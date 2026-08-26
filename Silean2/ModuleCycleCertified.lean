@@ -111,6 +111,31 @@ theorem hasExactlyOneStructuralResult
     certified.structuralResultUnique inputs structuralState other proposal
       otherSatisfies satisfies⟩
 
+/-- Every structural solution agrees with the executable evaluation of the
+public cycle contract. This is the generic bridge used by temporal models: the
+model can execute the contract without selecting a structural evaluator. -/
+theorem solution_matches_evaluate
+    (certified : ModuleCycleCertified ports)
+    (inputs : ports.inputs.Values)
+    (contractState : certified.cycleContract.state.Values)
+    (structuralState : certified.moduleStructure.State)
+    (proposal : ProposedValues certified.moduleStructure)
+    (corresponds : certified.stateCorresponds contractState structuralState)
+    (satisfies : certified.moduleStructure.IsSolution inputs structuralState proposal) :
+    proposal.outputs = (certified.cycleContract.evaluate inputs contractState).1 ∧
+      certified.stateCorresponds
+        (certified.cycleContract.evaluate inputs contractState).2
+        proposal.nextState := by
+  rcases certified.implements inputs contractState structuralState proposal
+      corresponds satisfies with
+    ⟨nextContractState, evaluates, nextCorresponds⟩
+  have unique := certified.cycleContract.evaluation_unique inputs contractState
+    proposal.outputs (certified.cycleContract.evaluate inputs contractState).1
+    nextContractState (certified.cycleContract.evaluate inputs contractState).2
+    evaluates (certified.cycleContract.evaluate_evaluatesTo inputs contractState)
+  rw [unique.2] at nextCorresponds
+  exact ⟨unique.1, nextCorresponds⟩
+
 /-! Certification turns each behavioral rule into a semantic dependency fact
 about the independent structure. This is the generic child-rule interface used
 by parent schedules; it does not inspect the certified module's implementation. -/

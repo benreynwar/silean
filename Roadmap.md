@@ -1094,3 +1094,70 @@ structure by FIRRTL naming metadata and propagated through every generic child
 and split/combine adapter. CIRCT accepts the resulting named aggregate types,
 and cocotb verifies all eight flattened payload leaves across fall-through,
 capture, backpressure, simultaneous replacement, and dequeue.
+
+## Goal outcome: one-entry FIFO temporal contract
+
+The implementation-independent `NoResetFifo` layer now defines cycle
+observations, accepted transfers, finite traces, conservation, capacity, and
+ready-propagation bounds. Its generic temporal execution machinery lifts
+single-step conservation and ready-stall inequalities over finite runs.
+
+`OneEntryFifo.Temporal` executes the existing `ModuleCycleContract` directly
+for every payload `SignalType`; it does not define a parallel FIFO behavior or
+inspect the structural hierarchy. Logical contents are either empty or the
+single stored payload. The module proves per-step and whole-run conservation,
+capacity one, and an input-ready stall count no greater than the downstream
+ready stall count. These facts package as a capacity-1, zero-ready-latency
+module view satisfying the general no-reset FIFO trace contract.
+
+The generic `ModuleCycleCertified.solution_matches_evaluate` theorem connects
+this executable contract boundary back to structure: every structural solution
+has the same outputs as contract evaluation and a corresponding next state.
+A nested tuple/vector payload check exercises both the temporal certificate and
+this structural bridge. Serial composition and arbitrary-depth FIFO temporal
+certification remain later work because Silean 2 does not yet contain that
+module hierarchy.
+
+## Goal outcome: generic serial FIFO temporal composition
+
+The pure no-reset FIFO contract is now closed under serial connection.
+Pointwise `SerialCycle` equalities lift over finite traces to identify external
+accepted transfers, cancel internal transfers, and transport ready-stall
+counts. `Contract.serial` consequently proves exact conservation, summed child
+capacity, and summed ready-propagation latency without mentioning module
+structure or a particular FIFO implementation.
+
+Generic execution composition separately lifts a one-step child decomposition
+to complete finite runs. A module-view constructor uses that result to derive a
+parent FIFO certificate from its two child certificates. The abstraction keeps
+trace algebra, temporal execution, and structural certification as distinct
+layers.
+
+A two-stage nested-payload check wires two executions of the existing
+`OneEntryFifo` cycle contract, pairs their states, and orders downstream
+contents before upstream contents. The generic theorem derives capacity 2 and
+zero ready latency from the two capacity-1, zero-latency child certificates.
+The existing `solution_matches_evaluate` theorem establishes that each child
+contract execution is realized by its certified structure. The following goal
+generalizes this temporary two-stage check into the reusable hierarchy.
+
+## Goal outcome: generic positive-depth FIFO
+
+The reusable serial FIFO structure now composes two arbitrary certified FIFO
+behaviors. Its schedules mention only public child contract rules; existence
+and refinement use only child certificates, never child-local schedules or
+implementation details. Contract state is the labelled sum of upstream and
+downstream contract state.
+
+`Modules.Fifo` recursively places one `OneEntryFifo` upstream of the remaining
+FIFO. Its public `depth` is the actual number of entries and must be positive;
+the internal `additionalDepth` is not the normal API. The `ModuleStructure`,
+behavior, and cycle contract remain computable, while noncomputable proof
+evidence is layered onto those independently defined values.
+
+The temporal view follows the same recursion and applies the generic serial
+trace theorem. For every positive depth and payload shape it proves capacity is
+exactly `depth`, ready-propagation latency is zero, and finite executions satisfy
+the no-reset FIFO contract. Depth-sensitive FIRRTL naming preserves caller
+provided hierarchical payload labels. Focused checks cover depths 1, 2, and 3
+with the nested `a/b/c/d/e/f` payload.

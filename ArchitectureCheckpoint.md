@@ -208,12 +208,15 @@ computable; their proof implementations are opaque.
   private typed assembly proofs.
 - `ModuleCycleCertified`: the generic one-cycle implementation property and
   non-vacuous certified bundle.
+- `Contracts/NoResetFifo*`: implementation-independent FIFO traces, finite
+  temporal execution, and module-facing capacity/latency views.
 - `Primitives/`: one file per concrete primitive, containing its structural
   definition and cycle contract; `PrimitivePorts` contains only shared
   single-bit port shapes.
 - `Modules/`: one file per reusable module, containing its interface, hierarchy,
   wiring, structure, and cycle contract where present. Test-only module fixtures
-  stay in `Examples/`.
+  stay in `Examples/`. Temporal properties remain in separate `*Temporal`
+  files rather than becoming part of structural module definitions.
 - `FIRRTL/`: executable naming, generic hierarchy traversal, and direct text
   generation. Module-specific files assign names to existing structures; they
   do not define alternate circuits.
@@ -227,8 +230,10 @@ meaning of evaluation.
 
 ## Deliberate omissions and remaining pressure tests
 
-There is currently no trace layer, general automatic refinement composition,
-lowering, backend correctness proof, reset model, or negative cycle checker.
+There is currently no general automatic refinement composition, lowering,
+backend correctness proof, reset model, or negative cycle checker. The trace
+layer covers the no-reset one-entry FIFO and generic serial temporal
+composition; a reusable serial `ModuleStructure` is not yet present in Silean 2.
 Aggregate projection/assembly and `Fin`/tuple-position indexed instance
 authoring are now validated by the recursively certified register and direct
 FIRRTL generation.
@@ -282,6 +287,49 @@ field such as `b.d[1].f` retains that hierarchy through FIRRTL and flattened
 SystemVerilog. The structured FIFO cocotb test verifies all payload leaves
 through capture, backpressure, simultaneous replacement, and dequeue.
 
+## One-entry FIFO temporal contract
+
+The no-reset FIFO layer is independent of module structure. A trace records
+accepted transfers and logical contents at its boundaries; its contract states
+exact conservation, a capacity bound, and a ready-propagation stall bound.
+Generic finite execution lifts single-cycle conservation and stall inequalities
+to arbitrary input sequences.
+
+`OneEntryFifo.Temporal.step` invokes `ModuleCycleContract.evaluate` for the
+existing generic FIFO cycle contract. It does not duplicate the FIFO transition
+function and does not inspect child instances. Logical contents are empty when
+`storedValid` is false and contain exactly `storedData` otherwise. The resulting
+proofs establish single-cycle and whole-run conservation, capacity one, and
+zero-cycle ready propagation for every `SignalType` payload.
+
+`ModuleCycleCertified.solution_matches_evaluate` is the generic bridge back to
+hardware structure: every structurally valid proposal has the contract
+evaluator's outputs, and its next structural state corresponds to the
+evaluator's next contract state. Thus temporal execution is deterministic at
+the public contract boundary while certification proves the structure follows
+that execution; no structural evaluator or proof schedule is exposed.
+
+## Serial FIFO temporal composition
+
+Serial composition is proved entirely over FIFO observations. `SerialCycle`
+states the nine equalities connecting the external and internal valid/data/ready
+signals; `SerialCycles` lifts those equalities pointwise over a finite trace.
+The derived laws identify external transfers, cancel internal transfers, and
+relate the three ready-stall counts.
+
+`Contract.serial` uses only those laws and the two child contracts. Downstream
+contents precede upstream contents in dequeue order, conservation cancels the
+internal channel, capacities add, and ready-propagation latencies add. The
+generic execution `Serial` lifts a one-step decomposition to every finite run;
+the module-view `Constructor` then turns child satisfaction certificates into
+parent satisfaction without referring to `ModuleStructure`.
+
+A two-stage check pairs two `OneEntryFifo` contract states and wires two
+`OneEntryFifo.Temporal.model` steps. Its view has capacity 2 and ready latency
+0, and its satisfaction proof is obtained solely by the generic constructor
+from the two capacity-1 child certificates. Each child contract execution is
+connected to its certified structure by `solution_matches_evaluate`.
+
 ## Current review conclusion
 
 The foundation now expresses the intended hierarchical argument cleanly:
@@ -303,3 +351,24 @@ No second lowered semantic representation is needed for this argument. Proof
 verbosity that remains in concrete refinement checks comes mostly from exposing
 the exact wiring equations of those examples; it has not justified adding
 module-specific public helper APIs.
+
+## Generic FIFO hierarchy
+
+The FIFO now demonstrates the intended layering at arbitrary positive depth:
+
+- `Fifo.Behavior` describes forward data/valid, backward ready, and next state.
+  Serial behavior combines states with a labelled sum.
+- `SerialFifo` is the two-instance structural composition. Its schedules call
+  only public upstream and downstream contract rules, and its certification
+  consumes only public child certificates.
+- `Fifo.moduleStructure`, `Fifo.behavior`, and `Fifo.cycleContract` are
+  independently computable. `Fifo.certification` is noncomputable evidence
+  connecting those values.
+- `Fifo.Temporal` executes the cycle contract and supplies the generic serial
+  execution decomposition. Recursive views inherit the serial conservation
+  theorem, yielding exact capacity `depth` and zero ready latency.
+- `FifoNaming.depthNamingWith` is backend-only metadata with depth-sensitive
+  module keys and recursively propagated payload labels.
+
+This replaces the temporary two-stage example as the reusable architecture;
+that example remains only a small regression check.

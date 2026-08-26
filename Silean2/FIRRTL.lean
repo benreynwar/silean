@@ -10,3 +10,4 @@ import Silean2.FIRRTL.LogicNaming
 import Silean2.FIRRTL.MuxNaming
 import Silean2.FIRRTL.EnabledRegisterNaming
 import Silean2.FIRRTL.FifoNaming
+import Silean2.FIRRTL.FifoDepthNaming

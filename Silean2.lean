@@ -10,9 +10,15 @@ import Silean2.Structure
 import Silean2.ModuleCycleContract
 import Silean2.ModuleCycleEvaluation
 import Silean2.ModuleCycleCertified
+import Silean2.Contracts.NoResetFifo
+import Silean2.Contracts.NoResetFifoExecution
+import Silean2.Contracts.NoResetFifoSerial
+import Silean2.Contracts.NoResetFifoView
+import Silean2.Contracts.NoResetFifoSerialExecution
 import Silean2.CertifiedComposition
 import Silean2.CertifiedSchedule
 import Silean2.ModuleStructure
 import Silean2.StructuralSemantics
 import Silean2.StructuralDependency
 import Silean2.FIRRTL
+import Silean2.Modules.OneEntryFifoTemporal

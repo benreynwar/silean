@@ -746,6 +746,9 @@ noncomputable def certified (signalType : SignalType) :
     ModuleCycleCertified (ports signalType) :=
   (certification signalType).bundle
 
+@[simp] theorem certified_cycleContract (signalType : SignalType) :
+    (certified signalType).cycleContract = cycleContract signalType := rfl
+
 theorem hasExactlyOneSolution (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
     (currentState : (moduleStructure signalType).State) :

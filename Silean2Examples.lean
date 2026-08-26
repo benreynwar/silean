@@ -14,3 +14,6 @@ import Silean2.Examples.ModuleCycleCertified
 import Silean2.Examples.OneEntryFifoChecks
 import Silean2.Examples.BidirectionalDualNot
 import Silean2.Examples.FIRRTLChecks
+import Silean2.Examples.OneEntryFifoTemporalChecks
+import Silean2.Examples.SerialFifoTemporalChecks
+import Silean2.Examples.FifoDepthChecks
