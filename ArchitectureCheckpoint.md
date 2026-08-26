@@ -53,7 +53,7 @@ independent statement of desired observable behavior.
   derived from the child-instance hierarchy. Stateless state is the canonical
   zero-label map.
 
-This remains close to a Verilog module body. Contracts, schedules, evaluators,
+This remains close to a hardware module body. Contracts, schedules, evaluators,
 emitted names, and backend metadata are not stored in `ModuleStructure`.
 
 ## Structural meaning
@@ -165,19 +165,27 @@ simultaneous dequeue/replacement for bit, vector, and nested tuple payloads.
 
 ## Certified cycle modules
 
-`ModuleCycleCertified` is the deliberate point where the independent objects
-are bundled. It contains a `ModuleStructure`, a `ModuleCycleContract`, their
-state correspondence, an `Implements` proof, evidence that every structural
-state has some corresponding contract state, and order-independent existence
-and uniqueness of structural results. It stores no schedules and no evaluator.
-The state-coverage field prevents an always-false relation from certifying a
-structure vacuously.
+Every reusable module exposes its `moduleStructure` directly as a computable
+definition. This is the structural API consumed by hierarchy traversal,
+naming, and direct FIRRTL generation; evaluating it never evaluates a proof.
 
-BitMux, DualNot, generic Register, EnabledRegister, FifoControl, and generic
-OneEntryFifo
-are exported as certified values. Structural
-consumers such as a future Verilog renderer use `.moduleStructure`; behavioral
-consumers use `.cycleContract`; correctness consumers use `.implements`.
+`ModuleCycleCertification structure contract` contains only correctness
+evidence indexed by an already chosen structure and contract: their state
+correspondence, correspondence coverage, `Implements`, and order-independent
+existence and uniqueness. A generic transport operation moves the complete
+dependent proof across a proved structure identity, so concrete proofs do not
+contain scattered casts. Module certification values are opaque/noncomputable;
+they cannot accidentally become the source of emitted structure.
+
+`ModuleCycleCertified` remains the convenient composition bundle formed from
+the public structure, public contract, and indexed certification. It stores no
+schedules and no evaluator. The state-coverage field prevents an always-false
+relation from certifying a structure vacuously. Parent proofs use this bundle
+through contract-facing operations such as `Certified.childImplements`.
+
+BitMux, FifoControl, generic Register, Mask, BitwiseOr, Mux, EnabledRegister,
+and OneEntryFifo all follow this boundary. Their public structures are
+computable; their proof implementations are opaque.
 
 ## File responsibilities
 
@@ -189,6 +197,9 @@ consumers use `.cycleContract`; correctness consumers use `.implements`.
 - `StructuralSemantics`: order-independent structural equations.
 - `StructuralDependency`: semantic dependency rules and the base at-most-one
   proposition, independent of schedule construction.
+- `CertifiedComposition`: certified child collections, their derived composite
+  structures, and the generic law for applying a child certificate to its part
+  of a valid parent proposal.
 - `CertifiedSchedule`: named certified-child rule schedules, schedule
   combination/coverage, finite-family scheduling both from an empty prefix and
   after existing availability, and generic parent at-most-one proof.
@@ -203,6 +214,9 @@ consumers use `.cycleContract`; correctness consumers use `.implements`.
 - `Modules/`: one file per reusable module, containing its interface, hierarchy,
   wiring, structure, and cycle contract where present. Test-only module fixtures
   stay in `Examples/`.
+- `FIRRTL/`: executable naming, generic hierarchy traversal, and direct text
+  generation. Module-specific files assign names to existing structures; they
+  do not define alternate circuits.
 
 The former `StructuralRules` and `StructuralEvaluation` layers have been
 removed. Their schedules mixed semantic dependency evidence with a program
@@ -214,17 +228,59 @@ meaning of evaluation.
 ## Deliberate omissions and remaining pressure tests
 
 There is currently no trace layer, general automatic refinement composition,
-lowering, definition collection, emitted naming, Verilog renderer, or negative
-cycle checker. Aggregate projection/assembly and `Fin`/tuple-position indexed
-instance authoring are now validated by the recursively certified register.
+lowering, backend correctness proof, reset model, or negative cycle checker.
+Aggregate projection/assembly and `Fin`/tuple-position indexed instance
+authoring are now validated by the recursively certified register and direct
+FIRRTL generation.
 
 The recursive register and leafwise Mask/BitwiseOr modules validate both
 stateful and combinational aggregate decomposition. Generic Mux validates
-contract-level composition of those recursive children, and generic
-EnabledRegister validates their stateful composition. The next aggregate
-pressure test is generalizing the FIFO data path while retaining bit-valued
-handshake control. Shallow Verilog rendering remains the eventual structural
-consumer.
+contract-level composition of those recursive children, generic
+EnabledRegister validates their stateful composition, and generic OneEntryFifo
+validates a typed payload path with bit-valued handshake control. Direct FIRRTL
+generation is now the major executable structural consumer.
+
+## Direct FIRRTL generation
+
+`ModuleNaming structure` is executable metadata indexed by the exact public
+`ModuleStructure`. It supplies module, port, instance, adapter, primitive-state,
+and recursive child names without copying wiring or behavior. Primitive
+operation metadata is also indexed by the exact supported single-bit primitive.
+
+`FIRRTL.renderCircuit` traverses that structure directly. It collects shared
+module definitions, declares ports and child instances, renders splitters and
+combiners as aggregate projection/assembly, and emits each typed structural
+connection as a FIRRTL `connect`. No lowered circuit or generated wire table
+intervenes. Runtime validation rejects illegal or duplicate local identifiers,
+rendered module-name collisions, and reuse of one module key for two different
+rendered definitions.
+
+The backend adds `input clock : Clock` uniformly to every emitted module and
+connects the parent clock to every child. This clock is infrastructure, not an
+ordinary `ModulePorts` signal. The bit-register primitive emits a reset-free
+FIRRTL register driven by that clock; recursive aggregate registers receive it
+through their hierarchy.
+
+Executable Lean checks cover BitMux, a vector Register, a tuple
+EnabledRegister, and a vector-payload OneEntryFifo. The pinned external pipeline
+also compiles emitted FIRRTL with CIRCT `firtool`, compiles the resulting
+SystemVerilog with Verilator, and checks behavior with cocotb.
+
+The checked-in Nix flake now supplies CIRCT `firtool`, Verilator, cocotb, Make,
+Python, and Elan as one pinned development environment. Concrete designs are
+selected by small typed Lean executables under `Silean2/Emitters/`; the shared
+`FIRRTL.emitMain` handles only rendering errors, stdout, and `--output PATH`.
+The Makefile keeps the external validation path file-oriented:
+Lean produces `.fir`, `firtool` produces `.sv`, and cocotb runs that result in
+Verilator. Generated artifacts stay below `build/` and are not semantic or
+proof inputs.
+
+Recursive tuple field labels are FIRRTL naming metadata rather than part of
+`ModuleStructure`. The same naming description is propagated through generic
+FIFO, mux, logic, register, splitter, and combiner renderings, so a payload
+field such as `b.d[1].f` retains that hierarchy through FIRRTL and flattened
+SystemVerilog. The structured FIFO cocotb test verifies all payload leaves
+through capture, backpressure, simultaneous replacement, and dequeue.
 
 ## Current review conclusion
 

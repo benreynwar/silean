@@ -13,3 +13,4 @@ import Silean2.Examples.ModuleCycleEvaluationChecks
 import Silean2.Examples.ModuleCycleCertified
 import Silean2.Examples.OneEntryFifoChecks
 import Silean2.Examples.BidirectionalDualNot
+import Silean2.Examples.FIRRTLChecks

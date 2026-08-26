@@ -10,3 +10,9 @@ lean_lib «Silean2» where
 @[default_target]
 lean_lib «Silean2Examples» where
   roots := #[`Silean2Examples]
+
+lean_exe «emit-bit-register» where
+  root := `Silean2.Emitters.BitRegister
+
+lean_exe «emit-structured-fifo» where
+  root := `Silean2.Emitters.StructuredFifo

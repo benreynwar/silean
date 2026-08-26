@@ -1,24 +1,8 @@
-import Silean2.ModuleCycleCertified
+import Silean2.CertifiedComposition
 
 namespace Silean2.Certified
 
 open Silean2
-
-/-! A parent reasons about each child only through its certified contract. The
-child structure is recovered from that certificate; none of the child's local
-schedules appear in this interface. -/
-
-abbrev Children (body : ModuleBody) :=
-  (name : body.context.instances.Name) →
-    ModuleCycleCertified (body.context.instances.ports name)
-
-@[reducible] def childStructure (children : Children body)
-    (name : body.context.instances.Name) :=
-  (children name).moduleStructure
-
-@[reducible] def moduleStructure (body : ModuleBody) (children : Children body) :
-    ModuleStructure body.context.ports :=
-  .composite body (childStructure children)
 
 structure RuleOccurrence {body : ModuleBody} (children : Children body) where
   child : body.context.instances.Name

@@ -10,7 +10,9 @@ import Silean2.Structure
 import Silean2.ModuleCycleContract
 import Silean2.ModuleCycleEvaluation
 import Silean2.ModuleCycleCertified
+import Silean2.CertifiedComposition
 import Silean2.CertifiedSchedule
 import Silean2.ModuleStructure
 import Silean2.StructuralSemantics
 import Silean2.StructuralDependency
+import Silean2.FIRRTL

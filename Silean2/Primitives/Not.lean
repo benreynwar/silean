@@ -32,6 +32,15 @@ def notCycleContract : ModuleCycleContract not.ports where
   stateRule := CycleStateRule.empty not.ports
   outputCoverage := by rfl
 
+@[simp] theorem notOutputRule_holds_iff
+    (inputs : not.ports.inputs.Values)
+    (state : notCycleContract.state.Values)
+    (outputs : not.ports.outputs.Values) :
+    notOutputRule.Holds inputs state outputs ↔
+      outputs .output = !inputs .input := by
+  simp [notOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+    SignalSelection.Matches, SignalMap.select]
+
 private def notStateCorresponds (_ : notCycleContract.state.Values)
     (_ : (ModuleStructure.primitive not).State) : Prop := True
 

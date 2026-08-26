@@ -85,9 +85,26 @@ def wiring (signalType : SignalType) :
 @[reducible] noncomputable def childStructure (signalType : SignalType) :=
   Certified.childStructure (children signalType)
 
-noncomputable def moduleStructure (signalType : SignalType) :
+@[reducible] def structuralChildren (signalType : SignalType) :
+    (name : (instances signalType).Name) →
+      ModuleStructure ((instances signalType).ports name)
+  | .validStorage => EnabledRegister.moduleStructure .bit
+  | .dataStorage => EnabledRegister.moduleStructure signalType
+  | .control => FifoControl.moduleStructure
+  | .outputValidOr => Primitives.orCertified.moduleStructure
+  | .outputDataMux => Mux.moduleStructure signalType
+
+def moduleStructure (signalType : SignalType) :
     ModuleStructure (ports signalType) :=
-  Certified.moduleStructure (body signalType) (children signalType)
+  .composite (body signalType) (structuralChildren signalType)
+
+theorem moduleStructure_eq (signalType : SignalType) :
+    moduleStructure signalType =
+      Certified.moduleStructure (body signalType) (children signalType) := by
+  unfold moduleStructure Certified.moduleStructure
+  congr
+  funext child
+  cases child <;> rfl
 
 inductive State
   | storedValid
@@ -316,7 +333,8 @@ theorem coversChildren (signalType : SignalType) :
     simp [stateSchedule, Certified.Schedule.finalAvailability]
 
 theorem hasAtMostOneSolution (signalType : SignalType) :
-    (moduleStructure signalType).HasAtMostOneSolution :=
+    (Certified.moduleStructure (body signalType)
+      (children signalType)).HasAtMostOneSolution :=
   (ruleSchedules signalType).hasAtMostOneSolution (coversChildren signalType)
 
 def controlInputsFrom (signalType : SignalType)
@@ -355,8 +373,10 @@ noncomputable def dataStorageInputs (signalType : SignalType)
 
 theorem hasStructuralResult (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
-    (currentState : (moduleStructure signalType).State) :
-    ∃ proposal, (moduleStructure signalType).IsSolution inputs currentState proposal := by
+    (currentState : (Certified.moduleStructure (body signalType)
+      (children signalType)).State) :
+    ∃ proposal, (Certified.moduleStructure (body signalType)
+      (children signalType)).IsSolution inputs currentState proposal := by
   rcases (children signalType .validStorage).hasCorrespondingState
       (currentState .validStorage) with
     ⟨validContractState, validCorresponds⟩
@@ -463,11 +483,12 @@ theorem hasStructuralResult (signalType : SignalType)
 
 def stateCorresponds (signalType : SignalType)
     (contractState : (cycleContract signalType).state.Values)
-    (structuralState : (moduleStructure signalType).State) : Prop :=
-  EnabledRegister.stateCorresponds .bit
+    (structuralState : (Certified.moduleStructure (body signalType)
+      (children signalType)).State) : Prop :=
+  (children signalType .validStorage).stateCorresponds
       (fun | .stored => contractState .storedValid)
       (structuralState .validStorage) ∧
-    EnabledRegister.stateCorresponds signalType
+    (children signalType .dataStorage).stateCorresponds
       (fun | .stored => contractState .storedData)
       (structuralState .dataStorage)
 
@@ -494,11 +515,49 @@ theorem readyRule_holds_iff (signalType : SignalType)
     SignalSelection.project, SignalMap.select]
 
 private theorem implements (signalType : SignalType) :
-    Implements (moduleStructure signalType) (cycleContract signalType)
+    Implements (Certified.moduleStructure (body signalType)
+      (children signalType)) (cycleContract signalType)
       (stateCorresponds signalType) := by
   intro inputs contractState structuralState proposal corresponds satisfies
+  let validState : (EnabledRegister.cycleContract .bit).state.Values :=
+    fun | .stored => contractState .storedValid
+  let dataState : (EnabledRegister.cycleContract signalType).state.Values :=
+    fun | .stored => contractState .storedData
+  have validCorresponds : (children signalType .validStorage).stateCorresponds
+      validState
+      (structuralState .validStorage) := corresponds.1
+  have dataCorresponds : (children signalType .dataStorage).stateCorresponds
+      dataState
+      (structuralState .dataStorage) := corresponds.2
+  have validImplements := Certified.childImplements (children signalType)
+    inputs structuralState proposal satisfies .validStorage validState
+      validCorresponds
+  have dataImplements := Certified.childImplements (children signalType)
+    inputs structuralState proposal satisfies .dataStorage dataState
+      dataCorresponds
+  rcases (children signalType .control).hasCorrespondingState
+      (structuralState .control) with ⟨controlState, controlCorresponds⟩
+  have controlState_eq : controlState = SignalMap.emptyValues := by
+    funext statePort
+    exact nomatch statePort
+  subst controlState
+  have controlImplements := Certified.childImplements (children signalType)
+    inputs structuralState proposal satisfies .control SignalMap.emptyValues
+      controlCorresponds
+  have validOrImplements := Certified.childImplements (children signalType)
+    inputs structuralState proposal satisfies .outputValidOr SignalMap.emptyValues
+      (by trivial)
+  rcases (children signalType .outputDataMux).hasCorrespondingState
+      (structuralState .outputDataMux) with ⟨muxState, muxCorresponds⟩
+  have muxState_eq : muxState = SignalMap.emptyValues := by
+    funext statePort
+    exact nomatch statePort
+  subst muxState
+  have muxImplements := Certified.childImplements (children signalType)
+    inputs structuralState proposal satisfies .outputDataMux SignalMap.emptyValues
+      muxCorresponds
+  have boundary := satisfies.1
   rcases proposal with ⟨outputs, childValues⟩
-  rcases satisfies with ⟨boundary, childSatisfies⟩
   let validInputs := ProposedValues.childInputs (body signalType) (childStructure signalType) inputs childValues
     Instance.validStorage
   let dataInputs := ProposedValues.childInputs (body signalType) (childStructure signalType) inputs childValues
@@ -507,29 +566,15 @@ private theorem implements (signalType : SignalType) :
     Instance.control
   let muxInputs := ProposedValues.childInputs (body signalType) (childStructure signalType) inputs childValues
     Instance.outputDataMux
-  let validState : (EnabledRegister.cycleContract .bit).state.Values :=
-    fun | .stored => contractState .storedValid
-  let dataState : (EnabledRegister.cycleContract signalType).state.Values :=
-    fun | .stored => contractState .storedData
-  have validCorresponds : EnabledRegister.stateCorresponds .bit validState
-      (structuralState .validStorage) := corresponds.1
-  have dataCorresponds : EnabledRegister.stateCorresponds signalType dataState
-      (structuralState .dataStorage) := corresponds.2
-  rcases (EnabledRegister.certified .bit).implements validInputs validState
-      (structuralState .validStorage) (childValues .validStorage)
-      validCorresponds (childSatisfies .validStorage) with
+  rcases validImplements with
     ⟨validNext, validEvaluates, validNextCorresponds⟩
-  rcases (EnabledRegister.certified signalType).implements dataInputs dataState
-      (structuralState .dataStorage) (childValues .dataStorage)
-      dataCorresponds (childSatisfies .dataStorage) with
+  rcases dataImplements with
     ⟨dataNext, dataEvaluates, dataNextCorresponds⟩
-  rcases FifoControl.certified.implements controlInputs SignalMap.emptyValues
-      (structuralState .control) (childValues .control) (by trivial)
-      (childSatisfies .control) with
+  rcases controlImplements with
     ⟨controlNext, controlEvaluates, controlNextCorresponds⟩
-  rcases (Mux.certified signalType).implements muxInputs SignalMap.emptyValues
-      (structuralState .outputDataMux) (childValues .outputDataMux) (by trivial)
-      (childSatisfies .outputDataMux) with
+  rcases validOrImplements with
+    ⟨validOrNext, validOrEvaluates, validOrNextCorresponds⟩
+  rcases muxImplements with
     ⟨muxNext, muxEvaluates, muxNextCorresponds⟩
   refine ⟨(cycleContract signalType).stateRule.target inputs contractState, ?_, ?_⟩
   · constructor
@@ -550,9 +595,8 @@ private theorem implements (signalType : SignalType) :
         change (childValues .outputDataMux).outputs .result =
           bif muxInputs .select then muxInputs .whenTrue
             else muxInputs .whenFalse at muxRule
-        have outputOr := congrFun (childSatisfies .outputValidOr).1
-          Primitives.SingleOutput.output
-        change (childValues .outputValidOr).outputs .output = _ at outputOr
+        have outputOr := (Primitives.orOutputRule_holds_iff _ _ _).mp
+          (validOrEvaluates.1 Primitives.OrRule.apply)
         have validBoundary : outputs .outputValid =
             (childValues .outputValidOr).outputs .output := by
           simpa [ProposedValues.boundaryOutputsSatisfy, body, wiring, context,
@@ -567,7 +611,7 @@ private theorem implements (signalType : SignalType) :
             ((childValues .validStorage).outputs .value || inputs .inputValid) := by
           simpa [ProposedValues.childInputs, body, wiring, context, instances,
             EndpointContext.moduleInput, EndpointContext.instanceOutput,
-            SignalSource.value, Primitives.or] using outputOr
+            SignalSource.value] using outputOr
         have muxEquation : (childValues .outputDataMux).outputs .result =
             bif (childValues .validStorage).outputs .value
               then (childValues .dataStorage).outputs .value
@@ -584,14 +628,10 @@ private theorem implements (signalType : SignalType) :
           exact dataBoundary.trans muxEquation
       · change (readyRule signalType).Holds inputs contractState _
         rw [readyRule_holds_iff signalType]
-        have controlRule := controlEvaluates.1 FifoControl.Rule.control
+        have controlRule := (FifoControl.controlRule_holds_iff _ _ _).mp
+          (controlEvaluates.1 FifoControl.Rule.control)
         have validEquation := (EnabledRegister.outputRule_holds_iff .bit _ _ _).mp
           (validEvaluates.1 EnabledRegister.Rule.observe)
-        simp [FifoControl.certified, FifoControl.cycleContract,
-          FifoControl.controlRule,
-          CycleOutputRule.Holds, SignalSelection.Matches,
-          SignalSelection.project, SignalMap.select,
-          SignalSelection.prepend] at controlRule
         change (childValues .validStorage).outputs .value =
           contractState .storedValid at validEquation
         change (childValues .control).outputs .upstreamReady =
@@ -620,15 +660,11 @@ private theorem implements (signalType : SignalType) :
     · rfl
   · have validNextRule := validEvaluates.2
     have dataNextRule := dataEvaluates.2
-    have controlRule := controlEvaluates.1 FifoControl.Rule.control
+    have controlRule := (FifoControl.controlRule_holds_iff _ _ _).mp
+      (controlEvaluates.1 FifoControl.Rule.control)
     have validOutputRule :=
       (EnabledRegister.outputRule_holds_iff .bit _ _ _).mp
         (validEvaluates.1 EnabledRegister.Rule.observe)
-    simp [FifoControl.certified, FifoControl.cycleContract,
-      FifoControl.controlRule,
-      CycleOutputRule.Holds, SignalSelection.Matches,
-      SignalSelection.project, SignalMap.select,
-      SignalSelection.prepend] at controlRule
     change (childValues .validStorage).outputs .value =
       contractState .storedValid at validOutputRule
     change _ ∧ (childValues .control).outputs .storageUpdate =
@@ -671,10 +707,10 @@ private theorem implements (signalType : SignalType) :
       exact congrArg
         (fun update => bif update then inputs .inputData
           else contractState .storedData) updateEquation.symm
-    change EnabledRegister.stateCorresponds .bit
+    change (children signalType .validStorage).stateCorresponds
         nextValidState
         (childValues .validStorage).nextState ∧
-      EnabledRegister.stateCorresponds signalType
+      (children signalType .dataStorage).stateCorresponds
         nextDataState
         (childValues .dataStorage).nextState
     constructor
@@ -683,10 +719,10 @@ private theorem implements (signalType : SignalType) :
     · rw [dataNextEq]
       exact dataNextCorresponds
 
-noncomputable def certified (signalType : SignalType) :
-    ModuleCycleCertified (ports signalType) where
-  moduleStructure := moduleStructure signalType
-  cycleContract := cycleContract signalType
+noncomputable def proofCertification (signalType : SignalType) :
+    ModuleCycleCertification
+      (Certified.moduleStructure (body signalType) (children signalType))
+      (cycleContract signalType) where
   stateCorresponds := stateCorresponds signalType
   hasCorrespondingState := fun structuralState => by
     rcases (children signalType .validStorage).hasCorrespondingState
@@ -699,6 +735,16 @@ noncomputable def certified (signalType : SignalType) :
   hasStructuralResult := hasStructuralResult signalType
   structuralResultUnique := hasAtMostOneSolution signalType
   implements := implements signalType
+
+noncomputable opaque certification (signalType : SignalType) :
+    ModuleCycleCertification (moduleStructure signalType)
+      (cycleContract signalType) :=
+  (proofCertification signalType).transportStructure
+    (moduleStructure_eq signalType).symm
+
+noncomputable def certified (signalType : SignalType) :
+    ModuleCycleCertified (ports signalType) :=
+  (certification signalType).bundle
 
 theorem hasExactlyOneSolution (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)

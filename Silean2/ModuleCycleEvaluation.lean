@@ -1,4 +1,5 @@
 import Silean2.ModuleCycleContract
+import Silean2.SignalLayout
 
 namespace Silean2
 
@@ -67,6 +68,23 @@ theorem Matches.eq_of_mem
       · subst label
         exact leftMatches.1.trans rightMatches.1.symm
       · exact induction leftMatches.2 rightMatches.2 member
+
+theorem allSelection_matches_project_iff (signals : SignalMap)
+    (left right : signals.Values) :
+    signals.allSelection.Matches left
+      (signals.allSelection.project right) ↔ left = right := by
+  constructor
+  · intro holds
+    funext label
+    exact SignalSelection.Matches.eq_of_mem signals.allSelection
+      holds (signals.allSelection.matches_project right) label
+      (by
+        rw [SignalMap.allSelection_labels]
+        exact ListIndex.get_eq (signals.labels.locate label) ▸
+          List.get_mem _ _)
+  · intro equal
+    subst left
+    exact signals.allSelection.matches_project right
 
 theorem project_eq_of_eq_on
     (selection : SignalSelection signals types)

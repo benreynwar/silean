@@ -37,6 +37,16 @@ def cycleContract (splitter : SignalSplitter) :
       splitter.ports.outputs.labels.values
     rw [SignalMap.allSelection_labels]
 
+theorem outputRule_holds_iff (splitter : SignalSplitter)
+    (inputs : splitter.ports.inputs.Values)
+    (state : emptySignalMap.Values)
+    (outputs : splitter.ports.outputs.Values) :
+    splitter.outputRule.Holds inputs state outputs ↔
+      outputs = splitter.outputValues inputs := by
+  simp only [CycleOutputRule.Holds, outputRule]
+  rw [splitter.ports.inputs.unpack_project]
+  exact SignalSelection.allSelection_matches_project_iff _ _ _
+
 private def emptyStateCorresponds (_ : emptySignalMap.Values)
     (_ : emptySignalMap.Values) : Prop := True
 
@@ -94,6 +104,16 @@ def cycleContract (combiner : SignalCombiner) :
     change combiner.ports.outputs.allSelection.labels.Perm
       combiner.ports.outputs.labels.values
     rw [SignalMap.allSelection_labels]
+
+theorem outputRule_holds_iff (combiner : SignalCombiner)
+    (inputs : combiner.ports.inputs.Values)
+    (state : emptySignalMap.Values)
+    (outputs : combiner.ports.outputs.Values) :
+    combiner.outputRule.Holds inputs state outputs ↔
+      outputs = combiner.outputValues inputs := by
+  simp only [CycleOutputRule.Holds, outputRule]
+  rw [combiner.ports.inputs.unpack_project]
+  exact SignalSelection.allSelection_matches_project_iff _ _ _
 
 private def emptyStateCorresponds (_ : emptySignalMap.Values)
     (_ : emptySignalMap.Values) : Prop := True

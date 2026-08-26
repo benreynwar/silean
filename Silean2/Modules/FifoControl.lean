@@ -227,7 +227,7 @@ theorem hasStructuralResult (inputs : ports.inputs.Values)
 private def stateCorresponds (_ : cycleContract.state.Values)
     (_ : moduleStructure.State) : Prop := True
 
-private theorem controlRule_holds_iff (inputs : ports.inputs.Values)
+theorem controlRule_holds_iff (inputs : ports.inputs.Values)
     (state : cycleContract.state.Values) (outputs : ports.outputs.Values) :
     controlRule.Holds inputs state outputs ↔
       outputs .upstreamReady =
@@ -240,6 +240,13 @@ private theorem controlRule_holds_iff (inputs : ports.inputs.Values)
 
 private theorem implements : Implements moduleStructure cycleContract stateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
+  have invertImplements := Certified.childImplements children inputs structuralState
+    proposal satisfies .invertValid SignalMap.emptyValues (by trivial)
+  have readyImplements := Certified.childImplements children inputs structuralState
+    proposal satisfies .readyOr SignalMap.emptyValues (by trivial)
+  have updateImplements := Certified.childImplements children inputs structuralState
+    proposal satisfies .updateEq SignalMap.emptyValues (by trivial)
+  have boundary := satisfies.1
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro name
@@ -247,16 +254,15 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
     change controlRule.Holds inputs contractState proposal.outputs
     rw [controlRule_holds_iff]
     rcases proposal with ⟨outputs, children⟩
-    rcases satisfies with ⟨boundary, childSatisfies⟩
-    have invert := (childSatisfies .invertValid).1
-    have ready := (childSatisfies .readyOr).1
-    have update := (childSatisfies .updateEq).1
-    have invertOutput := congrFun invert Primitives.SingleOutput.output
-    have readyOutput := congrFun ready Primitives.SingleOutput.output
-    have updateOutput := congrFun update Primitives.SingleOutput.output
-    change (children .invertValid).outputs .output = _ at invertOutput
-    change (children .readyOr).outputs .output = _ at readyOutput
-    change (children .updateEq).outputs .output = _ at updateOutput
+    rcases invertImplements with ⟨_, invertEvaluates, _⟩
+    rcases readyImplements with ⟨_, readyEvaluates, _⟩
+    rcases updateImplements with ⟨_, updateEvaluates, _⟩
+    have invertOutput := (Primitives.notOutputRule_holds_iff _ _ _).mp
+      (invertEvaluates.1 Primitives.NotRule.apply)
+    have readyOutput := (Primitives.orOutputRule_holds_iff _ _ _).mp
+      (readyEvaluates.1 Primitives.OrRule.apply)
+    have updateOutput := (Primitives.eqOutputRule_holds_iff _ _ _).mp
+      (updateEvaluates.1 Primitives.EqRule.apply)
     have readyBoundary := boundary Output.upstreamReady
     have updateBoundary := boundary Output.storageUpdate
     change outputs .upstreamReady =
@@ -275,18 +281,18 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
     have invertEq : (children .invertValid).outputs .output =
         !inputs .storedValid := by
       simpa [ProposedValues.childInputs, body, wiring, context, instances,
-        EndpointContext.moduleInput, SignalSource.value, Primitives.not] using
+        EndpointContext.moduleInput, SignalSource.value] using
         invertOutput
     have readyChild : (children .readyOr).outputs .output =
         (inputs .downstreamReady || (children .invertValid).outputs .output) := by
       simpa [ProposedValues.childInputs, body, wiring, context, instances,
         EndpointContext.moduleInput, EndpointContext.instanceOutput,
-        SignalSource.value, Primitives.or] using readyOutput
+        SignalSource.value] using readyOutput
     have updateChild : (children .updateEq).outputs .output =
         ((inputs .downstreamReady && inputs .storedValid) ||
           (!inputs .downstreamReady && !inputs .storedValid)) := by
       simpa [ProposedValues.childInputs, body, wiring, context, instances,
-        EndpointContext.moduleInput, SignalSource.value, Primitives.eq] using
+        EndpointContext.moduleInput, SignalSource.value] using
         updateOutput
     constructor
     · exact readyEq.trans (readyChild.trans
@@ -294,7 +300,7 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
     · exact updateEq.trans updateChild
   · rfl
 
-def certified : ModuleCycleCertified ports where
+private def certifiedDefinition : ModuleCycleCertified ports where
   moduleStructure := moduleStructure
   cycleContract := cycleContract
   stateCorresponds := stateCorresponds
@@ -302,6 +308,13 @@ def certified : ModuleCycleCertified ports where
   hasStructuralResult := hasStructuralResult
   structuralResultUnique := hasAtMostOneSolution
   implements := implements
+
+noncomputable opaque certification :
+    ModuleCycleCertification moduleStructure cycleContract :=
+  certifiedDefinition.certification
+
+noncomputable def certified : ModuleCycleCertified ports :=
+  certification.bundle
 
 theorem hasExactlyOneSolution (inputs : ports.inputs.Values)
     (currentState : moduleStructure.State) :

@@ -292,7 +292,7 @@ theorem hasStructuralResult (inputs : ports.inputs.Values)
 private def stateCorresponds (_ : cycleContract.state.Values)
     (_ : moduleStructure.State) : Prop := True
 
-private theorem selectRule_holds_iff (inputs : ports.inputs.Values)
+theorem selectRule_holds_iff (inputs : ports.inputs.Values)
     (state : cycleContract.state.Values) (outputs : ports.outputs.Values) :
     selectRule.Holds inputs state outputs ↔
       outputs .result = bif inputs .select then inputs .whenTrue else inputs .whenFalse := by
@@ -301,28 +301,37 @@ private theorem selectRule_holds_iff (inputs : ports.inputs.Values)
 
 private theorem implements : Implements moduleStructure cycleContract stateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
+  have invertImplements := Certified.childImplements children inputs structuralState
+    proposal satisfies .invertSelect SignalMap.emptyValues (by trivial)
+  have falseImplements := Certified.childImplements children inputs structuralState
+    proposal satisfies .chooseFalse SignalMap.emptyValues (by trivial)
+  have trueImplements := Certified.childImplements children inputs structuralState
+    proposal satisfies .chooseTrue SignalMap.emptyValues (by trivial)
+  have combineImplements := Certified.childImplements children inputs structuralState
+    proposal satisfies .combine SignalMap.emptyValues (by trivial)
+  have boundary := satisfies.1
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro name
     cases name
     change selectRule.Holds inputs contractState _
     rcases proposal with ⟨outputs, children⟩
-    rcases satisfies with ⟨boundary, childSatisfies⟩
-    have invert := (childSatisfies .invertSelect).1
-    have chooseFalse := (childSatisfies .chooseFalse).1
-    have chooseTrue := (childSatisfies .chooseTrue).1
-    have combine := (childSatisfies .combine).1
+    rcases invertImplements with ⟨_, invertEvaluates, _⟩
+    rcases falseImplements with ⟨_, falseEvaluates, _⟩
+    rcases trueImplements with ⟨_, trueEvaluates, _⟩
+    rcases combineImplements with ⟨_, combineEvaluates, _⟩
     have boundary' : outputs .result = (children .combine).outputs .output := by
       simpa [ProposedValues.boundaryOutputsSatisfy, body, wiring, context,
         instances, EndpointContext.instanceOutput, SignalSource.value] using
           boundary Output.result
-    simp [ProposedValues.childInputs, body, wiring, context, instances,
-      EndpointContext.moduleInput, EndpointContext.instanceOutput,
-      SignalSource.value, Primitive.OutputsSatisfy, Primitives.not] at invert chooseFalse chooseTrue combine
-    have invertBit := congrFun invert Primitives.SingleOutput.output
-    have falseBit := congrFun chooseFalse Primitives.SingleOutput.output
-    have trueBit := congrFun chooseTrue Primitives.SingleOutput.output
-    have combineBit := congrFun combine Primitives.SingleOutput.output
+    have invertBit := (Primitives.notOutputRule_holds_iff _ _ _).mp
+      (invertEvaluates.1 Primitives.NotRule.apply)
+    have falseBit := (Primitives.andOutputRule_holds_iff _ _ _).mp
+      (falseEvaluates.1 Primitives.AndRule.apply)
+    have trueBit := (Primitives.andOutputRule_holds_iff _ _ _).mp
+      (trueEvaluates.1 Primitives.AndRule.apply)
+    have combineBit := (Primitives.orOutputRule_holds_iff _ _ _).mp
+      (combineEvaluates.1 Primitives.OrRule.apply)
     change (children .invertSelect).outputs .output = !inputs .select at invertBit
     change (children .chooseFalse).outputs .output =
       (inputs .whenFalse && (children .invertSelect).outputs .output) at falseBit
@@ -338,7 +347,7 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
       cases inputs .whenTrue <;> rfl
   · simp [cycleContract, stateRule, CycleStateRule.empty]
 
-def certified : ModuleCycleCertified ports where
+private def certifiedDefinition : ModuleCycleCertified ports where
   moduleStructure := moduleStructure
   cycleContract := cycleContract
   stateCorresponds := stateCorresponds
@@ -346,6 +355,13 @@ def certified : ModuleCycleCertified ports where
   hasStructuralResult := hasStructuralResult
   structuralResultUnique := hasAtMostOneSolution
   implements := implements
+
+noncomputable opaque certification :
+    ModuleCycleCertification moduleStructure cycleContract :=
+  certifiedDefinition.certification
+
+noncomputable def certified : ModuleCycleCertified ports :=
+  certification.bundle
 
 theorem hasExactlyOneSolution (inputs : ports.inputs.Values)
     (currentState : moduleStructure.State) :

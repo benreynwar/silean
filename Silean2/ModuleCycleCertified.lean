@@ -21,6 +21,21 @@ def Implements {ports : ModulePorts}
           nextContractState ∧
         stateCorresponds nextContractState proposal.nextState
 
+/-! Correctness evidence for an already chosen structure and contract.  Keeping
+these as parameters is important: executable consumers can use the structure
+without evaluating this (generally noncomputable) proof object. -/
+
+structure ModuleCycleCertification {ports : ModulePorts}
+    (moduleStructure : ModuleStructure ports)
+    (cycleContract : ModuleCycleContract ports) where
+  stateCorresponds : cycleContract.state.Values → moduleStructure.State → Prop
+  hasCorrespondingState : ∀ structuralState,
+    ∃ contractState, stateCorresponds contractState structuralState
+  hasStructuralResult : ∀ inputs structuralState,
+    ∃ proposal, moduleStructure.IsSolution inputs structuralState proposal
+  structuralResultUnique : moduleStructure.HasAtMostOneSolution
+  implements : Implements moduleStructure cycleContract stateCorresponds
+
 /-! A certified cycle module packages independent structure and behavior. State
 coverage prevents an always-false correspondence from certifying vacuously. -/
 
@@ -35,7 +50,48 @@ structure ModuleCycleCertified (ports : ModulePorts) where
   structuralResultUnique : moduleStructure.HasAtMostOneSolution
   implements : Implements moduleStructure cycleContract stateCorresponds
 
+def ModuleCycleCertification.bundle {ports : ModulePorts}
+    {moduleStructure : ModuleStructure ports}
+    {cycleContract : ModuleCycleContract ports}
+    (certification : ModuleCycleCertification moduleStructure cycleContract) :
+    ModuleCycleCertified ports where
+  moduleStructure := moduleStructure
+  cycleContract := cycleContract
+  stateCorresponds := certification.stateCorresponds
+  hasCorrespondingState := certification.hasCorrespondingState
+  hasStructuralResult := certification.hasStructuralResult
+  structuralResultUnique := certification.structuralResultUnique
+  implements := certification.implements
+
+/-! Transport a whole certification across a proved structure identity.  This
+keeps dependent state/proposal casts at one generic boundary. -/
+def ModuleCycleCertification.transportStructure {ports : ModulePorts}
+    {source target : ModuleStructure ports}
+    {cycleContract : ModuleCycleContract ports}
+    (equal : source = target)
+    (certification : ModuleCycleCertification source cycleContract) :
+    ModuleCycleCertification target cycleContract := by
+  cases equal
+  exact certification
+
+def ModuleCycleCertification.transportContract {ports : ModulePorts}
+    {moduleStructure : ModuleStructure ports}
+    {source target : ModuleCycleContract ports}
+    (equal : source = target)
+    (certification : ModuleCycleCertification moduleStructure source) :
+    ModuleCycleCertification moduleStructure target := by
+  cases equal
+  exact certification
+
 namespace ModuleCycleCertified
+
+def certification (certified : ModuleCycleCertified ports) :
+    ModuleCycleCertification certified.moduleStructure certified.cycleContract where
+  stateCorresponds := certified.stateCorresponds
+  hasCorrespondingState := certified.hasCorrespondingState
+  hasStructuralResult := certified.hasStructuralResult
+  structuralResultUnique := certified.structuralResultUnique
+  implements := certified.implements
 
 /-! A certificate already contains exactly the two order-independent facts
 needed for existence and uniqueness. No selected evaluator is required. -/

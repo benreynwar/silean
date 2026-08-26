@@ -32,6 +32,15 @@ def andCycleContract : ModuleCycleContract and.ports where
   stateRule := CycleStateRule.empty and.ports
   outputCoverage := by rfl
 
+@[simp] theorem andOutputRule_holds_iff
+    (inputs : and.ports.inputs.Values)
+    (state : andCycleContract.state.Values)
+    (outputs : and.ports.outputs.Values) :
+    andOutputRule.Holds inputs state outputs ↔
+      outputs .output = (inputs .left && inputs .right) := by
+  simp [andOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+    SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
+
 private def andStateCorresponds (_ : andCycleContract.state.Values)
     (_ : (ModuleStructure.primitive and).State) : Prop := True
 

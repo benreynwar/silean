@@ -116,26 +116,11 @@ decreasing_by
   · simp [SignalType.complexity]
   · exact SignalTypes.complexity_typeAt_lt fields component
 
-structure Implementation (signalType : SignalType) where
-  moduleStructure : ModuleStructure (ports signalType)
-  moduleStructure_eq : moduleStructure = Register.moduleStructure signalType
-  stateCorresponds : (stateMap signalType).Values → moduleStructure.State → Prop
-  hasCorrespondingState : ∀ structuralState,
-    ∃ contractState, stateCorresponds contractState structuralState
-  hasStructuralResult : ∀ inputs structuralState,
-    ∃ proposal, moduleStructure.IsSolution inputs structuralState proposal
-  structuralResultUnique : moduleStructure.HasAtMostOneSolution
-  implements : Implements moduleStructure (cycleContract signalType) stateCorresponds
+abbrev Implementation (signalType : SignalType) :=
+  ModuleCycleCertification (moduleStructure signalType) (cycleContract signalType)
 
 def Implementation.certified (implementation : Implementation signalType) :
-    ModuleCycleCertified (ports signalType) where
-  moduleStructure := implementation.moduleStructure
-  cycleContract := cycleContract signalType
-  stateCorresponds := implementation.stateCorresponds
-  hasCorrespondingState := implementation.hasCorrespondingState
-  hasStructuralResult := implementation.hasStructuralResult
-  structuralResultUnique := implementation.structuralResultUnique
-  implements := implementation.implements
+    ModuleCycleCertified (ports signalType) := implementation.bundle
 
 @[reducible] def aggregateChildren (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
@@ -149,6 +134,26 @@ def Implementation.certified (implementation : Implementation signalType) :
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component)) :=
   Certified.childStructure (aggregateChildren splitter components)
+
+theorem aggregateModuleStructure_eq (splitter : SignalSplitter)
+    (components : (component : splitter.ports.outputs.Label) →
+      Implementation (splitter.ports.outputs.signalType component)) :
+    moduleStructure splitter.aggregateType =
+      Certified.moduleStructure (aggregateBody splitter)
+        (aggregateChildren splitter components) := by
+  cases splitter with
+  | vector length element =>
+      simp only [SignalSplitter.aggregateType, moduleStructure,
+        Certified.moduleStructure]
+      congr
+      funext child
+      cases child <;> rfl
+  | tuple fields =>
+      simp only [SignalSplitter.aggregateType, moduleStructure,
+        Certified.moduleStructure]
+      congr
+      funext child
+      cases child <;> rfl
 
 def aggregateStateCorresponds (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
@@ -165,17 +170,19 @@ def aggregateStateCorresponds (splitter : SignalSplitter)
             component)
       (structuralState (.item component))
 
-def bitImplementation : Implementation .bit where
-  moduleStructure := Primitives.registerCertified.moduleStructure
-  moduleStructure_eq := by
-    change ModuleStructure.primitive Primitives.register = moduleStructure .bit
-    unfold moduleStructure
-    rfl
-  stateCorresponds := Primitives.registerCertified.stateCorresponds
-  hasCorrespondingState := Primitives.registerCertified.hasCorrespondingState
-  hasStructuralResult := Primitives.registerCertified.hasStructuralResult
-  structuralResultUnique := Primitives.registerCertified.structuralResultUnique
-  implements := Primitives.registerCertified.implements
+def bitImplementation : Implementation .bit := by
+  have structureEq : Primitives.registerCertified.moduleStructure =
+      moduleStructure .bit := by
+    simp [Primitives.registerCertified, moduleStructure]
+  have contractEq : Primitives.registerCertified.cycleContract =
+      cycleContract .bit := by
+    rw [show Primitives.registerCertified.cycleContract =
+      Primitives.registerCycleContract by
+        simp [Primitives.registerCertified]]
+    exact bit_contract.symm
+  exact Primitives.registerCertified.certification
+    |>.transportStructure structureEq
+    |>.transportContract contractEq
 
 theorem aggregateHasCorrespondingState (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
@@ -220,7 +227,8 @@ def aggregateCombinerInputs (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component))
     (componentProposals : (component : splitter.ports.outputs.Label) →
-      ProposedValues (components component).moduleStructure) :
+      ProposedValues
+        (moduleStructure (splitter.ports.outputs.signalType component))) :
     splitter.combiner.ports.inputs.Values := by
   cases splitter with
   | vector => exact fun component => (componentProposals component).outputs .output
@@ -248,7 +256,7 @@ theorem aggregateHasStructuralResult (splitter : SignalSplitter)
       (aggregateSplitterInputs splitter inputs) (structuralState .start) with
     ⟨splitProposal, splitSatisfies⟩
   let Property := fun component proposal =>
-    (components component).moduleStructure.IsSolution
+    (moduleStructure (splitter.ports.outputs.signalType component)).IsSolution
       (aggregateComponentInputs splitter splitProposal component)
       (structuralState (.item component)) proposal
   have componentAvailable : ∀ component, ∃ proposal, Property component proposal :=
@@ -284,7 +292,8 @@ theorem aggregateHasStructuralResult (splitter : SignalSplitter)
           cases splitter <;> funext port <;> cases port <;> rfl]
         exact splitSatisfies
     | item component =>
-        change (components component).moduleStructure.IsSolution
+        change (moduleStructure
+          (splitter.ports.outputs.signalType component)).IsSolution
           (ProposedValues.childInputs (aggregateBody splitter)
             (aggregateChildStructure splitter components) inputs childProposals
               (.item component))
@@ -605,51 +614,43 @@ private theorem aggregateImplements (splitter : SignalSplitter)
       exact childInputValue.symm.trans nextValue.symm]
     exact nextCorresponds
 
-noncomputable def aggregateImplementation (splitter : SignalSplitter)
+noncomputable def aggregateCertification (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component)) :
-    Implementation splitter.aggregateType where
-  moduleStructure := Certified.moduleStructure (aggregateBody splitter)
-    (aggregateChildren splitter components)
-  moduleStructure_eq := by
-    cases splitter with
-    | vector length element =>
-        unfold Certified.moduleStructure Certified.childStructure aggregateChildren
-          moduleStructure
-        change ModuleStructure.composite _ _ = ModuleStructure.composite _ _
-        congr 1
-        funext child
-        cases child with
-        | start => rfl
-        | item component => exact (components component).moduleStructure_eq
-        | finish => rfl
-    | tuple fields =>
-        unfold Certified.moduleStructure Certified.childStructure aggregateChildren
-          moduleStructure
-        change ModuleStructure.composite _ _ = ModuleStructure.composite _ _
-        congr 1
-        funext child
-        cases child with
-        | start => rfl
-        | item component => exact (components component).moduleStructure_eq
-        | finish => rfl
+    ModuleCycleCertification
+      (Certified.moduleStructure (aggregateBody splitter)
+        (aggregateChildren splitter components))
+      (cycleContract splitter.aggregateType) where
   stateCorresponds := aggregateStateCorresponds splitter components
   hasCorrespondingState := aggregateHasCorrespondingState splitter components
   hasStructuralResult := aggregateHasStructuralResult splitter components
   structuralResultUnique := aggregateHasAtMostOneSolution splitter components
   implements := aggregateImplements splitter components
 
-noncomputable def implementation : (signalType : SignalType) → Implementation signalType
+noncomputable def aggregateImplementation (splitter : SignalSplitter)
+    (components : (component : splitter.ports.outputs.Label) →
+      Implementation (splitter.ports.outputs.signalType component)) :
+    Implementation splitter.aggregateType :=
+  (aggregateCertification splitter components).transportStructure
+    (aggregateModuleStructure_eq splitter components).symm
+
+private noncomputable def implementationDefinition :
+    (signalType : SignalType) → Implementation signalType
   | .bit => bitImplementation
   | .vector length element =>
-      aggregateImplementation (.vector length element) fun _ => implementation element
+      aggregateImplementation (.vector length element) fun _ =>
+        implementationDefinition element
   | .tuple fields =>
       aggregateImplementation (.tuple fields) fun component =>
-        implementation (fields.typeAt component)
+        implementationDefinition (fields.typeAt component)
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
   · exact SignalTypes.complexity_typeAt_lt fields component
+
+noncomputable opaque implementation (signalType : SignalType) :
+    Implementation signalType :=
+  implementationDefinition signalType
 
 noncomputable def certified (signalType : SignalType) :
     ModuleCycleCertified (ports signalType) :=
@@ -657,6 +658,6 @@ noncomputable def certified (signalType : SignalType) :
 
 theorem certified_moduleStructure (signalType : SignalType) :
     (certified signalType).moduleStructure = moduleStructure signalType :=
-  (implementation signalType).moduleStructure_eq
+  rfl
 
 end Silean2.Modules.Register

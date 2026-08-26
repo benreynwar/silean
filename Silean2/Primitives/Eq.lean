@@ -36,6 +36,17 @@ def eqCycleContract : ModuleCycleContract eq.ports where
   stateRule := CycleStateRule.empty eq.ports
   outputCoverage := by rfl
 
+@[simp] theorem eqOutputRule_holds_iff
+    (inputs : eq.ports.inputs.Values)
+    (state : eqCycleContract.state.Values)
+    (outputs : eq.ports.outputs.Values) :
+    eqOutputRule.Holds inputs state outputs ↔
+      outputs .output =
+        ((inputs .left && inputs .right) ||
+          (!inputs .left && !inputs .right)) := by
+  simp [eqOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+    SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
+
 private def eqStateCorresponds (_ : eqCycleContract.state.Values)
     (_ : (ModuleStructure.primitive eq).State) : Prop := True
 

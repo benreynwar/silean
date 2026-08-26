@@ -252,31 +252,27 @@ decreasing_by
   · simp [SignalType.complexity]
   · exact SignalTypes.complexity_typeAt_lt fields component
 
-structure Implementation (signalType : SignalType) where
-  moduleStructure : ModuleStructure (ports signalType)
-  moduleStructure_eq : moduleStructure = BitwiseOr.moduleStructure signalType
-  hasStructuralResult : ∀ inputs state,
-    ∃ proposal, moduleStructure.IsSolution inputs state proposal
-  structuralResultUnique : moduleStructure.HasAtMostOneSolution
-  implements : Implements moduleStructure (cycleContract signalType)
-    (fun _ _ => True)
+abbrev Implementation (signalType : SignalType) :=
+  ModuleCycleCertification (moduleStructure signalType) (cycleContract signalType)
 
 def Implementation.certified (implementation : Implementation signalType) :
-    ModuleCycleCertified (ports signalType) where
-  moduleStructure := implementation.moduleStructure
-  cycleContract := cycleContract signalType
-  stateCorresponds := fun _ _ => True
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := implementation.hasStructuralResult
-  structuralResultUnique := implementation.structuralResultUnique
-  implements := implementation.implements
+    ModuleCycleCertified (ports signalType) := implementation.bundle
+
+theorem moduleStructure_bit : moduleStructure .bit = bitModuleStructure := by
+  rw [moduleStructure]
 
 def bitImplementation : Implementation .bit where
-  moduleStructure := bitModuleStructure
-  moduleStructure_eq := by unfold moduleStructure; rfl
-  hasStructuralResult := bitHasStructuralResult
-  structuralResultUnique := bitHasAtMostOneSolution
-  implements := bitImplements
+  stateCorresponds := fun _ _ => True
+  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
+  hasStructuralResult := by
+    rw [moduleStructure_bit]
+    exact bitHasStructuralResult
+  structuralResultUnique := by
+    rw [moduleStructure_bit]
+    exact bitHasAtMostOneSolution
+  implements := by
+    rw [moduleStructure_bit]
+    exact bitImplements
 
 @[reducible] def aggregateChildren (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
@@ -291,6 +287,32 @@ def bitImplementation : Implementation .bit where
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component)) :=
   Certified.childStructure (aggregateChildren splitter components)
+
+theorem aggregateModuleStructure_eq (splitter : SignalSplitter)
+    (components : (component : splitter.ports.outputs.Label) →
+      Implementation (splitter.ports.outputs.signalType component)) :
+    moduleStructure splitter.aggregateType =
+      Certified.moduleStructure (aggregateBody splitter)
+        (aggregateChildren splitter components) := by
+  cases splitter with
+  | vector length element =>
+      simp only [SignalSplitter.aggregateType, moduleStructure,
+        Certified.moduleStructure]
+      congr
+      funext child
+      cases child with
+      | start => rfl
+      | item value => cases value <;> rfl
+      | finish => rfl
+  | tuple fields =>
+      simp only [SignalSplitter.aggregateType, moduleStructure,
+        Certified.moduleStructure]
+      congr
+      funext child
+      cases child with
+      | start => rfl
+      | item value => cases value <;> rfl
+      | finish => rfl
 
 def leftSplitterInputs (splitter : SignalSplitter)
     (inputs : (ports splitter.aggregateType).inputs.Values) :
@@ -311,7 +333,8 @@ def combinerInputs (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component))
     (proposals : (component : splitter.ports.outputs.Label) →
-      ProposedValues (components component).moduleStructure) :
+      ProposedValues
+        (moduleStructure (splitter.ports.outputs.signalType component))) :
     splitter.combiner.ports.inputs.Values := by
   cases splitter <;> exact fun component => (proposals component).outputs .result
 
@@ -338,7 +361,7 @@ theorem aggregateHasStructuralResult (splitter : SignalSplitter)
       (rightSplitterInputs splitter inputs) (state (.item (.inl .unit))) with
     ⟨rightSplit, rightSplitSatisfies⟩
   let Property := fun component proposal =>
-    (components component).moduleStructure.IsSolution
+    (moduleStructure (splitter.ports.outputs.signalType component)).IsSolution
       (componentInputs splitter leftSplit rightSplit component)
       (state (.item (.inr component))) proposal
   have available : ∀ component, ∃ proposal, Property component proposal :=
@@ -385,7 +408,8 @@ theorem aggregateHasStructuralResult (splitter : SignalSplitter)
               cases splitter <;> funext port <;> cases port <;> rfl]
             exact rightSplitSatisfies
         | inr component =>
-            change (components component).moduleStructure.IsSolution
+            change (moduleStructure
+              (splitter.ports.outputs.signalType component)).IsSolution
               (ProposedValues.childInputs (aggregateBody splitter)
                 (aggregateChildStructure splitter components) inputs children
                   (.item (.inr component)))
@@ -733,12 +757,20 @@ private theorem aggregateImplements (splitter : SignalSplitter)
           (splitter.outputValues (leftSplitterInputs splitter inputs) component)
           (splitter.outputValues (rightSplitterInputs splitter inputs) component) := by
     intro component
+    rcases (components component).hasCorrespondingState
+        (structuralState (.item (.inr component))) with
+      ⟨componentState, componentCorresponds⟩
+    have componentState_eq : componentState = SignalMap.emptyValues :=
+      by
+        funext statePort
+        exact nomatch statePort
+    subst componentState
     rcases (components component).implements
         (ProposedValues.childInputs (aggregateBody splitter)
           (aggregateChildStructure splitter components) inputs childProposals
           (.item (.inr component)))
         SignalMap.emptyValues (structuralState (.item (.inr component)))
-        (childProposals (.item (.inr component))) trivial
+        (childProposals (.item (.inr component))) componentCorresponds
         (childSatisfies (.item (.inr component))) with
       ⟨nextState, evaluates, nextCorresponds⟩
     have holds := evaluates.1 Rule.apply
@@ -795,61 +827,49 @@ private theorem aggregateImplements (splitter : SignalSplitter)
           (fields.get_bitwiseOr (inputs .left) (inputs .right) component).symm
   · rfl
 
-noncomputable def aggregateImplementation (splitter : SignalSplitter)
+noncomputable def aggregateCertification (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component)) :
-    Implementation splitter.aggregateType where
-  moduleStructure := Certified.moduleStructure (aggregateBody splitter)
-    (aggregateChildren splitter components)
-  moduleStructure_eq := by
-    cases splitter with
-    | vector length element =>
-        unfold Certified.moduleStructure Certified.childStructure aggregateChildren
-          moduleStructure
-        change ModuleStructure.composite _ _ = ModuleStructure.composite _ _
-        congr 1
-        funext child
-        cases child with
-        | start => rfl
-        | item role =>
-            cases role with
-            | inl singleton => cases singleton; rfl
-            | inr component => exact (components component).moduleStructure_eq
-        | finish => rfl
-    | tuple fields =>
-        unfold Certified.moduleStructure Certified.childStructure aggregateChildren
-          moduleStructure
-        change ModuleStructure.composite _ _ = ModuleStructure.composite _ _
-        congr 1
-        funext child
-        cases child with
-        | start => rfl
-        | item role =>
-            cases role with
-            | inl singleton => cases singleton; rfl
-            | inr component => exact (components component).moduleStructure_eq
-        | finish => rfl
+    ModuleCycleCertification
+      (Certified.moduleStructure (aggregateBody splitter)
+        (aggregateChildren splitter components))
+      (cycleContract splitter.aggregateType) where
+  stateCorresponds := fun _ _ => True
+  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
   hasStructuralResult := aggregateHasStructuralResult splitter components
   structuralResultUnique := aggregateHasAtMostOneSolution splitter components
   implements := aggregateImplements splitter components
 
-noncomputable def implementation : (signalType : SignalType) → Implementation signalType
+noncomputable def aggregateImplementation (splitter : SignalSplitter)
+    (components : (component : splitter.ports.outputs.Label) →
+      Implementation (splitter.ports.outputs.signalType component)) :
+    Implementation splitter.aggregateType :=
+  (aggregateCertification splitter components).transportStructure
+    (aggregateModuleStructure_eq splitter components).symm
+
+private noncomputable def implementationDefinition :
+    (signalType : SignalType) → Implementation signalType
   | .bit => bitImplementation
   | .vector length element =>
-      aggregateImplementation (.vector length element) fun _ => implementation element
+      aggregateImplementation (.vector length element) fun _ =>
+        implementationDefinition element
   | .tuple fields =>
       aggregateImplementation (.tuple fields) fun component =>
-        implementation (fields.typeAt component)
+        implementationDefinition (fields.typeAt component)
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
   · exact SignalTypes.complexity_typeAt_lt fields component
+
+noncomputable opaque implementation (signalType : SignalType) :
+    Implementation signalType :=
+  implementationDefinition signalType
 
 noncomputable def certified (signalType : SignalType) :
     ModuleCycleCertified (ports signalType) := (implementation signalType).certified
 
 theorem certified_moduleStructure (signalType : SignalType) :
     (certified signalType).moduleStructure = moduleStructure signalType :=
-  (implementation signalType).moduleStructure_eq
+  rfl
 
 end Silean2.Modules.BitwiseOr

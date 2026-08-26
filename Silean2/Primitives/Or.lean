@@ -32,6 +32,15 @@ def orCycleContract : ModuleCycleContract or.ports where
   stateRule := CycleStateRule.empty or.ports
   outputCoverage := by rfl
 
+@[simp] theorem orOutputRule_holds_iff
+    (inputs : or.ports.inputs.Values)
+    (state : orCycleContract.state.Values)
+    (outputs : or.ports.outputs.Values) :
+    orOutputRule.Holds inputs state outputs ↔
+      outputs .output = (inputs .left || inputs .right) := by
+  simp [orOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+    SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
+
 private def orStateCorresponds (_ : orCycleContract.state.Values)
     (_ : (ModuleStructure.primitive or).State) : Prop := True
 

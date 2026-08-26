@@ -62,9 +62,23 @@ def wiring (signalType : SignalType) :
 @[reducible] noncomputable def childStructure (signalType : SignalType) :=
   Certified.childStructure (children signalType)
 
-noncomputable def moduleStructure (signalType : SignalType) :
+@[reducible] def structuralChildren (signalType : SignalType) :
+    (name : (instances signalType).Name) →
+      ModuleStructure ((instances signalType).ports name)
+  | .selection => Modules.Mux.moduleStructure signalType
+  | .storage => Modules.Register.moduleStructure signalType
+
+def moduleStructure (signalType : SignalType) :
     ModuleStructure (ports signalType) :=
-  Certified.moduleStructure (body signalType) (children signalType)
+  .composite (body signalType) (structuralChildren signalType)
+
+theorem moduleStructure_eq (signalType : SignalType) :
+    moduleStructure signalType =
+      Certified.moduleStructure (body signalType) (children signalType) := by
+  unfold moduleStructure Certified.moduleStructure
+  congr
+  funext child
+  cases child <;> rfl
 
 end Silean2.Modules.EnabledRegister
 
@@ -163,7 +177,8 @@ theorem coversChildren (signalType : SignalType) :
     simp [outputSchedule, Certified.Schedule.finalAvailability]
 
 theorem hasAtMostOneSolution (signalType : SignalType) :
-    (moduleStructure signalType).HasAtMostOneSolution :=
+    (Certified.moduleStructure (body signalType)
+      (children signalType)).HasAtMostOneSolution :=
   (ruleSchedules signalType).hasAtMostOneSolution (coversChildren signalType)
 
 def selectionInputs (signalType : SignalType)
@@ -181,9 +196,11 @@ noncomputable def storageInputs (signalType : SignalType)
 
 theorem hasStructuralResult (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
-    (currentState : (moduleStructure signalType).State) :
+    (currentState : (Certified.moduleStructure (body signalType)
+      (children signalType)).State) :
     ∃ proposal,
-      (moduleStructure signalType).IsSolution inputs currentState proposal := by
+      (Certified.moduleStructure (body signalType)
+        (children signalType)).IsSolution inputs currentState proposal := by
   rcases (children signalType .storage).hasCorrespondingState
       (currentState .storage) with ⟨storageState, storageCorresponds⟩
   rcases (children signalType .selection).hasStructuralResult
@@ -241,7 +258,8 @@ theorem hasStructuralResult (signalType : SignalType)
 
 def stateCorresponds (signalType : SignalType)
     (contractState : (cycleContract signalType).state.Values)
-    (structuralState : (moduleStructure signalType).State) : Prop :=
+    (structuralState : (Certified.moduleStructure (body signalType)
+      (children signalType)).State) : Prop :=
   (children signalType .storage).stateCorresponds contractState
     (structuralState .storage)
 
@@ -255,22 +273,26 @@ def stateCorresponds (signalType : SignalType)
     SignalSelection.project, SignalMap.select]
 
 private theorem implements (signalType : SignalType) :
-    Implements (moduleStructure signalType) (cycleContract signalType)
+    Implements (Certified.moduleStructure (body signalType)
+      (children signalType)) (cycleContract signalType)
       (stateCorresponds signalType) := by
   intro inputs contractState structuralState proposal corresponds satisfies
+  have storageImplements := Certified.childImplements (children signalType)
+    inputs structuralState proposal satisfies .storage contractState corresponds
+  rcases (children signalType .selection).hasCorrespondingState
+      (structuralState .selection) with ⟨selectionState, selectionCorresponds⟩
+  have selectionState_eq : selectionState = SignalMap.emptyValues := by
+    funext statePort
+    exact nomatch statePort
+  subst selectionState
+  have selectionImplements := Certified.childImplements (children signalType)
+    inputs structuralState proposal satisfies .selection SignalMap.emptyValues
+      selectionCorresponds
+  have boundary := satisfies.1
   rcases proposal with ⟨outputs, childProposals⟩
-  rcases satisfies with ⟨boundary, childSatisfies⟩
-  rcases (children signalType .storage).implements
-      (ProposedValues.childInputs (body signalType) (childStructure signalType)
-        inputs childProposals .storage)
-      contractState (structuralState .storage) (childProposals .storage)
-      corresponds (childSatisfies .storage) with
+  rcases storageImplements with
     ⟨storageNextState, storageEvaluates, storageNextCorresponds⟩
-  rcases (children signalType .selection).implements
-      (ProposedValues.childInputs (body signalType) (childStructure signalType)
-        inputs childProposals .selection)
-      SignalMap.emptyValues (structuralState .selection)
-      (childProposals .selection) trivial (childSatisfies .selection) with
+  rcases selectionImplements with
     ⟨selectionNextState, selectionEvaluates, selectionNextCorresponds⟩
   refine ⟨storageNextState, ?_, storageNextCorresponds⟩
   constructor
@@ -286,7 +308,8 @@ private theorem implements (signalType : SignalType) :
         (ProposedValues.childInputs (body signalType) (childStructure signalType)
           inputs childProposals .storage) .input := by
       simpa [children, Register.certified, Register.Implementation.certified,
-        Register.cycleContract, Register.stateRule] using
+        ModuleCycleCertification.bundle, Register.cycleContract,
+        Register.stateRule] using
         congrFun storageEvaluates.2 Primitives.RegisterState.stored
     have selected := selectionEvaluates.1 Mux.Rule.select
     change (Mux.selectRule signalType).Holds _ SignalMap.emptyValues _ at selected
@@ -304,10 +327,10 @@ private theorem implements (signalType : SignalType) :
       bif inputs .enable then inputs .value else contractState .stored
     rw [selected, storageCurrent]
 
-noncomputable def certified (signalType : SignalType) :
-    ModuleCycleCertified (ports signalType) where
-  moduleStructure := moduleStructure signalType
-  cycleContract := cycleContract signalType
+noncomputable def proofCertification (signalType : SignalType) :
+    ModuleCycleCertification
+      (Certified.moduleStructure (body signalType) (children signalType))
+      (cycleContract signalType) where
   stateCorresponds := stateCorresponds signalType
   hasCorrespondingState := fun structuralState =>
     (children signalType .storage).hasCorrespondingState
@@ -315,6 +338,16 @@ noncomputable def certified (signalType : SignalType) :
   hasStructuralResult := hasStructuralResult signalType
   structuralResultUnique := hasAtMostOneSolution signalType
   implements := implements signalType
+
+noncomputable opaque certification (signalType : SignalType) :
+    ModuleCycleCertification (moduleStructure signalType)
+      (cycleContract signalType) :=
+  (proofCertification signalType).transportStructure
+    (moduleStructure_eq signalType).symm
+
+noncomputable def certified (signalType : SignalType) :
+    ModuleCycleCertified (ports signalType) :=
+  (certification signalType).bundle
 
 theorem hasExactlyOneSolution (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)

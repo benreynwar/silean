@@ -987,3 +987,110 @@ the public certificate to establish exactly one structural result, and the
 nested check exercises corresponding-state existence. Focused builds remain
 below five seconds: the FIFO builds in about 3.5 seconds and its checks in about
 1.1 seconds on the current workspace.
+
+## Current review: certified child composition
+
+Reviewing Mux, EnabledRegister, and OneEntryFifo identified one repeated law
+that is genuinely independent of module wiring and behavior: if a composite
+proposal satisfies the parent structure and a child contract state corresponds
+to that child's structural state, then the child certificate evaluates its
+automatically wired inputs and preserves correspondence for the proposed child
+next state.
+
+`CertifiedComposition` now owns the certified-child collection, the derived
+child and composite structures, and this `childImplements` theorem.
+`CertifiedSchedule` imports that layer and remains concerned only with positive
+dependency schedules and uniqueness. Mux, EnabledRegister, and OneEntryFifo use
+the generic theorem instead of manually extracting and passing each child's
+solution proof.
+
+This review deliberately did not abstract module-specific wiring equalities or
+contract-specific next-state transport. Those remain the actual local proof
+obligations. Public contract characterization theorems were added or exposed
+for NOT, OR, FifoControl, Mux, and OneEntryFifo so parent proofs can use child
+behavior without unfolding child structures, wiring, or schedules.
+
+## Goal outcome: computable module structures and opaque certification
+
+All reusable modules now expose their `moduleStructure` as a standalone
+computable definition. Recursive Register, Mask, and BitwiseOr structures are
+defined directly by signal shape. Mux, EnabledRegister, and OneEntryFifo define
+their composite child-structure maps directly from those public child
+structures. BitMux and FifoControl were audited to the same boundary.
+
+`ModuleCycleCertification structure contract` is the shared proof-only record.
+It is indexed by the exact public structure rather than owning a second
+structure. Generic structure and contract transport move the entire dependent
+certificate across a proved identity at one boundary. Each module keeps its
+certification implementation opaque/noncomputable and bundles it as
+`ModuleCycleCertified` only for behavioral composition. Therefore a backend
+can inspect public structures without evaluating certification; the direct
+FIRRTL renderer now does exactly that.
+
+The migration also tightened the parent interface: OneEntryFifo now expresses
+its state relation through its child certificates rather than referring to
+EnabledRegister's proof-internal state correspondence. Existing public
+contract characterization theorems and `Certified.childImplements` remain the
+composition API.
+
+## Goal outcome: direct FIRRTL generation
+
+The public computable `ModuleStructure` hierarchy now has a direct executable
+FIRRTL consumer. `ModuleNaming` is indexed by the exact source structure and
+adds only readable module, port, instance, state, and recursive child names.
+Generic traversal collects occurrences, shared definitions, ports, instances,
+and typed connections without evaluating certification or constructing a
+lowered semantic circuit.
+
+`FIRRTL.renderCircuit` emits FIRRTL 4.0 text for all current structural cases:
+the supported single-bit NOT, AND, OR, equality, and register primitives;
+vector/tuple splitters and combiners; and arbitrary composites. It uses direct
+connects rather than inventing intermediate wires. Executable validation
+diagnoses illegal or duplicate local identifiers, module-name collisions, and
+one module key being assigned different rendered definitions.
+
+A backend-only `clock` input is added uniformly to every module and propagated
+to every child instance. The register primitive declares a reset-free FIRRTL
+register on that clock; clock remains absent from ordinary `ModulePorts`.
+
+Readable naming covers BitMux, recursive generic Register, Mask, BitwiseOr,
+Mux, EnabledRegister, FifoControl, and OneEntryFifo. Executable checks render a
+complete BitMux, vector Register, tuple EnabledRegister, and vector-payload
+OneEntryFifo and inspect hierarchy, aggregate types, operations, register
+declarations, direct connections, and clock propagation. The syntax was
+reviewed against the local FIRRTL 4.0 specification; no local FIRRTL parser was
+available. Focused cached builds remain below five seconds, with the FIRRTL
+check target itself under one second.
+
+## Goal outcome: executable bit-register toolchain check
+
+A pinned Nix development shell now provides the complete external toolchain:
+the project-selected Lean version through Elan, CIRCT `firtool`, Verilator,
+Make, Python, cocotb, and pytest. This replaces ambient tool assumptions and
+keeps Python packages pinned transitively by `flake.lock`.
+
+`FIRRTL.emitMain` is the small shared executable boundary. Each concrete design
+configuration owns a dedicated Lean executable; the first is
+`emit-bit-register`. It emits to stdout or an explicit `--output PATH` and does
+not encode hardware configuration in command-line strings.
+
+The top-level Makefile exposes separate `firrtl-bit-register`,
+`verilog-bit-register`, and `test-bit-register` stages, with every generated
+artifact below `build/bit-register`. CIRCT successfully parses the generated
+FIRRTL and produces SystemVerilog containing the expected positive-edge
+register. Verilator 5.050 and cocotb 2.0.1 compile and simulate it.
+
+The cocotb test follows the existing Zamlet convention: a standard cocotb
+`Clock` runs continuously, and a drive phase waits for `RisingEdge` followed by
+`FallingEdge`. It avoids assumptions about initial register contents, then
+checks five cycles of between-edge stability and rising-edge capture. The clean
+end-to-end run passes; cached FIRRTL and SystemVerilog targets take about 1.4
+seconds including Nix shell startup, and the cached simulation takes about 2.1
+seconds.
+
+The same pipeline now exercises a generic one-entry FIFO carrying a nested
+tuple/vector payload. Recursive field labels are layered onto the computable
+structure by FIRRTL naming metadata and propagated through every generic child
+and split/combine adapter. CIRCT accepts the resulting named aggregate types,
+and cocotb verifies all eight flattened payload leaves across fall-through,
+capture, backpressure, simultaneous replacement, and dequeue.
