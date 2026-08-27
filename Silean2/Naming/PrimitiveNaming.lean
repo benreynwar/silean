@@ -33,4 +33,11 @@ def eq : ModuleNaming (ModuleStructure.primitive Primitives.eq) :=
 def register : ModuleNaming (ModuleStructure.primitive Primitives.register) :=
   .primitive ⟨"register", "bit", []⟩ unaryPorts registerState .register
 
+def constant (value : Bool) :
+    ModuleNaming (ModuleStructure.primitive (Primitives.constant value)) :=
+  .primitive ⟨"constant", if value then "true" else "false", []⟩
+    { inputs := emptySignals
+      outputs := ⟨fun | .output => "out"⟩ }
+    emptySignals (.constant value)
+
 end Silean2.Naming.Primitive

@@ -99,6 +99,8 @@ private def primitiveStatements {primitive : Primitive}
       [s!"reg {stored} : UInt<1>, clock",
        s!"connect {renderSourceName (ports.outputs.name .output)}, {stored}",
        s!"connect {stored}, {renderSourceName (ports.inputs.name .input)}"]
+  | .constant value =>
+      [s!"connect {renderSourceName (ports.outputs.name .output)}, UInt<1>({if value then 1 else 0})"]
 
 private def splitterStatements (splitter : SignalSplitter)
     (ports : ModulePortsNaming splitter.ports) : List String := match splitter with

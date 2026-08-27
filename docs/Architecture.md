@@ -147,12 +147,66 @@ Validated refinement examples are:
 - generic Mux: a shallow hierarchy composes NOT, two generic Masks, and generic
   BitwiseOr. Its refinement proof uses only the child certificates and keeps
   the mask/OR selection identity private to the module proof.
+- generic Constant: the bit case wraps a Boolean constant primitive. Vector
+  and tuple cases have no input splitters; they recursively instantiate the
+  value selected for each immediate component and combine the outputs. Module
+  keys include both signal shape and flattened value bits so distinct constant
+  definitions cannot collide during FIRRTL collection.
+- generic balanced Reduction: a reusable structural recursion accepts a
+  certified same-typed binary child and certified identity source. Empty,
+  singleton, and binary-node cases share generic existence, schedule-based
+  uniqueness, and refinement proofs. The balanced constructor proves its leaf
+  count and that every recursive split differs by at most one leaf.
+- bit `All`: the structure instantiates Reduction with AND and constant true,
+  but its public contract is phrased independently as the ordinary Lean
+  `every` operation. Its public law says the result is true exactly when every
+  indexed input is true. Tree shape and parenthesization remain details of the
+  structural certification, not facts required of module users.
+- generic recursive Equality: the public contract is the natural recursive
+  `SignalType.equal` function, with a theorem relating a true result to Lean
+  equality. A bit wraps the equality primitive. Each aggregate level splits
+  its two inputs, recursively compares corresponding immediate components,
+  and sends that indexed family of result bits to `All`. Empty aggregates are
+  therefore equal by the identity behavior of `All`; no flattened bit order is
+  part of either the contract or structure.
+- generic VectorConcat: two vectors with a common element type are split into
+  elements and recombined in left-then-right index order. Its contract is the
+  natural `Fin.addCases` function, and public laws describe each half without
+  exposing the splitter/combiner implementation.
+- generic BinaryToOneHot: the public contract identifies the sole true output
+  by the natural-number value of the big-endian input bits. The implementation
+  recursively decodes the tail, masks two copies using the leading bit and its
+  inverse, and concatenates them. Thus the contract does not expose the
+  recursive hierarchy or its scheduling proof.
+- generic VectorSplit: one vector is partitioned into left and right subvectors
+  using the existing element splitter and two combiners. It is reusable wiring
+  structure, not a new primitive adapter case.
+- generic CombMuxTree: the public contract directly indexes a value vector by
+  the natural-number interpretation of a big-endian selector. Each recursive
+  level partitions the values, evaluates two smaller trees using the selector
+  tail, and chooses with generic `Mux`; this hierarchy is absent from the
+  consumer-facing contract.
+- generic RegisterBank: the public state is a vector of entries, combinational
+  reads observe the current vector, and the next-state rule functionally
+  replaces only the decoded write entry. Its structure uses the certified
+  decoder, a family of AND gates and enabled registers, a vector combiner, and
+  CombMuxTree. State correspondence is pointwise over the register family;
+  neither that hierarchy nor its schedules appear in the behavioral contract.
+
+This distinction is intentional: proof-facing helper contracts may expose the
+precise behavior needed to compose a generic construction, while the reusable
+module at the boundary owns the most natural Lean statement of its behavior.
+Implementation choices such as balanced parenthesization must not leak into a
+consumer-facing contract when a simpler mathematical description is
+available.
 
 `LeafwiseComposition` now centralizes the common split/component/combine
 hierarchy, component-family scheduling, and structural-existence proof used by
-Register, Mask, and BitwiseOr. State correspondence and refinement remain
-module proofs because they express storage, masking, and disjunction semantics
-rather than hierarchy mechanics.
+Constant, Register, Mask, and BitwiseOr. Empty input families let Constant omit
+splitters while retaining the same component and combiner machinery. State
+correspondence and refinement remain module proofs because they express
+constant generation, storage, masking, and disjunction semantics rather than
+hierarchy mechanics.
 
 The structural vocabulary also expresses a generic one-entry fall-through
 FIFO. `FifoControl` computes bit-valued upstream readiness and the shared
@@ -192,8 +246,9 @@ computable; their proof implementations are opaque.
 
 ## File responsibilities
 
-- `Foundation/`: signal shapes, finite labels, typed signal maps and
-  selections, connectivity-only module ports, and structural-state shapes.
+- `Foundation/`: signal shapes, finite labels, fixed-width bit-vector
+  arithmetic, typed signal maps and selections, connectivity-only module
+  ports, and structural-state shapes.
 - `Structure/`: named child interfaces, typed endpoints, total wiring, module
   bodies, and recursively owned module structures.
 - `Primitive`, `PrimitivePorts`, and `Primitives/`: the open primitive record,
@@ -213,6 +268,30 @@ computable; their proof implementations are opaque.
 - `LeafwiseComposition`: generic recursive/fixed input classification,
   split/component/combine hierarchy and wiring, certified child occurrences,
   component-family scheduling, and composite structural-existence construction.
+- `Modules/Reduction`: generic finite reduction shape, balanced-tree proof,
+  hierarchy construction, schedules, and recursive certification.
+- `Modules/All`: the AND/true instantiation, its natural all-inputs contract,
+  public behavioral theorem, and module-owned naming.
+- `Modules/Equality`: natural equality contract, recursive split/compare/All
+  hierarchy, certification, public equality theorem, and module-owned naming.
+- `Modules/VectorConcat`: natural vector concatenation contract,
+  split/split/combine hierarchy, certification, public half-index laws, and
+  module-owned naming.
+- `Modules/BinaryToOneHot`: numeric one-hot contract, recursive
+  split/decode/mask/concat hierarchy, certification, public selected-index
+  law, and module-owned naming.
+- `Modules/VectorSplit`: natural vector partition contract,
+  split/combine/combine hierarchy, certification, public half laws, and
+  module-owned naming.
+- `Modules/CombMuxTree`: natural numeric-selection contract, recursive
+  partition/two-subtree/mux hierarchy, certification, public selected-value
+  theorem, and module-owned naming.
+- `Modules/RegisterBank`: natural vector-state read/write contract,
+  decoder/gate/enabled-register-family/combiner/mux structure, pointwise state
+  correspondence, certification, public read/write/retention laws, and
+  module-owned naming. Its private named child-instance type keeps proofs and
+  naming independent of enumeration encoding; numeric selection is the shared
+  `BitVector.toIndex` arithmetic utility also used by `CombMuxTree`.
 - `ModuleCycleContract`: behavioral rule declarations and coverage.
 - `ModuleCycleEvaluation`: public contract evaluation relations/functions plus
   private typed assembly proofs.

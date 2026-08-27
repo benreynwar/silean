@@ -6,6 +6,75 @@ namespace Silean2
 functions describe contract behavior; physical modules still recurse to
 single-bit primitive leaves. -/
 
+def allFin : (width : Nat) → (Fin width → Bool) → Bool
+  | 0, _ => true
+  | width + 1, values => values 0 && allFin width (fun index => values index.succ)
+
+theorem allFin_eq_true_iff : ∀ (width : Nat) (values : Fin width → Bool),
+    allFin width values = true ↔ ∀ index, values index = true
+  | 0, _ => by
+      constructor
+      · intro _ index; exact Fin.elim0 index
+      · intro _; rfl
+  | width + 1, values => by
+      simp only [allFin, Bool.and_eq_true, allFin_eq_true_iff]
+      constructor
+      · rintro ⟨head, tail⟩ index
+        exact Fin.cases head tail index
+      · intro every
+        exact ⟨every 0, fun index => every index.succ⟩
+
+mutual
+  def SignalType.equal : (signalType : SignalType) →
+      signalType.Denote → signalType.Denote → Bool
+    | .bit, left, right => (left && right) || (!left && !right)
+    | .vector length element, left, right =>
+        allFin length fun index => element.equal (left index) (right index)
+    | .tuple fields, left, right => fields.equal left right
+
+  def SignalTypes.equal : (fields : SignalTypes) →
+      fields.Denote → fields.Denote → Bool
+    | .nil, (), () => true
+    | .cons head tail, (leftHead, leftTail), (rightHead, rightTail) =>
+        head.equal leftHead rightHead && tail.equal leftTail rightTail
+end
+
+mutual
+  theorem SignalType.equal_eq_true_iff : ∀ (signalType : SignalType)
+      (left right : signalType.Denote),
+      signalType.equal left right = true ↔ left = right
+    | .bit, left, right => by cases left <;> cases right <;> simp [SignalType.equal]
+    | .vector length element, left, right => by
+        rw [show SignalType.equal (.vector length element) left right =
+            allFin length (fun index => element.equal (left index) (right index)) by rfl]
+        rw [allFin_eq_true_iff]
+        constructor
+        · intro pointwise
+          funext index
+          exact (SignalType.equal_eq_true_iff element _ _).mp (pointwise index)
+        · intro equal
+          subst right
+          intro index
+          exact (SignalType.equal_eq_true_iff element _ _).mpr rfl
+    | .tuple fields, left, right => by
+        change fields.equal left right = true ↔ left = right
+        exact SignalTypes.equal_eq_true_iff fields left right
+
+  theorem SignalTypes.equal_eq_true_iff : ∀ (fields : SignalTypes)
+      (left right : fields.Denote),
+      fields.equal left right = true ↔ left = right
+    | .nil, (), () => by simp [SignalTypes.equal]
+    | .cons head tail, (leftHead, leftTail), (rightHead, rightTail) => by
+        simp only [SignalTypes.equal, Bool.and_eq_true,
+          SignalType.equal_eq_true_iff head,
+          SignalTypes.equal_eq_true_iff tail]
+        constructor
+        · rintro ⟨rfl, rfl⟩; rfl
+        · intro equal
+          cases equal
+          exact ⟨rfl, rfl⟩
+end
+
 mutual
   def SignalType.mask : (signalType : SignalType) →
       signalType.Denote → Bool → signalType.Denote

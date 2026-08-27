@@ -37,7 +37,8 @@ entry points for consumers and do not create compatibility namespaces.
 
 `SignalLayout.lean` and `SignalAdapter.lean` describe immediate aggregate
 components. `SignalAdapterCertified.lean` proves splitter and combiner
-certificates; `SignalLogic.lean` contains generic signal-value logic laws.
+certificates; `SignalLogic.lean` contains generic signal-value logic laws,
+including recursive value equality and its equivalence to Lean equality.
 
 ## Meaning and certification
 
@@ -62,7 +63,29 @@ and module semantics are reviewed in `LeafwiseComposition.md`.
 
 `Primitives/` contains one file per supported single-bit primitive. `Modules/`
 contains reusable structures, contracts, certification, public behavioral
-theorems, and each module's naming metadata. FIFO responsibilities are split
+theorems, and each module's naming metadata. `Constant` uses the generic
+leafwise component/combiner hierarchy with empty input families and
+value-dependent recursive leaves. `Reduction` owns generic balanced finite
+reduction construction and proof machinery; `All` instantiates it with AND and
+true while exposing a separate, natural every-input contract. `Equality`
+recursively splits aggregates, compares corresponding children, and reduces
+their result-bit family through `All`, while its contract exposes only natural
+value equality. `VectorConcat` splits two vectors of a common element type and
+combines their elements in left-then-right order, while exposing only natural
+index laws and keeping aggregate elements intact. `BinaryToOneHot` interprets
+big-endian input bits numerically and implements the one-hot result through a
+recursive decoder, two masks, and `VectorConcat`. `VectorSplit` partitions a
+vector through existing generic adapters. `CombMuxTree` recursively applies
+that partition, two smaller trees, and `Mux` while exposing direct numeric
+selection as its contract. `RegisterBank` uses `BinaryToOneHot` and a family of
+generic enabled registers for synchronous writes, then combines their current
+values and selects a combinational read through `CombMuxTree`; its contract
+uses an ordinary vector state and functional replacement rather than exposing
+the hierarchy. Register-bank child identities are a private named inductive;
+their executable enumeration lists those constructors directly. Decoder,
+mux-tree, and register-bank contracts share `BitVector.toIndex` from the
+foundation arithmetic utilities. FIFO
+responsibilities are split
 explicitly: `FifoInterface` owns the shared ports and rules,
 `FifoCycleBehavior` turns ready/valid functions into cycle contracts and
 composes them, `FifoExecution` interprets those contracts over finite input

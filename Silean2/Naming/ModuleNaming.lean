@@ -116,6 +116,7 @@ inductive PrimitiveOperation : (primitive : Primitive) → Type
   | or : PrimitiveOperation Primitives.or
   | eq : PrimitiveOperation Primitives.eq
   | register : PrimitiveOperation Primitives.register
+  | constant (value : Bool) : PrimitiveOperation (Primitives.constant value)
 
 inductive ModuleNaming : {ports : ModulePorts} → ModuleStructure ports → Type 1
   | primitive {primitive : Primitive}

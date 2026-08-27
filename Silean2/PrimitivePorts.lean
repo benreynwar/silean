@@ -37,4 +37,6 @@ def unaryPorts : ModulePorts := ⟨unaryInputMap, singleOutputMap⟩
 
 def binaryPorts : ModulePorts := ⟨binaryInputMap, singleOutputMap⟩
 
+def constantPorts : ModulePorts := ⟨emptySignalMap, singleOutputMap⟩
+
 end Silean2.Primitives
