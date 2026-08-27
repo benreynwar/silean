@@ -161,12 +161,15 @@ outputs are unconstrained by `Accepts`, while any reset in the trace starts the
 exact-cycle obligations and every later reset restarts them.
 
 `ModuleResetCertified` packages the independently chosen structure and reset
-contract with only that refinement proof. It stores no structural-state
-existence or uniqueness result, specification-to-structure state relation,
-schedule, evaluator, or cycle contract. Its public laws expose acceptance of a
-whole execution and matching of the suffix after either an initial reset or a
-reset following an arbitrary prefix. Proofs may use private witnesses, but
-those witnesses are not part of certification's meaning.
+contract with structural `HasSolution` and that refinement proof. Totality
+prevents refinement from holding merely because the structure has no
+executions; it also supplies an execution, and an accepted execution, for every
+initial structural state and finite input trace. It does not require structural
+uniqueness and stores no specification-to-structure state relation, schedule,
+evaluator, or cycle contract. Its public laws expose acceptance of a whole
+execution and matching of the suffix after either an initial reset or a reset
+following an arbitrary prefix. Proofs may use private witnesses, but those
+witnesses are not part of certification's meaning.
 
 `Implements moduleStructure cycleContract stateCorresponds` quantifies over
 every structural proposal satisfying `ModuleStructure.IsSolution` at
@@ -307,7 +310,8 @@ observation equations and the four queue-update laws to match the reset
 contract while preserving capacity. The local trace induction carries this
 evidence through every later reset. None of the cycle state, structural-state
 correspondence, invariant, or induction witness occurs in the resulting
-`ModuleResetCertified` value.
+`ModuleResetCertified` value. Structural totality is carried separately from
+that private correspondence, using the FIFO's existing cycle certification.
 
 This concrete proof suggests a possible future generic constructor would need
 three proof ingredients: initial implementation-state coverage, reset

@@ -18,12 +18,8 @@ example (initialState : (Fifo.moduleStructure .bit 1).State)
       (Fifo.moduleStructure .bit 1).Executes initialState traceInputs outputs
           finalState ∧
         (Fifo.resetContract .bit 1).Accepts traceInputs outputs := by
-  have available : (Fifo.moduleStructure .bit 1).HasSolution :=
-    (Fifo.certified .bit 1).hasStructuralResult
-  rcases available.execution_exists initialState traceInputs with
-    ⟨outputs, finalState, execution⟩
-  exact ⟨outputs, finalState, execution,
-    (Fifo.resetCertified .bit 1).accepts_execution execution⟩
+  exact (Fifo.resetCertified .bit 1).accepted_execution_exists
+    initialState traceInputs
 
 example {initialState finalState : (Fifo.moduleStructure .bit 1).State}
     {resetOutput : (Fifo.ports .bit).outputs.Values}

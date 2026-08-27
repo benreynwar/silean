@@ -370,12 +370,15 @@ synchronization, and pre-reset-prefix laws are established without mentioning
 module structure or certification.
 
 `ModuleResetCertified` is also complete. It packages structure, reset contract,
-and only the universal statement that every structural execution is accepted.
-Because acceptance is unconstrained before reset, this directly gives the
-intended behavior from arbitrary initial structural state; generic suffix laws
-expose matching after an initial reset or after a reset following any prefix.
-No cycle contract, evaluator, schedule, structural-state mapping, existence
-proof, or uniqueness proof is stored in this certificate.
+structural totality, and the universal statement that every structural
+execution is accepted. Totality prevents a structure with no solutions from
+satisfying refinement vacuously and generically supplies finite executions for
+every initial structural state and input trace. Because acceptance is
+unconstrained before reset, refinement gives the intended behavior from
+arbitrary initial structural state; generic suffix laws expose matching after
+an initial reset or after a reset following any prefix. No cycle contract,
+evaluator, schedule, structural-state mapping, or uniqueness proof is stored in
+this certificate.
 
 The canonical FIFO now has a contract-only reset specification. Its state is
 the natural Lean queue `List T`, reset establishes `[]`, and ordinary cycles
@@ -396,7 +399,8 @@ reset establishes zero pointers, boundedness, and empty logical contents.
 Every ordinary cycle thereafter matches ready/valid/ternary payload
 expectations and the List queue update, while later resets re-establish the
 same alignment. All correspondence and induction witnesses are private;
-`Fifo.resetCertified` exposes only `ModuleResetCertified`.
+`Fifo.resetCertified` exposes only `ModuleResetCertified`, including its
+structural-totality guarantee.
 
 The concrete proof indicates that a reusable constructor would require three
 proof inputs: initial implementation-state coverage, reset establishment of

@@ -314,6 +314,7 @@ noncomputable def resetCertified (element : SignalType) (addressWidth : Nat) :
     ModuleResetCertified (ports element) where
   moduleStructure := moduleStructure element addressWidth
   resetContract := resetContract element addressWidth
+  hasSolution := (certified element addressWidth).hasStructuralResult
   implements := implementsResetContract element addressWidth
 
 end Silean2.Modules.Fifo

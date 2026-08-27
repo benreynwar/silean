@@ -6,7 +6,8 @@ namespace Silean2
 universe u
 
 /-! Reset certification relates two independently meaningful descriptions. It
-stores only the trace-refinement fact, not the witnesses used to prove it. -/
+stores structural totality so refinement cannot be vacuous, but not the private
+state-alignment witnesses used to prove that refinement. -/
 
 def ImplementsResetContract (moduleStructure : ModuleStructure ports)
     (resetContract : ModuleResetContract ports) : Prop :=
@@ -17,9 +18,35 @@ def ImplementsResetContract (moduleStructure : ModuleStructure ports)
 structure ModuleResetCertified (ports : ModulePorts) where
   moduleStructure : ModuleStructure ports
   resetContract : ModuleResetContract.{u} ports
+  hasSolution : moduleStructure.HasSolution
   implements : ImplementsResetContract moduleStructure resetContract
 
 namespace ModuleResetCertified
+
+theorem transition_exists (certified : ModuleResetCertified ports)
+    (inputs : ports.inputs.Values)
+    (currentState : certified.moduleStructure.State) :
+    ∃ outputs nextState,
+      certified.moduleStructure.Transition inputs currentState outputs nextState :=
+  certified.hasSolution.transition_exists inputs currentState
+
+theorem execution_exists (certified : ModuleResetCertified ports)
+    (initialState : certified.moduleStructure.State)
+    (inputs : List ports.inputs.Values) :
+    ∃ outputs finalState,
+      certified.moduleStructure.Executes initialState inputs outputs finalState :=
+  certified.hasSolution.execution_exists initialState inputs
+
+theorem accepted_execution_exists (certified : ModuleResetCertified ports)
+    (initialState : certified.moduleStructure.State)
+    (inputs : List ports.inputs.Values) :
+    ∃ outputs finalState,
+      certified.moduleStructure.Executes initialState inputs outputs finalState ∧
+        certified.resetContract.Accepts inputs outputs := by
+  rcases certified.execution_exists initialState inputs with
+    ⟨outputs, finalState, execution⟩
+  exact ⟨outputs, finalState, execution,
+    certified.implements initialState inputs outputs finalState execution⟩
 
 theorem accepts_execution (certified : ModuleResetCertified ports)
     {initialState finalState : certified.moduleStructure.State}

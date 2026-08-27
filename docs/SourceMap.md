@@ -53,7 +53,7 @@ including recursive value equality and its equivalence to Lean equality.
 | `StructuralExecution.lean` | Contract-independent one-cycle transitions and finite relational executions |
 | `ModuleCycleContract.lean` | Rule-local output behavior and explicit-input state transitions |
 | `ModuleResetContract.lean` | Contract-only synchronous-reset synchronization and ternary finite-trace behavior |
-| `ModuleResetCertified.lean` | Direct structural-trace refinement for reset contracts, without a public state mapping |
+| `ModuleResetCertified.lean` | Non-vacuous structural totality and direct structural-trace refinement for reset contracts, without a public state mapping |
 | `Modules/FifoResetContract.lean` | Natural List-based, capacity-bounded reset contract for the canonical FIFO interface |
 | `Modules/FifoResetCertified.lean` | Direct private-witness proof that canonical FIFO structural traces satisfy its reset contract |
 | `ModuleCycleEvaluation.lean` | Deterministic contract application and its relational laws |

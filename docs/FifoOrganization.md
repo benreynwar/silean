@@ -39,8 +39,9 @@ The reset certification consumes the existing cycle certificate only as a
 private proof technique. Its trace induction keeps cycle/structural
 correspondence before reset, establishes empty bounded logical contents on a
 reset edge, and preserves that alignment on ordinary edges. The exported
-`Fifo.resetCertified` contains only structure, reset contract, and trace
-refinement.
+`Fifo.resetCertified` contains only structure, reset contract, structural
+totality, and trace refinement. Totality is obtained from the existing cycle
+certificate and ensures the reset refinement has real executions to constrain.
 
 ## Retained abstractions
 
