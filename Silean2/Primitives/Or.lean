@@ -64,14 +64,15 @@ private theorem orImplements : Implements (.primitive or) orCycleContract
 def orCertified : ModuleCycleCertified or.ports where
   moduleStructure := .primitive or
   cycleContract := orCycleContract
-  stateCorresponds := orStateCorresponds
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := fun inputs state =>
+  certification := {
+    stateCorresponds := orStateCorresponds,
+    hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+    hasStructuralResult := fun inputs state =>
     ⟨ProposedValues.primitive (or.outputValues inputs state)
       (or.nextStateValues inputs state), by
         simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
           Primitive.IsSolution, Primitive.OutputsSatisfy,
-          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩
-  structuralResultUnique := Primitive.hasAtMostOneSolution or
-  implements := orImplements
+          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩,
+    structuralResultUnique := Primitive.hasAtMostOneSolution or,
+    implements := orImplements }
 end Silean2.Primitives

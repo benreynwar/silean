@@ -446,8 +446,90 @@ abbrev OutputSchedule (body : ModuleBody) (children : Children body)
     (BoundaryReady body children rule.writesOutputs.labels
       (fun input => input ∈ rule.readsInputs.labels)) []
 
+def ChildrenStateInputsReady (body : ModuleBody) (children : Children body)
+    (available : Availability children) : Prop :=
+  ∀ child input,
+    input ∈ (children child).cycleContract.stateRule.readsInputs.labels →
+    sourceAvailable (fun _ => True) available
+      (body.wiring.instanceInput child input)
+
 abbrev StateSchedule (body : ModuleBody) (children : Children body) :=
-  Schedule body children (fun _ => True) (fun _ => True) []
+  Schedule body children (fun _ => True)
+    (ChildrenStateInputsReady body children) []
+
+namespace StateSchedule
+
+/-- A completed state schedule makes the inputs selected by every immediate
+child state rule independent of the particular structural solution.  This is
+the semantic reason for the state schedule's finish condition: scheduled
+output rules determine every internal source needed by the next-state rules. -/
+theorem childStateInputs_eq
+    {body : ModuleBody} {children : Children body}
+    (schedule : StateSchedule body children)
+    (inputs : body.context.ports.inputs.Values)
+    (currentState : (moduleStructure body children).State)
+    (left right : (name : body.context.instances.Name) →
+      ProposedValues (children name).moduleStructure)
+    (leftSatisfies : ∀ name, (children name).moduleStructure.IsSolution
+      (ProposedValues.childInputs body (childStructure children)
+        inputs left name)
+      (currentState name) (left name))
+    (rightSatisfies : ∀ name, (children name).moduleStructure.IsSolution
+      (ProposedValues.childInputs body (childStructure children)
+        inputs right name)
+      (currentState name) (right name))
+    (child : body.context.instances.Name) :
+    let selection := (children child).cycleContract.stateRule.readsInputs
+    selection.project
+        (ProposedValues.childInputs body (childStructure children)
+          inputs left child) =
+      selection.project
+        (ProposedValues.childInputs body (childStructure children)
+          inputs right child) := by
+  dsimp
+  apply SignalSelection.project_eq_of_eq_on
+  intro input inputMem
+  apply source_value_eq_of_available
+    (schedule.finishAgreement inputs inputs (fun _ _ => rfl) currentState
+      left right leftSatisfies rightSatisfies (by
+        intro occurrence member
+        contradiction))
+    (fun _ => True) inputs inputs (fun _ _ => rfl)
+    (body.wiring.instanceInput child input)
+  exact schedule.finished child input inputMem
+
+/-- Consequently, a child's public next-state rule produces the same value in
+any two structural solutions with the same parent inputs and current state. -/
+theorem childStateRuleApply_eq
+    {body : ModuleBody} {children : Children body}
+    (schedule : StateSchedule body children)
+    (inputs : body.context.ports.inputs.Values)
+    (currentState : (moduleStructure body children).State)
+    (left right : (name : body.context.instances.Name) →
+      ProposedValues (children name).moduleStructure)
+    (leftSatisfies : ∀ name, (children name).moduleStructure.IsSolution
+      (ProposedValues.childInputs body (childStructure children)
+        inputs left name)
+      (currentState name) (left name))
+    (rightSatisfies : ∀ name, (children name).moduleStructure.IsSolution
+      (ProposedValues.childInputs body (childStructure children)
+        inputs right name)
+      (currentState name) (right name))
+    (child : body.context.instances.Name)
+    (contractState : (children child).cycleContract.state.Values) :
+    (children child).cycleContract.stateRule.apply
+        (ProposedValues.childInputs body (childStructure children)
+          inputs left child)
+        contractState =
+      (children child).cycleContract.stateRule.apply
+        (ProposedValues.childInputs body (childStructure children)
+          inputs right child)
+        contractState := by
+  unfold CycleStateRule.apply
+  rw [schedule.childStateInputs_eq inputs currentState left right
+    leftSatisfies rightSatisfies child]
+
+end StateSchedule
 
 structure RuleSchedules (body : ModuleBody) (children : Children body)
     (contract : ModuleCycleContract body.context.ports) where

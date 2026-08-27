@@ -70,14 +70,15 @@ private theorem eqImplements : Implements (.primitive eq) eqCycleContract
 def eqCertified : ModuleCycleCertified eq.ports where
   moduleStructure := .primitive eq
   cycleContract := eqCycleContract
-  stateCorresponds := eqStateCorresponds
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := fun inputs state =>
+  certification := {
+    stateCorresponds := eqStateCorresponds,
+    hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+    hasStructuralResult := fun inputs state =>
     ⟨ProposedValues.primitive (eq.outputValues inputs state)
       (eq.nextStateValues inputs state), by
         simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
           Primitive.IsSolution, Primitive.OutputsSatisfy,
-          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩
-  structuralResultUnique := Primitive.hasAtMostOneSolution eq
-  implements := eqImplements
+          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩,
+    structuralResultUnique := Primitive.hasAtMostOneSolution eq,
+    implements := eqImplements }
 end Silean2.Primitives

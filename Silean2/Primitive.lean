@@ -1,4 +1,6 @@
 import Silean2.DeriveEnumeration
+import Silean2.Foundation.ModulePorts
+import Silean2.Foundation.StructuralState
 
 namespace Silean2
 

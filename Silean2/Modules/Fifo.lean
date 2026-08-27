@@ -106,3 +106,29 @@ noncomputable def certified (signalType : SignalType)
       cycleContract signalType depth positive := rfl
 
 end Silean2.Modules.Fifo
+
+namespace Silean2.Modules.Fifo.Naming
+
+open Silean2 Silean2.Naming
+
+def namingFromAdditional (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType) :
+    (additionalDepth : Nat) →
+      ModuleNaming (Modules.Fifo.moduleStructureFromAdditional signalType additionalDepth)
+  | 0 => Modules.OneEntryFifo.Naming.namingWith signalType typeNaming
+  | additionalDepth + 1 =>
+      Modules.SerialFifo.Naming.serialNamingWith signalType typeNaming (additionalDepth + 2)
+        (Modules.OneEntryFifo.Naming.namingWith signalType typeNaming)
+        (namingFromAdditional signalType typeNaming additionalDepth)
+
+def depthNamingWith (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType)
+    (depth : Nat) (positive : 0 < depth) :
+    ModuleNaming (Modules.Fifo.moduleStructure signalType depth positive) :=
+  namingFromAdditional signalType typeNaming (Modules.Fifo.additionalDepth depth)
+
+def depthNaming (signalType : SignalType) (depth : Nat) (positive : 0 < depth) :
+    ModuleNaming (Modules.Fifo.moduleStructure signalType depth positive) :=
+  depthNamingWith signalType (.positional signalType) depth positive
+
+end Silean2.Modules.Fifo.Naming

@@ -42,13 +42,7 @@ coverage prevents an always-false correspondence from certifying vacuously. -/
 structure ModuleCycleCertified (ports : ModulePorts) where
   moduleStructure : ModuleStructure ports
   cycleContract : ModuleCycleContract ports
-  stateCorresponds : cycleContract.state.Values → moduleStructure.State → Prop
-  hasCorrespondingState : ∀ structuralState,
-    ∃ contractState, stateCorresponds contractState structuralState
-  hasStructuralResult : ∀ inputs structuralState,
-    ∃ proposal, moduleStructure.IsSolution inputs structuralState proposal
-  structuralResultUnique : moduleStructure.HasAtMostOneSolution
-  implements : Implements moduleStructure cycleContract stateCorresponds
+  certification : ModuleCycleCertification moduleStructure cycleContract
 
 def ModuleCycleCertification.bundle {ports : ModulePorts}
     {moduleStructure : ModuleStructure ports}
@@ -57,11 +51,7 @@ def ModuleCycleCertification.bundle {ports : ModulePorts}
     ModuleCycleCertified ports where
   moduleStructure := moduleStructure
   cycleContract := cycleContract
-  stateCorresponds := certification.stateCorresponds
-  hasCorrespondingState := certification.hasCorrespondingState
-  hasStructuralResult := certification.hasStructuralResult
-  structuralResultUnique := certification.structuralResultUnique
-  implements := certification.implements
+  certification := certification
 
 /-! Transport a whole certification across a proved structure identity.  This
 keeps dependent state/proposal casts at one generic boundary. -/
@@ -85,13 +75,23 @@ def ModuleCycleCertification.transportContract {ports : ModulePorts}
 
 namespace ModuleCycleCertified
 
-def certification (certified : ModuleCycleCertified ports) :
-    ModuleCycleCertification certified.moduleStructure certified.cycleContract where
-  stateCorresponds := certified.stateCorresponds
-  hasCorrespondingState := certified.hasCorrespondingState
-  hasStructuralResult := certified.hasStructuralResult
-  structuralResultUnique := certified.structuralResultUnique
-  implements := certified.implements
+/-! Forwarding projections retain the convenient public interface while the
+proof fields have a single owner in `ModuleCycleCertification`. -/
+
+abbrev stateCorresponds (certified : ModuleCycleCertified ports) :=
+  certified.certification.stateCorresponds
+
+abbrev hasCorrespondingState (certified : ModuleCycleCertified ports) :=
+  certified.certification.hasCorrespondingState
+
+abbrev hasStructuralResult (certified : ModuleCycleCertified ports) :=
+  certified.certification.hasStructuralResult
+
+abbrev structuralResultUnique (certified : ModuleCycleCertified ports) :=
+  certified.certification.structuralResultUnique
+
+abbrev implements (certified : ModuleCycleCertified ports) :=
+  certified.certification.implements
 
 /-! A certificate already contains exactly the two order-independent facts
 needed for existence and uniqueness. No selected evaluator is required. -/

@@ -177,7 +177,18 @@ def stateSchedule (upstream downstream : Fifo.CertifiedBehavior signalType) :
       | outputReady => exact ⟨OneEntryFifo.Rule.ready, by simp, by simp⟩
       | inputValid | inputData => simp at member)
     (by simp)
-  (.done trivial))))
+  (.done (by
+    intro child input member
+    cases child with
+    | upstream =>
+        cases input with
+        | inputValid | inputData => trivial
+        | outputReady => exact ⟨OneEntryFifo.Rule.ready, by simp, by simp⟩
+    | downstream =>
+        cases input with
+        | inputValid | inputData =>
+            exact ⟨OneEntryFifo.Rule.forward, by simp, by simp⟩
+        | outputReady => trivial)))))
 
 def ruleSchedules (upstream downstream : Fifo.CertifiedBehavior signalType) :
     Certified.RuleSchedules (body signalType) (children upstream downstream)
@@ -365,16 +376,17 @@ theorem implements
       (upstream.behavior.serial downstream.behavior).cycleContract
       (stateCorresponds upstream downstream) := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have upstreamImpl := Certified.childImplements (children upstream downstream)
+  have upstreamMatches := Certified.childSolutionMatchesContract
+    (children upstream downstream)
     inputs structuralState proposal satisfies .upstream
       (Fifo.leftState contractState) corresponds.1
-  have downstreamImpl := Certified.childImplements (children upstream downstream)
+  have downstreamMatches := Certified.childSolutionMatchesContract
+    (children upstream downstream)
     inputs structuralState proposal satisfies .downstream
       (Fifo.rightState contractState) corresponds.2
   rcases proposal with ⟨outputs, childProposals⟩
-  rcases upstreamImpl with ⟨upstreamNext, upstreamEvaluates, upstreamNextCorresponds⟩
-  rcases downstreamImpl with
-    ⟨downstreamNext, downstreamEvaluates, downstreamNextCorresponds⟩
+  rcases upstreamMatches with ⟨upstreamEvaluates, upstreamNextCorresponds⟩
+  rcases downstreamMatches with ⟨downstreamEvaluates, downstreamNextCorresponds⟩
   let upstreamActual := ProposedValues.childInputs (body signalType)
     (Certified.childStructure (children upstream downstream)) inputs
       childProposals .upstream
@@ -453,12 +465,15 @@ theorem implements
             simpa [Fifo.Behavior.serial, upstreamInputs] using upstreamReady)
     · rfl
   · constructor
-    · have nextEq : upstreamNext = upstream.behavior.nextState
+    · have nextEq : upstream.certified.cycleContract.stateRule.apply
+          upstreamActual (Fifo.leftState contractState) =
+          upstream.behavior.nextState
           (upstreamInputs upstream.behavior downstream.behavior inputs
             (Fifo.leftState contractState) (Fifo.rightState contractState))
           (Fifo.leftState contractState) := by
+        rw [Fifo.CertifiedBehavior.certified_stateRule_apply]
         rw [← upstreamActual_eq]
-        exact upstreamEvaluates.2
+        rfl
       change upstream.certified.stateCorresponds
         (Fifo.leftState nextContractState) (childProposals .upstream).nextState
       change upstream.certified.stateCorresponds
@@ -468,12 +483,15 @@ theorem implements
           (Fifo.leftState contractState)) (childProposals .upstream).nextState
       rw [← nextEq]
       exact upstreamNextCorresponds
-    · have nextEq : downstreamNext = downstream.behavior.nextState
+    · have nextEq : downstream.certified.cycleContract.stateRule.apply
+          downstreamActual (Fifo.rightState contractState) =
+          downstream.behavior.nextState
           (downstreamInputs upstream.behavior downstream.behavior inputs
             (Fifo.leftState contractState) (Fifo.rightState contractState))
           (Fifo.rightState contractState) := by
+        rw [Fifo.CertifiedBehavior.certified_stateRule_apply]
         rw [← downstreamActual_eq]
-        exact downstreamEvaluates.2
+        rfl
       change downstream.certified.stateCorresponds
         (Fifo.rightState nextContractState) (childProposals .downstream).nextState
       change downstream.certified.stateCorresponds
@@ -512,3 +530,22 @@ noncomputable def certifiedBehavior
   certification := certification upstream downstream
 
 end Silean2.Modules.SerialFifo
+
+namespace Silean2.Modules.SerialFifo.Naming
+
+open Silean2 Silean2.Naming
+
+def serialNamingWith (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType) (depth : Nat)
+    {upstream downstream : ModuleStructure (Modules.OneEntryFifo.ports signalType)}
+    (upstreamNaming : ModuleNaming upstream)
+    (downstreamNaming : ModuleNaming downstream) :
+    ModuleNaming (Modules.SerialFifo.moduleStructure signalType upstream downstream) := by
+  unfold Modules.SerialFifo.moduleStructure
+  exact .composite
+    ⟨"fifo", "structural", [.shape signalType, .natural depth]⟩
+    (Modules.OneEntryFifo.Naming.portsWithNaming signalType typeNaming)
+    (fun | .upstream => "upstream" | .downstream => "downstream")
+    (fun | .upstream => upstreamNaming | .downstream => downstreamNaming)
+
+end Silean2.Modules.SerialFifo.Naming

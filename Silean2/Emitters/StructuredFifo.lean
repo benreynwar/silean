@@ -1,5 +1,5 @@
 import Silean2.FIRRTL.Emit
-import Silean2.FIRRTL.FifoNaming
+import Silean2.Modules.Fifo
 
 namespace Silean2.Emitters.StructuredFifo
 
@@ -21,17 +21,17 @@ def bType : SignalType :=
 def payloadType : SignalType :=
   .tuple (.cons (.vector 3 .bit) (.cons bType .nil))
 
-def elementNaming : FIRRTL.SignalTypeNaming elementType :=
+def elementNaming : Naming.SignalTypeNaming elementType :=
   .tuple (.cons "e" .bit (.cons "f" .bit .nil))
 
-def bNaming : FIRRTL.SignalTypeNaming bType :=
+def bNaming : Naming.SignalTypeNaming bType :=
   .tuple (.cons "c" .bit (.cons "d" (.vector elementNaming) .nil))
 
-def payloadNaming : FIRRTL.SignalTypeNaming payloadType :=
+def payloadNaming : Naming.SignalTypeNaming payloadType :=
   .tuple (.cons "a" (.vector .bit) (.cons "b" bNaming .nil))
 
 def naming :=
-  (FIRRTL.OneEntryFifoNaming.namingWith payloadType payloadNaming).withKey
+  (Modules.OneEntryFifo.Naming.namingWith payloadType payloadNaming).withKey
       ⟨"structured_fifo", "", []⟩
 
 def firrtl : FIRRTL.RenderResult String :=

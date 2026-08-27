@@ -4,6 +4,10 @@ Silean 2 describes typed hierarchical hardware in Lean, proves its structural
 behavior against cycle contracts, and emits FIRRTL directly from the public
 computable `ModuleStructure` hierarchy.
 
+The current design is documented in [docs/Architecture.md](docs/Architecture.md),
+source ownership in [docs/SourceMap.md](docs/SourceMap.md), and remaining work
+in [Roadmap.md](Roadmap.md). These are the maintained design documents.
+
 ## Development environment
 
 The checked-in Nix flake pins the complete development and simulation
@@ -43,6 +47,19 @@ The structured FIFO test carries a recursively named payload through the
 generic FIFO, mux, logic, register, splitter, and combiner hierarchy. Its
 generated ports retain field paths such as `input_data.b.d[1].f` in FIRRTL and
 `input_data_b_d_1_f` in flattened SystemVerilog.
+
+## Source ownership
+
+`Silean2/Foundation/` contains signal shapes, finite enumerations, typed signal
+maps/selections, module ports, and structural-state shapes. `Silean2/Structure/`
+contains instances, endpoints, wiring, module bodies, and recursive module
+structures. Reusable hardware and its naming metadata live together under
+`Silean2/Modules/`. Generic naming types are under `Silean2/Naming/`, while
+`Silean2/FIRRTL/` contains only traversal, validation/rendering, and emission.
+The namespaces follow the same ownership: generic metadata is
+`Silean2.Naming`, each module's metadata is
+`Silean2.Modules.<Module>.Naming`, and only backend operations use
+`Silean2.FIRRTL`.
 
 ## Adding an emitted design
 

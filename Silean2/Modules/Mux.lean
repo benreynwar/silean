@@ -1,4 +1,5 @@
 import Silean2.CertifiedSchedule
+import Silean2.Naming.PrimitiveNaming
 import Silean2.Modules.Mask
 import Silean2.Modules.BitwiseOr
 import Silean2.Primitives.Not
@@ -105,6 +106,47 @@ theorem moduleStructure_eq (signalType : SignalType) :
 
 end Silean2.Modules.Mux
 
+namespace Silean2.Modules.Mux.Naming
+
+open Silean2 Silean2.Naming
+
+def portsWithNaming (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType) :
+    ModulePortsNaming (Modules.Mux.ports signalType) where
+  inputs := ⟨fun
+    | .select => "select"
+    | .whenFalse => "when_false"
+    | .whenTrue => "when_true"⟩
+  outputs := ⟨fun | .result => "result"⟩
+  inputTypes := fun
+    | .select => .bit
+    | .whenFalse | .whenTrue => typeNaming
+  outputTypes := fun | .result => typeNaming
+
+def ports (signalType : SignalType) : ModulePortsNaming (Modules.Mux.ports signalType) :=
+  portsWithNaming signalType (.positional signalType)
+
+def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalType) :
+    ModuleNaming (Modules.Mux.moduleStructure signalType) := by
+  unfold Modules.Mux.moduleStructure
+  exact .composite ⟨"mux", "structural", [.shape signalType]⟩
+    (portsWithNaming signalType typeNaming)
+    (fun
+      | .invertSelect => "invert_select"
+      | .chooseFalse => "choose_false"
+      | .chooseTrue => "choose_true"
+      | .combine => "combine")
+    (fun
+      | .invertSelect => Silean2.Naming.Primitive.not
+      | .chooseFalse | .chooseTrue => Modules.Mask.Naming.namingWith signalType typeNaming
+      | .combine => Modules.BitwiseOr.Naming.namingWith signalType typeNaming)
+
+def naming (signalType : SignalType) :
+    ModuleNaming (Modules.Mux.moduleStructure signalType) :=
+  namingWith signalType (.positional signalType)
+
+end Silean2.Modules.Mux.Naming
+
 namespace Silean2.Modules.Mux
 
 open Silean2
@@ -209,7 +251,16 @@ def outputSchedule (signalType : SignalType) :
     exact ⟨BitwiseOr.Rule.apply, by simp, by simp⟩)))))
 
 def stateSchedule (signalType : SignalType) :
-    Certified.StateSchedule (body signalType) (children signalType) := .done trivial
+    Certified.StateSchedule (body signalType) (children signalType) :=
+  .done (by
+    intro child input member
+    cases child <;>
+      simp [children, Primitives.notCertified, Primitives.notCycleContract,
+        Mask.certified, Mask.Implementation.certified, Mask.cycleContract,
+        BitwiseOr.certified, BitwiseOr.Implementation.certified,
+        ModuleCycleCertification.bundle, BitwiseOr.cycleContract,
+        CycleStateRule.empty,
+        SignalSelection.labels] at member)
 
 def ruleSchedules (signalType : SignalType) :
     Certified.RuleSchedules (body signalType) (children signalType)
@@ -453,7 +504,8 @@ private theorem implements (signalType : SignalType) :
       bif inputs .select then inputs .whenTrue else inputs .whenFalse
     rw [boundaryResult, combineOutput, falseOutput, trueOutput, invertBit]
     exact muxIdentity signalType _ _ _
-  · simp [cycleContract, stateRule, CycleStateRule.empty]
+  · simp [cycleContract, stateRule, CycleStateRule.empty,
+      CycleStateRule.apply, SignalSelection.project]
 
 noncomputable def proofCertification (signalType : SignalType) :
     ModuleCycleCertification
@@ -474,6 +526,9 @@ noncomputable opaque certification (signalType : SignalType) :
 noncomputable def certified (signalType : SignalType) :
     ModuleCycleCertified (ports signalType) :=
   (certification signalType).bundle
+
+@[simp] theorem certified_cycleContract (signalType : SignalType) :
+    (certified signalType).cycleContract = cycleContract signalType := rfl
 
 theorem hasExactlyOneSolution (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)

@@ -110,7 +110,7 @@ private theorem evaluated_ready (signalType : SignalType)
 @[simp] theorem step_nextState (signalType : SignalType)
     (state : ContractState signalType) (input : CycleInput signalType) :
     (step signalType state input).nextState =
-      (cycleContract signalType).stateRule.target
+      (cycleContract signalType).stateRule.apply
         (inputValues signalType input) state := rfl
 
 theorem contents_capacity_one (state : ContractState signalType) :
@@ -128,7 +128,9 @@ theorem step_conservation (signalType : SignalType)
       cases storedValid <;> cases enqValid <;> cases deqReady <;>
         simp [NoResetFifo.Cycle.acceptedInput,
           NoResetFifo.Cycle.acceptedOutput, contents, step_nextState,
-          cycleContract, stateRule, inputValues, validEq]
+          cycleContract, stateRule, inputValues, validEq,
+          CycleStateRule.apply, SignalSelection.project,
+          SignalSelection.prepend, SignalMap.select]
 
 theorem run_conservation (signalType : SignalType)
     (initial : ContractState signalType)

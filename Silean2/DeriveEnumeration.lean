@@ -1,4 +1,4 @@
-import Silean2.Types
+import Silean2.Foundation.Enumeration
 import Lean.Elab.Deriving.Basic
 
 namespace Silean2

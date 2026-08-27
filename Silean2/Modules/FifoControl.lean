@@ -1,4 +1,5 @@
 import Silean2.CertifiedSchedule
+import Silean2.Naming.PrimitiveNaming
 import Silean2.Primitives
 
 namespace Silean2.Modules.FifoControl
@@ -133,7 +134,14 @@ def outputSchedule : Certified.OutputSchedule body children cycleContract .contr
           Instance.updateEq .output
         exact ⟨Primitives.EqRule.apply, by simp, by simp⟩))))
 
-def stateSchedule : Certified.StateSchedule body children := .done trivial
+def stateSchedule : Certified.StateSchedule body children :=
+  .done (by
+    intro child input member
+    cases child <;>
+      simp [children, Primitives.notCertified, Primitives.notCycleContract,
+        Primitives.orCertified, Primitives.orCycleContract,
+        Primitives.eqCertified, Primitives.eqCycleContract,
+        CycleStateRule.empty, SignalSelection.labels] at member)
 
 def ruleSchedules : Certified.RuleSchedules body children cycleContract where
   output | .control => outputSchedule
@@ -300,21 +308,19 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
     · exact updateEq.trans updateChild
   · rfl
 
-private def certifiedDefinition : ModuleCycleCertified ports where
-  moduleStructure := moduleStructure
-  cycleContract := cycleContract
-  stateCorresponds := stateCorresponds
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := hasStructuralResult
-  structuralResultUnique := hasAtMostOneSolution
-  implements := implements
-
 noncomputable opaque certification :
-    ModuleCycleCertification moduleStructure cycleContract :=
-  certifiedDefinition.certification
+    ModuleCycleCertification moduleStructure cycleContract := {
+  stateCorresponds := stateCorresponds,
+  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+  hasStructuralResult := hasStructuralResult,
+  structuralResultUnique := hasAtMostOneSolution,
+  implements := implements }
 
 noncomputable def certified : ModuleCycleCertified ports :=
   certification.bundle
+
+@[simp] theorem certified_cycleContract :
+    certified.cycleContract = cycleContract := rfl
 
 theorem hasExactlyOneSolution (inputs : ports.inputs.Values)
     (currentState : moduleStructure.State) :
@@ -324,3 +330,29 @@ theorem hasExactlyOneSolution (inputs : ports.inputs.Values)
   certified.hasExactlyOneStructuralResult inputs currentState
 
 end Silean2.Modules.FifoControl
+
+namespace Silean2.Modules.FifoControl.Naming
+
+open Silean2 Silean2.Naming
+
+def ports : ModulePortsNaming Modules.FifoControl.ports where
+  inputs := ⟨fun
+    | .storedValid => "stored_valid"
+    | .downstreamReady => "downstream_ready"⟩
+  outputs := ⟨fun
+    | .upstreamReady => "upstream_ready"
+    | .storageUpdate => "storage_update"⟩
+
+def naming : ModuleNaming Modules.FifoControl.moduleStructure := by
+  unfold Modules.FifoControl.moduleStructure Certified.moduleStructure
+  exact .composite ⟨"fifo_control", "structural", []⟩ ports
+    (fun
+      | .invertValid => "invert_valid"
+      | .readyOr => "ready_or"
+      | .updateEq => "update_eq")
+    (fun
+      | .invertValid => Silean2.Naming.Primitive.not
+      | .readyOr => Silean2.Naming.Primitive.or
+      | .updateEq => Silean2.Naming.Primitive.eq)
+
+end Silean2.Modules.FifoControl.Naming

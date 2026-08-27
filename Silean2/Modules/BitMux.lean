@@ -1,4 +1,5 @@
 import Silean2.CertifiedSchedule
+import Silean2.Naming.PrimitiveNaming
 import Silean2.Primitives
 
 namespace Silean2.Modules.BitMux
@@ -81,6 +82,35 @@ def moduleStructure : ModuleStructure Modules.BitMux.ports :=
   Certified.moduleStructure body children
 
 end Silean2.Modules.BitMux
+
+namespace Silean2.Modules.BitMux.Naming
+
+open Silean2 Silean2.Naming
+
+def ports : ModulePortsNaming Modules.BitMux.ports where
+  inputs := ⟨fun
+    | .select => "select"
+    | .whenFalse => "when_false"
+    | .whenTrue => "when_true"⟩
+  outputs := ⟨fun | .result => "result"⟩
+
+def instanceName : Modules.BitMux.Instance → SourceName
+  | .invertSelect => "invert_select"
+  | .chooseFalse => "choose_false"
+  | .chooseTrue => "choose_true"
+  | .combine => "combine"
+
+def childNaming : (child : Modules.BitMux.Instance) →
+    ModuleNaming (Modules.BitMux.childStructure child)
+  | .invertSelect => Silean2.Naming.Primitive.not
+  | .chooseFalse | .chooseTrue => Silean2.Naming.Primitive.and
+  | .combine => Silean2.Naming.Primitive.or
+
+def naming : ModuleNaming Modules.BitMux.moduleStructure := by
+  unfold Modules.BitMux.moduleStructure Certified.moduleStructure
+  exact .composite ⟨"mux", "bit_gates", []⟩ ports instanceName childNaming
+
+end Silean2.Modules.BitMux.Naming
 
 namespace Silean2.Modules.BitMux
 
@@ -165,7 +195,14 @@ def outputSchedule : Certified.OutputSchedule body children cycleContract .selec
         Certified.Availability children) Instance.combine .output
     exact ⟨Primitives.OrRule.apply, by simp, by simp⟩)))))
 
-def stateSchedule : Certified.StateSchedule body children := .done trivial
+def stateSchedule : Certified.StateSchedule body children :=
+  .done (by
+    intro child input member
+    cases child <;>
+      simp [children, Primitives.notCertified, Primitives.notCycleContract,
+        Primitives.andCertified, Primitives.andCycleContract,
+        Primitives.orCertified, Primitives.orCycleContract,
+        CycleStateRule.empty, SignalSelection.labels] at member)
 
 def ruleSchedules : Certified.RuleSchedules body children cycleContract where
   output | .select => outputSchedule
@@ -345,20 +382,16 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
     rw [boundary', combineBit, falseBit, trueBit, invertBit]
     cases inputs .select <;> cases inputs .whenFalse <;>
       cases inputs .whenTrue <;> rfl
-  · simp [cycleContract, stateRule, CycleStateRule.empty]
-
-private def certifiedDefinition : ModuleCycleCertified ports where
-  moduleStructure := moduleStructure
-  cycleContract := cycleContract
-  stateCorresponds := stateCorresponds
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := hasStructuralResult
-  structuralResultUnique := hasAtMostOneSolution
-  implements := implements
+  · simp [cycleContract, stateRule, CycleStateRule.empty,
+      CycleStateRule.apply, SignalSelection.project]
 
 noncomputable opaque certification :
-    ModuleCycleCertification moduleStructure cycleContract :=
-  certifiedDefinition.certification
+    ModuleCycleCertification moduleStructure cycleContract := {
+  stateCorresponds := stateCorresponds,
+  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+  hasStructuralResult := hasStructuralResult,
+  structuralResultUnique := hasAtMostOneSolution,
+  implements := implements }
 
 noncomputable def certified : ModuleCycleCertified ports :=
   certification.bundle

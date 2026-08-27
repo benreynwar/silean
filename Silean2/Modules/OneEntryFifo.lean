@@ -2,6 +2,7 @@ import Silean2.Modules.EnabledRegister
 import Silean2.Modules.Mux
 import Silean2.Modules.FifoControl
 import Silean2.CertifiedSchedule
+import Silean2.Naming.PrimitiveNaming
 
 namespace Silean2.Modules.OneEntryFifo
 
@@ -142,12 +143,16 @@ def readyRule (signalType : SignalType) :
 
 def stateRule (signalType : SignalType) :
     CycleStateRule (ports signalType) (stateMap signalType) where
-  target := fun inputs state =>
-    let update := (inputs .outputReady && state .storedValid) ||
-      (!inputs .outputReady && !state .storedValid)
-    fun
-      | .storedValid => bif update then inputs .inputValid else state .storedValid
-      | .storedData => bif update then inputs .inputData else state .storedData
+  inputTypes := .cons .bit (.cons .bit (.cons signalType .nil))
+  readsInputs := (((inputMap signalType).select .inputData).prepend .inputValid).prepend
+    .outputReady
+  target
+    | (outputReady, (inputValid, (inputData, ()))), state =>
+        let update := (outputReady && state .storedValid) ||
+          (!outputReady && !state .storedValid)
+        fun
+          | .storedValid => bif update then inputValid else state .storedValid
+          | .storedData => bif update then inputData else state .storedData
 
 def cycleContract (signalType : SignalType) :
     ModuleCycleContract (ports signalType) where
@@ -289,7 +294,25 @@ def stateSchedule (signalType : SignalType) :
         | whenFalse => trivial
         | whenTrue => exact ⟨EnabledRegister.Rule.observe, by simp, by simp⟩)
     (by simp)
-  (.done trivial)))))
+  (.done (by
+    intro child input member
+    cases child with
+    | validStorage | dataStorage =>
+        rw [EnabledRegister.certified_cycleContract] at member
+        cases input with
+        | enable => exact ⟨FifoControl.Rule.control, by simp, by simp⟩
+        | value => trivial
+    | control =>
+        rw [FifoControl.certified_cycleContract] at member
+        simp [FifoControl.cycleContract, CycleStateRule.empty,
+          SignalSelection.labels] at member
+    | outputValidOr =>
+        simp [children, Primitives.orCertified, Primitives.orCycleContract,
+          CycleStateRule.empty, SignalSelection.labels] at member
+    | outputDataMux =>
+        rw [Mux.certified_cycleContract] at member
+        simp [Mux.cycleContract, Mux.stateRule, CycleStateRule.empty,
+          SignalSelection.labels] at member))))))
 
 def ruleSchedules (signalType : SignalType) :
     Certified.RuleSchedules (body signalType) (children signalType)
@@ -529,10 +552,10 @@ private theorem implements (signalType : SignalType) :
   have dataCorresponds : (children signalType .dataStorage).stateCorresponds
       dataState
       (structuralState .dataStorage) := corresponds.2
-  have validImplements := Certified.childImplements (children signalType)
+  have validMatches := Certified.childSolutionMatchesContract (children signalType)
     inputs structuralState proposal satisfies .validStorage validState
       validCorresponds
-  have dataImplements := Certified.childImplements (children signalType)
+  have dataMatches := Certified.childSolutionMatchesContract (children signalType)
     inputs structuralState proposal satisfies .dataStorage dataState
       dataCorresponds
   rcases (children signalType .control).hasCorrespondingState
@@ -541,10 +564,10 @@ private theorem implements (signalType : SignalType) :
     funext statePort
     exact nomatch statePort
   subst controlState
-  have controlImplements := Certified.childImplements (children signalType)
+  have controlMatches := Certified.childSolutionMatchesContract (children signalType)
     inputs structuralState proposal satisfies .control SignalMap.emptyValues
       controlCorresponds
-  have validOrImplements := Certified.childImplements (children signalType)
+  have validOrMatches := Certified.childSolutionMatchesContract (children signalType)
     inputs structuralState proposal satisfies .outputValidOr SignalMap.emptyValues
       (by trivial)
   rcases (children signalType .outputDataMux).hasCorrespondingState
@@ -553,7 +576,7 @@ private theorem implements (signalType : SignalType) :
     funext statePort
     exact nomatch statePort
   subst muxState
-  have muxImplements := Certified.childImplements (children signalType)
+  have muxMatches := Certified.childSolutionMatchesContract (children signalType)
     inputs structuralState proposal satisfies .outputDataMux SignalMap.emptyValues
       muxCorresponds
   have boundary := satisfies.1
@@ -566,17 +589,30 @@ private theorem implements (signalType : SignalType) :
     Instance.control
   let muxInputs := ProposedValues.childInputs (body signalType) (childStructure signalType) inputs childValues
     Instance.outputDataMux
-  rcases validImplements with
-    ⟨validNext, validEvaluates, validNextCorresponds⟩
-  rcases dataImplements with
-    ⟨dataNext, dataEvaluates, dataNextCorresponds⟩
-  rcases controlImplements with
-    ⟨controlNext, controlEvaluates, controlNextCorresponds⟩
-  rcases validOrImplements with
-    ⟨validOrNext, validOrEvaluates, validOrNextCorresponds⟩
-  rcases muxImplements with
-    ⟨muxNext, muxEvaluates, muxNextCorresponds⟩
-  refine ⟨(cycleContract signalType).stateRule.target inputs contractState, ?_, ?_⟩
+  rcases validMatches with ⟨validEvaluates, validNextCorresponds⟩
+  rcases dataMatches with ⟨dataEvaluates, dataNextCorresponds⟩
+  rcases controlMatches with ⟨controlEvaluates, _⟩
+  rcases validOrMatches with ⟨validOrEvaluates, _⟩
+  rcases muxMatches with ⟨muxEvaluates, _⟩
+  change (EnabledRegister.cycleContract .bit).EvaluatesTo validInputs validState
+    (childValues .validStorage).outputs
+    ((EnabledRegister.cycleContract .bit).stateRule.apply validInputs validState)
+      at validEvaluates
+  change (children signalType .validStorage).stateCorresponds
+    ((EnabledRegister.cycleContract .bit).stateRule.apply validInputs validState)
+    (childValues .validStorage).nextState at validNextCorresponds
+  change (EnabledRegister.cycleContract signalType).EvaluatesTo dataInputs dataState
+    (childValues .dataStorage).outputs
+    ((EnabledRegister.cycleContract signalType).stateRule.apply dataInputs dataState)
+      at dataEvaluates
+  change (children signalType .dataStorage).stateCorresponds
+    ((EnabledRegister.cycleContract signalType).stateRule.apply dataInputs dataState)
+    (childValues .dataStorage).nextState at dataNextCorresponds
+  let validNext := (EnabledRegister.cycleContract .bit).stateRule.apply
+    validInputs validState
+  let dataNext := (EnabledRegister.cycleContract signalType).stateRule.apply
+    dataInputs dataState
+  refine ⟨(cycleContract signalType).stateRule.apply inputs contractState, ?_, ?_⟩
   · constructor
     · intro name
       cases name
@@ -658,9 +694,7 @@ private theorem implements (signalType : SignalType) :
         rw [validEquation] at readyEquation
         exact readyBoundary.trans readyEquation
     · rfl
-  · have validNextRule := validEvaluates.2
-    have dataNextRule := dataEvaluates.2
-    have controlRule := (FifoControl.controlRule_holds_iff _ _ _).mp
+  · have controlRule := (FifoControl.controlRule_holds_iff _ _ _).mp
       (controlEvaluates.1 FifoControl.Rule.control)
     have validOutputRule :=
       (EnabledRegister.outputRule_holds_iff .bit _ _ _).mp
@@ -677,16 +711,14 @@ private theorem implements (signalType : SignalType) :
     rw [validOutputRule] at updateEquation
     have validNextEquation : validNext .stored =
         bif validInputs .enable then validInputs .value else validState .stored := by
-      rw [validNextRule]
       rfl
     have dataNextEquation : dataNext .stored =
         bif dataInputs .enable then dataInputs .value else dataState .stored := by
-      rw [dataNextRule]
       rfl
     let nextValidState : (EnabledRegister.cycleContract .bit).state.Values :=
-      fun | .stored => (cycleContract signalType).stateRule.target inputs contractState .storedValid
+      fun | .stored => (cycleContract signalType).stateRule.apply inputs contractState .storedValid
     let nextDataState : (EnabledRegister.cycleContract signalType).state.Values :=
-      fun | .stored => (cycleContract signalType).stateRule.target inputs contractState .storedData
+      fun | .stored => (cycleContract signalType).stateRule.apply inputs contractState .storedData
     have validNextEq : nextValidState = validNext := by
       funext statePort
       cases statePort
@@ -758,3 +790,53 @@ theorem hasExactlyOneSolution (signalType : SignalType)
   (certified signalType).hasExactlyOneStructuralResult inputs currentState
 
 end Silean2.Modules.OneEntryFifo
+
+namespace Silean2.Modules.OneEntryFifo.Naming
+
+open Silean2 Silean2.Naming
+
+def portsWithNaming (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType) :
+    ModulePortsNaming (Modules.OneEntryFifo.ports signalType) where
+  inputs := ⟨fun
+    | .inputValid => "input_valid"
+    | .inputData => "input_data"
+    | .outputReady => "output_ready"⟩
+  outputs := ⟨fun
+    | .outputValid => "output_valid"
+    | .outputData => "output_data"
+    | .inputReady => "input_ready"⟩
+  inputTypes := fun
+    | .inputValid | .outputReady => .bit
+    | .inputData => typeNaming
+  outputTypes := fun
+    | .outputValid | .inputReady => .bit
+    | .outputData => typeNaming
+
+def ports (signalType : SignalType) :
+    ModulePortsNaming (Modules.OneEntryFifo.ports signalType) :=
+  portsWithNaming signalType (.positional signalType)
+
+def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalType) :
+    ModuleNaming (Modules.OneEntryFifo.moduleStructure signalType) := by
+  unfold Modules.OneEntryFifo.moduleStructure
+  exact .composite ⟨"one_entry_fifo", "structural", [.shape signalType]⟩
+    (portsWithNaming signalType typeNaming)
+    (fun
+      | .validStorage => "valid_storage"
+      | .dataStorage => "data_storage"
+      | .control => "control"
+      | .outputValidOr => "output_valid_or"
+      | .outputDataMux => "output_data_mux")
+    (fun
+      | .validStorage => Modules.EnabledRegister.Naming.naming .bit
+      | .dataStorage => Modules.EnabledRegister.Naming.namingWith signalType typeNaming
+      | .control => Modules.FifoControl.Naming.naming
+      | .outputValidOr => Silean2.Naming.Primitive.or
+      | .outputDataMux => Modules.Mux.Naming.namingWith signalType typeNaming)
+
+def naming (signalType : SignalType) :
+    ModuleNaming (Modules.OneEntryFifo.moduleStructure signalType) :=
+  namingWith signalType (.positional signalType)
+
+end Silean2.Modules.OneEntryFifo.Naming

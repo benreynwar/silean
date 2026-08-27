@@ -71,12 +71,13 @@ def certified (splitter : SignalSplitter) :
     ModuleCycleCertified splitter.ports where
   moduleStructure := .splitter splitter
   cycleContract := splitter.cycleContract
-  stateCorresponds := emptyStateCorresponds
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := fun inputs _ =>
-    ⟨ProposedValues.splitter (splitter.outputValues inputs), rfl⟩
-  structuralResultUnique := splitter.hasAtMostOneSolution
-  implements := splitter.implements
+  certification := {
+    stateCorresponds := emptyStateCorresponds,
+    hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+    hasStructuralResult := fun inputs _ =>
+      ⟨ProposedValues.splitter (splitter.outputValues inputs), rfl⟩,
+    structuralResultUnique := splitter.hasAtMostOneSolution,
+    implements := splitter.implements }
 
 end SignalSplitter
 
@@ -139,12 +140,13 @@ def certified (combiner : SignalCombiner) :
     ModuleCycleCertified combiner.ports where
   moduleStructure := .combiner combiner
   cycleContract := combiner.cycleContract
-  stateCorresponds := emptyStateCorresponds
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := fun inputs _ =>
-    ⟨ProposedValues.combiner (combiner.outputValues inputs), rfl⟩
-  structuralResultUnique := combiner.hasAtMostOneSolution
-  implements := combiner.implements
+  certification := {
+    stateCorresponds := emptyStateCorresponds,
+    hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+    hasStructuralResult := fun inputs _ =>
+      ⟨ProposedValues.combiner (combiner.outputValues inputs), rfl⟩,
+    structuralResultUnique := combiner.hasAtMostOneSolution,
+    implements := combiner.implements }
 
 end SignalCombiner
 

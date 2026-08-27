@@ -47,4 +47,37 @@ theorem childImplements {body : ModuleBody} (children : Children body)
     contractState (structuralState child) (proposal.2 child)
     corresponds (satisfies.2 child)
 
+/-- The normalized form of `childImplements`: a parent gets the child's public
+output equations and next-state correspondence with no existential next-state
+name or rewrite step. -/
+theorem childSolutionMatchesContract {body : ModuleBody} (children : Children body)
+    (inputs : body.context.ports.inputs.Values)
+    (structuralState : (moduleStructure body children).State)
+    (proposal : ProposedValues (moduleStructure body children))
+    (satisfies : (moduleStructure body children).IsSolution
+      inputs structuralState proposal)
+    (child : body.context.instances.Name)
+    (contractState : (children child).cycleContract.state.Values)
+    (corresponds : (children child).stateCorresponds contractState
+      (structuralState child)) :
+    (children child).cycleContract.EvaluatesTo
+        (ProposedValues.childInputs body (childStructure children)
+          inputs proposal.2 child)
+        contractState (proposal.2 child).outputs
+        ((children child).cycleContract.stateRule.apply
+          (ProposedValues.childInputs body (childStructure children)
+            inputs proposal.2 child)
+          contractState) ∧
+      (children child).stateCorresponds
+        ((children child).cycleContract.stateRule.apply
+          (ProposedValues.childInputs body (childStructure children)
+            inputs proposal.2 child)
+          contractState)
+        (proposal.2 child).nextState := by
+  rcases childImplements children inputs structuralState proposal satisfies child
+      contractState corresponds with
+    ⟨nextState, evaluates, nextCorresponds⟩
+  rw [evaluates.2] at nextCorresponds
+  exact ⟨⟨evaluates.1, rfl⟩, nextCorresponds⟩
+
 end Silean2.Certified

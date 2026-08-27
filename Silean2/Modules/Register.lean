@@ -1,4 +1,6 @@
 import Silean2.CertifiedSchedule
+import Silean2.Naming.PrimitiveNaming
+import Silean2.Naming.SignalAdapterNaming
 import Silean2.Primitives.Register
 import Silean2.SignalAdapterCertified
 
@@ -30,7 +32,9 @@ def outputRule (signalType : SignalType) :
 
 def stateRule (signalType : SignalType) :
     CycleStateRule (ports signalType) (stateMap signalType) where
-  target := fun inputs _ => fun | .stored => inputs .input
+  inputTypes := .cons signalType .nil
+  readsInputs := (inputMap signalType).select .input
+  target := fun | (input, ()), _ => fun | .stored => input
 
 @[reducible] def cycleContract (signalType : SignalType) :
     ModuleCycleContract (ports signalType) where
@@ -405,7 +409,46 @@ def aggregateStateSchedule (splitter : SignalSplitter)
       · trivial
       · trivial)
     (by simp)
-    (.done trivial)
+    (.done (by
+      intro child input member
+      cases child with
+      | start =>
+          simp [aggregateChildren, SignalSplitter.certified,
+            SignalSplitter.cycleContract, CycleStateRule.empty,
+            SignalSelection.labels] at member
+      | item component =>
+          cases input
+          cases splitter with
+          | vector length element =>
+              change Certified.outputAvailable
+                ([splitOccurrence (.vector length element) components] :
+                  Certified.Availability
+                    (aggregateChildren (.vector length element) components))
+                .start component
+              exact ⟨SignalComponentRule.apply, by simp, by
+                change component ∈
+                  (SignalSplitter.vector length element).ports.outputs.allSelection.labels
+                rw [SignalMap.allSelection_labels]
+                exact ListIndex.get_eq
+                  ((SignalSplitter.vector length element).ports.outputs.labels.locate component) ▸
+                    List.get_mem _ _⟩
+          | tuple fields =>
+              change Certified.outputAvailable
+                ([splitOccurrence (.tuple fields) components] :
+                  Certified.Availability
+                    (aggregateChildren (.tuple fields) components))
+                .start component
+              exact ⟨SignalComponentRule.apply, by simp, by
+                change component ∈
+                  (SignalSplitter.tuple fields).ports.outputs.allSelection.labels
+                rw [SignalMap.allSelection_labels]
+                exact ListIndex.get_eq
+                  ((SignalSplitter.tuple fields).ports.outputs.labels.locate component) ▸
+                    List.get_mem _ _⟩
+      | finish =>
+          simp [aggregateChildren, SignalCombiner.certified,
+            SignalCombiner.cycleContract, CycleStateRule.empty,
+            SignalSelection.labels] at member))
 
 noncomputable def aggregateRuleSchedules (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
@@ -602,7 +645,8 @@ private theorem aggregateImplements (splitter : SignalSplitter)
           (ProposedValues.childInputs (aggregateBody splitter)
             (aggregateChildStructure splitter components) inputs childProposals
               (.item component)) .input := by
-        simpa [stateRule] using
+        simpa [stateRule, CycleStateRule.apply, SignalSelection.project,
+          SignalMap.select] using
           congrFun stateEvaluates Primitives.RegisterState.stored
       have splitSatisfies := childSatisfies Enumeration.Framed.start
       have childInputValue :
@@ -661,3 +705,67 @@ theorem certified_moduleStructure (signalType : SignalType) :
   rfl
 
 end Silean2.Modules.Register
+
+namespace Silean2.Modules.Register.Naming
+
+open Silean2 Silean2.Naming
+
+def portsWithNaming (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType) :
+    ModulePortsNaming (Modules.Register.ports signalType) where
+  inputs := ⟨fun | .input => "in"⟩
+  outputs := ⟨fun | .output => "out"⟩
+  inputTypes := fun | .input => typeNaming
+  outputTypes := fun | .output => typeNaming
+
+def ports (signalType : SignalType) :
+    ModulePortsNaming (Modules.Register.ports signalType) :=
+  portsWithNaming signalType (.positional signalType)
+
+private def componentName (splitter : SignalSplitter)
+    (component : splitter.ports.outputs.Label) : SourceName :=
+  .scoped "register"
+    ((SignalMapNaming.indexed splitter.ports.outputs "component").name component)
+
+def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
+    ModuleNaming (Modules.Register.moduleStructure signalType)
+  | .bit, _ => by
+      rw [Modules.Register.moduleStructure]
+      exact Silean2.Naming.Primitive.register
+  | .vector length element, typeNaming => by
+      rw [Modules.Register.moduleStructure]
+      let splitter : SignalSplitter := .vector length element
+      exact .composite ⟨"register", "structural", [.shape splitter.aggregateType]⟩
+        (portsWithNaming splitter.aggregateType typeNaming)
+        (fun
+          | .start => "split"
+          | .item component => componentName splitter component
+          | .finish => "combine")
+        (fun
+          | .start => Silean2.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
+          | .item component => namingWith element (typeNaming.component component)
+          | .finish => Silean2.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
+  | .tuple fields, typeNaming => by
+      rw [Modules.Register.moduleStructure]
+      let splitter : SignalSplitter := .tuple fields
+      exact .composite ⟨"register", "structural", [.shape splitter.aggregateType]⟩
+        (portsWithNaming splitter.aggregateType typeNaming)
+        (fun
+          | .start => "split"
+          | .item component => componentName splitter component
+          | .finish => "combine")
+        (fun
+          | .start => Silean2.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
+          | .item component =>
+              namingWith (fields.typeAt component) (typeNaming.component component)
+          | .finish => Silean2.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
+termination_by signalType => signalType.complexity
+decreasing_by
+  · simp [SignalType.complexity]
+  · exact SignalTypes.complexity_typeAt_lt fields component
+
+def naming (signalType : SignalType) :
+    ModuleNaming (Modules.Register.moduleStructure signalType) :=
+  namingWith signalType (.positional signalType)
+
+end Silean2.Modules.Register.Naming

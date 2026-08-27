@@ -2,14 +2,14 @@ import Silean2.FIRRTL.Traversal
 
 namespace Silean2.FIRRTL
 
-open Silean2
+open Silean2 Silean2.Naming
 
 abbrev RenderResult := Except String
 
-def SourceName.render : SourceName → String
+def renderSourceName : SourceName → String
   | .plain value => value
   | .indexed stem index => s!"{stem}_{index}"
-  | .scoped scope name => s!"{scope}_{name.render}"
+  | .scoped scope name => s!"{scope}_{renderSourceName name}"
 
 mutual
   def renderSignalType : (signalType : SignalType) →
@@ -24,10 +24,10 @@ mutual
       SignalTypesNaming signalTypes → String
     | .nil, .nil => ""
     | .cons head .nil, .cons name headNaming .nil =>
-        s!"{name.render} : {renderSignalType head headNaming}"
+        s!"{renderSourceName name} : {renderSignalType head headNaming}"
     | .cons head (.cons next tail),
         .cons name headNaming (.cons nextName nextNaming tailNaming) =>
-        s!"{name.render} : {renderSignalType head headNaming}, " ++
+        s!"{renderSourceName name} : {renderSignalType head headNaming}, " ++
           renderSignalTypes (.cons next tail)
             (.cons nextName nextNaming tailNaming)
 end
@@ -41,14 +41,14 @@ where
     | .nil => "unit"
     | .cons head tail => s!"{renderSignalTypeKey head}_{renderSignalTypesKey tail}"
 
-def ModuleParameter.render : ModuleParameter → String
+def renderModuleParameter : ModuleParameter → String
   | .natural value => toString value
   | .shape signalType => renderSignalTypeKey signalType
 
-def ModuleKey.render (key : ModuleKey) : String :=
+def renderModuleKey (key : ModuleKey) : String :=
   String.intercalate "_"
     ([key.family, key.variant].filter (fun part => !part.isEmpty) ++
-      key.specialization.map ModuleParameter.render)
+      key.specialization.map renderModuleParameter)
 
 private def firstDuplicate? [BEq α] : List α → Option α
   | [] => none
@@ -62,7 +62,7 @@ private def isIdentifier (value : String) : Bool :=
         tail.all (fun character => character.isAlphanum || character == '_')
 
 private def validateLocalNames (names : List SourceName) : RenderResult Unit :=
-  let rendered := names.map SourceName.render
+  let rendered := names.map renderSourceName
   if let some invalid := rendered.find? (fun name => !isIdentifier name) then
     throw s!"invalid FIRRTL identifier '{invalid}'"
   else match firstDuplicate? rendered with
@@ -78,55 +78,55 @@ private def indentLines (lines : List String) : String :=
 private def renderPorts (naming : ModulePortsNaming ports) : List String :=
   "input clock : Clock" ::
     (ports.inputs.labels.values.map fun label =>
-      s!"input {(naming.inputs.name label).render} : {renderSignalType (ports.inputs.signalType label) (naming.inputTypes label)}") ++
+      s!"input {renderSourceName (naming.inputs.name label)} : {renderSignalType (ports.inputs.signalType label) (naming.inputTypes label)}") ++
     (ports.outputs.labels.values.map fun label =>
-      s!"output {(naming.outputs.name label).render} : {renderSignalType (ports.outputs.signalType label) (naming.outputTypes label)}")
+      s!"output {renderSourceName (naming.outputs.name label)} : {renderSignalType (ports.outputs.signalType label) (naming.outputTypes label)}")
 
 private def primitiveStatements {primitive : Primitive}
     (ports : ModulePortsNaming primitive.ports)
     (state : SignalMapNaming primitive.localState) :
     PrimitiveOperation primitive → List String
   | .not =>
-      [s!"connect {(ports.outputs.name .output).render}, not({(ports.inputs.name .input).render})"]
+      [s!"connect {renderSourceName (ports.outputs.name .output)}, not({renderSourceName (ports.inputs.name .input)})"]
   | .and =>
-      [s!"connect {(ports.outputs.name .output).render}, and({(ports.inputs.name .left).render}, {(ports.inputs.name .right).render})"]
+      [s!"connect {renderSourceName (ports.outputs.name .output)}, and({renderSourceName (ports.inputs.name .left)}, {renderSourceName (ports.inputs.name .right)})"]
   | .or =>
-      [s!"connect {(ports.outputs.name .output).render}, or({(ports.inputs.name .left).render}, {(ports.inputs.name .right).render})"]
+      [s!"connect {renderSourceName (ports.outputs.name .output)}, or({renderSourceName (ports.inputs.name .left)}, {renderSourceName (ports.inputs.name .right)})"]
   | .eq =>
-      [s!"connect {(ports.outputs.name .output).render}, eq({(ports.inputs.name .left).render}, {(ports.inputs.name .right).render})"]
+      [s!"connect {renderSourceName (ports.outputs.name .output)}, eq({renderSourceName (ports.inputs.name .left)}, {renderSourceName (ports.inputs.name .right)})"]
   | .register =>
-      let stored := (state.name .stored).render
+      let stored := renderSourceName (state.name .stored)
       [s!"reg {stored} : UInt<1>, clock",
-       s!"connect {(ports.outputs.name .output).render}, {stored}",
-       s!"connect {stored}, {(ports.inputs.name .input).render}"]
+       s!"connect {renderSourceName (ports.outputs.name .output)}, {stored}",
+       s!"connect {stored}, {renderSourceName (ports.inputs.name .input)}"]
 
 private def splitterStatements (splitter : SignalSplitter)
     (ports : ModulePortsNaming splitter.ports) : List String := match splitter with
   | .vector length element =>
-      let aggregate := (ports.inputs.name AggregatePort.value).render
+      let aggregate := renderSourceName (ports.inputs.name AggregatePort.value)
       (SignalSplitter.vector length element).ports.outputs.labels.values.zipIdx.map
         fun (label, index) =>
-          s!"connect {(ports.outputs.name label).render}, {aggregate}[{index}]"
+          s!"connect {renderSourceName (ports.outputs.name label)}, {aggregate}[{index}]"
   | .tuple fields =>
-      let aggregate := (ports.inputs.name AggregatePort.value).render
+      let aggregate := renderSourceName (ports.inputs.name AggregatePort.value)
       let fieldNaming := match ports.inputTypes AggregatePort.value with
         | .tuple fieldNaming => fieldNaming
       (SignalSplitter.tuple fields).ports.outputs.labels.values.map fun label =>
-        s!"connect {(ports.outputs.name label).render}, {aggregate}.{(fieldNaming.nameAt label).render}"
+        s!"connect {renderSourceName (ports.outputs.name label)}, {aggregate}.{renderSourceName (fieldNaming.nameAt label)}"
 
 private def combinerStatements (combiner : SignalCombiner)
     (ports : ModulePortsNaming combiner.ports) : List String := match combiner with
   | .vector length element =>
-      let aggregate := (ports.outputs.name AggregatePort.value).render
+      let aggregate := renderSourceName (ports.outputs.name AggregatePort.value)
       (SignalCombiner.vector length element).ports.inputs.labels.values.zipIdx.map
         fun (label, index) =>
-          s!"connect {aggregate}[{index}], {(ports.inputs.name label).render}"
+          s!"connect {aggregate}[{index}], {renderSourceName (ports.inputs.name label)}"
   | .tuple fields =>
-      let aggregate := (ports.outputs.name AggregatePort.value).render
+      let aggregate := renderSourceName (ports.outputs.name AggregatePort.value)
       let fieldNaming := match ports.outputTypes AggregatePort.value with
         | .tuple fieldNaming => fieldNaming
       (SignalCombiner.tuple fields).ports.inputs.labels.values.map fun label =>
-        s!"connect {aggregate}.{(fieldNaming.nameAt label).render}, {(ports.inputs.name label).render}"
+        s!"connect {aggregate}.{renderSourceName (fieldNaming.nameAt label)}, {renderSourceName (ports.inputs.name label)}"
 
 private def sourceReference {body : ModuleBody}
     {children : (name : body.context.instances.Name) →
@@ -136,9 +136,9 @@ private def sourceReference {body : ModuleBody}
     (childNaming : (name : body.context.instances.Name) →
       ModuleNaming (children name)) :
     SignalSource body.context.ports body.context.instances signalType → String
-  | .moduleInput port => (ports.inputs.name port).render
+  | .moduleInput port => renderSourceName (ports.inputs.name port)
   | .instanceOutput child port =>
-      s!"{(instanceName child).render}.{((childNaming child).ports.outputs.name port).render}"
+      s!"{renderSourceName (instanceName child)}.{renderSourceName ((childNaming child).ports.outputs.name port)}"
 
 private def sinkReference {body : ModuleBody}
     {children : (name : body.context.instances.Name) →
@@ -148,9 +148,9 @@ private def sinkReference {body : ModuleBody}
     (childNaming : (name : body.context.instances.Name) →
       ModuleNaming (children name)) :
     SignalSink body.context.ports body.context.instances signalType → String
-  | .moduleOutput port => (ports.outputs.name port).render
+  | .moduleOutput port => renderSourceName (ports.outputs.name port)
   | .instanceInput child port =>
-      s!"{(instanceName child).render}.{((childNaming child).ports.inputs.name port).render}"
+      s!"{renderSourceName (instanceName child)}.{renderSourceName ((childNaming child).ports.inputs.name port)}"
 
 private def compositeStatements {body : ModuleBody}
     {children : (name : body.context.instances.Name) →
@@ -160,8 +160,8 @@ private def compositeStatements {body : ModuleBody}
     (childNaming : (name : body.context.instances.Name) →
       ModuleNaming (children name)) : List String :=
   let instances := body.context.instances.names.values.flatMap fun child =>
-    [s!"inst {(instanceName child).render} of {(childNaming child).key.render}",
-     s!"connect {(instanceName child).render}.clock, clock"]
+    [s!"inst {renderSourceName (instanceName child)} of {renderModuleKey (childNaming child).key}",
+     s!"connect {renderSourceName (instanceName child)}.clock, clock"]
   let connections := (connectionOccurrences body).map fun connection =>
     s!"connect {sinkReference ports instanceName childNaming connection.sink}, {sourceReference ports instanceName childNaming connection.driver}"
   instances ++ connections
@@ -185,7 +185,7 @@ private def renderModuleBody :
 private def renderDefinition (isPublic : Bool) (module : NamedModule) : RenderResult String := do
   let body ← renderModuleBody module.naming
   let qualifier := if isPublic then "public module" else "module"
-  pure s!"  {qualifier} {module.key.render} :\n{body}"
+  pure s!"  {qualifier} {renderModuleKey module.key} :\n{body}"
 
 private def validateDefinitionBodies :
     List (String × String) → List (String × String) → RenderResult Unit
@@ -200,17 +200,17 @@ private def validateDefinitionBodies :
 def renderCircuit (naming : ModuleNaming moduleStructure) : RenderResult String := do
   let definitions := collectDefinitions naming
   let rootKey := naming.key
-  let moduleNames := definitions.map (fun definition => definition.key.render)
+  let moduleNames := definitions.map (fun definition => renderModuleKey definition.key)
   if let some invalid := moduleNames.find? (fun name => !isIdentifier name) then
     throw s!"invalid FIRRTL module identifier '{invalid}'"
   if let some duplicate := firstDuplicate? moduleNames then
     throw s!"duplicate FIRRTL module name '{duplicate}'"
   let occurrenceBodies ← (collectOccurrences naming).mapM fun occurrence => do
     let body ← renderModuleBody occurrence.definition.naming
-    pure (occurrence.definition.key.render, body)
+    pure (renderModuleKey occurrence.definition.key, body)
   validateDefinitionBodies [] occurrenceBodies
   let rendered ← definitions.mapM fun definition =>
     renderDefinition (definition.key == rootKey) definition
-  pure s!"FIRRTL version 4.0.0\ncircuit {rootKey.render} :\n{String.intercalate "\n\n" rendered}\n"
+  pure s!"FIRRTL version 4.0.0\ncircuit {renderModuleKey rootKey} :\n{String.intercalate "\n\n" rendered}\n"
 
 end Silean2.FIRRTL

@@ -1,4 +1,4 @@
-import Silean2.ModuleStructure
+import Silean2.Structure.ModuleStructure
 
 namespace Silean2
 

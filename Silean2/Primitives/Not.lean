@@ -64,14 +64,15 @@ private theorem notImplements : Implements (.primitive not) notCycleContract
 def notCertified : ModuleCycleCertified not.ports where
   moduleStructure := .primitive not
   cycleContract := notCycleContract
-  stateCorresponds := notStateCorresponds
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := fun inputs state =>
+  certification := {
+    stateCorresponds := notStateCorresponds,
+    hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+    hasStructuralResult := fun inputs state =>
     ⟨ProposedValues.primitive (not.outputValues inputs state)
       (not.nextStateValues inputs state), by
         simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
           Primitive.IsSolution, Primitive.OutputsSatisfy,
-          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩
-  structuralResultUnique := Primitive.hasAtMostOneSolution not
-  implements := notImplements
+          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩,
+    structuralResultUnique := Primitive.hasAtMostOneSolution not,
+    implements := notImplements }
 end Silean2.Primitives

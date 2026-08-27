@@ -1,8 +1,8 @@
-import Silean2.FIRRTL.Naming
+import Silean2.Naming.ModuleNaming
 
 namespace Silean2.FIRRTL
 
-open Silean2
+open Silean2 Silean2.Naming
 
 inductive PortOccurrence (ports : ModulePorts) where
   | input (label : ports.inputs.Label)

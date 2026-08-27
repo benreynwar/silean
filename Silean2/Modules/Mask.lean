@@ -1,4 +1,6 @@
 import Silean2.CertifiedSchedule
+import Silean2.Naming.PrimitiveNaming
+import Silean2.Naming.SignalAdapterNaming
 import Silean2.Primitives.And
 import Silean2.SignalLogic
 
@@ -90,7 +92,12 @@ def bitOutputSchedule : Certified.OutputSchedule bitBody bitChildren
       exact ⟨Primitives.AndRule.apply, by simp,
         by change Primitives.SingleOutput.output ∈ [.output]; simp⟩))
 
-def bitStateSchedule : Certified.StateSchedule bitBody bitChildren := .done trivial
+def bitStateSchedule : Certified.StateSchedule bitBody bitChildren :=
+  .done (by
+    intro child input member
+    cases child
+    simp [bitChildren, Primitives.andCertified, Primitives.andCycleContract,
+      CycleStateRule.empty, SignalSelection.labels] at member)
 
 def bitRuleSchedules : Certified.RuleSchedules bitBody bitChildren
     (cycleContract .bit) where
@@ -259,11 +266,12 @@ def Implementation.certified
     ModuleCycleCertified (ports signalType) where
   moduleStructure := moduleStructure
   cycleContract := cycleContract signalType
-  stateCorresponds := fun _ _ => True
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := implementation.hasStructuralResult
-  structuralResultUnique := implementation.structuralResultUnique
-  implements := implementation.implements
+  certification := {
+    stateCorresponds := fun _ _ => True,
+    hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+    hasStructuralResult := implementation.hasStructuralResult,
+    structuralResultUnique := implementation.structuralResultUnique,
+    implements := implementation.implements }
 
 abbrev CanonicalImplementation (signalType : SignalType) :=
   Implementation signalType (moduleStructure signalType)
@@ -562,7 +570,14 @@ def aggregateStateSchedule (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       CanonicalImplementation (splitter.ports.outputs.signalType component)) :
     Certified.StateSchedule (aggregateBody splitter)
-      (aggregateChildren splitter components) := .done trivial
+      (aggregateChildren splitter components) :=
+  .done (by
+    intro child input member
+    cases child <;>
+      simp [aggregateChildren, Implementation.certified, cycleContract,
+        SignalSplitter.certified, SignalSplitter.cycleContract,
+        SignalCombiner.certified, SignalCombiner.cycleContract,
+        CycleStateRule.empty, SignalSelection.labels] at member)
 
 noncomputable def aggregateRuleSchedules (splitter : SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
@@ -770,3 +785,67 @@ theorem certified_moduleStructure (signalType : SignalType) :
   rfl
 
 end Silean2.Modules.Mask
+
+namespace Silean2.Modules.Mask.Naming
+
+open Silean2 Silean2.Naming
+
+private def indexedComponent (signals : SignalMap) (component : signals.Label) :
+    SourceName :=
+  .scoped "mask" ((SignalMapNaming.indexed signals "component").name component)
+
+def portsWithNaming (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType) :
+    ModulePortsNaming (Modules.Mask.ports signalType) where
+  inputs := ⟨fun | .value => "value" | .mask => "mask"⟩
+  outputs := ⟨fun | .result => "result"⟩
+  inputTypes := fun | .value => typeNaming | .mask => .bit
+  outputTypes := fun | .result => typeNaming
+
+def ports (signalType : SignalType) : ModulePortsNaming (Modules.Mask.ports signalType) :=
+  portsWithNaming signalType (.positional signalType)
+
+def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
+    ModuleNaming (Modules.Mask.moduleStructure signalType)
+  | .bit, _ => by
+      rw [Modules.Mask.moduleStructure]
+      unfold Modules.Mask.bitModuleStructure Certified.moduleStructure
+      exact .composite ⟨"mask", "bit", []⟩ (ports .bit)
+        (fun | .gate => "gate") (fun | .gate => Silean2.Naming.Primitive.and)
+  | .vector length element, typeNaming => by
+      rw [Modules.Mask.moduleStructure]
+      let splitter : SignalSplitter := .vector length element
+      exact .composite ⟨"mask", "structural", [.shape splitter.aggregateType]⟩
+        (portsWithNaming splitter.aggregateType typeNaming)
+        (fun
+          | .start => "split"
+          | .item component => indexedComponent splitter.ports.outputs component
+          | .finish => "combine")
+        (fun
+          | .start => Silean2.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
+          | .item component => namingWith element (typeNaming.component component)
+          | .finish => Silean2.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
+  | .tuple fields, typeNaming => by
+      rw [Modules.Mask.moduleStructure]
+      let splitter : SignalSplitter := .tuple fields
+      exact .composite ⟨"mask", "structural", [.shape splitter.aggregateType]⟩
+        (portsWithNaming splitter.aggregateType typeNaming)
+        (fun
+          | .start => "split"
+          | .item component => indexedComponent splitter.ports.outputs component
+          | .finish => "combine")
+        (fun
+          | .start => Silean2.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
+          | .item component =>
+              namingWith (fields.typeAt component) (typeNaming.component component)
+          | .finish => Silean2.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
+termination_by signalType => signalType.complexity
+decreasing_by
+  · simp [SignalType.complexity]
+  · exact SignalTypes.complexity_typeAt_lt fields component
+
+def naming (signalType : SignalType) :
+    ModuleNaming (Modules.Mask.moduleStructure signalType) :=
+  namingWith signalType (.positional signalType)
+
+end Silean2.Modules.Mask.Naming

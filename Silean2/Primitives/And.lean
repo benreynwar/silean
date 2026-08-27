@@ -64,14 +64,15 @@ private theorem andImplements : Implements (.primitive and) andCycleContract
 def andCertified : ModuleCycleCertified and.ports where
   moduleStructure := .primitive and
   cycleContract := andCycleContract
-  stateCorresponds := andStateCorresponds
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := fun inputs state =>
+  certification := {
+    stateCorresponds := andStateCorresponds,
+    hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
+    hasStructuralResult := fun inputs state =>
     ⟨ProposedValues.primitive (and.outputValues inputs state)
       (and.nextStateValues inputs state), by
         simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
           Primitive.IsSolution, Primitive.OutputsSatisfy,
-          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩
-  structuralResultUnique := Primitive.hasAtMostOneSolution and
-  implements := andImplements
+          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩,
+    structuralResultUnique := Primitive.hasAtMostOneSolution and,
+    implements := andImplements }
 end Silean2.Primitives

@@ -1,4 +1,4 @@
-import Silean2.ModuleCycleContract
+import Silean2.Foundation.SignalSelection
 
 namespace Silean2
 

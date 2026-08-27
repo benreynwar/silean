@@ -234,7 +234,7 @@ def EvaluatesTo (contract : ModuleCycleContract ports)
     (inputs : ports.inputs.Values) (currentState : contract.state.Values)
     (outputs : ports.outputs.Values) (nextState : contract.state.Values) : Prop :=
   contract.OutputRulesHold inputs currentState outputs ∧
-    nextState = contract.stateRule.target inputs currentState
+    nextState = contract.stateRule.apply inputs currentState
 
 def applyOutputRules (contract : ModuleCycleContract ports)
     (inputs : ports.inputs.Values) (currentState : contract.state.Values) :
@@ -261,7 +261,7 @@ def evaluate (contract : ModuleCycleContract ports)
     (inputs : ports.inputs.Values) (currentState : contract.state.Values) :
     ports.outputs.Values × contract.state.Values :=
   (contract.applyOutputRules inputs currentState,
-    contract.stateRule.target inputs currentState)
+    contract.stateRule.apply inputs currentState)
 
 theorem evaluate_evaluatesTo (contract : ModuleCycleContract ports)
     (inputs : ports.inputs.Values) (currentState : contract.state.Values) :

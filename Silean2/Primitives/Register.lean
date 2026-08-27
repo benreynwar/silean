@@ -23,7 +23,9 @@ def registerOutputRule : CycleOutputRule register.ports registerStateMap
   writesOutputs := register.ports.outputs.select .output
   target | (), state => (state .stored, ())
 def registerStateRule : CycleStateRule register.ports registerStateMap where
-  target := register.nextStateValues
+  inputTypes := .cons .bit .nil
+  readsInputs := register.ports.inputs.select .input
+  target := fun | (input, ()), _ => fun | .stored => input
 def registerCycleContract : ModuleCycleContract register.ports where
   state := registerStateMap
   RuleName := RegisterRule
@@ -40,7 +42,7 @@ private def registerStateCorresponds
 private theorem registerImplements : Implements (.primitive register)
     registerCycleContract registerStateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  refine ⟨registerStateRule.target inputs contractState, ?_, ?_⟩
+  refine ⟨registerStateRule.apply inputs contractState, ?_, ?_⟩
   · constructor
     · intro rule
       cases rule
@@ -58,20 +60,21 @@ private theorem registerImplements : Implements (.primitive register)
     | mk outputs nextState =>
       simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
         Primitive.IsSolution, Primitive.NextStateSatisfy] at satisfies
-      exact (congrArg (registerStateRule.target inputs) corresponds).trans
+      exact (congrArg (registerStateRule.apply inputs) corresponds).trans
         satisfies.2.symm
 
 def registerCertified : ModuleCycleCertified register.ports where
   moduleStructure := .primitive register
   cycleContract := registerCycleContract
-  stateCorresponds := registerStateCorresponds
-  hasCorrespondingState := fun state => ⟨state, rfl⟩
-  hasStructuralResult := fun inputs state =>
+  certification := {
+    stateCorresponds := registerStateCorresponds,
+    hasCorrespondingState := fun state => ⟨state, rfl⟩,
+    hasStructuralResult := fun inputs state =>
     ⟨ProposedValues.primitive (register.outputValues inputs state)
       (register.nextStateValues inputs state), by
         simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
           Primitive.IsSolution, Primitive.OutputsSatisfy,
-          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩
-  structuralResultUnique := Primitive.hasAtMostOneSolution register
-  implements := registerImplements
+          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩,
+    structuralResultUnique := Primitive.hasAtMostOneSolution register,
+    implements := registerImplements }
 end Silean2.Primitives

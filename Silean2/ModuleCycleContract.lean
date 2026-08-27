@@ -1,36 +1,8 @@
 import Silean2.DeriveEnumeration
+import Silean2.Foundation.ModulePorts
+import Silean2.Foundation.SignalSelection
 
 namespace Silean2
-
-/-! An ordered selection of labels from one signal map. The result index records
-the selected signal types, so projected values remain heterogeneous and typed. -/
-
-inductive SignalSelection (signals : SignalMap) : SignalTypes → Type
-  | nil : SignalSelection signals .nil
-  | cons (label : signals.Label) (tail : SignalSelection signals types) :
-      SignalSelection signals (.cons (signals.signalType label) types)
-
-namespace SignalSelection
-
-def prepend (tail : SignalSelection signals types) (label : signals.Label) :
-    SignalSelection signals (.cons (signals.signalType label) types) :=
-  .cons label tail
-
-def labels : SignalSelection signals types → List signals.Label
-  | .nil => []
-  | .cons label tail => label :: tail.labels
-
-def project (selection : SignalSelection signals types)
-    (values : signals.Values) : types.Denote :=
-  match selection with
-  | .nil => ()
-  | .cons label tail => (values label, tail.project values)
-
-end SignalSelection
-
-def SignalMap.select (signals : SignalMap) (label : signals.Label) :
-    SignalSelection signals (.cons (signals.signalType label) .nil) :=
-  .cons label .nil
 
 /-! Output rules are the observable, dependency-aware pieces of a contract.
 They read a selected set of module inputs, see complete current state, and
@@ -55,19 +27,39 @@ structure CycleOutputRule (ports : ModulePorts) (state : SignalMap)
 abbrev SomeCycleOutputRule (ports : ModulePorts) (state : SignalMap) :=
   Sigma (CycleOutputRule ports state)
 
-/-! Every contract has one total clock-edge transition. When its independent
-`state` map is empty, the result type has one possible value and this rule
-is trivial without requiring a separate combinational contract type. -/
+/-! Every contract has one clock-edge transition with precise selected input
+dependencies and a complete next-state result. When its independent `state`
+map is empty, both the input selection and result can be empty without
+requiring a separate combinational contract type. -/
 
 structure CycleStateRule (ports : ModulePorts) (state : SignalMap) where
-  target : ports.inputs.Values → state.Values → state.Values
+  inputTypes : SignalTypes
+  readsInputs : SignalSelection ports.inputs inputTypes
+  target : inputTypes.Denote → state.Values → state.Values
 
-def CycleStateRule.empty (ports : ModulePorts) :
+namespace CycleStateRule
+
+def apply (rule : CycleStateRule ports state)
+    (inputs : ports.inputs.Values) (currentState : state.Values) : state.Values :=
+  rule.target (rule.readsInputs.project inputs) currentState
+
+def empty (ports : ModulePorts) :
     CycleStateRule ports emptySignalMap where
+  inputTypes := .nil
+  readsInputs := .nil
   target := fun _ _ => SignalMap.emptyValues
 
+@[simp] theorem empty_readsInputs_labels (ports : ModulePorts) :
+    (empty ports).readsInputs.labels = [] := rfl
+
+@[simp] theorem empty_apply (ports : ModulePorts)
+    (inputs : ports.inputs.Values) (state : emptySignalMap.Values) :
+    (empty ports).apply inputs state = SignalMap.emptyValues := rfl
+
+end CycleStateRule
+
 /-! A contract owns a finite readable rule identity, its output rules, exact
-output coverage, and the one total state rule. The permutation says that the
+output coverage, and the one complete state rule. The permutation says that the
 concatenated write selections contain every output exactly once: the boundary
 output enumeration is already duplicate-free. -/
 
