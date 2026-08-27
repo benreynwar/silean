@@ -4,6 +4,7 @@ import Silean2.Structure
 import Silean2.SignalLayout
 import Silean2.SignalAdapterCertified
 import Silean2.SignalLogic
+import Silean2.StructuralExecution
 import Silean2.ModuleCycleEvaluation
 import Silean2.CertifiedComposition
 import Silean2.CertifiedSchedule

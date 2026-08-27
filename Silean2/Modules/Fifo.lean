@@ -1,5 +1,6 @@
 import Silean2.CertifiedSchedule
 import Silean2.Modules.EnabledResetCounter
+import Silean2.Modules.FifoInterface
 import Silean2.Modules.FifoPointerControl
 import Silean2.Modules.RegisterBank
 
@@ -17,32 +18,6 @@ abbrev Entries (element : SignalType) (addressWidth : Nat) :=
   .vector (addressWidth + 1) .bit
 
 def zeroPointer (addressWidth : Nat) : Pointer addressWidth := fun _ => false
-
-inductive Input
-  | inputValid
-  | inputData
-  | outputReady
-  | reset
-deriving Enumeration
-
-inductive Output
-  | outputValid
-  | outputData
-  | inputReady
-deriving Enumeration
-
-@[reducible] def inputMap (element : SignalType) : SignalMap :=
-  EnumeratedMap.of Input fun
-    | .inputValid | .outputReady | .reset => .bit
-    | .inputData => element
-
-@[reducible] def outputMap (element : SignalType) : SignalMap :=
-  EnumeratedMap.of Output fun
-    | .outputValid | .inputReady => .bit
-    | .outputData => element
-
-@[reducible] def ports (element : SignalType) : ModulePorts :=
-  ⟨inputMap element, outputMap element⟩
 
 inductive State
   | readPointer

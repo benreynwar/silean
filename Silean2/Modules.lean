@@ -9,6 +9,8 @@ import Silean2.Modules.ResetRegister
 import Silean2.Modules.EnabledResetRegister
 import Silean2.Modules.EnabledResetCounter
 import Silean2.Modules.Fifo
+import Silean2.Modules.FifoResetContract
+import Silean2.Modules.FifoResetCertified
 import Silean2.Modules.FifoProperties
 import Silean2.Modules.Mask
 import Silean2.Modules.BitwiseOr

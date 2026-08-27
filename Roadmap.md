@@ -8,10 +8,13 @@ in `docs/SourceMap.md`.
 
 Silean 2 represents hardware as a typed recursive hierarchy with total wiring
 and primitive storage. Its meaning is the order-independent
-`ModuleStructure.IsSolution` relation. Independently declared cycle contracts
-describe observable behavior, and certification proves that every structural
-solution implements its contract. Module certificates supply structural
-existence; certified schedules establish uniqueness.
+`ModuleStructure.IsSolution` relation. Independently declared behavioral
+contracts describe what users may observe, and separate certifications connect
+them to structure. The existing cycle contracts support rule-local
+hierarchical reasoning and an explicit correspondence between contract and
+structural state. They are one contract form rather than a requirement for all
+future modules. Module certificates supply structural existence; certified
+schedules establish uniqueness.
 
 The same computable hierarchy is consumed directly by naming and FIRRTL
 generation. We do not lower to a second semantic netlist, and backend
@@ -21,10 +24,18 @@ translation is not part of the correctness proof at this stage.
 
 - Bits, vectors, and heterogeneous tuples have typed values and stable finite
   labels.
+- Ternary zero/one/don't-care expectations retain those same recursive shapes
+  and labelled maps, with generic componentwise matching laws.
+- Reset-synchronized contracts use arbitrary Lean state and specify exact-cycle
+  ternary output expectations after synchronous reset, with no structural-state
+  mapping or dependency on another contract form.
 - Module ports contain connectivity only; structural state is derived from
   primitive storage and recursive child ownership.
 - Instances, endpoints, and total typed wiring describe composite structure.
 - Structural equations have an evaluation-order-independent meaning.
+- Contract-independent structural transitions chain those equations across
+  finite input lists; per-cycle existence and uniqueness lift to unique finite
+  output traces and final structural states without selecting an evaluator.
 - Cycle contracts own independent abstract state, rule-local output
   dependencies, and an explicit-input next-state rule.
 - Certified child rules and output/state schedules establish hierarchical
@@ -319,6 +330,88 @@ to arbitrary executions. On reset-free traces it proves
 exact conservation and, from empty, that accepted outputs are a prefix of
 accepted inputs. The proof does not inspect the FIFO hierarchy or its private
 certification machinery.
+
+## Reset-synchronized behavioral contracts
+
+Add a second contract form for exact cycle-by-cycle behavior after synchronous
+reset. This contract is independent of `ModuleCycleContract`: a module may
+have only a cycle contract, only a reset-synchronized contract, both, or other
+contract forms added later.
+
+The reset contract owns an arbitrary Lean specification-state type. Its state
+does not need to resemble structural state, and its public certification does
+not require or expose a mapping between them. Given the same concrete inputs,
+the specification and structure must produce matching outputs on corresponding
+cycles after reset has established a common behavioral starting point. Because
+reset is synchronous, the reset cycle itself may still observe pre-reset
+structural state; required matching begins on the following cycle. A later
+reset establishes a fresh comparison point in the same way.
+
+Specification outputs are shaped like module outputs, but every leaf bit is a
+ternary expectation: zero, one, or `dontCare`. Matching is recursive over bits,
+vectors, and named tuples. `dontCare` relaxes only the value of that bit on that
+particular cycle; it does not permit latency changes or matching an output on a
+different cycle. This generic expectation and matching foundation is now
+implemented independently of contracts in `Foundation/SignalExpectation.lean`.
+
+Certification is stated directly against multi-cycle `ModuleStructure`
+execution, so it does not depend on a cycle contract. For modules that already
+have `ModuleCycleCertified`, provide a reusable constructor that may use its
+evaluator, state correspondence, and refinement proof to establish the reset
+contract. That constructor is an optional proof technique and is absent from
+the resulting reset certificate's public requirements.
+
+The contract-only semantics are complete. `ModuleResetContract` defines the
+reset input, arbitrary specification state, reset state, and ordinary step.
+Its trace begins unsynchronized, leaves outputs unconstrained before and on a
+reset cycle, checks corresponding ordinary cycles after synchronization, and
+supports repeated resets. Generic nil, cons, append, split, length,
+synchronization, and pre-reset-prefix laws are established without mentioning
+module structure or certification.
+
+`ModuleResetCertified` is also complete. It packages structure, reset contract,
+and only the universal statement that every structural execution is accepted.
+Because acceptance is unconstrained before reset, this directly gives the
+intended behavior from arbitrary initial structural state; generic suffix laws
+expose matching after an initial reset or after a reset following any prefix.
+No cycle contract, evaluator, schedule, structural-state mapping, existence
+proof, or uniqueness proof is stored in this certificate.
+
+The canonical FIFO now has a contract-only reset specification. Its state is
+the natural Lean queue `List T`, reset establishes `[]`, and ordinary cycles
+derive input-ready, output-valid, and head payload expectations directly from
+that queue and capacity `2 ^ addressWidth`. Payload is `dontCare` while empty.
+The total step handles stalls and each enqueue/dequeue combination; generic
+laws prove the four cases, capacity preservation from every bounded state, and
+bounded synchronization after reset, including resets following arbitrary
+prefixes. `Modules/FifoInterface.lean` owns the shared ports, allowing this
+contract to remain independent of the structural FIFO and all cycle-contract
+and certification machinery.
+
+The canonical FIFO structure is now directly certified against that reset
+contract. From any initial structural state, the proof uses the existing cycle
+certificate to obtain a corresponding cycle state but requires no initial
+reachability invariant. Outputs remain unconstrained before and on reset;
+reset establishes zero pointers, boundedness, and empty logical contents.
+Every ordinary cycle thereafter matches ready/valid/ternary payload
+expectations and the List queue update, while later resets re-establish the
+same alignment. All correspondence and induction witnesses are private;
+`Fifo.resetCertified` exposes only `ModuleResetCertified`.
+
+The concrete proof indicates that a reusable constructor would require three
+proof inputs: initial implementation-state coverage, reset establishment of
+behavioral alignment, and ordinary-cycle matching/preservation. These would
+remain construction details rather than fields of the resulting certificate.
+No generic bridge has been extracted yet, because its value should be tested
+against a second real consumer rather than inferred from the FIFO alone.
+
+The remaining work should proceed in reviewable stages:
+
+1. Choose a second reset-synchronized module only when one is naturally needed;
+   use it to test whether the three-part private witness deserves a generic
+   constructor.
+2. Continue backend or storage work without coupling it to reset-contract
+   certification.
 
 ## Later work
 

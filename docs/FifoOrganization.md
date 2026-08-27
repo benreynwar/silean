@@ -9,7 +9,10 @@ the existing trace and capacity proofs.
 
 | Source | Owns | Does not own |
 | --- | --- | --- |
+| `Modules/FifoInterface.lean` | Primary FIFO ready/valid/data/reset port vocabulary | Structure, contracts, or proofs |
 | `Modules/Fifo.lean` | Primary resettable FIFO contract, exact four-child pointer/bank hierarchy, certification, public cycle laws, and naming | Trace execution or a memory backend |
+| `Modules/FifoResetContract.lean` | Natural `List T` reset-synchronized contract, ternary observations, queue transfers, capacity, and trace laws | FIFO structure, cycle contract, or reset certification |
+| `Modules/FifoResetCertified.lean` | Direct trace refinement from the canonical structure to the List-based reset contract | A generic cycle-to-reset bridge or public state relation |
 | `Modules/FifoProperties.lean` | Logical occupancy and queue contents, reachable invariant, reset-aware execution, cycle correctness, and arbitrary-trace FIFO theorems | Structural children or certification internals |
 | `Modules/NoResetFifoInterface.lean` | No-reset fall-through ready/valid/data interface and rule names | Storage, hierarchy, execution, or proofs |
 | `Modules/OneEntryFifoControl.lean` | Combinational update/ready control used only by OneEntryFifo | Generic pointer FIFO control |
@@ -31,6 +34,13 @@ The no-reset serial family progresses as:
 Structure and contract remain independent descriptions. Certification connects
 them. Execution interprets the already-certified contract; it is not another
 structural semantics and is not stored in `ModuleStructure`.
+
+The reset certification consumes the existing cycle certificate only as a
+private proof technique. Its trace induction keeps cycle/structural
+correspondence before reset, establishes empty bounded logical contents on a
+reset edge, and preserves that alignment on ordinary edges. The exported
+`Fifo.resetCertified` contains only structure, reset contract, and trace
+refinement.
 
 ## Retained abstractions
 

@@ -1,5 +1,10 @@
 import Silean2.Modules
 import Silean2.Examples.Checks.FoundationChecks
+import Silean2.Examples.Checks.SignalExpectationChecks
+import Silean2.Examples.Checks.ModuleResetContractChecks
+import Silean2.Examples.Checks.ModuleResetCertifiedChecks
+import Silean2.Examples.Checks.FifoResetContractChecks
+import Silean2.Examples.Checks.FifoResetCertifiedChecks
 import Silean2.Examples.Checks.EndpointChecks
 import Silean2.Examples.Checks.SignalAdapterChecks
 import Silean2.Examples.Checks.RegisterChecks
@@ -12,6 +17,7 @@ import Silean2.Examples.Checks.BitMuxChecks
 import Silean2.Examples.Checks.ModuleCycleContractChecks
 import Silean2.Examples.Checks.HierarchyChecks
 import Silean2.Examples.Checks.StructuralSemanticsChecks
+import Silean2.Examples.Checks.StructuralExecutionChecks
 import Silean2.Examples.Checks.VectorConcatChecks
 import Silean2.Examples.Checks.BinaryToOneHotChecks
 import Silean2.Examples.Checks.CombMuxTreeChecks

@@ -186,6 +186,41 @@ theorem contents_length_eq_capacity_iff_full (addressWidth : Nat)
   exact occupancy_eq_capacity_iff_full addressWidth (state .readPointer)
     (state .writePointer) valid
 
+theorem outputValid_eq_contents_nonempty (addressWidth : Nat)
+    (state : ContractState element addressWidth) :
+    Fifo.outputValid (state .readPointer) (state .writePointer) =
+      !(contents addressWidth state).isEmpty := by
+  rw [Bool.eq_iff_iff]
+  simp [Fifo.outputValid, FifoPointerControl.outputValid,
+    contents_eq_nil_iff_empty]
+
+theorem inputReady_eq_contents_below_capacity (addressWidth : Nat)
+    (state : ContractState element addressWidth)
+    (valid : Invariant addressWidth state) :
+    Fifo.inputReady (state .readPointer) (state .writePointer) =
+      decide ((contents addressWidth state).length < capacity addressWidth) := by
+  have fullIff := contents_length_eq_capacity_iff_full addressWidth state valid
+  cases fullEq : FifoPointerControl.full (state .readPointer) (state .writePointer)
+  · have notEqual : (contents addressWidth state).length ≠ capacity addressWidth := by
+      intro equal
+      have := fullIff.mp equal
+      simp [fullEq] at this
+    have below : (contents addressWidth state).length < capacity addressWidth := by
+      have bounded := contents_bounded addressWidth state valid
+      omega
+    rw [Fifo.inputReady, FifoPointerControl.inputReady, fullEq]
+    have decided : decide ((contents addressWidth state).length <
+        capacity addressWidth) = true := decide_eq_true_iff.mpr below
+    exact decided.symm
+  · have equal : (contents addressWidth state).length = capacity addressWidth :=
+      fullIff.mpr fullEq
+    rw [Fifo.inputReady, FifoPointerControl.inputReady, fullEq]
+    have notBelow : ¬(contents addressWidth state).length < capacity addressWidth := by
+      omega
+    have decided : decide ((contents addressWidth state).length <
+        capacity addressWidth) = false := decide_eq_false_iff_not.mpr notBelow
+    exact decided.symm
+
 private theorem pointerValue_nextRead_of_notReset (addressWidth : Nat)
     (ready : Bool) (readPointer writePointer : Pointer addressWidth) :
     pointerValue addressWidth
@@ -352,6 +387,23 @@ private theorem contentsOf_positive (addressWidth : Nat)
       simp only [CircularBuffer.values_succ, Nat.add_sub_cancel]
       congr 1
       exact congrArg entries (entryIndex_eq_pointerAddress addressWidth readPointer)
+
+theorem outputData_eq_contents_head (addressWidth : Nat)
+    (state : ContractState element addressWidth) (head : Word element)
+    (tail : List (Word element))
+    (equal : contents addressWidth state = head :: tail) :
+    Fifo.outputData addressWidth (state .readPointer) (state .entries) = head := by
+  have positive : 0 < occupancy addressWidth
+      (state .readPointer) (state .writePointer) := by
+    have lengths := congrArg List.length equal
+    rw [contents_length] at lengths
+    simp at lengths
+    omega
+  have expanded := contentsOf_positive addressWidth (state .entries)
+    (state .readPointer) (state .writePointer) positive
+  change contents addressWidth state = _ at expanded
+  rw [equal] at expanded
+  exact List.cons.inj expanded |>.1.symm
 
 private theorem contentsOf_next_of_notReset (addressWidth : Nat)
     (entries : Entries element addressWidth)

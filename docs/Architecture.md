@@ -65,6 +65,21 @@ state at primitive leaves. Child inputs and composite next state are derived.
 order-independent meaning of one cycle. It requires primitive equations, child
 equations, and boundary wiring to hold. It does not prescribe evaluation order.
 
+`StructuralExecution.lean` lifts this same meaning across clock cycles without
+introducing a contract or chosen evaluator. `ModuleStructure.Transition` hides
+one satisfying `ProposedValues` while exposing only its boundary outputs and
+derived next structural state. `ModuleStructure.Executes` chains those
+transitions over concrete input and output lists, carrying each intermediate
+structural state through its inductive constructors. Nil, cons, singleton,
+append, split, and length laws expose the ordinary finite-trace behavior.
+
+Per-cycle `HasSolution` supplies non-vacuous totality, while the existing
+`HasAtMostOneSolution` supplies determinism. Their conjunction,
+`HasExactlyOneSolution`, lifts to existence and uniqueness of the complete
+output list and final state for every finite input list. These are propositions,
+not a noncomputable simulation function; a future executable simulator would
+need a constructive algorithm proved to satisfy the same structural relation.
+
 `StructuralRule` is the small semantic dependency fact that selected module
 inputs determine selected outputs among arbitrary satisfying proposals. Every
 named rule of a `ModuleCycleCertified` child generically induces this fact.
@@ -111,7 +126,47 @@ detail. Generic theorems prove that `evaluate` satisfies `EvaluatesTo` and that
 any two satisfying evaluations agree. There is no separate contract solving
 layer.
 
+`Foundation/SignalExpectation.lean` supplies contract-independent partially
+specified values for future behavioral contracts. A `BitExpectation` is
+`zero`, `one`, or `dontCare`; `SignalType.Expectation` preserves vector and
+tuple hierarchy by placing those choices only at bit leaves. Labelled
+`SignalMap.Expectations` preserve the ordinary port labels. The generic
+`Matches` relations are componentwise, exact expectations match exactly one
+concrete value, and all-don't-care expectations match every value. This is
+value vocabulary shared by contract forms.
+
+`ModuleResetContract` is the second behavioral contract form. It owns an
+arbitrary Lean state type, a distinguished bit reset input, a reset state, and
+one natural step function producing ternary output expectations and next
+state. Its finite-trace relation begins unsynchronized: ordinary cycles before
+the first reset accept arbitrary outputs. A reset cycle also accepts arbitrary
+outputs and synchronizes the specification state to `resetState`; every
+following ordinary cycle must match the step function on that same cycle.
+Repeated resets restart synchronization. The contract contains no structure,
+cycle contract, structural-state mapping, evaluator, or certification proof.
+
+`Foundation/Execution.Trace` supplies the generic relational finite-trace
+mechanics used here and by structural execution, including nil, cons, append,
+split, length, and decomposition laws. It does not prescribe deterministic
+steps or hardware meaning.
+
 ## Structural-to-contract refinement
+
+`ImplementsResetContract structure resetContract` is the direct multi-cycle
+refinement used by reset-synchronized contracts. It says every relational
+structural execution, from every possible initial structural state, has an
+output trace accepted by the contract. This single statement is deliberately
+stronger than mentioning only traces whose first cycle resets: pre-reset
+outputs are unconstrained by `Accepts`, while any reset in the trace starts the
+exact-cycle obligations and every later reset restarts them.
+
+`ModuleResetCertified` packages the independently chosen structure and reset
+contract with only that refinement proof. It stores no structural-state
+existence or uniqueness result, specification-to-structure state relation,
+schedule, evaluator, or cycle contract. Its public laws expose acceptance of a
+whole execution and matching of the suffix after either an initial reset or a
+reset following an arbitrary prefix. Proofs may use private witnesses, but
+those witnesses are not part of certification's meaning.
 
 `Implements moduleStructure cycleContract stateCorresponds` quantifies over
 every structural proposal satisfying `ModuleStructure.IsSolution` at
@@ -233,7 +288,34 @@ Validated refinement examples are:
   and the ordinary bank write use pre-edge state even when reset is asserted;
   reset wins in the pointer next states. Child schedules,
   construction, structural-state correspondence, and refinement remain
-  private. Address width zero is the ordinary one-entry member of this family.
+  private. Independently, `Fifo.resetContract T addressWidth` describes the
+  reset-synchronized behavior with the natural Lean state `List T`. Empty and
+  nonempty queues determine ready/valid and head-data expectations directly;
+  invalid output data is `dontCare`. Its total ordinary step removes an
+  accepted output and appends an accepted input, with capacity derived solely
+  from `2 ^ addressWidth`. This contract imports only the FIFO interface and
+  is connected to the canonical structure by `Fifo.resetCertified`.
+  Address width zero is the ordinary one-entry member of this family.
+
+The FIFO reset certification is a direct concrete proof. It starts from the
+existing cycle certificate's existential cycle state for an arbitrary
+structural state. Before reset, it carries only that private correspondence and
+places no requirements on outputs. A reset evaluation establishes zero
+pointers, the invariant, and empty logical contents without assuming the
+initial state was reachable. Ordinary cycles then use three public logical
+observation equations and the four queue-update laws to match the reset
+contract while preserving capacity. The local trace induction carries this
+evidence through every later reset. None of the cycle state, structural-state
+correspondence, invariant, or induction witness occurs in the resulting
+`ModuleResetCertified` value.
+
+This concrete proof suggests a possible future generic constructor would need
+three proof ingredients: initial implementation-state coverage, reset
+establishment of behavioral alignment, and ordinary-cycle output matching with
+alignment preservation. Those ingredients would remain proof inputs rather
+than fields of the resulting certificate. The pattern has not been extracted
+yet; one example is not enough evidence that the abstraction would simplify
+another certification.
 
 This distinction is intentional: proof-facing helper contracts may expose the
 precise behavior needed to compose a generic construction, while the reusable
@@ -483,9 +565,9 @@ distance; it rules out the unused half of the extended-pointer state space.
 
 Reusable arithmetic about circular distance, index advancement, logical reads,
 and functional writes lives in `Foundation/CircularBuffer.lean`.
-`Foundation/Execution.lean` contains only the contract-independent mechanics
-of stepping a deterministic state machine over a finite input list and
-recording observations. Reset-aware accepted-transfer and finite-transition
+`Foundation/Execution.lean` contains contract-independent deterministic-run
+and relational-trace mechanics over finite input lists. Reset-aware
+accepted-transfer and finite-transition
 semantics lives in `Contracts/ResetFifo.lean`. The module property layer proves from
 `ModuleCycleContract.evaluate` that every valid cycle preserves the invariant
 and obeys the logical queue equation. Reset cycles accept no logical transfer
