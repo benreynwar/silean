@@ -27,7 +27,7 @@ example : Contracts.NoResetFifo.View.Satisfies
   OneEntryFifo.Properties.fifoView_satisfies payloadType
 
 example
-    (inputs : (Fifo.ports payloadType).inputs.Values)
+    (inputs : (NoResetFifo.ports payloadType).inputs.Values)
     (contractState :
       (OneEntryFifo.certified payloadType).cycleContract.state.Values)
     (structuralState :

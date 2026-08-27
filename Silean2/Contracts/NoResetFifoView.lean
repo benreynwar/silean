@@ -91,7 +91,7 @@ namespace Execution.Model
 def executes (model : Execution.Model State Word) :
     State → List (Cycle Word) → State → Prop :=
   fun initial cycles final =>
-    ∃ inputs, (model.run initial inputs).cycles = cycles ∧
+    ∃ inputs, (model.run initial inputs).observations = cycles ∧
       (model.run initial inputs).finalState = final
 
 end Execution.Model

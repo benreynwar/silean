@@ -33,9 +33,9 @@ def inputs2 : (Modules.CombMuxTree.ports .bit 2).inputs.Values
 
 def inputs3 : (Modules.CombMuxTree.ports .bit 3).inputs.Values
   | .values => fun
-      | 0 => false | 1 => false | 2 => false | 3 => false
-      | 4 => false | 5 => true | 6 => false | 7 => false
-  | .index => fun | 0 => true | 1 => false | 2 => true
+      | 0 => false | 1 => false | 2 => false | 3 => true
+      | 4 => false | 5 => false | 6 => false | 7 => false
+  | .index => fun | 0 => true | 1 => true | 2 => false
 
 def bitResult (width : Nat)
     (inputs : (Modules.CombMuxTree.ports .bit width).inputs.Values) :=
@@ -44,7 +44,7 @@ def bitResult (width : Nat)
 
 #guard bitResult 0 inputs0
 #guard bitResult 1 inputs1
-#guard !bitResult 2 inputs2
+#guard bitResult 2 inputs2
 #guard bitResult 3 inputs3
 
 def aggregateInputs : (Modules.CombMuxTree.ports pairBits 2).inputs.Values
@@ -58,7 +58,7 @@ def aggregateInputs : (Modules.CombMuxTree.ports pairBits 2).inputs.Values
 def aggregateResult := ((Modules.CombMuxTree.cycleContract pairBits 2).evaluate
   aggregateInputs SignalMap.emptyValues).1 .result
 
-#guard pairBits.equal aggregateResult (true, (false, ()))
+#guard pairBits.equal aggregateResult (false, (true, ()))
 
 example (inputs : (Modules.CombMuxTree.ports element width).inputs.Values)
     (outputs : (Modules.CombMuxTree.ports element width).outputs.Values)
@@ -86,7 +86,9 @@ private def renders (element : SignalType) (width : Nat)
 #guard renders .bit 2 ["public module comb_mux_tree_recursive_bit_2",
   "vector_split_structural_bit_2_2", "comb_mux_tree_recursive_bit_1"]
 #guard renders .bit 3 ["public module comb_mux_tree_recursive_bit_3",
-  "input values : UInt<1>[8]", "input index : UInt<1>[3]"]
+  "input values : UInt<1>[8]", "input index : UInt<1>[3]",
+  "connect combine_index_lower.component_0, split_index.component_0",
+  "connect mux.select, split_index.component_2"]
 #guard renders pairBits 2 ["public module comb_mux_tree_recursive",
   "output result : {", "inst mux"]
 

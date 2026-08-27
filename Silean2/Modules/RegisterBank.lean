@@ -11,7 +11,7 @@ namespace Silean2.Modules.RegisterBank
 
 open Silean2
 
-abbrev EntryCount (addressWidth : Nat) := BinaryToOneHot.size addressWidth
+abbrev entryCount (addressWidth : Nat) := BinaryToOneHot.size addressWidth
 
 inductive Input
   | writeEnable
@@ -40,15 +40,15 @@ deriving Enumeration
 
 @[reducible] def stateMap (element : SignalType) (addressWidth : Nat) : SignalMap :=
   EnumeratedMap.of State fun
-    | .entries => .vector (EntryCount addressWidth) element
+    | .entries => .vector (entryCount addressWidth) element
 
 inductive Rule | read
 deriving Enumeration
 
 def nextEntries (addressWidth : Nat) (writeEnable : Bool)
     (writeAddress : Fin addressWidth → Bool) (writeValue : α)
-    (entries : Fin (EntryCount addressWidth) → α) :
-    Fin (EntryCount addressWidth) → α :=
+    (entries : Fin (entryCount addressWidth) → α) :
+    Fin (entryCount addressWidth) → α :=
   fun index =>
     if writeEnable && decide (index = BitVector.toIndex addressWidth writeAddress)
     then writeValue
@@ -96,22 +96,22 @@ def stateRule (element : SignalType) (addressWidth : Nat) :
 
 @[simp] theorem nextEntries_selected (addressWidth : Nat)
     (writeAddress : Fin addressWidth → Bool) (writeValue : α)
-    (entries : Fin (EntryCount addressWidth) → α) :
+    (entries : Fin (entryCount addressWidth) → α) :
     nextEntries addressWidth true writeAddress writeValue entries
       (BitVector.toIndex addressWidth writeAddress) = writeValue := by
   simp [nextEntries]
 
 @[simp] theorem nextEntries_disabled (addressWidth : Nat)
     (writeAddress : Fin addressWidth → Bool) (writeValue : α)
-    (entries : Fin (EntryCount addressWidth) → α) :
+    (entries : Fin (entryCount addressWidth) → α) :
     nextEntries addressWidth false writeAddress writeValue entries = entries := by
   funext index
   simp [nextEntries]
 
 theorem nextEntries_other (addressWidth : Nat) (writeEnable : Bool)
     (writeAddress : Fin addressWidth → Bool) (writeValue : α)
-    (entries : Fin (EntryCount addressWidth) → α)
-    (index : Fin (EntryCount addressWidth))
+    (entries : Fin (entryCount addressWidth) → α)
+    (index : Fin (entryCount addressWidth))
     (different : index ≠ BitVector.toIndex addressWidth writeAddress) :
     nextEntries addressWidth writeEnable writeAddress writeValue entries index =
       entries index := by
@@ -123,14 +123,14 @@ register per entry, one vector combiner, and one combinational read mux. -/
 private inductive Instance (addressWidth : Nat)
   | decoder
   | decodeSplit
-  | gate (index : Fin (EntryCount addressWidth))
-  | storage (index : Fin (EntryCount addressWidth))
+  | gate (index : Fin (entryCount addressWidth))
+  | storage (index : Fin (entryCount addressWidth))
   | combine
   | readMux
 
 @[reducible] private def instanceEnumeration (addressWidth : Nat) :
     Enumeration (Instance addressWidth) :=
-  let indices := Enumeration.fin (EntryCount addressWidth)
+  let indices := Enumeration.fin (entryCount addressWidth)
   let gates := indices.values.map Instance.gate
   let stores := indices.values.map Instance.storage
   {
@@ -191,20 +191,20 @@ private inductive Instance (addressWidth : Nat)
 
 private abbrev decoder : Instance addressWidth := .decoder
 private abbrev decodeSplit : Instance addressWidth := .decodeSplit
-private abbrev gate (index : Fin (EntryCount addressWidth)) : Instance addressWidth := .gate index
-private abbrev storage (index : Fin (EntryCount addressWidth)) : Instance addressWidth := .storage index
+private abbrev gate (index : Fin (entryCount addressWidth)) : Instance addressWidth := .gate index
+private abbrev storage (index : Fin (entryCount addressWidth)) : Instance addressWidth := .storage index
 private abbrev combine : Instance addressWidth := .combine
 private abbrev readMux : Instance addressWidth := .readMux
 
 private def entryCombiner (element : SignalType) (addressWidth : Nat) : SignalCombiner :=
-  .vector (EntryCount addressWidth) element
+  .vector (entryCount addressWidth) element
 
 @[reducible] private def instances (element : SignalType) (addressWidth : Nat) : Instances where
   Key := Instance addressWidth
   keys := instanceEnumeration addressWidth
   value
     | .decoder => BinaryToOneHot.ports addressWidth
-    | .decodeSplit => (SignalSplitter.vector (EntryCount addressWidth) .bit).ports
+    | .decodeSplit => (SignalSplitter.vector (entryCount addressWidth) .bit).ports
     | .gate _ => Primitives.and.ports
     | .storage _ => EnabledRegister.ports element
     | .combine => (entryCombiner element addressWidth).ports
@@ -243,7 +243,7 @@ private def wiring (element : SignalType) (addressWidth : Nat) :
 @[reducible] private noncomputable def children (element : SignalType) (addressWidth : Nat) :
     Certified.Children (body element addressWidth)
   | .decoder => BinaryToOneHot.certified addressWidth
-  | .decodeSplit => (SignalSplitter.vector (EntryCount addressWidth) .bit).certified
+  | .decodeSplit => (SignalSplitter.vector (entryCount addressWidth) .bit).certified
   | .gate _ => Primitives.andCertified
   | .storage _ => EnabledRegister.certified element
   | .combine => (entryCombiner element addressWidth).certified
@@ -253,7 +253,7 @@ private def wiring (element : SignalType) (addressWidth : Nat) :
     (name : (instances element addressWidth).Name) →
       ModuleStructure ((instances element addressWidth).ports name)
   | .decoder => BinaryToOneHot.moduleStructure addressWidth
-  | .decodeSplit => (SignalSplitter.vector (EntryCount addressWidth) .bit).certified.moduleStructure
+  | .decodeSplit => (SignalSplitter.vector (entryCount addressWidth) .bit).certified.moduleStructure
   | .gate _ => Primitives.andCertified.moduleStructure
   | .storage _ => EnabledRegister.moduleStructure element
   | .combine => (entryCombiner element addressWidth).certified.moduleStructure
@@ -284,12 +284,12 @@ private abbrev splitOccurrence (element : SignalType) (addressWidth : Nat) :
   ⟨.decodeSplit, SignalComponentRule.apply⟩
 
 private abbrev gateOccurrence (element : SignalType) (addressWidth : Nat)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     Certified.RuleOccurrence (children element addressWidth) :=
   ⟨.gate index, Primitives.AndRule.apply⟩
 
 private abbrev storageOccurrence (element : SignalType) (addressWidth : Nat)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     Certified.RuleOccurrence (children element addressWidth) :=
   ⟨.storage index, EnabledRegister.Rule.observe⟩
 
@@ -309,24 +309,24 @@ private abbrev muxOccurrence (element : SignalType) (addressWidth : Nat) :
     (splitOccurrence element addressWidth).reads = [.value] := rfl
 @[simp] private theorem split_writes (element : SignalType) (addressWidth : Nat) :
     (splitOccurrence element addressWidth).writes =
-      (Enumeration.fin (EntryCount addressWidth)).values := by
-  change (SignalSplitter.vector (EntryCount addressWidth) .bit).ports.outputs.allSelection.labels = _
+      (Enumeration.fin (entryCount addressWidth)).values := by
+  change (SignalSplitter.vector (entryCount addressWidth) .bit).ports.outputs.allSelection.labels = _
   rw [SignalMap.allSelection_labels]
 @[simp] private theorem gate_reads (element : SignalType) (addressWidth : Nat)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     (gateOccurrence element addressWidth index).reads = [.left, .right] := rfl
 @[simp] private theorem gate_writes (element : SignalType) (addressWidth : Nat)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     (gateOccurrence element addressWidth index).writes = [.output] := rfl
 @[simp] private theorem storage_reads (element : SignalType) (addressWidth : Nat)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     (storageOccurrence element addressWidth index).reads = [] := rfl
 @[simp] private theorem storage_writes (element : SignalType) (addressWidth : Nat)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     (storageOccurrence element addressWidth index).writes = [.value] := rfl
 @[simp] private theorem combine_reads (element : SignalType) (addressWidth : Nat) :
     (combineOccurrence element addressWidth).reads =
-      (Enumeration.fin (EntryCount addressWidth)).values := by
+      (Enumeration.fin (entryCount addressWidth)).values := by
   change (entryCombiner element addressWidth).ports.inputs.allSelection.labels = _
   rw [SignalMap.allSelection_labels]
   rfl
@@ -346,7 +346,7 @@ private noncomputable def storageFamilySchedule (element : SignalType)
         (∀ index, storageOccurrence element addressWidth index ∈ final) ∧
         ∀ called, called ∈ final →
           ∃ index, called = storageOccurrence element addressWidth index) [] :=
-  Certified.Schedule.callFamily (Enumeration.fin (EntryCount addressWidth))
+  Certified.Schedule.callFamily (Enumeration.fin (entryCount addressWidth))
     (storageOccurrence element addressWidth)
     (by
       intro left right equal
@@ -407,7 +407,7 @@ private noncomputable def gateFamilyAfterDecode (element : SignalType)
       [splitOccurrence element addressWidth, decoderOccurrence element addressWidth] :=
   Certified.Schedule.callFamilyAfter
     [splitOccurrence element addressWidth, decoderOccurrence element addressWidth]
-    (Enumeration.fin (EntryCount addressWidth))
+    (Enumeration.fin (entryCount addressWidth))
     (gateOccurrence element addressWidth)
     (by
       intro left right equal
@@ -442,7 +442,7 @@ private noncomputable def makeStateSchedule (element : SignalType) (addressWidth
   let gates := gateFamilyAfterDecode element addressWidth
   let stores := Certified.Schedule.callFamilyAfter
     (inputAvailable := fun _ => True) gates.finalAvailability
-    (Enumeration.fin (EntryCount addressWidth))
+    (Enumeration.fin (entryCount addressWidth))
     (storageOccurrence element addressWidth)
     (by
       intro left right equal
@@ -482,7 +482,7 @@ private noncomputable def makeStateSchedule (element : SignalType) (addressWidth
           exact ⟨Primitives.AndRule.apply,
             stores.finished.1 _ (gates.finished.2.1 index), by simp⟩
       | combine =>
-        change input ∈ ([] : List (Fin (EntryCount addressWidth))) at member
+        change input ∈ ([] : List (Fin (entryCount addressWidth))) at member
         cases member
       | readMux =>
         change input ∈ ([] : List (CombMuxTree.Input)) at member
@@ -568,13 +568,13 @@ private theorem state_mem_split (element : SignalType) (addressWidth : Nat) :
   (makeStateSchedule element addressWidth).splitMem
 
 private theorem state_mem_gate (element : SignalType) (addressWidth : Nat)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     gateOccurrence element addressWidth index ∈
       (stateSchedule element addressWidth).finalAvailability :=
   (makeStateSchedule element addressWidth).gateMem index
 
 private theorem state_mem_storage (element : SignalType) (addressWidth : Nat)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     storageOccurrence element addressWidth index ∈
       (stateSchedule element addressWidth).finalAvailability :=
   (makeStateSchedule element addressWidth).storageMem index
@@ -645,28 +645,28 @@ private def decoderInputs (element : SignalType) (addressWidth : Nat)
 private noncomputable def splitInputs (addressWidth : Nat)
     (decoderProposal : ProposedValues
       (children element addressWidth .decoder).moduleStructure) :
-    (SignalSplitter.vector (EntryCount addressWidth) .bit).ports.inputs.Values
+    (SignalSplitter.vector (entryCount addressWidth) .bit).ports.inputs.Values
   | .value => decoderProposal.outputs .result
 
 private noncomputable def gateInputs (element : SignalType) (addressWidth : Nat)
     (inputs : (ports element addressWidth).inputs.Values)
     (splitProposal : ProposedValues
       (children element addressWidth .decodeSplit).moduleStructure)
-    (index : Fin (EntryCount addressWidth)) : Primitives.and.ports.inputs.Values
+    (index : Fin (entryCount addressWidth)) : Primitives.and.ports.inputs.Values
   | .left => inputs .writeEnable
   | .right => splitProposal.outputs index
 
 private noncomputable def storageInputs (element : SignalType) (addressWidth : Nat)
     (inputs : (ports element addressWidth).inputs.Values)
-    (gateProposals : ∀ index : Fin (EntryCount addressWidth),
+    (gateProposals : ∀ index : Fin (entryCount addressWidth),
       ProposedValues (children element addressWidth (.gate index)).moduleStructure)
-    (index : Fin (EntryCount addressWidth)) :
+    (index : Fin (entryCount addressWidth)) :
     (EnabledRegister.ports element).inputs.Values
   | .value => inputs .writeValue
   | .enable => (gateProposals index).outputs .output
 
 private noncomputable def combineInputs (element : SignalType) (addressWidth : Nat)
-    (storageProposals : ∀ index : Fin (EntryCount addressWidth),
+    (storageProposals : ∀ index : Fin (entryCount addressWidth),
       ProposedValues (children element addressWidth (.storage index)).moduleStructure) :
     (entryCombiner element addressWidth).ports.inputs.Values :=
   fun index => (storageProposals index).outputs .value
@@ -700,7 +700,7 @@ private theorem hasStructuralResult (element : SignalType) (addressWidth : Nat)
     exact (children element addressWidth (.gate index)).hasStructuralResult
       (gateInputs element addressWidth inputs splitProposal index)
       (currentState (.gate index))
-  rcases (Enumeration.fin (EntryCount addressWidth)).exists_pi
+  rcases (Enumeration.fin (entryCount addressWidth)).exists_pi
       GateProperty gatesAvailable with ⟨gateProposals, gateSatisfies⟩
   let StorageProperty := fun index proposal =>
     (children element addressWidth (.storage index)).moduleStructure.IsSolution
@@ -711,7 +711,7 @@ private theorem hasStructuralResult (element : SignalType) (addressWidth : Nat)
     exact (children element addressWidth (.storage index)).hasStructuralResult
       (storageInputs element addressWidth inputs gateProposals index)
       (currentState (.storage index))
-  rcases (Enumeration.fin (EntryCount addressWidth)).exists_pi
+  rcases (Enumeration.fin (entryCount addressWidth)).exists_pi
       StorageProperty storesAvailable with ⟨storageProposals, storageSatisfies⟩
   rcases (children element addressWidth .combine).hasStructuralResult
       (combineInputs element addressWidth storageProposals) (currentState .combine) with
@@ -796,7 +796,7 @@ def stateCorresponds (element : SignalType) (addressWidth : Nat)
     (contractState : (stateMap element addressWidth).Values)
     (structuralState : (Certified.moduleStructure (body element addressWidth)
       (children element addressWidth)).State) : Prop :=
-  ∀ index : Fin (EntryCount addressWidth),
+  ∀ index : Fin (entryCount addressWidth),
     (children element addressWidth (storage index)).stateCorresponds
       (fun | .stored => contractState .entries index)
       (structuralState (storage index))
@@ -812,7 +812,7 @@ private theorem hasCorrespondingState (element : SignalType) (addressWidth : Nat
     intro index
     exact (children element addressWidth (storage index)).hasCorrespondingState
       (structuralState (storage index))
-  rcases (Enumeration.fin (EntryCount addressWidth)).exists_pi Property available with
+  rcases (Enumeration.fin (entryCount addressWidth)).exists_pi Property available with
     ⟨states, corresponds⟩
   let contractState : (stateMap element addressWidth).Values := fun
     | .entries => fun index => states index .stored
@@ -823,7 +823,7 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
       (children element addressWidth)) (cycleContract element addressWidth)
       (stateCorresponds element addressWidth) := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have storageMatches : ∀ index : Fin (EntryCount addressWidth),
+  have storageMatches : ∀ index : Fin (entryCount addressWidth),
       (children element addressWidth (storage index)).cycleContract.EvaluatesTo
         (ProposedValues.childInputs (body element addressWidth)
           (childStructure element addressWidth) inputs proposal.2 (storage index))
@@ -843,7 +843,7 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
     exact Certified.childSolutionMatchesContract (children element addressWidth)
       inputs structuralState proposal satisfies (storage index)
       (fun | .stored => contractState .entries index) (corresponds index)
-  have storageCurrent : ∀ index : Fin (EntryCount addressWidth),
+  have storageCurrent : ∀ index : Fin (entryCount addressWidth),
       (proposal.2 (storage index)).outputs .value = contractState .entries index := by
     intro index
     exact (EnabledRegister.outputRule_holds_iff element _ _ _).mp
@@ -857,7 +857,7 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
   have decoderMatches := Certified.childSolutionMatchesContract
     (children element addressWidth) inputs structuralState proposal satisfies decoder
     SignalMap.emptyValues decoderCorresponds
-  have decoderValue (index : Fin (EntryCount addressWidth)) :
+  have decoderValue (index : Fin (entryCount addressWidth)) :
       (proposal.2 decoder).outputs .result index =
         BinaryToOneHot.oneHot addressWidth (inputs .writeAddress) index := by
     have held := decoderMatches.1.1 BinaryToOneHot.Rule.apply
@@ -875,14 +875,14 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
   have splitMatches := Certified.childSolutionMatchesContract
     (children element addressWidth) inputs structuralState proposal satisfies decodeSplit
     SignalMap.emptyValues splitCorresponds
-  have splitValue (index : Fin (EntryCount addressWidth)) :
+  have splitValue (index : Fin (entryCount addressWidth)) :
       (proposal.2 decodeSplit).outputs index = (proposal.2 decoder).outputs .result index := by
     have equal := (SignalSplitter.outputRule_holds_iff
-      (SignalSplitter.vector (EntryCount addressWidth) .bit) _ _ _).mp
+      (SignalSplitter.vector (entryCount addressWidth) .bit) _ _ _).mp
       (splitMatches.1.1 SignalComponentRule.apply)
     exact congrFun equal index
 
-  have gateValue (index : Fin (EntryCount addressWidth)) :
+  have gateValue (index : Fin (entryCount addressWidth)) :
       (proposal.2 (gate index)).outputs .output =
         (BinaryToOneHot.oneHot addressWidth (inputs .writeAddress) index &&
           inputs .writeEnable) := by
@@ -1065,7 +1065,7 @@ theorem retained_entry_of_evaluatesTo (element : SignalType) (addressWidth : Nat
     (nextState : (stateMap element addressWidth).Values)
     (evaluates : (cycleContract element addressWidth).EvaluatesTo
       inputs state outputs nextState)
-    (index : Fin (EntryCount addressWidth))
+    (index : Fin (entryCount addressWidth))
     (different : index ≠ BitVector.toIndex addressWidth (inputs .writeAddress)) :
     nextState .entries index = state .entries index := by
   rw [evaluates.2, stateRule_apply_entries]
@@ -1113,13 +1113,13 @@ def namingWith (element : SignalType) (addressWidth : Nat)
     (fun
       | .decoder => BinaryToOneHot.Naming.naming addressWidth
       | .decodeSplit => Silean2.Naming.SignalAdapter.splitter
-          (.vector (Modules.RegisterBank.EntryCount addressWidth) .bit)
+          (.vector (Modules.RegisterBank.entryCount addressWidth) .bit)
       | .gate _ => Silean2.Naming.Primitive.and
       | .storage _ =>
           EnabledRegister.Naming.namingWith element elementNaming
       | .combine =>
           Silean2.Naming.SignalAdapter.combiner
-            (.vector (Modules.RegisterBank.EntryCount addressWidth) element)
+            (.vector (Modules.RegisterBank.entryCount addressWidth) element)
       | .readMux =>
           CombMuxTree.Naming.namingWith element addressWidth elementNaming)
 

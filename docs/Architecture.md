@@ -174,17 +174,17 @@ Validated refinement examples are:
   natural `Fin.addCases` function, and public laws describe each half without
   exposing the splitter/combiner implementation.
 - generic BinaryToOneHot: the public contract identifies the sole true output
-  by the natural-number value of the big-endian input bits. The implementation
-  recursively decodes the tail, masks two copies using the leading bit and its
-  inverse, and concatenates them. Thus the contract does not expose the
+  by the natural-number value of LSB-first input bits. The implementation
+  recursively decodes the lower-index bits, masks two copies using the high bit
+  and its inverse, and concatenates them. Thus the contract does not expose the
   recursive hierarchy or its scheduling proof.
 - generic VectorSplit: one vector is partitioned into left and right subvectors
   using the existing element splitter and two combiners. It is reusable wiring
   structure, not a new primitive adapter case.
 - generic CombMuxTree: the public contract directly indexes a value vector by
-  the natural-number interpretation of a big-endian selector. Each recursive
-  level partitions the values, evaluates two smaller trees using the selector
-  tail, and chooses with generic `Mux`; this hierarchy is absent from the
+  the natural-number interpretation of an LSB-first selector. Each recursive
+  level partitions the values, evaluates two smaller trees using the
+  lower-index selector bits, and chooses with generic `Mux`; this hierarchy is absent from the
   consumer-facing contract.
 - generic RegisterBank: the public state is a vector of entries, combinational
   reads observe the current vector, and the next-state rule functionally
@@ -192,6 +192,48 @@ Validated refinement examples are:
   decoder, a family of AND gates and enabled registers, a vector combiner, and
   CombMuxTree. State correspondence is pointwise over the register family;
   neither that hierarchy nor its schedules appear in the behavioral contract.
+- HalfAdder: two bit inputs feed closed XOR and AND primitive children. Separate
+  contract rules expose `sum` and `carry`, while the public numeric law states
+  `sum + 2 * carry = left + right`; schedules and child identities are private.
+- Increment: one LSB-first vector is incremented modulo its width. The public
+  contract is natural vector arithmetic; a private carry-aware recursion fixes
+  the initial carry to true, certifies the lower indices first, and feeds their
+  carry into a HalfAdder for the current highest index.
+- generic ResetRegister and EnabledResetRegister: synchronous reset is ordinary
+  certified structure, not primitive behavior. ResetRegister selects between a
+  configured Constant and its input before a generic Register.
+  EnabledResetRegister uses ResetRegister as its storage child and adds
+  enable/hold feedback through a generic Mux. Their natural contracts give
+  reset priority over loading and retention; configured reset values are also
+  included in their emitted module identities.
+- generic EnabledResetCounter: a two-child stateful composition feeds the
+  current output of EnabledResetRegister through Increment and returns the
+  incremented vector to the register. Its independent contract states
+  synchronous reset priority, modular enabled increment, and disabled
+  retention directly. Increment stays in this state-owning layer rather than
+  leaking into combinational pointer control. The construction and all
+  certification machinery are private.
+- FifoPointerControl: a certified combinational boundary interprets
+  LSB-first read and write pointers whose final bit is a wrap bit. It exposes
+  read/write addresses, non-fall-through valid/ready decisions, and separate
+  read/write advance enables. Equal pointers mean empty; matching addresses
+  with unequal wraps mean full. It has no reset input because it owns no state;
+  Fifo supplies the current values of its two EnabledResetCounter
+  pointer children here. Its structure splits the pointers directly
+  into bits, recombines only address bits, compares addresses once and wrap
+  bits once, and derives the remaining results with ordinary bit gates. The
+  whole-pointer vector remains useful for Increment but is not redundantly
+  compared here.
+- generic Fifo: the scalable pointer-and-register-bank FIFO has exactly
+  four children: read and write EnabledResetCounter instances,
+  FifoPointerControl, and RegisterBank. Its independent contract state is the
+  two logical pointers plus stored entries. Reset synchronously returns both
+  pointers to zero without clearing storage, while valid/ready transfers drive
+  independent pointer advances and accepted writes. Current-cycle handshakes
+  and the ordinary bank write use pre-edge state even when reset is asserted;
+  reset wins in the pointer next states. Child schedules,
+  construction, structural-state correspondence, and refinement remain
+  private. Address width zero is the ordinary one-entry member of this family.
 
 This distinction is intentional: proof-facing helper contracts may expose the
 precise behavior needed to compose a generic construction, while the reusable
@@ -209,7 +251,7 @@ constant generation, storage, masking, and disjunction semantics rather than
 hierarchy mechanics.
 
 The structural vocabulary also expresses a generic one-entry fall-through
-FIFO. `FifoControl` computes bit-valued upstream readiness and the shared
+FIFO. `OneEntryFifoControl` computes bit-valued upstream readiness and the shared
 storage-update condition. `OneEntryFifo T` composes `EnabledRegister .bit` for
 valid state, `EnabledRegister T` for payload state, that control module, an OR
 primitive, and `Mux T`. Its contract records bit-valued validity and
@@ -240,7 +282,7 @@ schedules and no evaluator. The state-coverage field prevents an always-false
 relation from certifying a structure vacuously. Parent proofs use this bundle
 through contract-facing operations such as `Certified.childImplements`.
 
-BitMux, FifoControl, generic Register, Mask, BitwiseOr, Mux, EnabledRegister,
+BitMux, OneEntryFifoControl, generic Register, Mask, BitwiseOr, Mux, EnabledRegister,
 and OneEntryFifo all follow this boundary. Their public structures are
 computable; their proof implementations are opaque.
 
@@ -292,6 +334,12 @@ computable; their proof implementations are opaque.
   module-owned naming. Its private named child-instance type keeps proofs and
   naming independent of enumeration encoding; numeric selection is the shared
   `BitVector.toIndex` arithmetic utility also used by `CombMuxTree`.
+- `Modules/HalfAdder`: natural Boolean and numeric two-bit addition contract,
+  private XOR/AND composition and schedules, public result laws, and
+  module-owned naming.
+- `Modules/Increment`: natural modular-increment contract and public numeric
+  law, backed by a private recursive ripple-carry hierarchy of HalfAdders and
+  ordinary vector adapters.
 - `ModuleCycleContract`: behavioral rule declarations and coverage.
 - `ModuleCycleEvaluation`: public contract evaluation relations/functions plus
   private typed assembly proofs.
@@ -388,8 +436,8 @@ exact conservation, a capacity bound, and a ready-propagation stall bound.
 Generic finite execution lifts single-cycle conservation and stall inequalities
 to arbitrary input sequences.
 
-`Fifo.Execution.step` invokes `ModuleCycleContract.evaluate` for any
-`Fifo.CycleBehavior`. `OneEntryFifo.Properties` specializes that one generic
+`NoResetFifo.Execution.step` invokes `ModuleCycleContract.evaluate` for any
+`NoResetFifo.CycleBehavior`. `OneEntryFifo.Properties` specializes that one generic
 interpreter; it does not duplicate an evaluator or inspect child instances.
 Logical contents are empty when `storedValid` is false and contain exactly
 `storedData` otherwise. The resulting proofs establish single-cycle and
@@ -418,11 +466,39 @@ generic execution `Serial` lifts a one-step decomposition to every finite run;
 `View.Execution.Constructor` then turns child satisfaction certificates into
 parent satisfaction without referring to `ModuleStructure`.
 
-`Fifo.Execution.serial` proves that execution of a serially composed cycle
-behavior decomposes into execution of its children. `Fifo.Properties` combines
+`NoResetFifo.Execution.serial` proves that execution of a serially composed cycle
+behavior decomposes into execution of its children. `SerialDepthFifo.Properties` combines
 the child views using the generic no-reset FIFO constructor. Positive-depth
 FIFO checks exercise this composition at depths one, two, and three; no second
 hand-written two-stage evaluator is retained.
+
+## Resettable FIFO behavioral correctness
+
+The canonical pointer-and-register-bank `Fifo` is interpreted at its public
+cycle-contract boundary. `Fifo.Properties` defines logical occupancy as the
+circular distance between its extended read and write pointers and defines
+logical contents by reading that many register-bank entries from the read
+address. The reachable-state predicate is precisely the capacity bound on that
+distance; it rules out the unused half of the extended-pointer state space.
+
+Reusable arithmetic about circular distance, index advancement, logical reads,
+and functional writes lives in `Foundation/CircularBuffer.lean`.
+`Foundation/Execution.lean` contains only the contract-independent mechanics
+of stepping a deterministic state machine over a finite input list and
+recording observations. Reset-aware accepted-transfer and finite-transition
+semantics lives in `Contracts/ResetFifo.lean`. The module property layer proves from
+`ModuleCycleContract.evaluate` that every valid cycle preserves the invariant
+and obeys the logical queue equation. Reset cycles accept no logical transfer
+and clear the next logical contents; ordinary cycles append accepted input and
+remove exactly the oldest accepted output. This covers stalls, simultaneous
+transfers, pointer wraparound, and capacity one uniformly.
+
+The generic finite-run induction then proves the transition relation for every
+input sequence. Reset-free segments have exact conservation; from empty, their
+accepted outputs are a prefix of accepted inputs. This is the ordering and
+no-loss/no-duplication theorem. Structural certification remains a separate
+fact: none of these behavioral proofs sees child instances, wiring, or private
+schedules.
 
 ## Current review conclusion
 
@@ -446,22 +522,23 @@ verbosity that remains in concrete refinement checks comes mostly from exposing
 the exact wiring equations of those examples; it has not justified adding
 module-specific public helper APIs.
 
-## Generic FIFO hierarchy
+## No-reset serial-depth FIFO hierarchy
 
 The FIFO now demonstrates the intended layering at arbitrary positive depth:
 
-- `Fifo.CycleBehavior` describes forward data/valid, backward ready, and next state.
+- `NoResetFifo.CycleBehavior` describes forward data/valid, backward ready, and next state.
   Serial behavior combines states with a labelled sum.
 - `SerialFifo` is the two-instance structural composition. Its schedules call
   only public upstream and downstream contract rules, and its certification
   consumes only public child certificates.
-- `Fifo.moduleStructure`, `Fifo.cycleBehavior`, and `Fifo.cycleContract` are
-  independently computable. `Fifo.certification` is noncomputable evidence
+- `SerialDepthFifo.moduleStructure`, `SerialDepthFifo.cycleBehavior`, and
+  `SerialDepthFifo.cycleContract` are independently computable.
+  `SerialDepthFifo.certification` is noncomputable evidence
   connecting those values.
-- `Fifo.Execution` executes cycle contracts and supplies the generic serial
-  execution decomposition. `Fifo.Properties` recursively combines certified
+- `NoResetFifo.Execution` executes cycle contracts and supplies the generic serial
+  execution decomposition. `SerialDepthFifo.Properties` recursively combines certified
   views, yielding exact capacity `depth` and zero ready latency.
-- `Fifo.Naming.depthNamingWith` is module-owned metadata with depth-sensitive
+- `SerialDepthFifo.Naming.depthNamingWith` is module-owned metadata with depth-sensitive
   module keys and recursively propagated payload labels.
 
 This replaces the former hand-written two-stage evaluator with one reusable

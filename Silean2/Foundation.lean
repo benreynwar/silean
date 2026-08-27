@@ -5,3 +5,5 @@ import Silean2.Foundation.SignalSelection
 import Silean2.Foundation.ModulePorts
 import Silean2.Foundation.StructuralState
 import Silean2.Foundation.BitVector
+import Silean2.Foundation.CircularBuffer
+import Silean2.Foundation.Execution

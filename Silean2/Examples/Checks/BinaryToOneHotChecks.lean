@@ -24,7 +24,7 @@ def inputs2 : (Modules.BinaryToOneHot.ports 2).inputs.Values
   | .value => fun | 0 => true | 1 => false
 
 def inputs3 : (Modules.BinaryToOneHot.ports 3).inputs.Values
-  | .value => fun | 0 => true | 1 => false | 2 => true
+  | .value => fun | 0 => true | 1 => true | 2 => false
 
 def result (width : Nat) (inputs : (Modules.BinaryToOneHot.ports width).inputs.Values) :=
   ((Modules.BinaryToOneHot.cycleContract width).evaluate
@@ -34,14 +34,15 @@ def result (width : Nat) (inputs : (Modules.BinaryToOneHot.ports width).inputs.V
 #guard !result 1 inputs1 0
 #guard result 1 inputs1 1
 #guard !result 2 inputs2 0
-#guard !result 2 inputs2 1
-#guard result 2 inputs2 2
+#guard result 2 inputs2 1
+#guard !result 2 inputs2 2
 #guard !result 2 inputs2 3
-#guard !result 3 inputs3 4
-#guard result 3 inputs3 5
+#guard !result 3 inputs3 2
+#guard result 3 inputs3 3
 #guard !result 3 inputs3 6
 
-#guard BitVector.toNat 3 (inputs3 .value) == 5
+#guard BitVector.toNat 2 (inputs2 .value) == 1
+#guard BitVector.toNat 3 (inputs3 .value) == 3
 
 example (inputs : (Modules.BinaryToOneHot.ports width).inputs.Values)
     (outputs : (Modules.BinaryToOneHot.ports width).outputs.Values)
@@ -66,6 +67,7 @@ private def renders (width : Nat) (fragments : List String) : Bool :=
 #guard renders 2 ["binary_to_one_hot_recursive_2", "output result : UInt<1>[4]",
   "lower_mask", "upper_mask"]
 #guard renders 3 ["binary_to_one_hot_recursive_3", "output result : UInt<1>[8]",
-  "decode_tail", "concat"]
+  "decode_lower", "concat", "connect lower_bits.component_0, split.component_0",
+  "connect invert_high.in, split.component_2"]
 
 end Silean2.Examples.Checks.BinaryToOneHot

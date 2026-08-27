@@ -92,6 +92,8 @@ private def primitiveStatements {primitive : Primitive}
       [s!"connect {renderSourceName (ports.outputs.name .output)}, and({renderSourceName (ports.inputs.name .left)}, {renderSourceName (ports.inputs.name .right)})"]
   | .or =>
       [s!"connect {renderSourceName (ports.outputs.name .output)}, or({renderSourceName (ports.inputs.name .left)}, {renderSourceName (ports.inputs.name .right)})"]
+  | .xor =>
+      [s!"connect {renderSourceName (ports.outputs.name .output)}, xor({renderSourceName (ports.inputs.name .left)}, {renderSourceName (ports.inputs.name .right)})"]
   | .eq =>
       [s!"connect {renderSourceName (ports.outputs.name .output)}, eq({renderSourceName (ports.inputs.name .left)}, {renderSourceName (ports.inputs.name .right)})"]
   | .register =>

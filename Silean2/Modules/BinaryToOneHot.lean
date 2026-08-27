@@ -31,14 +31,16 @@ abbrev size := BitVector.cardinality
 @[reducible] def ports (width : Nat) : ModulePorts :=
   ⟨inputMap width, outputMap width⟩
 
-/-! Bits are interpreted most-significant first. The definition is deliberately
+/-! Bit index `i` has weight `2 ^ i`. The definition is deliberately
 contract-level Lean code; it does not mention the structural hierarchy. -/
 def decode : (width : Nat) → (Fin width → Bool) → Fin (size width) → Bool
   | 0, _ => fun _ => true
   | width + 1, bits => fun index =>
       Fin.addCases
-        (fun lower => !bits 0 && decode width (fun i => bits i.succ) lower)
-        (fun upper => bits 0 && decode width (fun i => bits i.succ) upper)
+        (fun lower => !bits (Fin.last width) &&
+          decode width (fun i => bits i.castSucc) lower)
+        (fun upper => bits (Fin.last width) &&
+          decode width (fun i => bits i.castSucc) upper)
         index
 
 private theorem castAdd_injective {n : Nat} (left right : Fin n) :
@@ -96,14 +98,14 @@ theorem decode_eq_true_iff : ∀ (width : Nat) (bits : Fin width → Bool)
   | width + 1, bits, index => by
       refine Fin.addCases ?_ ?_ index
       · intro lower
-        cases head : bits 0 <;>
-          simp [decode, BitVector.toIndex, head, decode_eq_true_iff,
+        cases high : bits (Fin.last width) <;>
+          simp [decode, BitVector.toIndex, high, decode_eq_true_iff,
             castAdd_injective, castAdd_ne_addNat]
       · intro upper
-        cases head : bits 0
-        · simp [decode, BitVector.toIndex, head, addCases_addNat,
+        cases high : bits (Fin.last width)
+        · simp [decode, BitVector.toIndex, high, addCases_addNat,
             addNat_ne_castAdd]
-        · simp [decode, BitVector.toIndex, head, decode_eq_true_iff,
+        · simp [decode, BitVector.toIndex, high, decode_eq_true_iff,
             addCases_addNat, addNat_injective]
 
 def oneHot (width : Nat) (bits : Fin width → Bool) : Fin (size width) → Bool :=
@@ -168,8 +170,8 @@ theorem result_eq_true_iff_of_holds (width : Nat)
   exact decide_eq_true_iff
 
 /-! Width zero is the one-element constant vector `[true]`. A successor width
-splits off the most-significant bit, rebuilds the tail vector, recursively
-decodes it, masks two copies with the leading bit and its inverse, then joins
+splits off the highest-index bit, rebuilds the lower-bit vector, recursively
+decodes it, masks two copies with the high bit and its inverse, then joins
 the halves. -/
 
 private def baseValue : (SignalType.vector 1 .bit).Denote := fun _ => true
@@ -196,13 +198,13 @@ private def baseModuleStructure : ModuleStructure (ports 0) :=
     | .constant => Modules.Constant.moduleStructure (.vector 1 .bit) baseValue
 
 private def splitter (width : Nat) : SignalSplitter := .vector (width + 1) .bit
-private def tailCombiner (width : Nat) : SignalCombiner := .vector width .bit
-private def headIndex (width : Nat) : (splitter width).ports.outputs.Label :=
-  ⟨0, Nat.zero_lt_succ width⟩
+private def lowerCombiner (width : Nat) : SignalCombiner := .vector width .bit
+private def highIndex (width : Nat) : (splitter width).ports.outputs.Label :=
+  Fin.last width
 
 inductive SuccInstance
   | split
-  | tail
+  | lowerBits
   | decode
   | invert
   | lowerMask
@@ -213,7 +215,7 @@ deriving Enumeration
 @[reducible] def succInstances (width : Nat) : Instances :=
   EnumeratedMap.of SuccInstance fun
     | .split => (splitter width).ports
-    | .tail => (tailCombiner width).ports
+    | .lowerBits => (lowerCombiner width).ports
     | .decode => ports width
     | .invert => Primitives.not.ports
     | .lowerMask | .upperMask => Modules.Mask.ports (.vector (size width) .bit)
@@ -229,12 +231,12 @@ def succWiring (width : Nat) :
     | .result => (succContext width).instanceOutput .concat .result
   instanceInput
     | .split, .value => (succContext width).moduleInput .value
-    | .tail, index =>
-        (succContext width).instanceOutput .split index.succ
+    | .lowerBits, index =>
+        (succContext width).instanceOutput .split index.castSucc
     | .decode, .value =>
-        (succContext width).instanceOutput .tail .value
+        (succContext width).instanceOutput .lowerBits .value
     | .invert, .input =>
-        (succContext width).instanceOutput .split (headIndex width)
+        (succContext width).instanceOutput .split (highIndex width)
     | .lowerMask, .value =>
         (succContext width).instanceOutput .decode .result
     | .lowerMask, .mask =>
@@ -242,7 +244,7 @@ def succWiring (width : Nat) :
     | .upperMask, .value =>
         (succContext width).instanceOutput .decode .result
     | .upperMask, .mask =>
-        (succContext width).instanceOutput .split (headIndex width)
+        (succContext width).instanceOutput .split (highIndex width)
     | .concat, .left =>
         (succContext width).instanceOutput .lowerMask .result
     | .concat, .right =>
@@ -255,7 +257,7 @@ def moduleStructure : (width : Nat) → ModuleStructure (ports width)
   | 0 => baseModuleStructure
   | width + 1 => .composite (succBody width) fun
       | .split => (splitter width).certified.moduleStructure
-      | .tail => (tailCombiner width).certified.moduleStructure
+      | .lowerBits => (lowerCombiner width).certified.moduleStructure
       | .decode => moduleStructure width
       | .invert => Primitives.notCertified.moduleStructure
       | .lowerMask | .upperMask =>
@@ -371,7 +373,7 @@ private def baseImplementation : Implementation 0 where
 @[reducible] private noncomputable def succChildren (width : Nat)
     (previous : Implementation width) : Certified.Children (succBody width)
   | .split => (splitter width).certified
-  | .tail => (tailCombiner width).certified
+  | .lowerBits => (lowerCombiner width).certified
   | .decode => previous.certified
   | .invert => Primitives.notCertified
   | .lowerMask | .upperMask => Modules.Mask.certified (.vector (size width) .bit)
@@ -380,9 +382,9 @@ private def baseImplementation : Implementation 0 where
 private abbrev splitOccurrence (width) (previous : Implementation width) :
     Certified.RuleOccurrence (succChildren width previous) :=
   ⟨.split, SignalComponentRule.apply⟩
-private abbrev tailOccurrence (width) (previous : Implementation width) :
+private abbrev lowerBitsOccurrence (width) (previous : Implementation width) :
     Certified.RuleOccurrence (succChildren width previous) :=
-  ⟨.tail, SignalComponentRule.apply⟩
+  ⟨.lowerBits, SignalComponentRule.apply⟩
 private abbrev decodeOccurrence (width) (previous : Implementation width) :
     Certified.RuleOccurrence (succChildren width previous) :=
   ⟨.decode, Rule.apply⟩
@@ -410,17 +412,17 @@ private def succOutputSchedule (width : Nat) (previous : Implementation width) :
         SignalSelection.labels, Certified.sourceAvailable, succBody,
         succWiring, succContext, EndpointContext.moduleInput])
     (by simp)
-  (.call (tailOccurrence width previous)
+  (.call (lowerBitsOccurrence width previous)
     (by
       intro index _
       exact ⟨SignalComponentRule.apply, by simp, by
-        change index.succ ∈ (splitOccurrence width previous).writes
+        change index.castSucc ∈ (splitOccurrence width previous).writes
         rw [show (splitOccurrence width previous).writes =
             (splitter width).ports.outputs.labels.values by
           change (splitter width).ports.outputs.allSelection.labels = _
           rw [SignalMap.allSelection_labels]]
         exact ListIndex.get_eq
-          ((splitter width).ports.outputs.labels.locate index.succ) ▸
+          ((splitter width).ports.outputs.labels.locate index.castSucc) ▸
             List.get_mem _ _⟩)
     (by simp)
   (.call (decodeOccurrence width previous)
@@ -429,13 +431,13 @@ private def succOutputSchedule (width : Nat) (previous : Implementation width) :
     (by simp)
   (.call (invertOccurrence width previous)
     (by intro port _; cases port; exact ⟨SignalComponentRule.apply, by simp, by
-      change headIndex width ∈ (splitOccurrence width previous).writes
+      change highIndex width ∈ (splitOccurrence width previous).writes
       rw [show (splitOccurrence width previous).writes =
           (splitter width).ports.outputs.labels.values by
         change (splitter width).ports.outputs.allSelection.labels = _
         rw [SignalMap.allSelection_labels]]
       exact ListIndex.get_eq
-        ((splitter width).ports.outputs.labels.locate (headIndex width)) ▸
+        ((splitter width).ports.outputs.labels.locate (highIndex width)) ▸
           List.get_mem _ _⟩)
     (by simp)
   (.call (lowerOccurrence width previous)
@@ -450,13 +452,13 @@ private def succOutputSchedule (width : Nat) (previous : Implementation width) :
       | value => exact ⟨Rule.apply, by simp, by
           change Output.result ∈ [Output.result]; simp⟩
       | mask => exact ⟨SignalComponentRule.apply, by simp, by
-          change headIndex width ∈ (splitOccurrence width previous).writes
+          change highIndex width ∈ (splitOccurrence width previous).writes
           rw [show (splitOccurrence width previous).writes =
               (splitter width).ports.outputs.labels.values by
             change (splitter width).ports.outputs.allSelection.labels = _
             rw [SignalMap.allSelection_labels]]
           exact ListIndex.get_eq
-            ((splitter width).ports.outputs.labels.locate (headIndex width)) ▸
+            ((splitter width).ports.outputs.labels.locate (highIndex width)) ▸
               List.get_mem _ _⟩)
     (by simp)
   (.call (concatOccurrence width previous)
@@ -477,7 +479,7 @@ private def succStateSchedule (width : Nat) (previous : Implementation width) :
   .done (by
     intro child input member
     cases child with
-    | split | tail =>
+    | split | lowerBits =>
         change input ∈ (CycleStateRule.empty _).readsInputs.labels at member
         exact nomatch member
     | decode =>
@@ -511,10 +513,10 @@ private theorem succCoversChildren (width : Nat) (previous : Implementation widt
       change splitOccurrence width previous ∈
         (succOutputSchedule width previous).finalAvailability
       simp [succOutputSchedule, Certified.Schedule.finalAvailability]
-  | tail =>
+  | lowerBits =>
       change SignalComponentRule at rule
       cases rule
-      change tailOccurrence width previous ∈
+      change lowerBitsOccurrence width previous ∈
         (succOutputSchedule width previous).finalAvailability
       simp [succOutputSchedule, Certified.Schedule.finalAvailability]
   | decode =>
@@ -552,20 +554,20 @@ private def splitInputs (width : Nat) (inputs : (ports (width + 1)).inputs.Value
     (splitter width).ports.inputs.Values
   | .value => inputs .value
 
-private noncomputable def tailInputs (width : Nat) (previous : Implementation width)
+private noncomputable def lowerBitsInputs (width : Nat) (previous : Implementation width)
     (split : ProposedValues (succChildren width previous .split).moduleStructure) :
-    (tailCombiner width).ports.inputs.Values := fun index =>
-  split.outputs index.succ
+    (lowerCombiner width).ports.inputs.Values := fun index =>
+  split.outputs index.castSucc
 
 private noncomputable def decodeInputs (width : Nat) (previous : Implementation width)
-    (tail : ProposedValues (succChildren width previous .tail).moduleStructure) :
+    (lowerBits : ProposedValues (succChildren width previous .lowerBits).moduleStructure) :
     (ports width).inputs.Values
-  | .value => tail.outputs .value
+  | .value => lowerBits.outputs .value
 
 private noncomputable def invertInputs (width : Nat) (previous : Implementation width)
     (split : ProposedValues (succChildren width previous .split).moduleStructure) :
     Primitives.not.ports.inputs.Values
-  | .input => split.outputs (headIndex width)
+  | .input => split.outputs (highIndex width)
 
 private noncomputable def lowerInputs (width : Nat) (previous : Implementation width)
     (decoded : ProposedValues (succChildren width previous .decode).moduleStructure)
@@ -579,7 +581,7 @@ private noncomputable def upperInputs (width : Nat) (previous : Implementation w
     (decoded : ProposedValues (succChildren width previous .decode).moduleStructure) :
     (Modules.Mask.ports (.vector (size width) .bit)).inputs.Values
   | .value => decoded.outputs .result
-  | .mask => split.outputs (headIndex width)
+  | .mask => split.outputs (highIndex width)
 
 private noncomputable def concatInputs (width : Nat) (previous : Implementation width)
     (lower : ProposedValues (succChildren width previous .lowerMask).moduleStructure)
@@ -596,10 +598,11 @@ private theorem succHasStructuralResult (width : Nat) (previous : Implementation
       (succChildren width previous)).IsSolution inputs state proposal := by
   rcases (succChildren width previous .split).hasStructuralResult
       (splitInputs width inputs) (state .split) with ⟨split, splitSatisfies⟩
-  rcases (succChildren width previous .tail).hasStructuralResult
-      (tailInputs width previous split) (state .tail) with ⟨tail, tailSatisfies⟩
+  rcases (succChildren width previous .lowerBits).hasStructuralResult
+      (lowerBitsInputs width previous split) (state .lowerBits) with
+    ⟨lowerBits, lowerBitsSatisfies⟩
   rcases (succChildren width previous .decode).hasStructuralResult
-      (decodeInputs width previous tail) (state .decode) with ⟨decoded, decodeSatisfies⟩
+      (decodeInputs width previous lowerBits) (state .decode) with ⟨decoded, decodeSatisfies⟩
   rcases (succChildren width previous .invert).hasStructuralResult
       (invertInputs width previous split) (state .invert) with ⟨inverted, invertSatisfies⟩
   rcases (succChildren width previous .lowerMask).hasStructuralResult
@@ -614,7 +617,7 @@ private theorem succHasStructuralResult (width : Nat) (previous : Implementation
   let proposals : (child : SuccInstance) →
       ProposedValues (Certified.childStructure (succChildren width previous) child)
     | .split => split
-    | .tail => tail
+    | .lowerBits => lowerBits
     | .decode => decoded
     | .invert => inverted
     | .lowerMask => lower
@@ -633,11 +636,11 @@ private theorem succHasStructuralResult (width : Nat) (previous : Implementation
     · rw [show ProposedValues.childInputs (succBody width) _ inputs proposals .split =
           splitInputs width inputs by funext port; cases port; rfl]
       exact splitSatisfies
-    · rw [show ProposedValues.childInputs (succBody width) _ inputs proposals .tail =
-          tailInputs width previous split by funext index; rfl]
-      exact tailSatisfies
+    · rw [show ProposedValues.childInputs (succBody width) _ inputs proposals .lowerBits =
+          lowerBitsInputs width previous split by funext index; rfl]
+      exact lowerBitsSatisfies
     · rw [show ProposedValues.childInputs (succBody width) _ inputs proposals .decode =
-          decodeInputs width previous tail by funext port; cases port; rfl]
+          decodeInputs width previous lowerBits by funext port; cases port; rfl]
       exact decodeSatisfies
     · rw [show ProposedValues.childInputs (succBody width) _ inputs proposals .invert =
           invertInputs width previous split by funext port; cases port; rfl]
@@ -662,10 +665,10 @@ private theorem succImplements (width : Nat) (previous : Implementation width) :
   have splitOutputs : (proposal.snd .split).outputs =
       (splitter width).outputValues (splitInputs width inputs) :=
     childSatisfies .split
-  have tailOutputs : (proposal.snd .tail).outputs =
-      (tailCombiner width).outputValues
-        (ProposedValues.childInputs (succBody width) _ inputs proposal.snd .tail) :=
-    childSatisfies .tail
+  have lowerOutputs : (proposal.snd .lowerBits).outputs =
+      (lowerCombiner width).outputValues
+        (ProposedValues.childInputs (succBody width) _ inputs proposal.snd .lowerBits) :=
+    childSatisfies .lowerBits
 
   rcases (succChildren width previous .decode).hasCorrespondingState
       (structuralState .decode) with ⟨decodeState, decodeCorresponds⟩
@@ -719,14 +722,14 @@ private theorem succImplements (width : Nat) (previous : Implementation width) :
     change proposal.fst .result = decode (width + 1) (inputs .value)
     rw [show proposal.fst .result =
         (proposal.snd .concat).outputs .result by exact boundary .result]
-    have tailInputsEquation : ProposedValues.childInputs (succBody width) _
-        inputs proposal.snd .tail =
-          tailInputs width previous (proposal.snd .split) := by
+    have lowerBitsInputsEquation : ProposedValues.childInputs (succBody width) _
+        inputs proposal.snd .lowerBits =
+          lowerBitsInputs width previous (proposal.snd .split) := by
       funext index
       rfl
     have decodeInputsEquation : ProposedValues.childInputs (succBody width) _
         inputs proposal.snd .decode =
-          decodeInputs width previous (proposal.snd .tail) := by
+          decodeInputs width previous (proposal.snd .lowerBits) := by
       funext port; cases port; rfl
     have invertInputsEquation : ProposedValues.childInputs (succBody width) _
         inputs proposal.snd .invert =
@@ -752,25 +755,25 @@ private theorem succImplements (width : Nat) (previous : Implementation width) :
     rw [decodeInputsEquation] at decodedEquation
     rw [oneHot_eq_decode] at decodedEquation
     rw [invertInputsEquation] at invertEquation
-    rw [tailInputsEquation] at tailOutputs
+    rw [lowerBitsInputsEquation] at lowerOutputs
     rw [concatInputsEquation] at concatEquation
-    have tailValue : (proposal.snd .tail).outputs .value =
-        fun index => inputs .value index.succ := by
-      rw [congrFun tailOutputs .value]
+    have lowerValue : (proposal.snd .lowerBits).outputs .value =
+        fun index => inputs .value index.castSucc := by
+      rw [congrFun lowerOutputs .value]
       funext index
-      change (proposal.snd .split).outputs index.succ = inputs .value index.succ
+      change (proposal.snd .split).outputs index.castSucc = inputs .value index.castSucc
       rw [splitOutputs]
       rfl
-    have splitHead : (proposal.snd .split).outputs (headIndex width) =
-        inputs .value 0 := by
+    have splitHigh : (proposal.snd .split).outputs (highIndex width) =
+        inputs .value (Fin.last width) := by
       rw [splitOutputs]
       rfl
     change (proposal.snd .decode).outputs .result =
-      decode width ((proposal.snd .tail).outputs .value) at decodedEquation
-    rw [tailValue] at decodedEquation
+      decode width ((proposal.snd .lowerBits).outputs .value) at decodedEquation
+    rw [lowerValue] at decodedEquation
     change (proposal.snd .invert).outputs .output =
-      !(proposal.snd .split).outputs (headIndex width) at invertEquation
-    rw [splitHead] at invertEquation
+      !(proposal.snd .split).outputs (highIndex width) at invertEquation
+    rw [splitHigh] at invertEquation
     rw [concatEquation]
     funext index
     refine Fin.addCases ?_ ?_ index
@@ -787,10 +790,11 @@ private theorem succImplements (width : Nat) (previous : Implementation width) :
       rw [congrFun upperEquation upperIndex]
       simp [upperInputs, SignalType.mask]
       rw [congrFun decodedEquation upperIndex]
-      rw [splitHead]
+      rw [splitHigh]
       simp only [decode]
       rw [Bool.and_comm (decode width
-        (fun index => inputs .value index.succ) upperIndex) (inputs .value 0)]
+        (fun index => inputs .value index.castSucc) upperIndex)
+          (inputs .value (Fin.last width))]
       symm
       rw [show upperIndex.addNat (size width) =
           Fin.natAdd (size width) upperIndex by
@@ -805,7 +809,7 @@ private theorem succModuleStructure_eq (width : Nat) (previous : Implementation 
       Certified.moduleStructure (succBody width) (succChildren width previous) := by
   change ModuleStructure.composite (succBody width) (fun
     | .split => (splitter width).certified.moduleStructure
-    | .tail => (tailCombiner width).certified.moduleStructure
+    | .lowerBits => (lowerCombiner width).certified.moduleStructure
     | .decode => moduleStructure width
     | .invert => Primitives.notCertified.moduleStructure
     | .lowerMask | .upperMask =>
@@ -871,17 +875,17 @@ def naming : (width : Nat) →
         (ports (width + 1))
         (fun
           | .split => "split"
-          | .tail => "tail"
-          | .decode => "decode_tail"
-          | .invert => "invert_head"
+          | .lowerBits => "lower_bits"
+          | .decode => "decode_lower"
+          | .invert => "invert_high"
           | .lowerMask => "lower_mask"
           | .upperMask => "upper_mask"
           | .concat => "concat")
         (fun
           | .split => Silean2.Naming.SignalAdapter.splitter
               (Modules.BinaryToOneHot.splitter width)
-          | .tail => Silean2.Naming.SignalAdapter.combiner
-              (Modules.BinaryToOneHot.tailCombiner width)
+          | .lowerBits => Silean2.Naming.SignalAdapter.combiner
+              (Modules.BinaryToOneHot.lowerCombiner width)
           | .decode => naming width
           | .invert => Silean2.Naming.Primitive.not
           | .lowerMask | .upperMask => Modules.Mask.Naming.naming

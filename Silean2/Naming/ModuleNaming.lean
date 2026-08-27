@@ -114,6 +114,7 @@ inductive PrimitiveOperation : (primitive : Primitive) → Type
   | not : PrimitiveOperation Primitives.not
   | and : PrimitiveOperation Primitives.and
   | or : PrimitiveOperation Primitives.or
+  | xor : PrimitiveOperation Primitives.xor
   | eq : PrimitiveOperation Primitives.eq
   | register : PrimitiveOperation Primitives.register
   | constant (value : Bool) : PrimitiveOperation (Primitives.constant value)

@@ -1,6 +1,6 @@
 import Silean2.ModuleCycleContract
 
-namespace Silean2.Modules.Fifo
+namespace Silean2.Modules.NoResetFifo
 
 open Silean2
 
@@ -34,4 +34,4 @@ inductive Rule
   | ready
 deriving Enumeration
 
-end Silean2.Modules.Fifo
+end Silean2.Modules.NoResetFifo

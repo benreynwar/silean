@@ -2,7 +2,7 @@ import Silean2.CertifiedSchedule
 import Silean2.Naming.PrimitiveNaming
 import Silean2.Primitives
 
-namespace Silean2.Modules.FifoControl
+namespace Silean2.Modules.OneEntryFifoControl
 
 open Silean2
 
@@ -329,13 +329,13 @@ theorem hasExactlyOneSolution (inputs : ports.inputs.Values)
         other = proposal :=
   certified.hasExactlyOneStructuralResult inputs currentState
 
-end Silean2.Modules.FifoControl
+end Silean2.Modules.OneEntryFifoControl
 
-namespace Silean2.Modules.FifoControl.Naming
+namespace Silean2.Modules.OneEntryFifoControl.Naming
 
 open Silean2 Silean2.Naming
 
-def ports : ModulePortsNaming Modules.FifoControl.ports where
+def ports : ModulePortsNaming Modules.OneEntryFifoControl.ports where
   inputs := ⟨fun
     | .storedValid => "stored_valid"
     | .downstreamReady => "downstream_ready"⟩
@@ -343,9 +343,9 @@ def ports : ModulePortsNaming Modules.FifoControl.ports where
     | .upstreamReady => "upstream_ready"
     | .storageUpdate => "storage_update"⟩
 
-def naming : ModuleNaming Modules.FifoControl.moduleStructure := by
-  unfold Modules.FifoControl.moduleStructure Certified.moduleStructure
-  exact .composite ⟨"fifo_control", "structural", []⟩ ports
+def naming : ModuleNaming Modules.OneEntryFifoControl.moduleStructure := by
+  unfold Modules.OneEntryFifoControl.moduleStructure Certified.moduleStructure
+  exact .composite ⟨"one_entry_fifo_control", "structural", []⟩ ports
     (fun
       | .invertValid => "invert_valid"
       | .readyOr => "ready_or"
@@ -355,4 +355,4 @@ def naming : ModuleNaming Modules.FifoControl.moduleStructure := by
       | .readyOr => Silean2.Naming.Primitive.or
       | .updateEq => Silean2.Naming.Primitive.eq)
 
-end Silean2.Modules.FifoControl.Naming
+end Silean2.Modules.OneEntryFifoControl.Naming

@@ -1,14 +1,14 @@
 import Silean2.Modules.EnabledRegister
 import Silean2.Modules.Mux
-import Silean2.Modules.FifoControl
-import Silean2.Modules.FifoInterface
+import Silean2.Modules.OneEntryFifoControl
+import Silean2.Modules.NoResetFifoInterface
 import Silean2.CertifiedSchedule
 import Silean2.Naming.PrimitiveNaming
 
 namespace Silean2.Modules.OneEntryFifo
 
 open Silean2
-open Fifo
+open NoResetFifo
 
 private inductive Instance
   | validStorage
@@ -22,7 +22,7 @@ deriving Enumeration
   EnumeratedMap.of Instance fun
     | .validStorage => EnabledRegister.ports .bit
     | .dataStorage => EnabledRegister.ports signalType
-    | .control => FifoControl.ports
+    | .control => OneEntryFifoControl.ports
     | .outputValidOr => Primitives.or.ports
     | .outputDataMux => Mux.ports signalType
 
@@ -56,7 +56,7 @@ private def wiring (signalType : SignalType) :
     Certified.Children (body signalType)
   | .validStorage => EnabledRegister.certified .bit
   | .dataStorage => EnabledRegister.certified signalType
-  | .control => FifoControl.certified
+  | .control => OneEntryFifoControl.certified
   | .outputValidOr => Primitives.orCertified
   | .outputDataMux => Mux.certified signalType
 
@@ -68,7 +68,7 @@ private def wiring (signalType : SignalType) :
       ModuleStructure ((instances signalType).ports name)
   | .validStorage => EnabledRegister.moduleStructure .bit
   | .dataStorage => EnabledRegister.moduleStructure signalType
-  | .control => FifoControl.moduleStructure
+  | .control => OneEntryFifoControl.moduleStructure
   | .outputValidOr => Primitives.orCertified.moduleStructure
   | .outputDataMux => Mux.moduleStructure signalType
 
@@ -145,7 +145,7 @@ private abbrev dataRule (signalType : SignalType) :
   ⟨.dataStorage, EnabledRegister.Rule.observe⟩
 private abbrev controlOccurrence (signalType : SignalType) :
     Certified.RuleOccurrence (children signalType) :=
-  ⟨.control, FifoControl.Rule.control⟩
+  ⟨.control, OneEntryFifoControl.Rule.control⟩
 private abbrev validOrRule (signalType : SignalType) :
     Certified.RuleOccurrence (children signalType) :=
   ⟨.outputValidOr, Primitives.OrRule.apply⟩
@@ -238,7 +238,7 @@ private def readySchedule (signalType : SignalType) :
           ([controlOccurrence signalType, validRule signalType] :
             Certified.Availability (children signalType))
           Instance.control .upstreamReady
-        exact ⟨FifoControl.Rule.control, by simp, by simp⟩
+        exact ⟨OneEntryFifoControl.Rule.control, by simp, by simp⟩
     | outputValid | outputData =>
         simp [cycleContract, readyRule, SignalMap.select,
           SignalSelection.labels] at member)))
@@ -272,11 +272,11 @@ private def stateSchedule (signalType : SignalType) :
     | validStorage | dataStorage =>
         rw [EnabledRegister.certified_cycleContract] at member
         cases input with
-        | enable => exact ⟨FifoControl.Rule.control, by simp, by simp⟩
+        | enable => exact ⟨OneEntryFifoControl.Rule.control, by simp, by simp⟩
         | value => trivial
     | control =>
-        rw [FifoControl.certified_cycleContract] at member
-        simp [FifoControl.cycleContract, CycleStateRule.empty,
+        rw [OneEntryFifoControl.certified_cycleContract] at member
+        simp [OneEntryFifoControl.cycleContract, CycleStateRule.empty,
           SignalSelection.labels] at member
     | outputValidOr =>
         simp [children, Primitives.orCertified, Primitives.orCycleContract,
@@ -309,7 +309,7 @@ private theorem coversChildren (signalType : SignalType) :
     change dataRule signalType ∈ (stateSchedule signalType).finalAvailability
     simp [stateSchedule, Certified.Schedule.finalAvailability]
   | control =>
-    change FifoControl.Rule at rule
+    change OneEntryFifoControl.Rule at rule
     cases rule
     apply Certified.RuleSchedules.Combined.add_includes
     change controlOccurrence signalType ∈ (stateSchedule signalType).finalAvailability
@@ -334,7 +334,7 @@ private theorem hasAtMostOneSolution (signalType : SignalType) :
 
 private def controlInputsFrom (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values) (storedValid : Bool) :
-    FifoControl.ports.inputs.Values
+    OneEntryFifoControl.ports.inputs.Values
   | .storedValid => storedValid
   | .downstreamReady => inputs .outputReady
 
@@ -636,8 +636,8 @@ private theorem implements (signalType : SignalType) :
           exact dataBoundary.trans muxEquation
       · change (readyRule signalType).Holds inputs contractState _
         rw [readyRule_holds_iff signalType]
-        have controlRule := (FifoControl.controlRule_holds_iff _ _ _).mp
-          (controlEvaluates.1 FifoControl.Rule.control)
+        have controlRule := (OneEntryFifoControl.controlRule_holds_iff _ _ _).mp
+          (controlEvaluates.1 OneEntryFifoControl.Rule.control)
         have validEquation := (EnabledRegister.outputRule_holds_iff .bit _ _ _).mp
           (validEvaluates.1 EnabledRegister.Rule.observe)
         change (childValues .validStorage).outputs .value =
@@ -666,8 +666,8 @@ private theorem implements (signalType : SignalType) :
         rw [validEquation] at readyEquation
         exact readyBoundary.trans readyEquation
     · rfl
-  · have controlRule := (FifoControl.controlRule_holds_iff _ _ _).mp
-      (controlEvaluates.1 FifoControl.Rule.control)
+  · have controlRule := (OneEntryFifoControl.controlRule_holds_iff _ _ _).mp
+      (controlEvaluates.1 OneEntryFifoControl.Rule.control)
     have validOutputRule :=
       (EnabledRegister.outputRule_holds_iff .bit _ _ _).mp
         (validEvaluates.1 EnabledRegister.Rule.observe)
@@ -769,7 +769,7 @@ open Silean2 Silean2.Naming
 
 def portsWithNaming (signalType : SignalType)
     (typeNaming : SignalTypeNaming signalType) :
-    ModulePortsNaming (Modules.Fifo.ports signalType) where
+    ModulePortsNaming (Modules.NoResetFifo.ports signalType) where
   inputs := ⟨fun
     | .inputValid => "input_valid"
     | .inputData => "input_data"
@@ -786,7 +786,7 @@ def portsWithNaming (signalType : SignalType)
     | .outputData => typeNaming
 
 def ports (signalType : SignalType) :
-    ModulePortsNaming (Modules.Fifo.ports signalType) :=
+    ModulePortsNaming (Modules.NoResetFifo.ports signalType) :=
   portsWithNaming signalType (.positional signalType)
 
 def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalType) :
@@ -803,7 +803,7 @@ def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalTy
     (fun
       | .validStorage => Modules.EnabledRegister.Naming.naming .bit
       | .dataStorage => Modules.EnabledRegister.Naming.namingWith signalType typeNaming
-      | .control => Modules.FifoControl.Naming.naming
+      | .control => Modules.OneEntryFifoControl.Naming.naming
       | .outputValidOr => Silean2.Naming.Primitive.or
       | .outputDataMux => Modules.Mux.Naming.namingWith signalType typeNaming)
 

@@ -3,6 +3,10 @@ import Silean2.Examples.Checks.FoundationChecks
 import Silean2.Examples.Checks.EndpointChecks
 import Silean2.Examples.Checks.SignalAdapterChecks
 import Silean2.Examples.Checks.RegisterChecks
+import Silean2.Examples.Checks.ResetRegisterChecks
+import Silean2.Examples.Checks.EnabledResetCounterChecks
+import Silean2.Examples.Checks.FifoChecks
+import Silean2.Examples.Checks.FifoPropertiesChecks
 import Silean2.Examples.Checks.LeafwiseLogicChecks
 import Silean2.Examples.Checks.BitMuxChecks
 import Silean2.Examples.Checks.ModuleCycleContractChecks
@@ -20,6 +24,9 @@ import Silean2.Examples.Checks.BidirectionalDualNotChecks
 import Silean2.Examples.Checks.FIRRTLChecks
 import Silean2.Examples.Checks.ConstantChecks
 import Silean2.Examples.Checks.AllChecks
+import Silean2.Examples.Checks.HalfAdderChecks
+import Silean2.Examples.Checks.IncrementChecks
+import Silean2.Examples.Checks.FifoPointerControlChecks
 import Silean2.Examples.Checks.EqualityChecks
 import Silean2.Examples.Checks.OneEntryFifoPropertiesChecks
-import Silean2.Examples.Checks.FifoDepthChecks
+import Silean2.Examples.Checks.SerialDepthFifoChecks

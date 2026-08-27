@@ -32,7 +32,8 @@ translation is not part of the correctness proof at this stage.
 - `ModuleCycleCertified` packages a computable structure, cycle contract, state
   correspondence, refinement proof, and structural existence/uniqueness.
 - Generic Constant, balanced Reduction, All, recursive Equality, VectorConcat,
-  BinaryToOneHot, CombMuxTree, RegisterBank, Register, Mask, BitwiseOr, Mux,
+  BinaryToOneHot, CombMuxTree, RegisterBank, HalfAdder, Increment, Register, Mask,
+  BitwiseOr, Mux,
   EnabledRegister,
   OneEntryFifo, serial FIFO composition, and arbitrary positive-depth FIFO
   validate the hierarchy.
@@ -92,8 +93,9 @@ A Boolean constant primitive and certified generic `Constant T value` module
 now generate arbitrary bit, vector, and tuple values. Aggregate constants use
 the leafwise component/combiner hierarchy with empty input families and
 value-dependent recursive leaves. Naming keys include the flattened value, and
-direct FIRRTL checks cover primitive and nested aggregate constants. This is
-the first dependency for generic equality-with-constant and pointer logic.
+direct FIRRTL checks cover primitive and nested aggregate constants. Constants
+are available when a concrete design needs them; no equality-with-constant
+module is currently planned.
 
 ## Completed balanced Boolean reduction
 
@@ -139,7 +141,7 @@ aggregate element types.
 
 ## Completed binary-to-one-hot decoding
 
-`BinaryToOneHot width` interprets its input bits most-significant first and
+`BinaryToOneHot width` interprets bit index `i` with weight `2 ^ i` and
 produces `2 ^ width` result bits. Its contract is numeric: output index `i` is
 true exactly when `i` is the natural-number value of the input. The certified
 structure is recursive rather than an equality bank. Width zero emits the
@@ -151,11 +153,11 @@ cover widths zero through three; no cocotb target is needed for this module.
 
 ## Completed combinational mux tree
 
-`CombMuxTree T indexWidth` takes `2 ^ indexWidth` values of type `T` and a
-big-endian bit-vector index. Its natural contract returns the value at the
+`CombMuxTree T indexWidth` takes `2 ^ indexWidth` values of type `T` and an
+LSB-first bit-vector index. Its natural contract returns the value at the
 numeric index. The recursive structure partitions the values with the generic
-certified `VectorSplit`, rebuilds the selector tail using ordinary signal
-adapters, evaluates two smaller mux trees, and selects between their results
+certified `VectorSplit`, rebuilds the lower-index selector bits using ordinary signal
+  adapters, evaluates two smaller mux trees, and selects between their results
 with `Mux T`. `VectorSplit` is the reusable inverse-shaped counterpart of
 `VectorConcat`, rather than a mux-specific adapter. Certification proves
 existence, schedule-based uniqueness, and refinement. Lean and direct FIRRTL
@@ -180,17 +182,151 @@ named child-instance type rather than nested sums, keeps construction witnesses
 private, and shares `BitVector.toIndex` as the generic numeric interpretation
 used by the decoder, mux tree, and register bank.
 
+## Completed LSB-first numeric indexing
+
+Numeric bit vectors now use the conventional hardware ordering: vector index
+`i` has weight `2 ^ i`, so index zero is the least-significant bit.
+`BitVector.toNat` and `toIndex` recurse by removing the highest-index bit.
+`BinaryToOneHot` and `CombMuxTree` follow the same hierarchy directly: their
+recursive children receive the lower-index bits and the current high bit
+selects between equal output/value halves. RegisterBank addresses inherit this
+interpretation through those generic contracts, without reversal wiring or a
+bank-specific conversion. Asymmetric checks and the generated RegisterBank
+simulation distinguish this convention from the former MSB-first ordering.
+
+## Completed increment arithmetic foundation
+
+The closed XOR bit primitive has a natural Boolean contract and a numeric law
+relating XOR and AND to the sum of two input bits. `HalfAdder` composes one XOR
+and one AND child behind two named inputs and independent `sum` and `carry`
+contract rules. Its public laws expose the Boolean results and the arithmetic
+identity `sum + 2 * carry = left + right` without mentioning child structure.
+Its two output schedules and all construction witnesses remain private. Lean
+truth-table checks and direct FIRRTL rendering cover both the primitive and
+composite module.
+
+## Completed combinational increment
+
+`Increment width` has one LSB-first bit-vector input and result. Its contract is
+the natural modular arithmetic operation: the result's numeric value is the
+input value plus one modulo `2 ^ width`. The certified implementation fixes an
+initial carry to true and recursively processes the lower-index bits before a
+HalfAdder for the current highest-index bit, so carry flows from low to high.
+The carry-aware recursion, schedules, state correspondence, and construction
+witnesses are private implementation details. Public laws expose both the
+result vector and its modular numeric meaning. Lean checks cover width zero,
+one-bit overflow, asymmetric multi-bit carry propagation, and full-width
+overflow; FIRRTL checks confirm the recursive HalfAdder hierarchy and bit
+ordering. No separate simulation target is needed for this combinational module.
+
+## Completed certified FIFO pointer control
+
+`FifoPointerControl addressWidth` defines the natural combinational boundary
+between FIFO pointer state and the eventual FIFO structure. Its LSB-first read
+and write pointers contain `addressWidth` address bits followed by one wrap
+bit. The contract exposes both addresses, valid/ready flow control, and
+explicit read/write advance enables. Equal complete pointers mean empty;
+equal addresses with different wrap bits mean full. Transfer behavior is
+non-fall-through, so a full FIFO does not accept a simultaneous replacement
+and an empty FIFO does not bypass a simultaneous input.
+
+The natural contract and its public laws remain independent of the certified
+structure. Structurally, each extended pointer is split directly into bits;
+only its address bits are recombined. One generic Equality compares the two
+addresses and one primitive equality compares the wrap bits. AND/NOT logic
+then derives empty, full, ready, valid, and advance signals. There is no
+redundant whole-pointer comparison or one-element wrap vector. The same
+structure works when `addressWidth = 0`.
+
+Schedules, child identities, existence construction, uniqueness, and
+refinement remain private. Lean and direct FIRRTL checks cover asymmetric
+pointers, empty and full states, simultaneous transfers, and zero address
+width. Reset is deliberately absent because this module owns no state. The
+enclosing FIFO resets both pointer registers equally, from which this control
+naturally reports empty.
+
+## Completed generic synchronous-reset registers
+
+`ResetRegister T resetValue` is a certified generic composition of
+`Constant T`, `Mux T`, and `Register T`. It exposes current state and loads the
+configured constant when reset is high, otherwise loading its ordinary input.
+`EnabledResetRegister T resetValue` adds enable/hold selection around that
+module, so reset has highest priority, enable loads, and disable retains.
+Neither module adds reset behavior to primitives: reset is ordinary synchronous
+data-path logic evaluated on the existing clock.
+
+Both contracts state their next-state behavior directly, independent of the
+hierarchy. Public laws cover reset, loading, and retention; schedules and
+construction proofs remain private. Checks instantiate both modules for bits,
+vectors, and named tuples, including reset priority. Configured reset values
+are part of emitted module identities, preventing differently configured
+definitions from colliding.
+
+## Completed generic enabled-reset counter
+
+`EnabledResetCounter width resetValue` is a certified LSB-first modular
+counter with synchronous reset. Its natural contract exposes current state and
+defines next state directly: reset has highest priority, enable applies
+`Increment.incrementValue`, and otherwise the value is retained. The public
+numeric law relates enabled updates to addition modulo `2 ^ width`.
+
+The structure has exactly two children. The current output of
+`EnabledResetRegister (.vector width .bit) resetValue` feeds `Increment width`,
+whose result returns to the register's value input. Enable and reset connect
+directly to the register. All schedules, child identities, construction,
+correspondence, uniqueness, and refinement details are private. Contract,
+structural, and FIRRTL checks cover reset priority, retention, carry
+propagation, rollover, and width zero. No counter-specific primitive was added.
+
+## Completed certified generic FIFO
+
+`Fifo T addressWidth` is the primary pointer-and-storage FIFO implementation.
+Its natural contract state contains read and write pointers plus a vector of
+entries. The contract directly describes valid/ready observations, the oldest
+visible value, pointer advancement, and accepted writes without mentioning
+the child hierarchy. Synchronous reset has priority in both pointer updates,
+making the following state empty; storage is not cleared.
+Because reset is synchronous, current-cycle outputs and any accepted bank
+write use the pre-edge state; reset wins only in the pointer next states.
+
+The structure has exactly four children: two zero-reset
+`EnabledResetCounter (addressWidth + 1)` pointers, `FifoPointerControl`, and
+`RegisterBank T addressWidth`. Certification maps the three contract-state
+fields onto those three state-owning children; schedules and all
+construction/refinement details remain private. Checks cover ordering,
+boundary stalls, simultaneous transfers, carry and rollover, reset, and the
+one-entry `addressWidth = 0` case, plus structural uniqueness and FIRRTL.
+
+The older no-reset behavior vocabulary is owned by `NoResetFifo`; its
+recursive positive-depth implementation is `SerialDepthFifo`. The canonical
+`Fifo` name refers only to the scalable resettable implementation.
+
+## Completed generic FIFO behavioral proof
+
+The canonical `Fifo T addressWidth` now has a logical queue view derived from
+its public contract state. Circular extended-pointer distance defines
+occupancy; reading the register-bank entries from the read address defines
+contents. A reachable-state invariant bounds occupancy by
+`2 ^ addressWidth`.
+
+Contract-only proofs establish reset clearing, invariant preservation,
+empty/full equivalence, capacity, exact enqueue append, oldest-value dequeue,
+simultaneous transfer ordering, stalls, wraparound, and the one-entry
+`addressWidth = 0` case. A shared contract-independent runner folds
+deterministic steps over finite input lists; a reset-aware FIFO transition
+layer gives those observations their queue meaning and lifts the cycle theorem
+to arbitrary executions. On reset-free traces it proves
+exact conservation and, from empty, that accepted outputs are a prefix of
+accepted inputs. The proof does not inspect the FIFO hierarchy or its private
+certification machinery.
+
 ## Later work
 
-1. Build the pointer and memory pieces needed for a practical FIFO backed by a
-   register bank or later memory primitive, keeping its contract independent
-   of the chosen storage hierarchy.
-2. Review intentionally public module theorems and remove debugging or
-   construction details that no consumer needs.
-3. Expand direct FIRRTL emission to additional configured designs as useful;
+1. Expand direct FIRRTL emission to additional configured designs as useful;
    keep translation straightforward and executable rather than proof-heavy.
-4. Add reset semantics only when a concrete module requires them.
-5. Consider backend correctness or trace packaging only when a real consumer
+2. Define the storage contract required for a future memory-backed FIFO before
+   introducing backend-specific memory structure.
+3. Consider backend correctness or trace packaging only when a real consumer
    makes the additional proof layer valuable.
 
 Each architectural goal ends with a plain-language review, focused timing,

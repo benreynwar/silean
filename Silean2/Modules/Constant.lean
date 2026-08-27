@@ -656,8 +656,12 @@ mutual
       fields.Denote → List ModuleParameter
     | .nil, () => []
     | .cons head tail, (headValue, tailValue) =>
-        valueParameters head headValue ++ fieldValueParameters tail tailValue
+      valueParameters head headValue ++ fieldValueParameters tail tailValue
 end
+
+def parameters (signalType : SignalType) (value : signalType.Denote) :
+    List ModuleParameter :=
+  valueParameters signalType value
 
 private def indexedComponent (signals : SignalMap) (component : signals.Label) :
     SourceName :=

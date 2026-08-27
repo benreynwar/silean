@@ -1,5 +1,5 @@
 import Silean2.FIRRTL.Emit
-import Silean2.Modules.Fifo
+import Silean2.Modules.OneEntryFifo
 
 namespace Silean2.Emitters.StructuredFifo
 

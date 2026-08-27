@@ -18,9 +18,9 @@ structure StepDecomposition
     downstreamState (outer.step state input).nextState =
       (downstream.step (downstreamState state) (childInputs state input).2).nextState
   connected : NoResetFifo.SerialCycle
-    (outer.step state input).cycle
-    (upstream.step (upstreamState state) (childInputs state input).1).cycle
-    (downstream.step (downstreamState state) (childInputs state input).2).cycle
+    (outer.step state input).observation
+    (upstream.step (upstreamState state) (childInputs state input).1).observation
+    (downstream.step (downstreamState state) (childInputs state input).2).observation
 
 structure Serial
     {OuterState UpstreamState DownstreamState Word : Type}
@@ -65,11 +65,11 @@ structure RunDecomposition
       (downstream.run (serial.downstreamState initial)
         (serial.childInputLists initial inputs).2).finalState
   connected : NoResetFifo.SerialCycles
-    (outer.run initial inputs).cycles
+    (outer.run initial inputs).observations
     (upstream.run (serial.upstreamState initial)
-      (serial.childInputLists initial inputs).1).cycles
+      (serial.childInputLists initial inputs).1).observations
     (downstream.run (serial.downstreamState initial)
-      (serial.childInputLists initial inputs).2).cycles
+      (serial.childInputLists initial inputs).2).observations
 
 theorem run_decomposes
     {OuterState UpstreamState DownstreamState Word : Type}
@@ -84,13 +84,13 @@ theorem run_decomposes
       have head := serial.step_decomposes initial input
       have tail := induction (outer.step initial input).nextState
       refine ⟨?_, ?_, ?_⟩
-      · simp only [Model.run, childInputLists]
+      · simp only [Silean2.Execution.Model.run, childInputLists]
         rw [← head.upstreamNext]
         exact tail.upstreamFinal
-      · simp only [Model.run, childInputLists]
+      · simp only [Silean2.Execution.Model.run, childInputLists]
         rw [← head.downstreamNext]
         exact tail.downstreamFinal
-      · simp only [Model.run, childInputLists]
+      · simp only [Silean2.Execution.Model.run, childInputLists]
         rw [← head.upstreamNext, ← head.downstreamNext]
         exact NoResetFifo.SerialCycles.cons head.connected tail.connected
 
@@ -160,8 +160,8 @@ theorem execution_decomposes
   have downstreamFinalEqual : downstreamRun.finalState = downstreamFinal := by
     dsimp [downstreamRun, downstreamInitial, downstreamFinal]
     rw [← split.downstreamFinal, finalEqual]
-  refine ⟨upstreamInitial, upstreamRun.cycles, upstreamFinal,
-    downstreamInitial, downstreamRun.cycles, downstreamFinal,
+  refine ⟨upstreamInitial, upstreamRun.observations, upstreamFinal,
+    downstreamInitial, downstreamRun.observations, downstreamFinal,
     ⟨childInputs.1, rfl, upstreamFinalEqual⟩,
     ⟨childInputs.2, rfl, downstreamFinalEqual⟩, ?_,
     constructor.contents initial, constructor.contents final⟩

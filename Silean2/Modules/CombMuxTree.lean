@@ -101,17 +101,20 @@ private def baseModuleStructure (element : SignalType) :
     | .split => (baseSplitter element).certified.moduleStructure
 
 /-! A successor width partitions values into equal halves and the index into
-head/tail, selects recursively from both halves, then chooses with `Mux`. -/
+lower bits/high bit, selects recursively from both halves, then chooses with
+`Mux`. -/
 
 private def indexSplitter (indexWidth : Nat) : SignalSplitter :=
   .vector (indexWidth + 1) .bit
-private def indexTailCombiner (indexWidth : Nat) : SignalCombiner :=
+private def indexLowerCombiner (indexWidth : Nat) : SignalCombiner :=
   .vector indexWidth .bit
+private def highIndex (indexWidth : Nat) : (indexSplitter indexWidth).ports.outputs.Label :=
+  Fin.last indexWidth
 
 inductive SuccInstance
   | valuesSplit
   | indexSplit
-  | indexTail
+  | indexLower
   | lower
   | upper
   | mux
@@ -122,7 +125,7 @@ deriving Enumeration
     | .valuesSplit => VectorSplit.ports element
         (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
     | .indexSplit => (indexSplitter indexWidth).ports
-    | .indexTail => (indexTailCombiner indexWidth).ports
+    | .indexLower => (indexLowerCombiner indexWidth).ports
     | .lower | .upper => ports element indexWidth
     | .mux => Mux.ports element
 
@@ -140,18 +143,18 @@ def succWiring (element : SignalType) (indexWidth : Nat) :
         (succContext element indexWidth).moduleInput .values
     | .indexSplit, .value =>
         (succContext element indexWidth).moduleInput .index
-    | .indexTail, tailIndex =>
-        (succContext element indexWidth).instanceOutput .indexSplit tailIndex.succ
+    | .indexLower, lowerIndex =>
+        (succContext element indexWidth).instanceOutput .indexSplit lowerIndex.castSucc
     | .lower, .values =>
         (succContext element indexWidth).instanceOutput .valuesSplit .left
     | .lower, .index =>
-        (succContext element indexWidth).instanceOutput .indexTail .value
+        (succContext element indexWidth).instanceOutput .indexLower .value
     | .upper, .values =>
         (succContext element indexWidth).instanceOutput .valuesSplit .right
     | .upper, .index =>
-        (succContext element indexWidth).instanceOutput .indexTail .value
+        (succContext element indexWidth).instanceOutput .indexLower .value
     | .mux, .select =>
-        (succContext element indexWidth).instanceOutput .indexSplit ⟨0, by omega⟩
+        (succContext element indexWidth).instanceOutput .indexSplit (highIndex indexWidth)
     | .mux, .whenFalse =>
         (succContext element indexWidth).instanceOutput .lower .result
     | .mux, .whenTrue =>
@@ -167,7 +170,7 @@ def moduleStructure (element : SignalType) : (indexWidth : Nat) →
       | .valuesSplit => VectorSplit.moduleStructure element
           (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
       | .indexSplit => (indexSplitter indexWidth).certified.moduleStructure
-      | .indexTail => (indexTailCombiner indexWidth).certified.moduleStructure
+      | .indexLower => (indexLowerCombiner indexWidth).certified.moduleStructure
       | .lower | .upper => moduleStructure element indexWidth
       | .mux => Mux.moduleStructure element
 
@@ -299,7 +302,7 @@ private def baseImplementation (element : SignalType) : Implementation element 0
   | .valuesSplit => VectorSplit.certified element
       (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
   | .indexSplit => (indexSplitter indexWidth).certified
-  | .indexTail => (indexTailCombiner indexWidth).certified
+  | .indexLower => (indexLowerCombiner indexWidth).certified
   | .lower | .upper => previous.certified
   | .mux => Mux.certified element
 
@@ -311,10 +314,10 @@ private abbrev indexSplitOccurrence (element) (indexWidth)
     (previous : Implementation element indexWidth) :
     Certified.RuleOccurrence (succChildren element indexWidth previous) :=
   ⟨.indexSplit, SignalComponentRule.apply⟩
-private abbrev indexTailOccurrence (element) (indexWidth)
+private abbrev indexLowerOccurrence (element) (indexWidth)
     (previous : Implementation element indexWidth) :
     Certified.RuleOccurrence (succChildren element indexWidth previous) :=
-  ⟨.indexTail, SignalComponentRule.apply⟩
+  ⟨.indexLower, SignalComponentRule.apply⟩
 private abbrev lowerOccurrence (element) (indexWidth)
     (previous : Implementation element indexWidth) :
     Certified.RuleOccurrence (succChildren element indexWidth previous) :=
@@ -359,9 +362,9 @@ private def succOutputSchedule (element : SignalType) (indexWidth : Nat)
         SignalSelection.labels, Certified.sourceAvailable, succBody, succWiring,
         succContext, EndpointContext.moduleInput])
     (by simp)
-  (.call (indexTailOccurrence element indexWidth previous)
-    (by intro tailIndex _; exact ⟨SignalComponentRule.apply, by simp,
-      indexSplitWrites element indexWidth previous tailIndex.succ⟩)
+  (.call (indexLowerOccurrence element indexWidth previous)
+    (by intro lowerIndex _; exact ⟨SignalComponentRule.apply, by simp,
+      indexSplitWrites element indexWidth previous lowerIndex.castSucc⟩)
     (by simp)
   (.call (lowerOccurrence element indexWidth previous)
     (by intro input _; cases input with
@@ -380,7 +383,7 @@ private def succOutputSchedule (element : SignalType) (indexWidth : Nat)
   (.call (muxOccurrence element indexWidth previous)
     (by intro input _; cases input with
       | select => exact ⟨SignalComponentRule.apply, by simp,
-          indexSplitWrites element indexWidth previous ⟨0, by omega⟩⟩
+          indexSplitWrites element indexWidth previous (highIndex indexWidth)⟩
       | whenFalse => exact ⟨Rule.apply, by simp,
           by change Output.result ∈ [Output.result]; simp⟩
       | whenTrue => exact ⟨Rule.apply, by simp,
@@ -402,7 +405,7 @@ private def succStateSchedule (element : SignalType) (indexWidth : Nat)
     | valuesSplit =>
         change input ∈ (VectorSplit.cycleContract _ _ _).stateRule.readsInputs.labels at member
         exact nomatch member
-    | indexSplit | indexTail =>
+    | indexSplit | indexLower =>
         change input ∈ (CycleStateRule.empty _).readsInputs.labels at member
         exact nomatch member
     | lower | upper =>
@@ -438,9 +441,9 @@ private theorem succCoversChildren (element : SignalType) (indexWidth : Nat)
       change indexSplitOccurrence element indexWidth previous ∈
         (succOutputSchedule element indexWidth previous).finalAvailability
       simp [succOutputSchedule, Certified.Schedule.finalAvailability]
-  | indexTail =>
+  | indexLower =>
       change SignalComponentRule at rule; cases rule
-      change indexTailOccurrence element indexWidth previous ∈
+      change indexLowerOccurrence element indexWidth previous ∈
         (succOutputSchedule element indexWidth previous).finalAvailability
       simp [succOutputSchedule, Certified.Schedule.finalAvailability]
   | lower =>
@@ -470,32 +473,32 @@ private def indexSplitInputs (element : SignalType) (indexWidth : Nat)
     (indexSplitter indexWidth).ports.inputs.Values
   | .value => inputs .index
 
-private noncomputable def indexTailInputs (element : SignalType) (indexWidth : Nat)
+private noncomputable def indexLowerInputs (element : SignalType) (indexWidth : Nat)
     (previous : Implementation element indexWidth)
     (split : ProposedValues
       (succChildren element indexWidth previous .indexSplit).moduleStructure) :
-    (indexTailCombiner indexWidth).ports.inputs.Values := fun tailIndex =>
-  split.outputs tailIndex.succ
+    (indexLowerCombiner indexWidth).ports.inputs.Values := fun lowerIndex =>
+  split.outputs lowerIndex.castSucc
 
 private noncomputable def lowerInputs (element : SignalType) (indexWidth : Nat)
     (previous : Implementation element indexWidth)
     (values : ProposedValues
       (succChildren element indexWidth previous .valuesSplit).moduleStructure)
-    (tail : ProposedValues
-      (succChildren element indexWidth previous .indexTail).moduleStructure) :
+    (lowerBits : ProposedValues
+      (succChildren element indexWidth previous .indexLower).moduleStructure) :
     (ports element indexWidth).inputs.Values
   | .values => values.outputs .left
-  | .index => tail.outputs .value
+  | .index => lowerBits.outputs .value
 
 private noncomputable def upperInputs (element : SignalType) (indexWidth : Nat)
     (previous : Implementation element indexWidth)
     (values : ProposedValues
       (succChildren element indexWidth previous .valuesSplit).moduleStructure)
-    (tail : ProposedValues
-      (succChildren element indexWidth previous .indexTail).moduleStructure) :
+    (lowerBits : ProposedValues
+      (succChildren element indexWidth previous .indexLower).moduleStructure) :
     (ports element indexWidth).inputs.Values
   | .values => values.outputs .right
-  | .index => tail.outputs .value
+  | .index => lowerBits.outputs .value
 
 private noncomputable def muxInputs (element : SignalType) (indexWidth : Nat)
     (previous : Implementation element indexWidth)
@@ -506,7 +509,7 @@ private noncomputable def muxInputs (element : SignalType) (indexWidth : Nat)
     (upper : ProposedValues
       (succChildren element indexWidth previous .upper).moduleStructure) :
     (Mux.ports element).inputs.Values
-  | .select => index.outputs ⟨0, by omega⟩
+  | .select => index.outputs (highIndex indexWidth)
   | .whenFalse => lower.outputs .result
   | .whenTrue => upper.outputs .result
 
@@ -523,14 +526,14 @@ private theorem succHasStructuralResult (element : SignalType) (indexWidth : Nat
   rcases (succChildren element indexWidth previous .indexSplit).hasStructuralResult
       (indexSplitInputs element indexWidth inputs) (state .indexSplit) with
     ⟨index, indexSatisfies⟩
-  rcases (succChildren element indexWidth previous .indexTail).hasStructuralResult
-      (indexTailInputs element indexWidth previous index) (state .indexTail) with
-    ⟨tail, tailSatisfies⟩
+  rcases (succChildren element indexWidth previous .indexLower).hasStructuralResult
+      (indexLowerInputs element indexWidth previous index) (state .indexLower) with
+    ⟨lowerBits, indexLowerSatisfies⟩
   rcases (succChildren element indexWidth previous .lower).hasStructuralResult
-      (lowerInputs element indexWidth previous values tail) (state .lower) with
+      (lowerInputs element indexWidth previous values lowerBits) (state .lower) with
     ⟨lower, lowerSatisfies⟩
   rcases (succChildren element indexWidth previous .upper).hasStructuralResult
-      (upperInputs element indexWidth previous values tail) (state .upper) with
+      (upperInputs element indexWidth previous values lowerBits) (state .upper) with
     ⟨upper, upperSatisfies⟩
   rcases (succChildren element indexWidth previous .mux).hasStructuralResult
       (muxInputs element indexWidth previous index lower upper) (state .mux) with
@@ -540,7 +543,7 @@ private theorem succHasStructuralResult (element : SignalType) (indexWidth : Nat
         (succChildren element indexWidth previous) child)
     | .valuesSplit => values
     | .indexSplit => index
-    | .indexTail => tail
+    | .indexLower => lowerBits
     | .lower => lower
     | .upper => upper
     | .mux => mux
@@ -563,16 +566,16 @@ private theorem succHasStructuralResult (element : SignalType) (indexWidth : Nat
         funext port; cases port; rfl]
       exact indexSatisfies
     · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .indexTail =
-            indexTailInputs element indexWidth previous index by
-        funext tailIndex; rfl]
-      exact tailSatisfies
+          inputs proposals .indexLower =
+            indexLowerInputs element indexWidth previous index by
+        funext lowerIndex; rfl]
+      exact indexLowerSatisfies
     · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .lower = lowerInputs element indexWidth previous values tail by
+          inputs proposals .lower = lowerInputs element indexWidth previous values lowerBits by
         funext port; cases port <;> rfl]
       exact lowerSatisfies
     · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .upper = upperInputs element indexWidth previous values tail by
+          inputs proposals .upper = upperInputs element indexWidth previous values lowerBits by
         funext port; cases port <;> rfl]
       exact upperSatisfies
     · rw [show ProposedValues.childInputs (succBody element indexWidth) _
@@ -591,10 +594,10 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
   have indexOutputs : (proposal.snd .indexSplit).outputs =
       (indexSplitter indexWidth).outputValues
         (indexSplitInputs element indexWidth inputs) := childSatisfies .indexSplit
-  have tailOutputs : (proposal.snd .indexTail).outputs =
-      (indexTailCombiner indexWidth).outputValues
+  have lowerOutputs : (proposal.snd .indexLower).outputs =
+      (indexLowerCombiner indexWidth).outputValues
         (ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposal.snd .indexTail) := childSatisfies .indexTail
+          inputs proposal.snd .indexLower) := childSatisfies .indexLower
 
   rcases (succChildren element indexWidth previous .valuesSplit).hasCorrespondingState
       (structuralState .valuesSplit) with ⟨valuesState, valuesCorresponds⟩
@@ -641,19 +644,19 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
         (succBody element indexWidth) _ inputs proposal.snd .valuesSplit =
           valuesSplitInputs element indexWidth inputs := by
       funext port; cases port; rfl
-    have tailInputsEquation : ProposedValues.childInputs
-        (succBody element indexWidth) _ inputs proposal.snd .indexTail =
-          indexTailInputs element indexWidth previous (proposal.snd .indexSplit) := by
-      funext tailIndex; rfl
+    have indexLowerInputsEquation : ProposedValues.childInputs
+        (succBody element indexWidth) _ inputs proposal.snd .indexLower =
+          indexLowerInputs element indexWidth previous (proposal.snd .indexSplit) := by
+      funext lowerIndex; rfl
     have lowerInputsEquation : ProposedValues.childInputs
         (succBody element indexWidth) _ inputs proposal.snd .lower =
           lowerInputs element indexWidth previous (proposal.snd .valuesSplit)
-            (proposal.snd .indexTail) := by
+            (proposal.snd .indexLower) := by
       funext port; cases port <;> rfl
     have upperInputsEquation : ProposedValues.childInputs
         (succBody element indexWidth) _ inputs proposal.snd .upper =
           upperInputs element indexWidth previous (proposal.snd .valuesSplit)
-            (proposal.snd .indexTail) := by
+            (proposal.snd .indexLower) := by
       funext port; cases port <;> rfl
     have muxInputsEquation : ProposedValues.childInputs
         (succBody element indexWidth) _ inputs proposal.snd .mux =
@@ -661,32 +664,32 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
             (proposal.snd .lower) (proposal.snd .upper) := by
       funext port; cases port <;> rfl
     rw [valuesInputsEquation] at valuesEquation
-    rw [tailInputsEquation] at tailOutputs
+    rw [indexLowerInputsEquation] at lowerOutputs
     rw [lowerInputsEquation] at lowerEquation
     rw [upperInputsEquation] at upperEquation
     rw [muxInputsEquation] at muxEquation
     rw [muxEquation]
-    have tailValue : (proposal.snd .indexTail).outputs .value =
-        fun tailIndex => inputs .index tailIndex.succ := by
-      rw [congrFun tailOutputs .value]
-      funext tailIndex
-      change (proposal.snd .indexSplit).outputs tailIndex.succ =
-        inputs .index tailIndex.succ
+    have lowerValue : (proposal.snd .indexLower).outputs .value =
+        fun lowerIndex => inputs .index lowerIndex.castSucc := by
+      rw [congrFun lowerOutputs .value]
+      funext lowerIndex
+      change (proposal.snd .indexSplit).outputs lowerIndex.castSucc =
+        inputs .index lowerIndex.castSucc
       rw [indexOutputs]
       rfl
-    have headValue : (proposal.snd .indexSplit).outputs ⟨0, by omega⟩ =
-        inputs .index 0 := by
+    have highValue : (proposal.snd .indexSplit).outputs (highIndex indexWidth) =
+        inputs .index (Fin.last indexWidth) := by
       rw [indexOutputs]
       rfl
     simp only [muxInputs]
     rw [lowerEquation, upperEquation]
     simp only [lowerInputs, upperInputs]
-    rw [tailValue, headValue]
-    cases head : inputs .index 0
+    rw [lowerValue, highValue]
+    cases high : inputs .index (Fin.last indexWidth)
     · simp only [cond_false]
       rw [valuesEquation.1]
       simp [select, BitVector.toIndex,
-        VectorSplit.leftPart, head]
+        VectorSplit.leftPart, high]
       change inputs .values _ = inputs .values _
       apply congrArg (inputs .values)
       apply Fin.ext
@@ -694,7 +697,7 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
     · simp only [cond_true]
       rw [valuesEquation.2]
       simp [select, BitVector.toIndex,
-        VectorSplit.rightPart, head, Fin.natAdd]
+        VectorSplit.rightPart, high, Fin.natAdd]
       change inputs .values _ = inputs .values _
       apply congrArg (inputs .values)
       apply Fin.ext
@@ -711,7 +714,7 @@ private theorem succModuleStructure_eq (element : SignalType) (indexWidth : Nat)
     | .valuesSplit => VectorSplit.moduleStructure element
         (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
     | .indexSplit => (indexSplitter indexWidth).certified.moduleStructure
-    | .indexTail => (indexTailCombiner indexWidth).certified.moduleStructure
+    | .indexLower => (indexLowerCombiner indexWidth).certified.moduleStructure
     | .lower | .upper => moduleStructure element indexWidth
     | .mux => Mux.moduleStructure element) = _
   unfold Certified.moduleStructure
@@ -791,7 +794,7 @@ def namingWith (element : SignalType) : (indexWidth : Nat) →
         (fun
           | .valuesSplit => "split_values"
           | .indexSplit => "split_index"
-          | .indexTail => "combine_index_tail"
+          | .indexLower => "combine_index_lower"
           | .lower => "select_lower"
           | .upper => "select_upper"
           | .mux => "mux")
@@ -801,8 +804,8 @@ def namingWith (element : SignalType) : (indexWidth : Nat) →
               elementNaming
           | .indexSplit => Silean2.Naming.SignalAdapter.splitter
               (Modules.CombMuxTree.indexSplitter indexWidth)
-          | .indexTail => Silean2.Naming.SignalAdapter.combiner
-              (Modules.CombMuxTree.indexTailCombiner indexWidth)
+          | .indexLower => Silean2.Naming.SignalAdapter.combiner
+              (Modules.CombMuxTree.indexLowerCombiner indexWidth)
           | .lower | .upper => namingWith element indexWidth elementNaming
           | .mux => Mux.Naming.namingWith element elementNaming)
 

@@ -29,6 +29,9 @@ entry points for consumers and do not create compatibility namespaces.
 | `Foundation/SignalSelection.lean` | Typed ordered subsets of signal maps |
 | `Foundation/ModulePorts.lean` | Connectivity-only input and output maps |
 | `Foundation/StructuralState.lean` | Primitive-local and recursively labelled state shapes |
+| `Foundation/BitVector.lean` | LSB-first finite bit-vector arithmetic and indexing laws |
+| `Foundation/CircularBuffer.lean` | Generic modular distance, indexed traversal, and functional-write laws |
+| `Foundation/Execution.lean` | Contract-independent deterministic steps and finite input-sequence runs |
 | `Structure/Instances.lean` | Canonically ordered child names and exact child ports |
 | `Structure/Endpoint.lean` | Typed module/instance signal sources and sinks |
 | `Structure/Wiring.lean` | Total same-type driver functions for every sink |
@@ -73,7 +76,7 @@ their result-bit family through `All`, while its contract exposes only natural
 value equality. `VectorConcat` splits two vectors of a common element type and
 combines their elements in left-then-right order, while exposing only natural
 index laws and keeping aggregate elements intact. `BinaryToOneHot` interprets
-big-endian input bits numerically and implements the one-hot result through a
+LSB-first input bits numerically and implements the one-hot result through a
 recursive decoder, two masks, and `VectorConcat`. `VectorSplit` partitions a
 vector through existing generic adapters. `CombMuxTree` recursively applies
 that partition, two smaller trees, and `Mux` while exposing direct numeric
@@ -84,17 +87,50 @@ uses an ordinary vector state and functional replacement rather than exposing
 the hierarchy. Register-bank child identities are a private named inductive;
 their executable enumeration lists those constructors directly. Decoder,
 mux-tree, and register-bank contracts share `BitVector.toIndex` from the
-foundation arithmetic utilities. FIFO
-responsibilities are split
-explicitly: `FifoInterface` owns the shared ports and rules,
-`FifoCycleBehavior` turns ready/valid functions into cycle contracts and
-composes them, `FifoExecution` interprets those contracts over finite input
-sequences, and `*Properties` proves conservation, capacity, and ready
-propagation. Structural module files do not own execution machinery.
+foundation arithmetic utilities. The XOR primitive and `HalfAdder` provide the
+first arithmetic layer used by the ripple incrementer. HalfAdder owns two
+independent output rules and composes XOR/AND structurally; its public
+arithmetic law depends only on its contract results. `Increment` builds the
+next arithmetic layer: its public behavior is addition of one modulo the vector
+cardinality, while its private recursive helper carries from lower indices into
+one HalfAdder at each successive high index. `ResetRegister` composes Constant,
+Mux, and Register for synchronous configured reset; `EnabledResetRegister`
+wraps that certified storage with enable/hold selection and gives reset highest
+priority. Neither requires reset-aware primitives. `FifoPointerControl` owns
+the natural contract and certified combinational structure for interpreting
+address-plus-wrap pointers. Direct splitters expose address and wrap bits, one
+generic address Equality and one primitive wrap equality distinguish empty
+from full, and ordinary gates derive valid/ready transfer enables. It has no
+state or reset input. `EnabledResetCounter` composes Increment and
+EnabledResetRegister into the generic synchronous state element used by FIFO
+pointers; its public
+contract describes modular arithmetic rather than feedback wiring.
+`Fifo` is the certified pointer-and-register-bank composition: two
+zero-reset counters feed FifoPointerControl, whose addresses and transfer
+enables drive RegisterBank and the counters. Its contract owns logical pointer
+and entry state and remains independent of those four structural children.
+Reset is synchronous: it wins in pointer next state without suppressing the
+current pre-edge handshake or clearing storage.
+`FifoProperties` gives this contract its logical queue interpretation and
+proves the reachable occupancy invariant, empty/full boundaries, exact
+enqueue/dequeue behavior, reset clearing, and arbitrary finite-trace FIFO
+ordering. Generic circular-buffer arithmetic lives in
+`Foundation/CircularBuffer.lean`; the small contract-independent finite runner
+lives in `Foundation/Execution.lean`; reset-aware queue observations,
+transitions, and trace lifting live in `Contracts/ResetFifo.lean`. The property
+proof consumes the public `Fifo` contract evaluator and does not inspect
+structural children.
+The separate no-reset serial family is explicit:
+`NoResetFifoInterface` owns its shared ports and rules,
+`NoResetFifoCycleBehavior` turns ready/valid functions into cycle contracts,
+`NoResetFifoExecution` interprets those contracts over finite input sequences,
+and `SerialDepthFifo` owns the recursive positive-depth implementation and its
+properties. Structural module files do not own execution machinery.
 
-`Contracts/NoResetFifo*.lean` contains implementation-independent FIFO trace,
-serial-composition, execution, and view laws. It does not inspect structural
-hierarchy.
+`Contracts/NoResetFifo*.lean` contains implementation-independent no-reset FIFO
+trace, serial-composition, execution, and view laws. `Contracts/ResetFifo.lean`
+contains reset-aware queue steps and finite transition lifting. Neither layer
+inspects structural hierarchy.
 
 ## Naming and backend
 

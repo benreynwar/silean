@@ -14,8 +14,8 @@ noncomputable example : ModuleCycleCertified
   Modules.RegisterBank.certified (.vector 3 .bit) 2
 
 def address (value : Fin 4) : Fin 2 → Bool
-  | 0 => value.val / 2 % 2 = 1
-  | 1 => value.val % 2 = 1
+  | 0 => value.val % 2 = 1
+  | 1 => value.val / 2 % 2 = 1
 
 def inputs (writeEnable : Bool) (writeAddress : Fin 4)
     (writeValue : Bool) (readAddress : Fin 4) :
@@ -36,7 +36,7 @@ def sameAddressCycle := (Modules.RegisterBank.cycleContract .bit 2).evaluate
 #guard !(sameAddressCycle.2 .entries 1)
 #guard sameAddressCycle.2 .entries 3
 
-example : Modules.RegisterBank.EntryCount 3 = 8 := by decide
+example : Modules.RegisterBank.entryCount 3 = 8 := by decide
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

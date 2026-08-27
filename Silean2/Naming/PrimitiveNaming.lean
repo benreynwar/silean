@@ -27,6 +27,9 @@ def and : ModuleNaming (ModuleStructure.primitive Primitives.and) :=
 def or : ModuleNaming (ModuleStructure.primitive Primitives.or) :=
   .primitive ⟨"or", "bit", []⟩ binaryPorts emptySignals .or
 
+def xor : ModuleNaming (ModuleStructure.primitive Primitives.xor) :=
+  .primitive ⟨"xor", "bit", []⟩ binaryPorts emptySignals .xor
+
 def eq : ModuleNaming (ModuleStructure.primitive Primitives.eq) :=
   .primitive ⟨"eq", "bit", []⟩ binaryPorts emptySignals .eq
 
