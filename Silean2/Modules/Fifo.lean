@@ -8,40 +8,40 @@ open Silean2
 internal recursion index; the public API below takes the FIFO's actual positive
 depth. -/
 
-def moduleStructureFromAdditional (signalType : SignalType) :
-    (additionalDepth : Nat) → ModuleStructure (OneEntryFifo.ports signalType)
+private def moduleStructureFromAdditional (signalType : SignalType) :
+    (additionalDepth : Nat) → ModuleStructure (Fifo.ports signalType)
   | 0 => OneEntryFifo.moduleStructure signalType
   | additionalDepth + 1 =>
       SerialFifo.moduleStructure signalType
         (OneEntryFifo.moduleStructure signalType)
         (moduleStructureFromAdditional signalType additionalDepth)
 
-noncomputable def certifiedFromAdditional (signalType : SignalType) :
-    (additionalDepth : Nat) → CertifiedBehavior signalType
+private noncomputable def certifiedFromAdditional (signalType : SignalType) :
+    (additionalDepth : Nat) → CertifiedCycleBehavior signalType
   | 0 => oneEntryCertified signalType
   | additionalDepth + 1 =>
-      SerialFifo.certifiedBehavior (oneEntryCertified signalType)
+      SerialFifo.certifiedCycleBehavior (oneEntryCertified signalType)
         (certifiedFromAdditional signalType additionalDepth)
 
-def behaviorFromAdditional (signalType : SignalType) :
-    (additionalDepth : Nat) → Behavior signalType
-  | 0 => oneEntryBehavior signalType
+private def cycleBehaviorFromAdditional (signalType : SignalType) :
+    (additionalDepth : Nat) → CycleBehavior signalType
+  | 0 => oneEntryCycleBehavior signalType
   | additionalDepth + 1 =>
-      (oneEntryBehavior signalType).serial
-        (behaviorFromAdditional signalType additionalDepth)
+      (oneEntryCycleBehavior signalType).serial
+        (cycleBehaviorFromAdditional signalType additionalDepth)
 
-@[simp] theorem certifiedFromAdditional_behavior
+@[simp] private theorem certifiedFromAdditional_behavior
     (signalType : SignalType) (additionalDepth : Nat) :
-    (certifiedFromAdditional signalType additionalDepth).behavior =
-      behaviorFromAdditional signalType additionalDepth := by
+    (certifiedFromAdditional signalType additionalDepth).cycleBehavior =
+      cycleBehaviorFromAdditional signalType additionalDepth := by
   induction additionalDepth with
   | zero => rfl
   | succ additionalDepth induction =>
-      simp only [certifiedFromAdditional, behaviorFromAdditional,
-        SerialFifo.certifiedBehavior, oneEntryCertified]
+      simp only [certifiedFromAdditional, cycleBehaviorFromAdditional,
+        SerialFifo.certifiedCycleBehavior, oneEntryCertified]
       rw [induction]
 
-@[simp] theorem certifiedFromAdditional_moduleStructure
+@[simp] private theorem certifiedFromAdditional_moduleStructure
     (signalType : SignalType) (additionalDepth : Nat) :
     (certifiedFromAdditional signalType additionalDepth).moduleStructure =
       moduleStructureFromAdditional signalType additionalDepth := by
@@ -49,50 +49,62 @@ def behaviorFromAdditional (signalType : SignalType) :
   | zero => rfl
   | succ additionalDepth induction =>
       simp only [certifiedFromAdditional, moduleStructureFromAdditional,
-        SerialFifo.certifiedBehavior, oneEntryCertified]
+        SerialFifo.certifiedCycleBehavior, oneEntryCertified]
       rw [induction]
 
-def additionalDepth (depth : Nat) : Nat := depth - 1
+private def additionalDepth (depth : Nat) : Nat := depth - 1
 
-theorem additionalDepth_eq {depth : Nat} (positive : 0 < depth) :
+private theorem additionalDepth_eq {depth : Nat} (positive : 0 < depth) :
     additionalDepth depth + 1 = depth := by
   unfold additionalDepth
   omega
 
 def moduleStructure (signalType : SignalType) (depth : Nat) (_positive : 0 < depth) :
-    ModuleStructure (OneEntryFifo.ports signalType) :=
+    ModuleStructure (Fifo.ports signalType) :=
   moduleStructureFromAdditional signalType (additionalDepth depth)
 
-noncomputable def certifiedBehavior (signalType : SignalType)
-    (depth : Nat) (positive : 0 < depth) : CertifiedBehavior signalType :=
+private noncomputable def certifiedCycleBehavior (signalType : SignalType)
+    (depth : Nat) (positive : 0 < depth) : CertifiedCycleBehavior signalType :=
   let assembled := certifiedFromAdditional signalType (additionalDepth depth)
-  { behavior := behaviorFromAdditional signalType (additionalDepth depth)
+  { cycleBehavior := cycleBehaviorFromAdditional signalType (additionalDepth depth)
     moduleStructure := moduleStructure signalType depth positive
     certification := (assembled.certification.transportStructure
       (by
         simp only [moduleStructure]
         exact certifiedFromAdditional_moduleStructure signalType
           (additionalDepth depth))).transportContract
-      (congrArg Behavior.cycleContract
+      (congrArg CycleBehavior.cycleContract
         (certifiedFromAdditional_behavior signalType (additionalDepth depth))) }
 
-def behavior (signalType : SignalType) (depth : Nat) (_positive : 0 < depth) :
-    Behavior signalType :=
-  behaviorFromAdditional signalType (additionalDepth depth)
+def cycleBehavior (signalType : SignalType) (depth : Nat) (_positive : 0 < depth) :
+    CycleBehavior signalType :=
+  cycleBehaviorFromAdditional signalType (additionalDepth depth)
+
+@[simp] theorem cycleBehavior_one (signalType : SignalType)
+    (positive : 0 < 1) :
+    cycleBehavior signalType 1 positive = oneEntryCycleBehavior signalType := rfl
+
+@[simp] theorem cycleBehavior_step (signalType : SignalType)
+    (additionalDepth : Nat) (positive : 0 < additionalDepth + 2) :
+    cycleBehavior signalType (additionalDepth + 2) positive =
+      (oneEntryCycleBehavior signalType).serial
+        (cycleBehavior signalType (additionalDepth + 1) (by omega)) := by
+  simp only [cycleBehavior, Fifo.additionalDepth, Nat.add_sub_cancel]
+  rfl
 
 def cycleContract (signalType : SignalType) (depth : Nat) (positive : 0 < depth) :
-    ModuleCycleContract (OneEntryFifo.ports signalType) :=
-  (behavior signalType depth positive).cycleContract
+    ModuleCycleContract (Fifo.ports signalType) :=
+  (cycleBehavior signalType depth positive).cycleContract
 
 noncomputable def certification (signalType : SignalType)
     (depth : Nat) (positive : 0 < depth) :
     ModuleCycleCertification (moduleStructure signalType depth positive)
       (cycleContract signalType depth positive) :=
-  (certifiedBehavior signalType depth positive).certification
+  (certifiedCycleBehavior signalType depth positive).certification
 
 noncomputable def certified (signalType : SignalType)
     (depth : Nat) (positive : 0 < depth) :
-    ModuleCycleCertified (OneEntryFifo.ports signalType) :=
+    ModuleCycleCertified (Fifo.ports signalType) :=
   (certification signalType depth positive).bundle
 
 @[simp] theorem certified_moduleStructure (signalType : SignalType)

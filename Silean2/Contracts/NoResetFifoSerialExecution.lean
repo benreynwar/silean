@@ -98,14 +98,14 @@ end Serial
 
 end Silean2.Contracts.NoResetFifo.Execution
 
-namespace Silean2.Contracts.NoResetFifo.ModuleView.Execution
+namespace Silean2.Contracts.NoResetFifo.View.Execution
 
 open NoResetFifo.Execution
 
 structure Constructor
-    (outerView : ModuleView OuterState Word)
-    (upstreamView : ModuleView UpstreamState Word)
-    (downstreamView : ModuleView DownstreamState Word)
+    (outerView : View OuterState Word)
+    (upstreamView : View UpstreamState Word)
+    (downstreamView : View DownstreamState Word)
     (outer : Model OuterState Word)
     (upstream : Model UpstreamState Word)
     (downstream : Model DownstreamState Word) where
@@ -119,20 +119,20 @@ namespace Constructor
 
 def outerExecutes (_constructor : Constructor outerView upstreamView
     downstreamView outer upstream downstream) :
-    ModuleView.ExecutionRelation outerView := outer.executes
+    View.ExecutionRelation outerView := outer.executes
 
 def upstreamExecutes (_constructor : Constructor outerView upstreamView
     downstreamView outer upstream downstream) :
-    ModuleView.ExecutionRelation upstreamView := upstream.executes
+    View.ExecutionRelation upstreamView := upstream.executes
 
 def downstreamExecutes (_constructor : Constructor outerView upstreamView
     downstreamView outer upstream downstream) :
-    ModuleView.ExecutionRelation downstreamView := downstream.executes
+    View.ExecutionRelation downstreamView := downstream.executes
 
 theorem execution_decomposes
-    {outerView : ModuleView OuterState Word}
-    {upstreamView : ModuleView UpstreamState Word}
-    {downstreamView : ModuleView DownstreamState Word}
+    {outerView : View OuterState Word}
+    {upstreamView : View UpstreamState Word}
+    {downstreamView : View DownstreamState Word}
     {outer : Model OuterState Word}
     {upstream : Model UpstreamState Word}
     {downstream : Model DownstreamState Word}
@@ -142,7 +142,7 @@ theorem execution_decomposes
     (cycles : List (NoResetFifo.Cycle Word))
     (final : OuterState)
     (execution : constructor.outerExecutes initial cycles final) :
-    ModuleView.SerialExecutionDecomposition outerView upstreamView downstreamView
+    View.SerialExecutionDecomposition outerView upstreamView downstreamView
       constructor.upstreamExecutes constructor.downstreamExecutes
       initial cycles final := by
   rcases execution with ⟨inputs, cyclesEqual, finalEqual⟩
@@ -169,9 +169,9 @@ theorem execution_decomposes
   exact split.connected
 
 theorem satisfies
-    {outerView : ModuleView OuterState Word}
-    {upstreamView : ModuleView UpstreamState Word}
-    {downstreamView : ModuleView DownstreamState Word}
+    {outerView : View OuterState Word}
+    {upstreamView : View UpstreamState Word}
+    {downstreamView : View DownstreamState Word}
     {outer : Model OuterState Word}
     {upstream : Model UpstreamState Word}
     {downstream : Model DownstreamState Word}
@@ -182,14 +182,14 @@ theorem satisfies
     (readyPropagationLatency : outerView.readyPropagationLatency =
       upstreamView.readyPropagationLatency +
         downstreamView.readyPropagationLatency)
-    (upstreamSatisfies : ModuleView.Satisfies upstreamView
+    (upstreamSatisfies : View.Satisfies upstreamView
       constructor.upstreamExecutes)
-    (downstreamSatisfies : ModuleView.Satisfies downstreamView
+    (downstreamSatisfies : View.Satisfies downstreamView
       constructor.downstreamExecutes) :
-    ModuleView.Satisfies outerView constructor.outerExecutes :=
-  ModuleView.Satisfies.serial capacity readyPropagationLatency
+    View.Satisfies outerView constructor.outerExecutes :=
+  View.Satisfies.serial capacity readyPropagationLatency
     upstreamSatisfies downstreamSatisfies constructor.execution_decomposes
 
 end Constructor
 
-end Silean2.Contracts.NoResetFifo.ModuleView.Execution
+end Silean2.Contracts.NoResetFifo.View.Execution

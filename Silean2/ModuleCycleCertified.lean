@@ -112,7 +112,7 @@ theorem hasExactlyOneStructuralResult
       otherSatisfies satisfies⟩
 
 /-- Every structural solution agrees with the executable evaluation of the
-public cycle contract. This is the generic bridge used by temporal models: the
+public cycle contract. This is the generic bridge used by execution models: the
 model can execute the contract without selecting a structural evaluator. -/
 theorem solution_matches_evaluate
     (certified : ModuleCycleCertified ports)

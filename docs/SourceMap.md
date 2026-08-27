@@ -12,7 +12,7 @@ the concepts and proof boundary; `../Roadmap.md` records remaining work.
 | `Silean2.Structure` | Instances, endpoints, wiring, bodies, and recursive structures |
 | `Silean2.Primitives` | All supported single-bit primitive leaves and contracts |
 | `Silean2.Contracts` | Implementation-independent no-reset FIFO contracts and execution |
-| `Silean2.Modules` | Reusable certified hardware modules and temporal FIFO results |
+| `Silean2.Modules` | Reusable certified hardware modules and FIFO behavior/results |
 | `Silean2.Naming` | Generic naming metadata plus primitive and adapter naming |
 | `Silean2.FIRRTL` | Generic traversal, rendering, validation, and emission |
 
@@ -50,17 +50,24 @@ certificates; `SignalLogic.lean` contains generic signal-value logic laws.
 | `ModuleCycleCertified.lean` | State correspondence, refinement, existence, and uniqueness package |
 | `CertifiedComposition.lean` | Typed certified child collections and child refinement laws |
 | `CertifiedSchedule.lean` | Parent-owned output/state availability schedules and coverage |
+| `LeafwiseComposition.lean` | Generic split/component/combine hierarchy, proposal construction, and shared component scheduling |
 
 Schedules are proof data. They neither belong to `ModuleStructure` nor define
 its meaning.
+
+The exact shared pattern and the boundary between generic hierarchy mechanics
+and module semantics are reviewed in `LeafwiseComposition.md`.
 
 ## Hardware and behavior
 
 `Primitives/` contains one file per supported single-bit primitive. `Modules/`
 contains reusable structures, contracts, certification, public behavioral
-theorems, and each module's naming metadata. Temporal FIFO results remain in
-separate `*Temporal.lean` files because they describe traces rather than
-structure.
+theorems, and each module's naming metadata. FIFO responsibilities are split
+explicitly: `FifoInterface` owns the shared ports and rules,
+`FifoCycleBehavior` turns ready/valid functions into cycle contracts and
+composes them, `FifoExecution` interprets those contracts over finite input
+sequences, and `*Properties` proves conservation, capacity, and ready
+propagation. Structural module files do not own execution machinery.
 
 `Contracts/NoResetFifo*.lean` contains implementation-independent FIFO trace,
 serial-composition, execution, and view laws. It does not inspect structural

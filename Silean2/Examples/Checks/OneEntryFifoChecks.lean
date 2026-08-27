@@ -16,14 +16,14 @@ def fullFalseDataState : (OneEntryFifo.stateMap .bit).Values
   | .storedValid => true
   | .storedData => false
 
-def captureInputs : (OneEntryFifo.ports .bit).inputs.Values
+def captureInputs : (Fifo.ports .bit).inputs.Values
   | .inputValid | .inputData => true
   | .outputReady => false
 
-def stalledInputs : (OneEntryFifo.ports .bit).inputs.Values
+def stalledInputs : (Fifo.ports .bit).inputs.Values
   | .inputValid | .inputData | .outputReady => false
 
-def replaceInputs : (OneEntryFifo.ports .bit).inputs.Values
+def replaceInputs : (Fifo.ports .bit).inputs.Values
   | .inputValid | .inputData | .outputReady => true
 
 /-! An empty FIFO is fall-through and simultaneously captures an unaccepted
@@ -84,7 +84,7 @@ def vectorEmptyState : (OneEntryFifo.stateMap vectorType).Values
   | .storedValid => false
   | .storedData => fun _ => false
 
-def vectorCaptureInputs : (OneEntryFifo.ports vectorType).inputs.Values
+def vectorCaptureInputs : (Fifo.ports vectorType).inputs.Values
   | .inputValid => true
   | .inputData => vectorValue
   | .outputReady => false
@@ -120,7 +120,7 @@ def nestedFullState : (OneEntryFifo.stateMap nestedType).Values
   | .storedValid => true
   | .storedData => nestedOld
 
-def nestedReplaceInputs : (OneEntryFifo.ports nestedType).inputs.Values
+def nestedReplaceInputs : (Fifo.ports nestedType).inputs.Values
   | .inputValid => true
   | .inputData => nestedNew
   | .outputReady => true

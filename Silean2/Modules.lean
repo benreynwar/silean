@@ -6,7 +6,8 @@ import Silean2.Modules.Mux
 import Silean2.Modules.EnabledRegister
 import Silean2.Modules.FifoControl
 import Silean2.Modules.OneEntryFifo
-import Silean2.Modules.FifoBehavior
+import Silean2.Modules.FifoCycleBehavior
 import Silean2.Modules.SerialFifo
 import Silean2.Modules.Fifo
-import Silean2.Modules.FifoTemporal
+import Silean2.Modules.FifoExecution
+import Silean2.Modules.FifoProperties

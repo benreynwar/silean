@@ -1,39 +1,16 @@
 import Silean2.Modules.EnabledRegister
 import Silean2.Modules.Mux
 import Silean2.Modules.FifoControl
+import Silean2.Modules.FifoInterface
 import Silean2.CertifiedSchedule
 import Silean2.Naming.PrimitiveNaming
 
 namespace Silean2.Modules.OneEntryFifo
 
 open Silean2
+open Fifo
 
-inductive Input
-  | inputValid
-  | inputData
-  | outputReady
-deriving Enumeration
-
-inductive Output
-  | outputValid
-  | outputData
-  | inputReady
-deriving Enumeration
-
-@[reducible] def inputMap (signalType : SignalType) : SignalMap :=
-  EnumeratedMap.of Input fun
-    | .inputValid | .outputReady => .bit
-    | .inputData => signalType
-
-@[reducible] def outputMap (signalType : SignalType) : SignalMap :=
-  EnumeratedMap.of Output fun
-    | .outputValid | .inputReady => .bit
-    | .outputData => signalType
-
-@[reducible] def ports (signalType : SignalType) : ModulePorts :=
-  ⟨inputMap signalType, outputMap signalType⟩
-
-inductive Instance
+private inductive Instance
   | validStorage
   | dataStorage
   | control
@@ -41,7 +18,7 @@ inductive Instance
   | outputDataMux
 deriving Enumeration
 
-@[reducible] def instances (signalType : SignalType) : Instances :=
+@[reducible] private def instances (signalType : SignalType) : Instances :=
   EnumeratedMap.of Instance fun
     | .validStorage => EnabledRegister.ports .bit
     | .dataStorage => EnabledRegister.ports signalType
@@ -49,11 +26,11 @@ deriving Enumeration
     | .outputValidOr => Primitives.or.ports
     | .outputDataMux => Mux.ports signalType
 
-@[reducible] def context (signalType : SignalType) : EndpointContext where
+@[reducible] private def context (signalType : SignalType) : EndpointContext where
   ports := ports signalType
   instances := instances signalType
 
-def wiring (signalType : SignalType) :
+private def wiring (signalType : SignalType) :
     Wiring (context signalType).ports (context signalType).instances where
   moduleOutput
     | .outputValid => (context signalType).instanceOutput .outputValidOr .output
@@ -72,10 +49,10 @@ def wiring (signalType : SignalType) :
     | .outputDataMux, .whenFalse => (context signalType).moduleInput .inputData
     | .outputDataMux, .whenTrue => (context signalType).instanceOutput .dataStorage .value
 
-@[reducible] def body (signalType : SignalType) : ModuleBody :=
+@[reducible] private def body (signalType : SignalType) : ModuleBody :=
   ⟨context signalType, wiring signalType⟩
 
-@[reducible] noncomputable def children (signalType : SignalType) :
+@[reducible] private noncomputable def children (signalType : SignalType) :
     Certified.Children (body signalType)
   | .validStorage => EnabledRegister.certified .bit
   | .dataStorage => EnabledRegister.certified signalType
@@ -83,10 +60,10 @@ def wiring (signalType : SignalType) :
   | .outputValidOr => Primitives.orCertified
   | .outputDataMux => Mux.certified signalType
 
-@[reducible] noncomputable def childStructure (signalType : SignalType) :=
+@[reducible] private noncomputable def childStructure (signalType : SignalType) :=
   Certified.childStructure (children signalType)
 
-@[reducible] def structuralChildren (signalType : SignalType) :
+@[reducible] private def structuralChildren (signalType : SignalType) :
     (name : (instances signalType).Name) →
       ModuleStructure ((instances signalType).ports name)
   | .validStorage => EnabledRegister.moduleStructure .bit
@@ -99,7 +76,7 @@ def moduleStructure (signalType : SignalType) :
     ModuleStructure (ports signalType) :=
   .composite (body signalType) (structuralChildren signalType)
 
-theorem moduleStructure_eq (signalType : SignalType) :
+private theorem moduleStructure_eq (signalType : SignalType) :
     moduleStructure signalType =
       Certified.moduleStructure (body signalType) (children signalType) := by
   unfold moduleStructure Certified.moduleStructure
@@ -116,11 +93,6 @@ def stateMap (signalType : SignalType) : SignalMap :=
   EnumeratedMap.of State fun
     | .storedValid => .bit
     | .storedData => signalType
-
-inductive Rule
-  | forward
-  | ready
-deriving Enumeration
 
 def forwardRule (signalType : SignalType) :
     CycleOutputRule (ports signalType) (stateMap signalType)
@@ -165,42 +137,42 @@ def cycleContract (signalType : SignalType) :
   stateRule := stateRule signalType
   outputCoverage := by rfl
 
-abbrev validRule (signalType : SignalType) :
+private abbrev validRule (signalType : SignalType) :
     Certified.RuleOccurrence (children signalType) :=
   ⟨.validStorage, EnabledRegister.Rule.observe⟩
-abbrev dataRule (signalType : SignalType) :
+private abbrev dataRule (signalType : SignalType) :
     Certified.RuleOccurrence (children signalType) :=
   ⟨.dataStorage, EnabledRegister.Rule.observe⟩
-abbrev controlOccurrence (signalType : SignalType) :
+private abbrev controlOccurrence (signalType : SignalType) :
     Certified.RuleOccurrence (children signalType) :=
   ⟨.control, FifoControl.Rule.control⟩
-abbrev validOrRule (signalType : SignalType) :
+private abbrev validOrRule (signalType : SignalType) :
     Certified.RuleOccurrence (children signalType) :=
   ⟨.outputValidOr, Primitives.OrRule.apply⟩
-abbrev dataMuxRule (signalType : SignalType) :
+private abbrev dataMuxRule (signalType : SignalType) :
     Certified.RuleOccurrence (children signalType) :=
   ⟨.outputDataMux, Mux.Rule.select⟩
 
-@[simp] theorem validRule_reads (signalType) : (validRule signalType).reads = [] := rfl
-@[simp] theorem dataRule_reads (signalType) : (dataRule signalType).reads = [] := rfl
-@[simp] theorem controlOccurrence_reads (signalType) :
+@[simp] private theorem validRule_reads (signalType) : (validRule signalType).reads = [] := rfl
+@[simp] private theorem dataRule_reads (signalType) : (dataRule signalType).reads = [] := rfl
+@[simp] private theorem controlOccurrence_reads (signalType) :
     (controlOccurrence signalType).reads = [.storedValid, .downstreamReady] := rfl
-@[simp] theorem validOrRule_reads (signalType) :
+@[simp] private theorem validOrRule_reads (signalType) :
     (validOrRule signalType).reads = [.left, .right] := rfl
-@[simp] theorem dataMuxRule_reads (signalType) :
+@[simp] private theorem dataMuxRule_reads (signalType) :
     (dataMuxRule signalType).reads = [.select, .whenFalse, .whenTrue] := rfl
-@[simp] theorem validRule_writes (signalType) :
+@[simp] private theorem validRule_writes (signalType) :
     (validRule signalType).writes = [.value] := rfl
-@[simp] theorem dataRule_writes (signalType) :
+@[simp] private theorem dataRule_writes (signalType) :
     (dataRule signalType).writes = [.value] := rfl
-@[simp] theorem controlOccurrence_writes (signalType) :
+@[simp] private theorem controlOccurrence_writes (signalType) :
     (controlOccurrence signalType).writes = [.upstreamReady, .storageUpdate] := rfl
-@[simp] theorem validOrRule_writes (signalType) :
+@[simp] private theorem validOrRule_writes (signalType) :
     (validOrRule signalType).writes = [.output] := rfl
-@[simp] theorem dataMuxRule_writes (signalType) :
+@[simp] private theorem dataMuxRule_writes (signalType) :
     (dataMuxRule signalType).writes = [.result] := rfl
 
-def forwardSchedule (signalType : SignalType) :
+private def forwardSchedule (signalType : SignalType) :
     Certified.OutputSchedule (body signalType) (children signalType)
       (cycleContract signalType) .forward :=
   .call (validRule signalType)
@@ -244,7 +216,7 @@ def forwardSchedule (signalType : SignalType) :
         simp [cycleContract, forwardRule, SignalSelection.prepend,
           SignalMap.select, SignalSelection.labels] at member)))))
 
-def readySchedule (signalType : SignalType) :
+private def readySchedule (signalType : SignalType) :
     Certified.OutputSchedule (body signalType) (children signalType)
       (cycleContract signalType) .ready :=
   .call (validRule signalType)
@@ -271,7 +243,7 @@ def readySchedule (signalType : SignalType) :
         simp [cycleContract, readyRule, SignalMap.select,
           SignalSelection.labels] at member)))
 
-def stateSchedule (signalType : SignalType) :
+private def stateSchedule (signalType : SignalType) :
     Certified.StateSchedule (body signalType) (children signalType) :=
   .call (validRule signalType) (by intro input member; cases member) (by simp)
   (.call (dataRule signalType) (by intro input member; cases member) (by simp)
@@ -314,13 +286,13 @@ def stateSchedule (signalType : SignalType) :
         simp [Mux.cycleContract, Mux.stateRule, CycleStateRule.empty,
           SignalSelection.labels] at member))))))
 
-def ruleSchedules (signalType : SignalType) :
+private def ruleSchedules (signalType : SignalType) :
     Certified.RuleSchedules (body signalType) (children signalType)
       (cycleContract signalType) where
   output | .forward => forwardSchedule signalType | .ready => readySchedule signalType
   state := stateSchedule signalType
 
-theorem coversChildren (signalType : SignalType) :
+private theorem coversChildren (signalType : SignalType) :
     (ruleSchedules signalType).CoversChildren := by
   intro child rule
   cases child with
@@ -355,24 +327,24 @@ theorem coversChildren (signalType : SignalType) :
     change dataMuxRule signalType ∈ (stateSchedule signalType).finalAvailability
     simp [stateSchedule, Certified.Schedule.finalAvailability]
 
-theorem hasAtMostOneSolution (signalType : SignalType) :
+private theorem hasAtMostOneSolution (signalType : SignalType) :
     (Certified.moduleStructure (body signalType)
       (children signalType)).HasAtMostOneSolution :=
   (ruleSchedules signalType).hasAtMostOneSolution (coversChildren signalType)
 
-def controlInputsFrom (signalType : SignalType)
+private def controlInputsFrom (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values) (storedValid : Bool) :
     FifoControl.ports.inputs.Values
   | .storedValid => storedValid
   | .downstreamReady => inputs .outputReady
 
-def validOrInputsFrom (signalType : SignalType)
+private def validOrInputsFrom (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values) (storedValid : Bool) :
     Primitives.or.ports.inputs.Values
   | .left => storedValid
   | .right => inputs .inputValid
 
-def dataMuxInputsFrom (signalType : SignalType)
+private def dataMuxInputsFrom (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
     (storedValid : Bool) (storedData : signalType.Denote) :
     (Mux.ports signalType).inputs.Values
@@ -380,21 +352,21 @@ def dataMuxInputsFrom (signalType : SignalType)
   | .whenFalse => inputs .inputData
   | .whenTrue => storedData
 
-noncomputable def validStorageInputs (signalType : SignalType)
+private noncomputable def validStorageInputs (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
     (control : ProposedValues (children signalType .control).moduleStructure) :
     (EnabledRegister.ports .bit).inputs.Values
   | .value => inputs .inputValid
   | .enable => control.outputs .storageUpdate
 
-noncomputable def dataStorageInputs (signalType : SignalType)
+private noncomputable def dataStorageInputs (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
     (control : ProposedValues (children signalType .control).moduleStructure) :
     (EnabledRegister.ports signalType).inputs.Values
   | .value => inputs .inputData
   | .enable => control.outputs .storageUpdate
 
-theorem hasStructuralResult (signalType : SignalType)
+private theorem hasStructuralResult (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
     (currentState : (Certified.moduleStructure (body signalType)
       (children signalType)).State) :
@@ -504,7 +476,7 @@ theorem hasStructuralResult (signalType : SignalType)
           | whenTrue => exact dataOutput]
         exact dataMuxSatisfies
 
-def stateCorresponds (signalType : SignalType)
+private def stateCorresponds (signalType : SignalType)
     (contractState : (cycleContract signalType).state.Values)
     (structuralState : (Certified.moduleStructure (body signalType)
       (children signalType)).State) : Prop :=
@@ -751,7 +723,7 @@ private theorem implements (signalType : SignalType) :
     · rw [dataNextEq]
       exact dataNextCorresponds
 
-noncomputable def proofCertification (signalType : SignalType) :
+private noncomputable def proofCertification (signalType : SignalType) :
     ModuleCycleCertification
       (Certified.moduleStructure (body signalType) (children signalType))
       (cycleContract signalType) where
@@ -797,7 +769,7 @@ open Silean2 Silean2.Naming
 
 def portsWithNaming (signalType : SignalType)
     (typeNaming : SignalTypeNaming signalType) :
-    ModulePortsNaming (Modules.OneEntryFifo.ports signalType) where
+    ModulePortsNaming (Modules.Fifo.ports signalType) where
   inputs := ⟨fun
     | .inputValid => "input_valid"
     | .inputData => "input_data"
@@ -814,7 +786,7 @@ def portsWithNaming (signalType : SignalType)
     | .outputData => typeNaming
 
 def ports (signalType : SignalType) :
-    ModulePortsNaming (Modules.OneEntryFifo.ports signalType) :=
+    ModulePortsNaming (Modules.Fifo.ports signalType) :=
   portsWithNaming signalType (.positional signalType)
 
 def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalType) :

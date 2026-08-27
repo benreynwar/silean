@@ -3,34 +3,34 @@ import Silean2.Contracts.NoResetFifoSerial
 
 namespace Silean2.Contracts.NoResetFifo
 
-structure ModuleView (State Word : Type) where
+structure View (State Word : Type) where
   contents : State → List Word
   capacity : Nat
   readyPropagationLatency : Nat
   contents_bounded : ∀ state, (contents state).length ≤ capacity
 
-namespace ModuleView
+namespace View
 
-def trace (view : ModuleView State Word)
+def trace (view : View State Word)
     (initial : State) (cycles : List (Cycle Word))
     (final : State) : Trace Word where
   initialContents := view.contents initial
   cycles := cycles
   finalContents := view.contents final
 
-abbrev ExecutionRelation (_view : ModuleView State Word) : Type :=
+abbrev ExecutionRelation (_view : View State Word) : Type :=
   State → List (Cycle Word) → State → Prop
 
-def Satisfies (view : ModuleView State Word)
+def Satisfies (view : View State Word)
     (executes : ExecutionRelation view) : Prop :=
   ∀ initial cycles final, executes initial cycles final →
     Contract view.capacity view.readyPropagationLatency
       (view.trace initial cycles final)
 
 def SerialExecutionDecomposition
-    (outerView : ModuleView OuterState Word)
-    (upstreamView : ModuleView UpstreamState Word)
-    (downstreamView : ModuleView DownstreamState Word)
+    (outerView : View OuterState Word)
+    (upstreamView : View UpstreamState Word)
+    (downstreamView : View DownstreamState Word)
     (upstreamExecutes : ExecutionRelation upstreamView)
     (downstreamExecutes : ExecutionRelation downstreamView)
     (outerInitial : OuterState)
@@ -49,9 +49,9 @@ def SerialExecutionDecomposition
         upstreamView.contents upstreamFinal
 
 theorem Satisfies.serial
-    {outerView : ModuleView OuterState Word}
-    {upstreamView : ModuleView UpstreamState Word}
-    {downstreamView : ModuleView DownstreamState Word}
+    {outerView : View OuterState Word}
+    {upstreamView : View UpstreamState Word}
+    {downstreamView : View DownstreamState Word}
     {outerExecutes : ExecutionRelation outerView}
     {upstreamExecutes : ExecutionRelation upstreamView}
     {downstreamExecutes : ExecutionRelation downstreamView}
@@ -84,7 +84,7 @@ theorem Satisfies.serial
       (downstreamView.contents_bounded downstreamInitial))
     upstreamContractProof downstreamContractProof
 
-end ModuleView
+end View
 
 namespace Execution.Model
 

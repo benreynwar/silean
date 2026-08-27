@@ -1,5 +1,5 @@
 import Silean2.FIRRTL.Render
-import Silean2.Modules.FifoTemporal
+import Silean2.Modules.FifoProperties
 
 namespace Silean2.Examples.Checks.FifoDepth
 
@@ -18,35 +18,35 @@ def bNaming : SignalTypeNaming bType :=
 def payloadNaming : SignalTypeNaming payloadType :=
   .tuple (.cons "a" (.vector .bit) (.cons "b" bNaming .nil))
 
-example : ModuleStructure (OneEntryFifo.ports payloadType) :=
+example : ModuleStructure (Fifo.ports payloadType) :=
   Fifo.moduleStructure payloadType 1 (by omega)
 
-example : ModuleStructure (OneEntryFifo.ports payloadType) :=
+example : ModuleStructure (Fifo.ports payloadType) :=
   Fifo.moduleStructure payloadType 2 (by omega)
 
-example : ModuleStructure (OneEntryFifo.ports payloadType) :=
+example : ModuleStructure (Fifo.ports payloadType) :=
   Fifo.moduleStructure payloadType 3 (by omega)
 
-noncomputable example : ModuleCycleCertified (OneEntryFifo.ports payloadType) :=
+noncomputable example : ModuleCycleCertified (Fifo.ports payloadType) :=
   Fifo.certified payloadType 3 (by omega)
 
-example : (Fifo.Temporal.certifiedView payloadType 1 (by omega)).view.capacity = 1 := by
+example : (Fifo.Properties.certifiedView payloadType 1 (by omega)).view.capacity = 1 := by
   simp
 
-example : (Fifo.Temporal.certifiedView payloadType 2 (by omega)).view.capacity = 2 := by
+example : (Fifo.Properties.certifiedView payloadType 2 (by omega)).view.capacity = 2 := by
   simp
 
-example : (Fifo.Temporal.certifiedView payloadType 3 (by omega)).view.capacity = 3 := by
+example : (Fifo.Properties.certifiedView payloadType 3 (by omega)).view.capacity = 3 := by
   simp
 
-example : (Fifo.Temporal.certifiedView payloadType 3
+example : (Fifo.Properties.certifiedView payloadType 3
     (by omega)).view.readyPropagationLatency = 0 := by
   simp
 
-example : NoResetFifo.ModuleView.Satisfies
-    (Fifo.Temporal.certifiedView payloadType 3 (by omega)).view
-    (Fifo.Temporal.model (Fifo.behavior payloadType 3 (by omega))).executes :=
-  (Fifo.Temporal.certifiedView payloadType 3 (by omega)).satisfies
+example : NoResetFifo.View.Satisfies
+    (Fifo.Properties.certifiedView payloadType 3 (by omega)).view
+    (Fifo.Execution.model (Fifo.cycleBehavior payloadType 3 (by omega))).executes :=
+  (Fifo.Properties.certifiedView payloadType 3 (by omega)).satisfies
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

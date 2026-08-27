@@ -14,6 +14,5 @@ import Silean2.Examples.Checks.HierarchicalDualNotCertificationChecks
 import Silean2.Examples.Checks.OneEntryFifoChecks
 import Silean2.Examples.Checks.BidirectionalDualNotChecks
 import Silean2.Examples.Checks.FIRRTLChecks
-import Silean2.Examples.Checks.OneEntryFifoTemporalChecks
-import Silean2.Examples.Checks.SerialFifoTemporalChecks
+import Silean2.Examples.Checks.OneEntryFifoPropertiesChecks
 import Silean2.Examples.Checks.FifoDepthChecks

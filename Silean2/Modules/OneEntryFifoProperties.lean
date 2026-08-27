@@ -1,7 +1,8 @@
 import Silean2.Contracts.NoResetFifoView
+import Silean2.Modules.FifoExecution
 import Silean2.Modules.OneEntryFifo
 
-namespace Silean2.Modules.OneEntryFifo.Temporal
+namespace Silean2.Modules.OneEntryFifo.Properties
 
 open Silean2.Contracts
 
@@ -9,15 +10,13 @@ abbrev Word (signalType : SignalType) := signalType.Denote
 abbrev ContractState (signalType : SignalType) :=
   (cycleContract signalType).state.Values
 abbrev CycleInput (signalType : SignalType) :=
-  NoResetFifo.Execution.Input (Word signalType)
+  Fifo.Execution.Input signalType
 abbrev StepResult (signalType : SignalType) :=
   NoResetFifo.Execution.StepResult (ContractState signalType) (Word signalType)
 
 def inputValues (signalType : SignalType) (input : CycleInput signalType) :
-    (ports signalType).inputs.Values := fun
-  | .inputValid => input.enqValid
-  | .inputData => input.enqData
-  | .outputReady => input.deqReady
+    (Fifo.ports signalType).inputs.Values :=
+  Fifo.Execution.inputValues signalType input
 
 @[simp] theorem inputValues_inputValid (signalType : SignalType)
     (input : CycleInput signalType) :
@@ -33,20 +32,11 @@ def inputValues (signalType : SignalType) (input : CycleInput signalType) :
 
 def step (signalType : SignalType) (state : ContractState signalType)
     (input : CycleInput signalType) : StepResult signalType :=
-  let evaluated := (cycleContract signalType).evaluate
-    (inputValues signalType input) state
-  { nextState := evaluated.2
-    cycle :=
-      { enqValid := input.enqValid
-        enqData := input.enqData
-        enqReady := evaluated.1 .inputReady
-        deqValid := evaluated.1 .outputValid
-        deqData := evaluated.1 .outputData
-        deqReady := input.deqReady } }
+  Fifo.Execution.step (Fifo.oneEntryCycleBehavior signalType) state input
 
 def model (signalType : SignalType) :
-    NoResetFifo.Execution.Model (ContractState signalType) (Word signalType) where
-  step := step signalType
+    NoResetFifo.Execution.Model (ContractState signalType) (Word signalType) :=
+  Fifo.Execution.model (Fifo.oneEntryCycleBehavior signalType)
 
 @[simp] theorem step_enqValid (signalType : SignalType)
     (state : ContractState signalType) (input : CycleInput signalType) :
@@ -63,55 +53,31 @@ def model (signalType : SignalType) :
 def contents (state : ContractState signalType) : List (Word signalType) :=
   bif state .storedValid then [state .storedData] else []
 
-private theorem evaluated_forward (signalType : SignalType)
-    (state : ContractState signalType) (input : CycleInput signalType) :
-    let evaluated := (cycleContract signalType).evaluate
-      (inputValues signalType input) state
-    evaluated.1 .outputValid = (state .storedValid || input.enqValid) ∧
-      evaluated.1 .outputData =
-        (bif state .storedValid then state .storedData else input.enqData) := by
-  intro evaluated
-  have holds := ((cycleContract signalType).evaluate_evaluatesTo
-    (inputValues signalType input) state).1 .forward
-  have equations := (forwardRule_holds_iff signalType
-    (inputValues signalType input) state evaluated.1).mp holds
-  simpa using equations
-
-private theorem evaluated_ready (signalType : SignalType)
-    (state : ContractState signalType) (input : CycleInput signalType) :
-    let evaluated := (cycleContract signalType).evaluate
-      (inputValues signalType input) state
-    evaluated.1 .inputReady = (input.deqReady || !state .storedValid) := by
-  intro evaluated
-  have holds := ((cycleContract signalType).evaluate_evaluatesTo
-    (inputValues signalType input) state).1 .ready
-  have equation := (readyRule_holds_iff signalType
-    (inputValues signalType input) state evaluated.1).mp holds
-  simpa using equation
-
 @[simp] theorem step_enqReady (signalType : SignalType)
     (state : ContractState signalType) (input : CycleInput signalType) :
     (step signalType state input).cycle.enqReady =
       (input.deqReady || !state .storedValid) :=
-  evaluated_ready signalType state input
+  Fifo.Execution.step_enqReady (Fifo.oneEntryCycleBehavior signalType) state input
 
 @[simp] theorem step_deqValid (signalType : SignalType)
     (state : ContractState signalType) (input : CycleInput signalType) :
     (step signalType state input).cycle.deqValid =
       (state .storedValid || input.enqValid) :=
-  (evaluated_forward signalType state input).1
+  Fifo.Execution.step_deqValid (Fifo.oneEntryCycleBehavior signalType) state input
 
 @[simp] theorem step_deqData (signalType : SignalType)
     (state : ContractState signalType) (input : CycleInput signalType) :
     (step signalType state input).cycle.deqData =
       (bif state .storedValid then state .storedData else input.enqData) :=
-  (evaluated_forward signalType state input).2
+  Fifo.Execution.step_deqData (Fifo.oneEntryCycleBehavior signalType) state input
 
 @[simp] theorem step_nextState (signalType : SignalType)
     (state : ContractState signalType) (input : CycleInput signalType) :
     (step signalType state input).nextState =
       (cycleContract signalType).stateRule.apply
-        (inputValues signalType input) state := rfl
+        (inputValues signalType input) state := by
+  exact Fifo.Execution.step_nextState
+    (Fifo.oneEntryCycleBehavior signalType) state input
 
 theorem contents_capacity_one (state : ContractState signalType) :
     (contents state).length ≤ 1 := by
@@ -129,6 +95,7 @@ theorem step_conservation (signalType : SignalType)
         simp [NoResetFifo.Cycle.acceptedInput,
           NoResetFifo.Cycle.acceptedOutput, contents, step_nextState,
           cycleContract, stateRule, inputValues, validEq,
+          Fifo.Execution.inputValues,
           CycleStateRule.apply, SignalSelection.project,
           SignalSelection.prepend, SignalMap.select]
 
@@ -182,18 +149,18 @@ theorem satisfies_contract (signalType : SignalType)
   · simpa [trace] using ready_stalls_bound signalType initial inputs
 
 def fifoView (signalType : SignalType) :
-    NoResetFifo.ModuleView (ContractState signalType) (Word signalType) where
+    NoResetFifo.View (ContractState signalType) (Word signalType) where
   contents := contents
   capacity := 1
   readyPropagationLatency := 0
   contents_bounded := contents_capacity_one
 
 def executes (signalType : SignalType) :
-    NoResetFifo.ModuleView.ExecutionRelation (fifoView signalType) :=
+    NoResetFifo.View.ExecutionRelation (fifoView signalType) :=
   (model signalType).executes
 
 theorem fifoView_satisfies (signalType : SignalType) :
-    NoResetFifo.ModuleView.Satisfies (fifoView signalType)
+    NoResetFifo.View.Satisfies (fifoView signalType)
       (executes signalType) := by
   intro initial cycles final execution
   rcases execution with ⟨inputs, cyclesEqual, finalEqual⟩
@@ -201,4 +168,4 @@ theorem fifoView_satisfies (signalType : SignalType) :
   rw [← cyclesEqual, ← finalEqual]
   exact contract
 
-end Silean2.Modules.OneEntryFifo.Temporal
+end Silean2.Modules.OneEntryFifo.Properties

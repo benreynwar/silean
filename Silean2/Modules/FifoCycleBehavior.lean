@@ -22,41 +22,41 @@ def combineState (leftValues : left.Values) (rightValues : right.Values) :
   | .inl key => leftValues key
   | .inr key => rightValues key
 
-structure Behavior (signalType : SignalType) where
+structure CycleBehavior (signalType : SignalType) where
   state : SignalMap
   forward : Bool → signalType.Denote → state.Values →
     Bool × signalType.Denote
   ready : Bool → state.Values → Bool
-  nextState : (OneEntryFifo.ports signalType).inputs.Values →
+  nextState : (Fifo.ports signalType).inputs.Values →
     state.Values → state.Values
 
-namespace Behavior
+namespace CycleBehavior
 
-def forwardRule (behavior : Behavior signalType) :
-    CycleOutputRule (OneEntryFifo.ports signalType) behavior.state
+def forwardRule (behavior : CycleBehavior signalType) :
+    CycleOutputRule (Fifo.ports signalType) behavior.state
       (.ofLists [.bit, signalType] [.bit, signalType]) where
-  readsInputs := ((OneEntryFifo.inputMap signalType).select .inputData).prepend
+  readsInputs := ((Fifo.inputMap signalType).select .inputData).prepend
     .inputValid
-  writesOutputs := ((OneEntryFifo.outputMap signalType).select .outputData).prepend
+  writesOutputs := ((Fifo.outputMap signalType).select .outputData).prepend
     .outputValid
   target
     | (inputValid, (inputData, ())), state =>
         let result := behavior.forward inputValid inputData state
         (result.1, (result.2, ()))
 
-def readyRule (behavior : Behavior signalType) :
-    CycleOutputRule (OneEntryFifo.ports signalType) behavior.state
+def readyRule (behavior : CycleBehavior signalType) :
+    CycleOutputRule (Fifo.ports signalType) behavior.state
       (.ofLists [.bit] [.bit]) where
-  readsInputs := (OneEntryFifo.inputMap signalType).select .outputReady
-  writesOutputs := (OneEntryFifo.outputMap signalType).select .inputReady
+  readsInputs := (Fifo.inputMap signalType).select .outputReady
+  writesOutputs := (Fifo.outputMap signalType).select .inputReady
   target
     | (outputReady, ()), state => (behavior.ready outputReady state, ())
 
-def stateRule (behavior : Behavior signalType) :
-    CycleStateRule (OneEntryFifo.ports signalType) behavior.state where
+def stateRule (behavior : CycleBehavior signalType) :
+    CycleStateRule (Fifo.ports signalType) behavior.state where
   inputTypes := .cons .bit (.cons .bit (.cons signalType .nil))
   readsInputs :=
-    (((OneEntryFifo.inputMap signalType).select .inputData).prepend .inputValid).prepend
+    (((Fifo.inputMap signalType).select .inputData).prepend .inputValid).prepend
       .outputReady
   target
     | (outputReady, (inputValid, (inputData, ()))), state =>
@@ -65,10 +65,10 @@ def stateRule (behavior : Behavior signalType) :
           | .inputData => inputData
           | .outputReady => outputReady) state
 
-def cycleContract (behavior : Behavior signalType) :
-    ModuleCycleContract (OneEntryFifo.ports signalType) where
+def cycleContract (behavior : CycleBehavior signalType) :
+    ModuleCycleContract (Fifo.ports signalType) where
   state := behavior.state
-  RuleName := OneEntryFifo.Rule
+  RuleName := Fifo.Rule
   ruleNames := inferInstance
   outputRule
     | .forward => ⟨_, behavior.forwardRule⟩
@@ -76,8 +76,8 @@ def cycleContract (behavior : Behavior signalType) :
   stateRule := behavior.stateRule
   outputCoverage := by rfl
 
-@[simp] theorem stateRule_apply (behavior : Behavior signalType)
-    (inputs : (OneEntryFifo.ports signalType).inputs.Values)
+@[simp] theorem stateRule_apply (behavior : CycleBehavior signalType)
+    (inputs : (Fifo.ports signalType).inputs.Values)
     (state : behavior.state.Values) :
     behavior.stateRule.apply inputs state = behavior.nextState inputs state := by
   simp only [stateRule, CycleStateRule.apply, SignalSelection.project,
@@ -86,33 +86,33 @@ def cycleContract (behavior : Behavior signalType) :
   funext input
   cases input <;> rfl
 
-@[simp] theorem cycleContract_stateRule_apply (behavior : Behavior signalType)
-    (inputs : (OneEntryFifo.ports signalType).inputs.Values)
+@[simp] theorem cycleContract_stateRule_apply (behavior : CycleBehavior signalType)
+    (inputs : (Fifo.ports signalType).inputs.Values)
     (state : behavior.state.Values) :
     behavior.cycleContract.stateRule.apply inputs state =
       behavior.nextState inputs state :=
   behavior.stateRule_apply inputs state
 
-@[simp] theorem cycleContract_forward_reads (behavior : Behavior signalType) :
-    ((behavior.cycleContract.outputRule OneEntryFifo.Rule.forward).2.readsInputs.labels) =
+@[simp] theorem cycleContract_forward_reads (behavior : CycleBehavior signalType) :
+    ((behavior.cycleContract.outputRule Fifo.Rule.forward).2.readsInputs.labels) =
       [.inputValid, .inputData] := rfl
 
-@[simp] theorem cycleContract_forward_writes (behavior : Behavior signalType) :
-    ((behavior.cycleContract.outputRule OneEntryFifo.Rule.forward).2.writesOutputs.labels) =
+@[simp] theorem cycleContract_forward_writes (behavior : CycleBehavior signalType) :
+    ((behavior.cycleContract.outputRule Fifo.Rule.forward).2.writesOutputs.labels) =
       [.outputValid, .outputData] := rfl
 
-@[simp] theorem cycleContract_ready_reads (behavior : Behavior signalType) :
-    ((behavior.cycleContract.outputRule OneEntryFifo.Rule.ready).2.readsInputs.labels) =
+@[simp] theorem cycleContract_ready_reads (behavior : CycleBehavior signalType) :
+    ((behavior.cycleContract.outputRule Fifo.Rule.ready).2.readsInputs.labels) =
       [.outputReady] := rfl
 
-@[simp] theorem cycleContract_ready_writes (behavior : Behavior signalType) :
-    ((behavior.cycleContract.outputRule OneEntryFifo.Rule.ready).2.writesOutputs.labels) =
+@[simp] theorem cycleContract_ready_writes (behavior : CycleBehavior signalType) :
+    ((behavior.cycleContract.outputRule Fifo.Rule.ready).2.writesOutputs.labels) =
       [.inputReady] := rfl
 
-theorem forwardRule_holds_iff (behavior : Behavior signalType)
-    (inputs : (OneEntryFifo.ports signalType).inputs.Values)
+theorem forwardRule_holds_iff (behavior : CycleBehavior signalType)
+    (inputs : (Fifo.ports signalType).inputs.Values)
     (state : behavior.state.Values)
-    (outputs : (OneEntryFifo.ports signalType).outputs.Values) :
+    (outputs : (Fifo.ports signalType).outputs.Values) :
     behavior.forwardRule.Holds inputs state outputs ↔
       outputs .outputValid =
           (behavior.forward (inputs .inputValid) (inputs .inputData) state).1 ∧
@@ -121,17 +121,17 @@ theorem forwardRule_holds_iff (behavior : Behavior signalType)
   simp [CycleOutputRule.Holds, forwardRule, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select, SignalSelection.prepend]
 
-theorem readyRule_holds_iff (behavior : Behavior signalType)
-    (inputs : (OneEntryFifo.ports signalType).inputs.Values)
+theorem readyRule_holds_iff (behavior : CycleBehavior signalType)
+    (inputs : (Fifo.ports signalType).inputs.Values)
     (state : behavior.state.Values)
-    (outputs : (OneEntryFifo.ports signalType).outputs.Values) :
+    (outputs : (Fifo.ports signalType).outputs.Values) :
     behavior.readyRule.Holds inputs state outputs ↔
       outputs .inputReady = behavior.ready (inputs .outputReady) state := by
   simp [CycleOutputRule.Holds, readyRule, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select]
 
-theorem evaluate_forward (behavior : Behavior signalType)
-    (inputs : (OneEntryFifo.ports signalType).inputs.Values)
+theorem evaluate_forward (behavior : CycleBehavior signalType)
+    (inputs : (Fifo.ports signalType).inputs.Values)
     (state : behavior.state.Values) :
     let evaluated := behavior.cycleContract.evaluate inputs state
     evaluated.1 .outputValid =
@@ -144,8 +144,8 @@ theorem evaluate_forward (behavior : Behavior signalType)
   exact (behavior.forwardRule_holds_iff inputs state evaluated.1).mp
     holds
 
-theorem evaluate_ready (behavior : Behavior signalType)
-    (inputs : (OneEntryFifo.ports signalType).inputs.Values)
+theorem evaluate_ready (behavior : CycleBehavior signalType)
+    (inputs : (Fifo.ports signalType).inputs.Values)
     (state : behavior.state.Values) :
     let evaluated := behavior.cycleContract.evaluate inputs state
     evaluated.1 .inputReady = behavior.ready (inputs .outputReady) state := by
@@ -155,7 +155,7 @@ theorem evaluate_ready (behavior : Behavior signalType)
   exact (behavior.readyRule_holds_iff inputs state evaluated.1).mp
     holds
 
-def serial (upstream downstream : Behavior signalType) : Behavior signalType where
+def serial (upstream downstream : CycleBehavior signalType) : CycleBehavior signalType where
   state := sumState upstream.state downstream.state
   forward := fun inputValid inputData state =>
     let middle := upstream.forward inputValid inputData (leftState state)
@@ -169,42 +169,42 @@ def serial (upstream downstream : Behavior signalType) : Behavior signalType whe
     let middle := upstream.forward (inputs .inputValid) (inputs .inputData)
       upstreamState
     let middleReady := downstream.ready (inputs .outputReady) downstreamState
-    let upstreamInputs : (OneEntryFifo.ports signalType).inputs.Values := fun
+    let upstreamInputs : (Fifo.ports signalType).inputs.Values := fun
       | .inputValid => inputs .inputValid
       | .inputData => inputs .inputData
       | .outputReady => middleReady
-    let downstreamInputs : (OneEntryFifo.ports signalType).inputs.Values := fun
+    let downstreamInputs : (Fifo.ports signalType).inputs.Values := fun
       | .inputValid => middle.1
       | .inputData => middle.2
       | .outputReady => inputs .outputReady
     combineState (upstream.nextState upstreamInputs upstreamState)
       (downstream.nextState downstreamInputs downstreamState)
 
-end Behavior
+end CycleBehavior
 
-structure CertifiedBehavior (signalType : SignalType) where
-  behavior : Behavior signalType
-  moduleStructure : ModuleStructure (OneEntryFifo.ports signalType)
-  certification : ModuleCycleCertification moduleStructure behavior.cycleContract
+structure CertifiedCycleBehavior (signalType : SignalType) where
+  cycleBehavior : CycleBehavior signalType
+  moduleStructure : ModuleStructure (Fifo.ports signalType)
+  certification : ModuleCycleCertification moduleStructure cycleBehavior.cycleContract
 
-def CertifiedBehavior.certified (value : CertifiedBehavior signalType) :
-    ModuleCycleCertified (OneEntryFifo.ports signalType) :=
+def CertifiedCycleBehavior.certified (value : CertifiedCycleBehavior signalType) :
+    ModuleCycleCertified (Fifo.ports signalType) :=
   value.certification.bundle
 
-@[simp] theorem CertifiedBehavior.certified_cycleContract
-    (value : CertifiedBehavior signalType) :
-    value.certified.cycleContract = value.behavior.cycleContract := rfl
+@[simp] theorem CertifiedCycleBehavior.certified_cycleContract
+    (value : CertifiedCycleBehavior signalType) :
+    value.certified.cycleContract = value.cycleBehavior.cycleContract := rfl
 
-@[simp] theorem CertifiedBehavior.certified_stateRule_apply
-    (value : CertifiedBehavior signalType)
-    (inputs : (OneEntryFifo.ports signalType).inputs.Values)
+@[simp] theorem CertifiedCycleBehavior.certified_stateRule_apply
+    (value : CertifiedCycleBehavior signalType)
+    (inputs : (Fifo.ports signalType).inputs.Values)
     (state : value.certified.cycleContract.state.Values) :
     value.certified.cycleContract.stateRule.apply inputs state =
-      value.behavior.nextState inputs state := by
-  change value.behavior.cycleContract.stateRule.apply inputs state = _
-  exact value.behavior.cycleContract_stateRule_apply inputs state
+      value.cycleBehavior.nextState inputs state := by
+  change value.cycleBehavior.cycleContract.stateRule.apply inputs state = _
+  exact value.cycleBehavior.cycleContract_stateRule_apply inputs state
 
-def oneEntryBehavior (signalType : SignalType) : Behavior signalType where
+def oneEntryCycleBehavior (signalType : SignalType) : CycleBehavior signalType where
   state := OneEntryFifo.stateMap signalType
   forward := fun inputValid inputData state =>
     (state .storedValid || inputValid,
@@ -212,15 +212,15 @@ def oneEntryBehavior (signalType : SignalType) : Behavior signalType where
   ready := fun outputReady state => outputReady || !state .storedValid
   nextState := (OneEntryFifo.stateRule signalType).apply
 
-theorem oneEntryBehavior_cycleContract (signalType : SignalType) :
-    (oneEntryBehavior signalType).cycleContract =
+theorem oneEntryCycleBehavior_cycleContract (signalType : SignalType) :
+    (oneEntryCycleBehavior signalType).cycleContract =
       OneEntryFifo.cycleContract signalType := rfl
 
 noncomputable def oneEntryCertified (signalType : SignalType) :
-    CertifiedBehavior signalType where
-  behavior := oneEntryBehavior signalType
+    CertifiedCycleBehavior signalType where
+  cycleBehavior := oneEntryCycleBehavior signalType
   moduleStructure := OneEntryFifo.moduleStructure signalType
   certification := (OneEntryFifo.certification signalType).transportContract
-    (oneEntryBehavior_cycleContract signalType).symm
+    (oneEntryCycleBehavior_cycleContract signalType).symm
 
 end Silean2.Modules.Fifo

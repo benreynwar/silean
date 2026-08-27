@@ -1,6 +1,6 @@
-import Silean2.Modules.OneEntryFifoTemporal
+import Silean2.Modules.OneEntryFifoProperties
 
-namespace Silean2.Examples.Checks.OneEntryFifoTemporal
+namespace Silean2.Examples.Checks.OneEntryFifoProperties
 
 open Silean2.Contracts
 open Silean2.Modules
@@ -8,26 +8,26 @@ open Silean2.Modules
 def payloadType : SignalType :=
   .tuple (.cons (.vector 3 .bit) (.cons .bit .nil))
 
-def initial : OneEntryFifo.Temporal.ContractState payloadType := fun
+def initial : OneEntryFifo.Properties.ContractState payloadType := fun
   | .storedValid => false
   | .storedData => payloadType.default
 
-def input : OneEntryFifo.Temporal.CycleInput payloadType where
+def input : OneEntryFifo.Properties.CycleInput payloadType where
   enqValid := true
   enqData := payloadType.default
   deqReady := false
 
 example : Contracts.NoResetFifo.Contract 1 0
-    (OneEntryFifo.Temporal.trace payloadType initial [input]) :=
-  OneEntryFifo.Temporal.satisfies_contract payloadType initial [input]
+    (OneEntryFifo.Properties.trace payloadType initial [input]) :=
+  OneEntryFifo.Properties.satisfies_contract payloadType initial [input]
 
-example : Contracts.NoResetFifo.ModuleView.Satisfies
-    (OneEntryFifo.Temporal.fifoView payloadType)
-    (OneEntryFifo.Temporal.executes payloadType) :=
-  OneEntryFifo.Temporal.fifoView_satisfies payloadType
+example : Contracts.NoResetFifo.View.Satisfies
+    (OneEntryFifo.Properties.fifoView payloadType)
+    (OneEntryFifo.Properties.executes payloadType) :=
+  OneEntryFifo.Properties.fifoView_satisfies payloadType
 
 example
-    (inputs : (OneEntryFifo.ports payloadType).inputs.Values)
+    (inputs : (Fifo.ports payloadType).inputs.Values)
     (contractState :
       (OneEntryFifo.certified payloadType).cycleContract.state.Values)
     (structuralState :
@@ -47,4 +47,4 @@ example
   (OneEntryFifo.certified payloadType).solution_matches_evaluate
     inputs contractState structuralState proposal corresponds satisfies
 
-end Silean2.Examples.Checks.OneEntryFifoTemporal
+end Silean2.Examples.Checks.OneEntryFifoProperties

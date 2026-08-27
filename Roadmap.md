@@ -33,8 +33,12 @@ translation is not part of the correctness proof at this stage.
   correspondence, refinement proof, and structural existence/uniqueness.
 - Generic Register, Mask, BitwiseOr, Mux, EnabledRegister, OneEntryFifo, serial
   FIFO composition, and arbitrary positive-depth FIFO validate the hierarchy.
-- Temporal FIFO contracts prove conservation, capacity, and ready-propagation
-  behavior over contract execution.
+- `LeafwiseComposition` provides the shared recursive/fixed-input
+  split/component/combine hierarchy, proposal-existence construction, and
+  component-family scheduling used by Register, Mask, and BitwiseOr.
+- FIFO cycle behavior, execution, and derived properties are separate layers.
+  The properties prove conservation, capacity, and ready propagation over
+  contract execution.
 - Module-owned naming feeds direct FIRRTL generation; FIRRTL is converted to
   SystemVerilog and exercised with Verilator and cocotb.
 
@@ -61,29 +65,32 @@ The repository-facing semantic-no-op cleanup established:
 - separate test fixtures and regression checks; and
 - verified Lean, FIRRTL conversion, and cocotb regressions.
 
-## Next architectural goal
+## Completed leafwise composition review
 
-Reduce the repeated recursive split/component/combine certification machinery
-in Register, Mask, and BitwiseOr.
+Register, Mask, and BitwiseOr now share a generic aggregate hierarchy and one
+generic structural-existence proof. Register validates recursive state, Mask
+validates a broadcast bit beside one recursive input, and BitwiseOr validates
+two recursive inputs. Their schedules retain the contract-specific dependency
+facts, while their state-correspondence and refinement proofs retain the actual
+operation semantics. The retention boundary and comparison are recorded in
+`docs/LeafwiseComposition.md`.
 
-The abstraction must be generic over aggregate shape, split inputs, broadcast
-inputs, recursive certified children, component behavior, and state
-correspondence. Register should exercise the stateful case first; Mask and
-BitwiseOr should then demonstrate that the abstraction also covers distinct
-combinational layouts. Retain the abstraction only if it materially reduces
-module code while leaving the wiring and proof boundary easier to understand.
+## Completed FIFO organization review
+
+FIFO organization is consolidated around the shared interface, cycle behavior,
+one-entry storage, serial composition, positive depth, execution, and derived
+properties. Module structures remain free of execution data; proof-construction
+schedules and witnesses are private. The resulting organization and its
+retention decisions are recorded in `docs/FifoOrganization.md`.
 
 ## Later work
 
-1. Consolidate FIFO organization around interface behavior, one-entry storage,
-   serial composition, positive depth, and temporal properties. Hide recursive
-   implementation helpers that are not public module APIs.
-2. Review intentionally public module theorems and remove debugging or
+1. Review intentionally public module theorems and remove debugging or
    construction details that no consumer needs.
-3. Expand direct FIRRTL emission to additional configured designs as useful;
+2. Expand direct FIRRTL emission to additional configured designs as useful;
    keep translation straightforward and executable rather than proof-heavy.
-4. Add reset semantics only when a concrete module requires them.
-5. Consider backend correctness or trace packaging only when a real consumer
+3. Add reset semantics only when a concrete module requires them.
+4. Consider backend correctness or trace packaging only when a real consumer
    makes the additional proof layer valuable.
 
 Each architectural goal ends with a plain-language review, focused timing,
