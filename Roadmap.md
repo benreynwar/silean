@@ -402,6 +402,14 @@ same alignment. All correspondence and induction witnesses are private;
 `Fifo.resetCertified` exposes only `ModuleResetCertified`, including its
 structural-totality guarantee.
 
+Direct backend validation now emits a configured four-entry pointer FIFO with
+the shared nested tuple/vector payload fixture. Register-bank naming propagates
+that payload metadata through its aggregate combiner as well as its storage and
+read path. A reproducibly seeded cocotb stream independently randomizes input
+valid and output ready, compares every accepted output immediately with the
+oldest accepted input, then forces downstream readiness and verifies bounded
+complete drainage and an empty FIFO.
+
 The concrete proof indicates that a reusable constructor would require three
 proof inputs: initial implementation-state coverage, reset establishment of
 behavioral alignment, and ordinary-cycle matching/preservation. These would

@@ -514,6 +514,14 @@ field such as `b.d[1].f` retains that hierarchy through FIRRTL and flattened
 SystemVerilog. The structured FIFO cocotb test verifies all payload leaves
 through capture, backpressure, simultaneous replacement, and dequeue.
 
+The generic pointer-FIFO backend target uses the same nested payload at depth
+four. `RegisterBank.Naming.namingWith` propagates the supplied element naming
+through storage registers, the entry-vector combiner, and the read mux, so
+aggregate connects have identical FIRRTL field types throughout the hierarchy.
+Its seeded cocotb scoreboard independently randomizes producer validity and
+consumer readiness, checks every transfer in FIFO order, and finishes with a
+forced-ready drain bounded by the configured capacity.
+
 ## One-entry FIFO properties
 
 The no-reset FIFO layer is independent of module structure. A trace records

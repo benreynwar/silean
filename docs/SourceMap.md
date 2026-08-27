@@ -156,7 +156,9 @@ proof or alternate circuit representation.
   regressions. Nothing in the reusable library imports this directory.
 - `Examples/Checks/` contains Lean compile-time and executable checks.
 - `Silean2Examples.lean` is the aggregate regression target.
-- `tests/` contains cocotb tests and per-design simulator configuration.
+- `tests/` contains cocotb tests and per-design simulator configuration,
+  including randomized ready/valid scoreboard coverage for the configured
+  generic pointer FIFO.
 - `Makefile` runs Lean emission, CIRCT `firtool`, Verilator, and cocotb.
 - `build/` contains generated FIRRTL, SystemVerilog, and simulator artifacts;
   it is never a semantic or proof input.

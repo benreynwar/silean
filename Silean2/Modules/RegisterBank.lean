@@ -1118,8 +1118,10 @@ def namingWith (element : SignalType) (addressWidth : Nat)
       | .storage _ =>
           EnabledRegister.Naming.namingWith element elementNaming
       | .combine =>
-          Silean2.Naming.SignalAdapter.combiner
-            (.vector (Modules.RegisterBank.entryCount addressWidth) element)
+          Silean2.Naming.SignalAdapter.combinerWithNaming
+            (SignalSplitter.vector
+              (Modules.RegisterBank.entryCount addressWidth) element).combiner
+            (.vector elementNaming)
       | .readMux =>
           CombMuxTree.Naming.namingWith element addressWidth elementNaming)
 

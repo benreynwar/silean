@@ -17,5 +17,8 @@ lean_exe «emit-bit-register» where
 lean_exe «emit-structured-fifo» where
   root := `Silean2.Emitters.StructuredFifo
 
+lean_exe «emit-pointer-fifo» where
+  root := `Silean2.Emitters.PointerFifo
+
 lean_exe «emit-bit-register-bank» where
   root := `Silean2.Emitters.BitRegisterBank
