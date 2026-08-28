@@ -410,9 +410,7 @@ valid and output ready, compares every accepted output immediately with the
 oldest accepted input, then forces downstream readiness and verifies bounded
 complete drainage and an empty FIFO.
 
-This milestone is complete. No next development goal has been selected; future
-near-term work should be added here only when there is a concrete, agreed need
-for it.
+This milestone is complete.
 
 ## Long-term RISC-V direction
 
@@ -470,11 +468,52 @@ are:
 - possibly a reusable single-outstanding ready/valid transaction holder once
   the memory-controller boundary is understood during the port.
 
-Arithmetic is the likely first foundation: `FullAdder`, `Add`, and their
-generic proofs unlock PC updates, address calculation, arithmetic instructions,
-subtraction, and comparisons. Do not design a generic monolithic ALU in
-advance; keep PicoRV32-specific decode and operation selection in the CPU until
-the port demonstrates a genuinely reusable boundary.
+After the contract-first milestone below, arithmetic is a likely early
+implementation foundation: `FullAdder`, `Add`, and their generic proofs unlock
+PC updates, address calculation, arithmetic instructions, subtraction, and
+comparisons. Do not design a generic monolithic ALU in advance; keep
+PicoRV32-specific decode and operation selection in the CPU until the port
+demonstrates a genuinely reusable boundary.
+
+## Next milestone: PicoRV32 child contracts
+
+Before implementing any PicoRV32 child structure, define and review the
+interfaces and behavioral specifications of every direct top-level child. The
+PicoRV32-specific files live in `Silean/Examples/PicoRV/`; reusable contract
+machinery belongs in the general library only when a real specification needs
+it.
+
+The direct children are `PicoRV32Control`, `PicoRV32Memory`,
+`PicoRV32Decoder`, `PicoRV32Regs`, `PicoRV32Alu`, and `PicoRV32Rvfi`. Work in
+this milestone should:
+
+1. mechanically inventory the configured Verilog registers and crossing
+   signals, assigning every state element to exactly one child;
+2. define shared fixed-configuration types and source-named port maps without
+   adding implementation structure;
+3. define a natural behavioral specification for each child, choosing the
+   contract form independently at each boundary;
+4. state the public laws the eventual parent proof may use, without exposing
+   child structure, schedules, or proof-construction state;
+5. check that the six specifications collectively describe the enabled
+   PicoRV32 behavior and give the top level enough information to connect and
+   verify them; and
+6. review naming, state ownership, reset behavior, unspecified values, and
+   same-cycle dependencies against `picorv32.v`.
+
+Likely specification styles are pure combinational behavior for
+`PicoRV32Alu`, registered decode behavior for `PicoRV32Decoder`, architectural
+state/read/write behavior for `PicoRV32Regs`, exact internal transition support
+plus useful temporal properties for `PicoRV32Control`, a temporal ready/valid
+protocol for `PicoRV32Memory`, and an instruction-retirement observation trace
+for `PicoRV32Rvfi`. These are starting points, not a requirement that every
+child use `ModuleCycleContract`.
+
+The milestone ends with a contract-only build and a written interface review.
+No `ModuleStructure` implementation, FIRRTL emission, cocotb test, Sail
+integration, `FullAdder`, or other bottom-up datapath work is part of this
+milestone. Those begin only after the complete child boundary has been
+reviewed.
 
 Each architectural goal ends with a plain-language review, focused timing,
 full Lean verification, and relevant external simulation.

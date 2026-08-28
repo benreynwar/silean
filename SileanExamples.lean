@@ -36,3 +36,5 @@ import Silean.Examples.Checks.FifoPointerControlChecks
 import Silean.Examples.Checks.EqualityChecks
 import Silean.Examples.Checks.OneEntryFifoPropertiesChecks
 import Silean.Examples.Checks.SerialDepthFifoChecks
+import Silean.Examples.PicoRV.Regs
+import Silean.Examples.PicoRV.Alu
