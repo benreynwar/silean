@@ -1,4 +1,4 @@
-# Silean 2 source map
+# Silean source map
 
 This document describes current source ownership. `Architecture.md` explains
 the concepts and proof boundary; `../Roadmap.md` records remaining work.
@@ -7,14 +7,14 @@ the concepts and proof boundary; `../Roadmap.md` records remaining work.
 
 | Import | Contents |
 | --- | --- |
-| `Silean2` | Complete library: foundation, semantics, contracts, modules, naming, and FIRRTL |
-| `Silean2.Foundation` | Foundational signal, label, port, and state-shape vocabulary |
-| `Silean2.Structure` | Instances, endpoints, wiring, bodies, and recursive structures |
-| `Silean2.Primitives` | All supported single-bit primitive leaves and contracts |
-| `Silean2.Contracts` | Behavioral contract forms plus implementation-independent FIFO contracts and execution |
-| `Silean2.Modules` | Reusable certified hardware modules and FIFO behavior/results |
-| `Silean2.Naming` | Generic naming metadata plus primitive and adapter naming |
-| `Silean2.FIRRTL` | Generic traversal, rendering, validation, and emission |
+| `Silean` | Complete library: foundation, semantics, contracts, modules, naming, and FIRRTL |
+| `Silean.Foundation` | Foundational signal, label, port, and state-shape vocabulary |
+| `Silean.Structure` | Instances, endpoints, wiring, bodies, and recursive structures |
+| `Silean.Primitives` | All supported single-bit primitive leaves and contracts |
+| `Silean.Contracts` | Behavioral contract forms plus implementation-independent FIFO contracts and execution |
+| `Silean.Modules` | Reusable certified hardware modules and FIFO behavior/results |
+| `Silean.Naming` | Generic naming metadata plus primitive and adapter naming |
+| `Silean.FIRRTL` | Generic traversal, rendering, validation, and emission |
 
 Internal files import the narrow dependency they need. The aggregates are
 entry points for consumers and do not create compatibility namespaces.
@@ -140,10 +140,10 @@ inspects structural hierarchy.
 
 ## Naming and backend
 
-`Naming/` owns generic executable naming metadata in `Silean2.Naming`.
-Module-specific metadata is in `Silean2.Modules.<Module>.Naming`, inside the
+`Naming/` owns generic executable naming metadata in `Silean.Naming`.
+Module-specific metadata is in `Silean.Modules.<Module>.Naming`, inside the
 module's source file. `FIRRTL/` owns only backend operations in
-`Silean2.FIRRTL`: hierarchy traversal, identifier and definition validation,
+`Silean.FIRRTL`: hierarchy traversal, identifier and definition validation,
 FIRRTL 4 text rendering, and the shared emitter command-line shell.
 
 Configured top-level designs live in `Emitters/`. They select an ordinary Lean
@@ -155,7 +155,7 @@ proof or alternate circuit representation.
 - `Examples/Fixtures/` contains small test-only designs shared by multiple
   regressions. Nothing in the reusable library imports this directory.
 - `Examples/Checks/` contains Lean compile-time and executable checks.
-- `Silean2Examples.lean` is the aggregate regression target.
+- `SileanExamples.lean` is the aggregate regression target.
 - `tests/` contains cocotb tests and per-design simulator configuration,
   including randomized ready/valid scoreboard coverage for the configured
   generic pointer FIFO.

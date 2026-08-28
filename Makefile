@@ -16,7 +16,7 @@ POINTER_FIFO_FIRRTL := $(POINTER_FIFO_DIR)/pointer_fifo.fir
 POINTER_FIFO_VERILOG := $(POINTER_FIFO_DIR)/pointer_fifo.sv
 POINTER_FIFO_SIM := $(POINTER_FIFO_DIR)/sim
 
-LEAN_SOURCES := $(shell find Silean2 -type f -name '*.lean')
+LEAN_SOURCES := $(shell find Silean -type f -name '*.lean')
 LEAN_BUILD_INPUTS := $(LEAN_SOURCES) lakefile.lean lean-toolchain lake-manifest.json
 
 .PHONY: all firrtl-bit-register verilog-bit-register test-bit-register \

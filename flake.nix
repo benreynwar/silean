@@ -1,5 +1,5 @@
 {
-  description = "Silean 2 Lean, FIRRTL, and simulation development environment";
+  description = "Silean Lean, FIRRTL, and simulation development environment";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -26,7 +26,7 @@
             ];
 
             shellHook = ''
-              export PS1="\[\e[1;35m\][silean2]\[\e[0m\] $PS1"
+              export PS1="\[\e[1;35m\][silean]\[\e[0m\] $PS1"
             '';
           };
         });

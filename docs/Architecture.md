@@ -1,4 +1,4 @@
-# Silean 2 architecture
+# Silean architecture
 
 This is the authoritative description of the current design. `Roadmap.md`
 records only the present direction and remaining work; `SourceMap.md` maps the
@@ -6,7 +6,7 @@ concepts here to files.
 
 ## Purpose
 
-Silean 2 gives a readable, typed, HDL-like hierarchy
+Silean gives a readable, typed, HDL-like hierarchy
 an independent mathematical meaning and be proved to implement behavioral
 contracts without lowering to a second semantic netlist.
 
@@ -500,7 +500,7 @@ SystemVerilog with Verilator, and checks behavior with cocotb.
 
 The checked-in Nix flake now supplies CIRCT `firtool`, Verilator, cocotb, Make,
 Python, and Elan as one pinned development environment. Concrete designs are
-selected by small typed Lean executables under `Silean2/Emitters/`; the shared
+selected by small typed Lean executables under `Silean/Emitters/`; the shared
 `FIRRTL.emitMain` handles only rendering errors, stdout, and `--output PATH`.
 The Makefile keeps the external validation path file-oriented:
 Lean produces `.fir`, `firtool` produces `.sv`, and cocotb runs that result in

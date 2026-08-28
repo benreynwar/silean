@@ -1,4 +1,4 @@
-# Silean 2 roadmap
+# Silean roadmap
 
 This roadmap records the current destination and remaining work. The current
 design is described in `docs/Architecture.md`; source ownership is summarized
@@ -6,7 +6,7 @@ in `docs/SourceMap.md`.
 
 ## Direction
 
-Silean 2 represents hardware as a typed recursive hierarchy with total wiring
+Silean represents hardware as a typed recursive hierarchy with total wiring
 and primitive storage. Its meaning is the order-independent
 `ModuleStructure.IsSolution` relation. Independently declared behavioral
 contracts describe what users may observe, and separate certifications connect
@@ -410,29 +410,71 @@ valid and output ready, compares every accepted output immediately with the
 oldest accepted input, then forces downstream readiness and verifies bounded
 complete drainage and an empty FIFO.
 
-The concrete proof indicates that a reusable constructor would require three
-proof inputs: initial implementation-state coverage, reset establishment of
-behavioral alignment, and ordinary-cycle matching/preservation. These would
-remain construction details rather than fields of the resulting certificate.
-No generic bridge has been extracted yet, because its value should be tested
-against a second real consumer rather than inferred from the FIFO alone.
+This milestone is complete. No next development goal has been selected; future
+near-term work should be added here only when there is a concrete, agreed need
+for it.
 
-The remaining work should proceed in reviewable stages:
+## Long-term RISC-V direction
 
-1. Choose a second reset-synchronized module only when one is naturally needed;
-   use it to test whether the three-part private witness deserves a generic
-   constructor.
-2. Continue backend or storage work without coupling it to reset-contract
-   certification.
+A possible much later application is a small RV32I CPU made by directly
+porting a simple configuration of PicoRV32 into Silean. The intended
+correctness boundary is architectural instruction retirement rather than
+correspondence between the original and ported implementations' internal
+cycles or state-machine state. The Sail model is an independent architectural
+specification against which to verify the port; it is not the source design.
+The provisional construction hierarchy, specification-blackbox staging
+boundary, and ideas for each module's appropriate behavioral specification
+are recorded in `docs/PicoRV32ModuleHierarchy.md`.
+The proposed first top-level child interfaces, state ownership, acyclic signal
+flow, and implementation staging are recorded in
+`docs/PicoRV32TopLevelPlan.md`; its remaining interface choices must be
+reviewed before implementation begins.
 
-## Later work
+The locally available `sail-riscv32-lean` repository is a candidate upstream
+specification dependency when this work becomes timely. It contains the
+type-correct Lean translation of the official Sail RISC-V model, including
+RV32 decode, architectural state, instruction execution, memory effects, and
+traps. It is currently generated, very large, unpolished, and described by its
+authors as non-executable, so integrating it is deliberately not near-term
+work.
 
-1. Expand direct FIRRTL emission to additional configured designs as useful;
-   keep translation straightforward and executable rather than proof-heavy.
-2. Define the storage contract required for a future memory-backed FIFO before
-   introducing backend-specific memory structure.
-3. Consider backend correctness or trace packaging only when a real consumer
-   makes the additional proof layer valuable.
+Before depending on it, make a small feasibility study around one ordinary
+RV32I instruction. Check Lean and `lean-sail` version compatibility, isolate a
+small stable wrapper for the architectural observations we require, and assess
+proof and build performance. If direct use is practical, keep the generated
+model as an external dependency rather than copying it into Silean. Otherwise,
+use it as the authoritative source for a clean RV32I-facing specification and
+prove a bridge to that interface. Initial CPU verification should exclude
+extensions, interrupts, privileged behavior, and exceptional memory cases
+until the base retirement relation is established.
+
+Likely reusable modules needed while porting the simple PicoRV32 configuration
+are:
+
+- `FullAdder` and generic fixed-width `Add`, followed by a shared `AddSub`
+  datapath;
+- generic `BitwiseAnd`, `BitwiseXor`, and, if useful in compositions,
+  `BitwiseNot`;
+- fixed-width unsigned and signed less-than comparison, alongside the existing
+  generic equality;
+- logical-left, logical-right, and arithmetic-right shifting, initially with
+  the iterative organization used by a simple PicoRV32 configuration rather
+  than assuming a barrel shifter;
+- a generic register bank with multiple combinational read ports and one
+  synchronous write port, with RISC-V's hardwired zero register kept in a
+  CPU-specific wrapper;
+- one-hot or priority family selection for PicoRV32's decoded control signals,
+  chosen according to the decoder validity guarantee;
+- clean static bit-vector slicing, concatenation, extension, and permutation
+  support for instruction fields and immediates; and
+- possibly a reusable single-outstanding ready/valid transaction holder once
+  the memory-controller boundary is understood during the port.
+
+Arithmetic is the likely first foundation: `FullAdder`, `Add`, and their
+generic proofs unlock PC updates, address calculation, arithmetic instructions,
+subtraction, and comparisons. Do not design a generic monolithic ALU in
+advance; keep PicoRV32-specific decode and operation selection in the CPU until
+the port demonstrates a genuinely reusable boundary.
 
 Each architectural goal ends with a plain-language review, focused timing,
 full Lean verification, and relevant external simulation.
