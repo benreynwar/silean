@@ -5,6 +5,11 @@ namespace Silean
 
 /-! Labelled, canonically ordered collections of typed signals. -/
 
+/-- A finite collection of signals addressed by readable, typed labels rather
+than positions. This lets module interfaces, contracts, and wiring refer to
+signals by meaningful names while Lean checks the type of each referenced
+signal. The underlying enumeration provides an order for structural traversal
+and emission. -/
 abbrev SignalMap := EnumeratedMap SignalType
 
 abbrev SignalMap.Label (signalMap : SignalMap) := signalMap.Key

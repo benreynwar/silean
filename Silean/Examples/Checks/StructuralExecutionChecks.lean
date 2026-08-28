@@ -1,6 +1,6 @@
-import Silean.StructuralExecution
-import Silean.Primitives.Not
-import Silean.Primitives.Register
+import Silean.Semantics.StructuralExecution
+import Silean.Primitives.NotPrimitive
+import Silean.Primitives.RegisterPrimitive
 
 namespace Silean.Examples.Checks.StructuralExecution
 

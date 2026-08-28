@@ -1,10 +1,13 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Naming.SignalAdapterNaming
-import Silean.SignalAdapterCertified
+import Silean.Composition.SignalAdapterImplementation
 
 namespace Silean.Modules.VectorConcat
 
 open Silean
+
+/-! Concatenates two vectors of the same element type, with the left vector at
+the lower result indices. -/
 
 inductive Input | left | right
 deriving Enumeration
@@ -45,7 +48,7 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule (element : SignalType) (leftWidth rightWidth : Nat) :
-    CycleOutputRule (ports element leftWidth rightWidth) emptySignalMap
+    Contracts.Cycle.CycleOutputRule (ports element leftWidth rightWidth) emptySignalMap
       { inputTypes := .cons (.vector leftWidth element)
           (.cons (.vector rightWidth element) .nil)
         outputTypes := .cons (.vector (leftWidth + rightWidth) element) .nil } where
@@ -55,12 +58,12 @@ def outputRule (element : SignalType) (leftWidth rightWidth : Nat) :
 
 @[reducible] def cycleContract (element : SignalType)
     (leftWidth rightWidth : Nat) :
-    ModuleCycleContract (ports element leftWidth rightWidth) where
+    Contracts.Cycle.ModuleCycleContract (ports element leftWidth rightWidth) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule | .apply => ⟨_, outputRule element leftWidth rightWidth⟩
-  stateRule := CycleStateRule.empty _
+  stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
 @[simp] theorem outputRule_holds_iff (element : SignalType)
@@ -70,7 +73,7 @@ def outputRule (element : SignalType) (leftWidth rightWidth : Nat) :
     (outputs : (ports element leftWidth rightWidth).outputs.Values) :
     (outputRule element leftWidth rightWidth).Holds inputs state outputs ↔
       outputs .result = concat (inputs .left) (inputs .right) := by
-  simp [outputRule, CycleOutputRule.Holds, SignalSelection.Matches,
+  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalSelection.project, SignalSelection.prepend, SignalMap.select]
 
 theorem result_left_of_holds (element : SignalType) (leftWidth rightWidth : Nat)
@@ -93,20 +96,28 @@ theorem result_right_of_holds (element : SignalType) (leftWidth rightWidth : Nat
   rw [(outputRule_holds_iff element leftWidth rightWidth inputs state outputs).mp holds]
   exact concat_right _ _ index
 
-private def leftSplitter (element : SignalType) (leftWidth : Nat) : SignalSplitter :=
+private def leftSplitter (element : SignalType) (leftWidth : Nat) : Composition.SignalSplitter :=
   .vector leftWidth element
 
-private def rightSplitter (element : SignalType) (rightWidth : Nat) : SignalSplitter :=
+private def rightSplitter (element : SignalType) (rightWidth : Nat) : Composition.SignalSplitter :=
   .vector rightWidth element
 
 private def combiner (element : SignalType) (leftWidth rightWidth : Nat) :
-    SignalCombiner := .vector (leftWidth + rightWidth) element
+    Composition.SignalCombiner := .vector (leftWidth + rightWidth) element
 
-inductive Instance | leftSplit | rightSplit | combine
+/-! ## Hardware structure -/
+
+inductive Instance
+  /-- Exposes the elements of the left input vector. -/
+  | leftSplit
+  /-- Exposes the elements of the right input vector. -/
+  | rightSplit
+  /-- Collects both sets of elements into the result vector. -/
+  | combine
 deriving Enumeration
 
-@[reducible] def instances (element : SignalType) (leftWidth rightWidth : Nat) :
-    Instances := EnumeratedMap.of Instance fun
+@[reducible] def instancePorts (element : SignalType) (leftWidth rightWidth : Nat) :
+    InstancePorts := EnumeratedMap.of Instance fun
   | .leftSplit => (leftSplitter element leftWidth).ports
   | .rightSplit => (rightSplitter element rightWidth).ports
   | .combine => (combiner element leftWidth rightWidth).ports
@@ -114,57 +125,61 @@ deriving Enumeration
 @[reducible] def context (element : SignalType) (leftWidth rightWidth : Nat) :
     EndpointContext where
   ports := ports element leftWidth rightWidth
-  instances := instances element leftWidth rightWidth
+  instancePorts := instancePorts element leftWidth rightWidth
 
 def wiring (element : SignalType) (leftWidth rightWidth : Nat) :
     Wiring (context element leftWidth rightWidth).ports
-      (context element leftWidth rightWidth).instances where
-  moduleOutput
-    | .result => (context element leftWidth rightWidth).instanceOutput .combine .value
-  instanceInput
+      (context element leftWidth rightWidth).instancePorts :=
+  let c := context element leftWidth rightWidth
+  { moduleOutput := fun
+    -- The combiner produces the concatenated vector.
+    | .result => c.instanceOutput .combine .value
+    instanceInput := fun
+    -- Split both input vectors into elements.
     | .leftSplit, .value =>
-        (context element leftWidth rightWidth).moduleInput .left
+        c.moduleInput .left
     | .rightSplit, .value =>
-        (context element leftWidth rightWidth).moduleInput .right
+        c.moduleInput .right
+    -- Feed left elements first, followed by right elements.
     | .combine, index =>
         Fin.addCases
           (fun leftIndex =>
-            (context element leftWidth rightWidth).instanceOutput
+            c.instanceOutput
               .leftSplit leftIndex)
           (fun rightIndex =>
-            (context element leftWidth rightWidth).instanceOutput
+            c.instanceOutput
               .rightSplit rightIndex)
-          index
+          index }
 
 @[reducible] def body (element : SignalType) (leftWidth rightWidth : Nat) :
     ModuleBody := ⟨context element leftWidth rightWidth,
       wiring element leftWidth rightWidth⟩
 
 @[reducible] def children (element : SignalType) (leftWidth rightWidth : Nat) :
-    Certified.Children (body element leftWidth rightWidth)
+    Contracts.Cycle.Certification.Children (body element leftWidth rightWidth)
   | .leftSplit => (leftSplitter element leftWidth).certified
   | .rightSplit => (rightSplitter element rightWidth).certified
   | .combine => (combiner element leftWidth rightWidth).certified
 
 def moduleStructure (element : SignalType) (leftWidth rightWidth : Nat) :
     ModuleStructure (ports element leftWidth rightWidth) :=
-  Certified.moduleStructure (body element leftWidth rightWidth)
+  Contracts.Cycle.Certification.moduleStructure (body element leftWidth rightWidth)
     (children element leftWidth rightWidth)
 
 abbrev leftOccurrence (element : SignalType) (leftWidth rightWidth : Nat) :
-    Certified.RuleOccurrence (children element leftWidth rightWidth) :=
-  ⟨.leftSplit, SignalComponentRule.apply⟩
+    Contracts.Cycle.Certification.RuleOccurrence (children element leftWidth rightWidth) :=
+  ⟨.leftSplit, Composition.SignalComponentRule.apply⟩
 
 abbrev rightOccurrence (element : SignalType) (leftWidth rightWidth : Nat) :
-    Certified.RuleOccurrence (children element leftWidth rightWidth) :=
-  ⟨.rightSplit, SignalComponentRule.apply⟩
+    Contracts.Cycle.Certification.RuleOccurrence (children element leftWidth rightWidth) :=
+  ⟨.rightSplit, Composition.SignalComponentRule.apply⟩
 
 abbrev combineOccurrence (element : SignalType) (leftWidth rightWidth : Nat) :
-    Certified.RuleOccurrence (children element leftWidth rightWidth) :=
-  ⟨.combine, SignalComponentRule.apply⟩
+    Contracts.Cycle.Certification.RuleOccurrence (children element leftWidth rightWidth) :=
+  ⟨.combine, Composition.SignalComponentRule.apply⟩
 
 def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
-    Certified.OutputSchedule (body element leftWidth rightWidth)
+    Contracts.Cycle.Certification.OutputSchedule (body element leftWidth rightWidth)
       (children element leftWidth rightWidth)
       (cycleContract element leftWidth rightWidth) .apply :=
   .call (leftOccurrence element leftWidth rightWidth)
@@ -172,7 +187,7 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
       intro input _
       cases input
       simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Certified.sourceAvailable, body, wiring, context,
+        SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable, body, wiring, context,
         EndpointContext.moduleInput])
     (by simp)
     (.call (rightOccurrence element leftWidth rightWidth)
@@ -180,12 +195,12 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
         intro input _
         cases input
         simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-          SignalSelection.labels, Certified.sourceAvailable, body, wiring, context,
+          SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable, body, wiring, context,
           EndpointContext.moduleInput])
       (by
         intro member
         have equal := List.mem_singleton.mp member
-        have childEqual := congrArg Certified.RuleOccurrence.child equal
+        have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
         cases childEqual)
       (.call (combineOccurrence element leftWidth rightWidth)
         (by
@@ -197,11 +212,11 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
               (context element leftWidth rightWidth).instanceOutput
                 .leftSplit leftIndex by
               simp [body, wiring]]
-            change Certified.outputAvailable
+            change Contracts.Cycle.Certification.outputAvailable
               [rightOccurrence element leftWidth rightWidth,
                 leftOccurrence element leftWidth rightWidth]
               .leftSplit leftIndex
-            refine ⟨SignalComponentRule.apply, by simp, ?_⟩
+            refine ⟨Composition.SignalComponentRule.apply, by simp, ?_⟩
             change leftIndex ∈
               (leftOccurrence element leftWidth rightWidth).writes
             rw [show (leftOccurrence element leftWidth rightWidth).writes =
@@ -217,11 +232,11 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
               (context element leftWidth rightWidth).instanceOutput
                 .rightSplit rightIndex by
               simp [body, wiring]]
-            change Certified.outputAvailable
+            change Contracts.Cycle.Certification.outputAvailable
               [rightOccurrence element leftWidth rightWidth,
                 leftOccurrence element leftWidth rightWidth]
               .rightSplit rightIndex
-            refine ⟨SignalComponentRule.apply, by simp, ?_⟩
+            refine ⟨Composition.SignalComponentRule.apply, by simp, ?_⟩
             change rightIndex ∈
               (rightOccurrence element leftWidth rightWidth).writes
             rw [show (rightOccurrence element leftWidth rightWidth).writes =
@@ -234,38 +249,38 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
         (by
           intro member
           rcases List.mem_cons.mp member with equal | member
-          · have childEqual := congrArg Certified.RuleOccurrence.child equal
+          · have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
             cases childEqual
           · have equal := List.mem_singleton.mp member
-            have childEqual := congrArg Certified.RuleOccurrence.child equal
+            have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
             cases childEqual)
         (.done (by
           intro output _
           cases output
-          exact ⟨SignalComponentRule.apply, by simp,
-            by change AggregatePort.value ∈ [AggregatePort.value]; simp⟩))))
+          exact ⟨Composition.SignalComponentRule.apply, by simp,
+            by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩))))
 
 def stateSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
-    Certified.StateSchedule (body element leftWidth rightWidth)
+    Contracts.Cycle.Certification.StateSchedule (body element leftWidth rightWidth)
       (children element leftWidth rightWidth) :=
   .done (by
     intro child input member
     cases child with
     | leftSplit =>
-        change input ∈ (CycleStateRule.empty
+        change input ∈ (Contracts.Cycle.CycleStateRule.empty
           (leftSplitter element leftWidth).ports).readsInputs.labels at member
         exact nomatch member
     | rightSplit =>
-        change input ∈ (CycleStateRule.empty
+        change input ∈ (Contracts.Cycle.CycleStateRule.empty
           (rightSplitter element rightWidth).ports).readsInputs.labels at member
         exact nomatch member
     | combine =>
-        change input ∈ (CycleStateRule.empty
+        change input ∈ (Contracts.Cycle.CycleStateRule.empty
           (combiner element leftWidth rightWidth).ports).readsInputs.labels at member
         exact nomatch member)
 
 def ruleSchedules (element : SignalType) (leftWidth rightWidth : Nat) :
-    Certified.RuleSchedules (body element leftWidth rightWidth)
+    Contracts.Cycle.Certification.RuleSchedules (body element leftWidth rightWidth)
       (children element leftWidth rightWidth)
       (cycleContract element leftWidth rightWidth) where
   output | .apply => outputSchedule element leftWidth rightWidth
@@ -274,22 +289,22 @@ def ruleSchedules (element : SignalType) (leftWidth rightWidth : Nat) :
 theorem coversChildren (element : SignalType) (leftWidth rightWidth : Nat) :
     (ruleSchedules element leftWidth rightWidth).CoversChildren := by
   intro child rule
-  apply Certified.RuleSchedules.Combined.add_preserves
-  apply Certified.RuleSchedules.mem_combineOutputs
+  apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+  apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
     (ruleSchedules element leftWidth rightWidth) .apply
   cases child with
   | leftSplit =>
-      change SignalComponentRule at rule
+      change Composition.SignalComponentRule at rule
       cases rule
-      simp [ruleSchedules, outputSchedule, Certified.Schedule.finalAvailability]
+      simp [ruleSchedules, outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
   | rightSplit =>
-      change SignalComponentRule at rule
+      change Composition.SignalComponentRule at rule
       cases rule
-      simp [ruleSchedules, outputSchedule, Certified.Schedule.finalAvailability]
+      simp [ruleSchedules, outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
   | combine =>
-      change SignalComponentRule at rule
+      change Composition.SignalComponentRule at rule
       cases rule
-      simp [ruleSchedules, outputSchedule, Certified.Schedule.finalAvailability]
+      simp [ruleSchedules, outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
 
 theorem structuralResultUnique (element : SignalType) (leftWidth rightWidth : Nat) :
     (moduleStructure element leftWidth rightWidth).HasAtMostOneSolution :=
@@ -323,7 +338,7 @@ theorem hasStructuralResult (element : SignalType) (leftWidth rightWidth : Nat)
   rcases (combiner element leftWidth rightWidth).certified.hasStructuralResult
       (combineInputs left right) (state .combine) with ⟨combined, combineSatisfies⟩
   let proposals : (child : Instance) →
-      ProposedValues (Certified.childStructure
+      ProposedValues (Contracts.Cycle.Certification.childStructure
         (children element leftWidth rightWidth) child)
     | .leftSplit => left
     | .rightSplit => right
@@ -368,7 +383,7 @@ theorem hasStructuralResult (element : SignalType) (leftWidth rightWidth : Nat)
         exact combineSatisfies
 
 private theorem implements (element : SignalType) (leftWidth rightWidth : Nat) :
-    Implements (moduleStructure element leftWidth rightWidth)
+    Contracts.Cycle.Implements (moduleStructure element leftWidth rightWidth)
       (cycleContract element leftWidth rightWidth) (fun _ _ => True) := by
   intro inputs contractState structuralState proposal corresponds satisfies
   rcases proposal with ⟨outputs, proposals⟩
@@ -407,17 +422,17 @@ private theorem implements (element : SignalType) (leftWidth rightWidth : Nat) :
     funext index
     refine Fin.addCases ?_ ?_ index
     · intro leftIndex
-      simp [combiner, SignalCombiner.outputValues, combineInputs, concat]
+      simp [combiner, Composition.SignalCombiner.outputValues, combineInputs, concat]
       rw [leftOutputs]
       rfl
     · intro rightIndex
-      simp [combiner, SignalCombiner.outputValues, combineInputs, concat]
+      simp [combiner, Composition.SignalCombiner.outputValues, combineInputs, concat]
       rw [rightOutputs]
       rfl
   · rfl
 
 def certification (element : SignalType) (leftWidth rightWidth : Nat) :
-    ModuleCycleCertification (moduleStructure element leftWidth rightWidth)
+    Contracts.Cycle.ModuleCycleCertification (moduleStructure element leftWidth rightWidth)
       (cycleContract element leftWidth rightWidth) where
   stateCorresponds := fun _ _ => True
   hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
@@ -426,7 +441,7 @@ def certification (element : SignalType) (leftWidth rightWidth : Nat) :
   implements := implements element leftWidth rightWidth
 
 def certified (element : SignalType) (leftWidth rightWidth : Nat) :
-    ModuleCycleCertified (ports element leftWidth rightWidth) :=
+    Contracts.Cycle.ModuleCycleCertified (ports element leftWidth rightWidth) :=
   (certification element leftWidth rightWidth).bundle
 
 end Silean.Modules.VectorConcat

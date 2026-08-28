@@ -1,4 +1,4 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Examples.Fixtures.DualNot
 import Silean.Examples.Fixtures.HierarchicalDualNot
 
@@ -11,7 +11,7 @@ private theorem forwardRule_holds_iff (inputs : Examples.Fixtures.DualNot.ports.
     (outputs : Examples.Fixtures.DualNot.ports.outputs.Values) :
     Examples.Fixtures.DualNot.forwardRule.Holds inputs state outputs ↔
       outputs .forward = !inputs .forward := by
-  simp [CycleOutputRule.Holds, Examples.Fixtures.DualNot.forwardRule,
+  simp [Contracts.Cycle.CycleOutputRule.Holds, Examples.Fixtures.DualNot.forwardRule,
     SignalSelection.Matches, SignalSelection.project, SignalMap.select]
 
 private theorem backwardRule_holds_iff (inputs : Examples.Fixtures.DualNot.ports.inputs.Values)
@@ -19,13 +19,13 @@ private theorem backwardRule_holds_iff (inputs : Examples.Fixtures.DualNot.ports
     (outputs : Examples.Fixtures.DualNot.ports.outputs.Values) :
     Examples.Fixtures.DualNot.backwardRule.Holds inputs state outputs ↔
       outputs .backward = !inputs .backward := by
-  simp [CycleOutputRule.Holds, Examples.Fixtures.DualNot.backwardRule,
+  simp [Contracts.Cycle.CycleOutputRule.Holds, Examples.Fixtures.DualNot.backwardRule,
     SignalSelection.Matches, SignalSelection.project, SignalMap.select]
 
 private def stateCorresponds (_ : Examples.Fixtures.DualNot.cycleContract.state.Values)
     (_ : Examples.Fixtures.HierarchicalDualNot.moduleStructure.State) : Prop := True
 
-private theorem implements : Implements Examples.Fixtures.HierarchicalDualNot.moduleStructure
+private theorem implements : Contracts.Cycle.Implements Examples.Fixtures.HierarchicalDualNot.moduleStructure
     Examples.Fixtures.DualNot.cycleContract stateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
@@ -41,7 +41,7 @@ private theorem implements : Implements Examples.Fixtures.HierarchicalDualNot.mo
       simpa [ProposedValues.outputs, ProposedValues.boundaryOutputsSatisfy,
         ProposedValues.childInputs, Examples.Fixtures.HierarchicalDualNot.body,
         Examples.Fixtures.HierarchicalDualNot.wiring, Examples.Fixtures.HierarchicalDualNot.context,
-        Examples.Fixtures.HierarchicalDualNot.instances,
+        Examples.Fixtures.HierarchicalDualNot.instancePorts,
         Examples.Fixtures.HierarchicalDualNot.moduleStructure,
         Examples.Fixtures.HierarchicalDualNot.childStructure, EndpointContext.moduleInput,
         EndpointContext.instanceOutput, SignalSource.value,
@@ -54,7 +54,7 @@ private theorem implements : Implements Examples.Fixtures.HierarchicalDualNot.mo
       simpa [ProposedValues.outputs, ProposedValues.boundaryOutputsSatisfy,
         ProposedValues.childInputs, Examples.Fixtures.HierarchicalDualNot.body,
         Examples.Fixtures.HierarchicalDualNot.wiring, Examples.Fixtures.HierarchicalDualNot.context,
-        Examples.Fixtures.HierarchicalDualNot.instances,
+        Examples.Fixtures.HierarchicalDualNot.instancePorts,
         Examples.Fixtures.HierarchicalDualNot.moduleStructure,
         Examples.Fixtures.HierarchicalDualNot.childStructure, EndpointContext.moduleInput,
         EndpointContext.instanceOutput, SignalSource.value,
@@ -107,7 +107,7 @@ private theorem hasStructuralResult
             backwardInputs by funext port; cases port; rfl]
         exact backwardSatisfies
 
-open Silean.Certified
+open Silean.Contracts.Cycle.Certification
 
 abbrev forwardOccurrence :
     RuleOccurrence Examples.Fixtures.HierarchicalDualNot.children :=
@@ -178,7 +178,7 @@ def stateSchedule : StateSchedule Examples.Fixtures.HierarchicalDualNot.body
     intro child input member
     cases child <;>
       simp [Examples.Fixtures.HierarchicalDualNot.children, Primitives.notCertified,
-        Primitives.notCycleContract, CycleStateRule.empty,
+        Primitives.notCycleContract, Contracts.Cycle.CycleStateRule.empty,
         SignalSelection.labels] at member)
 
 def ruleSchedules : RuleSchedules Examples.Fixtures.HierarchicalDualNot.body
@@ -204,7 +204,7 @@ theorem hasAtMostOneSolution :
     Examples.Fixtures.HierarchicalDualNot.moduleStructure.HasAtMostOneSolution :=
   ruleSchedules.hasAtMostOneSolution coversChildren
 
-def dualNotCertified : ModuleCycleCertified Examples.Fixtures.DualNot.ports where
+def dualNotCertified : Contracts.Cycle.ModuleCycleCertified Examples.Fixtures.DualNot.ports where
   moduleStructure := Examples.Fixtures.HierarchicalDualNot.moduleStructure
   cycleContract := Examples.Fixtures.DualNot.cycleContract
   certification := {

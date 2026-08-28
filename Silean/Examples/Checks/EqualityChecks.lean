@@ -10,16 +10,16 @@ def bitVector3 : SignalType := .vector 3 .bit
 def nestedTuple : SignalType :=
   .tuple (.cons (.vector 2 .bit) (.cons (.tuple (.cons .bit .nil)) .nil))
 
-noncomputable example : ModuleCycleCertified (Modules.Equality.ports .bit) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Equality.ports .bit) :=
   Modules.Equality.certified .bit
 
-noncomputable example : ModuleCycleCertified (Modules.Equality.ports emptyTuple) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Equality.ports emptyTuple) :=
   Modules.Equality.certified emptyTuple
 
-noncomputable example : ModuleCycleCertified (Modules.Equality.ports bitVector3) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Equality.ports bitVector3) :=
   Modules.Equality.certified bitVector3
 
-noncomputable example : ModuleCycleCertified (Modules.Equality.ports nestedTuple) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Equality.ports nestedTuple) :=
   Modules.Equality.certified nestedTuple
 
 def vectorEqualInputs : (Modules.Equality.ports bitVector3).inputs.Values

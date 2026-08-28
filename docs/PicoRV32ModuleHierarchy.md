@@ -8,7 +8,7 @@ boundaries below identify pieces that can have natural contracts and be
 developed independently without changing the intended design.
 
 “Contract” in this document does not mean that every module receives a
-`ModuleCycleContract`. Contract form follows the abstraction boundary. Pure
+`Contracts.Cycle.ModuleCycleContract`. Contract form follows the abstraction boundary. Pure
 datapath modules may naturally use cycle contracts; a memory controller needs
 a protocol property over multiple cycles; and the complete CPU needs an
 instruction-retirement relation over traces. New contract forms should be
@@ -271,7 +271,7 @@ module may first be used through its real ports and natural specification,
 using whichever contract form matches that boundary. Parent proofs should be
 parameterized by the relevant behavioral guarantee and should not inspect
 child structure or private proof schedules. This may require modular
-composition support for contract forms other than `ModuleCycleContract`.
+composition support for contract forms other than `Contracts.Cycle.ModuleCycleContract`.
 
 This gives two meaningful completion levels:
 

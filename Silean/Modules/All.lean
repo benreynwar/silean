@@ -1,10 +1,15 @@
-import Silean.Modules.Reduction
+import Silean.Composition.Reduction
 import Silean.Naming.ModuleNaming
 import Silean.Naming.PrimitiveNaming
 
 namespace Silean.Modules.All
 
 open Silean
+
+/-! A combinational reduction which outputs true exactly when every input bit
+is true. The hardware is a balanced tree of AND gates. -/
+
+/-! ## Lean behavior and generic reduction ingredients -/
 
 @[reducible] private def andOperation : SignalType.bit.Denote → SignalType.bit.Denote →
     SignalType.bit.Denote := fun left right => left && right
@@ -17,9 +22,9 @@ private theorem and_eq_true_iff (left right : SignalType.bit.Denote) :
   change ((left && right) = true ↔ left = true ∧ right = true)
   cases left <;> cases right <;> simp
 
-private theorem fold_eq_true_iff : ∀ (tree : Reduction.Tree)
+private theorem fold_eq_true_iff : ∀ (tree : Composition.Reduction.Tree)
     (values : Fin tree.leafCount → SignalType.bit.Denote),
-    Reduction.fold andOperation trueValue tree values = trueValue ↔
+    Composition.Reduction.fold andOperation trueValue tree values = trueValue ↔
       ∀ index, values index = trueValue
   | .empty, values => by
       constructor
@@ -28,7 +33,7 @@ private theorem fold_eq_true_iff : ∀ (tree : Reduction.Tree)
       · intro _
         rfl
   | .leaf, values => by
-      change values ⟨0, by simp [Reduction.Tree.leafCount]⟩ = true ↔ _
+      change values ⟨0, by simp [Composition.Reduction.Tree.leafCount]⟩ = true ↔ _
       constructor
       · intro isTrue index
         change Fin 1 at index
@@ -39,12 +44,12 @@ private theorem fold_eq_true_iff : ∀ (tree : Reduction.Tree)
         subst index
         exact isTrue
       · intro allTrue
-        exact allTrue ⟨0, by simp [Reduction.Tree.leafCount]⟩
+        exact allTrue ⟨0, by simp [Composition.Reduction.Tree.leafCount]⟩
   | .node left right, values => by
-      rw [show Reduction.fold andOperation trueValue (.node left right) values =
-          (Reduction.fold andOperation trueValue left (fun index =>
+      rw [show Composition.Reduction.fold andOperation trueValue (.node left right) values =
+          (Composition.Reduction.fold andOperation trueValue left (fun index =>
             values (Fin.castAdd right.leafCount index)) &&
-          Reduction.fold andOperation trueValue right (fun index =>
+          Composition.Reduction.fold andOperation trueValue right (fun index =>
             values (Fin.natAdd left.leafCount index))) by rfl]
       rw [and_eq_true_iff]
       constructor
@@ -83,9 +88,9 @@ theorem every_eq_true_iff : ∀ (width : Nat)
       · intro allTrue
         exact ⟨allTrue 0, fun index => allTrue index.succ⟩
 
-private theorem fold_eq_every (tree : Reduction.Tree)
+private theorem fold_eq_every (tree : Composition.Reduction.Tree)
     (values : Fin tree.leafCount → SignalType.bit.Denote) :
-    Reduction.fold andOperation trueValue tree values =
+    Composition.Reduction.fold andOperation trueValue tree values =
       every tree.leafCount values := by
   apply Bool.eq_iff_iff.mpr
   constructor
@@ -100,8 +105,8 @@ private def andStateCorresponds (_ : emptySignalMap.Values)
     (_ : (ModuleStructure.primitive Primitives.and).State) : Prop := True
 
 private theorem andImplements :
-    Implements (.primitive Primitives.and)
-      (Reduction.binaryCycleContract .bit andOperation)
+    Contracts.Cycle.Implements (.primitive Primitives.and)
+      (Composition.Reduction.binaryCycleContract .bit andOperation)
       andStateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
@@ -109,8 +114,8 @@ private theorem andImplements :
   · intro rule
     cases rule
     rcases proposal with ⟨outputs, nextState⟩
-    simp only [Reduction.binaryCycleContract]
-    simp only [Reduction.binaryOutputRule, CycleOutputRule.Holds,
+    simp only [Composition.Reduction.binaryCycleContract]
+    simp only [Composition.Reduction.binaryOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
       SignalSelection.Matches, SignalSelection.project,
       SignalSelection.prepend, SignalMap.select]
     change outputs .output = _ ∧ True
@@ -120,7 +125,7 @@ private theorem andImplements :
   · rfl
 
 private def andImplementation :
-    Reduction.BinaryImplementation .bit andOperation where
+    Composition.Reduction.BinaryImplementation .bit andOperation where
   moduleStructure := .primitive Primitives.and
   certification := {
     stateCorresponds := andStateCorresponds
@@ -133,8 +138,8 @@ private def trueStateCorresponds (_ : emptySignalMap.Values)
     (_ : (ModuleStructure.primitive (Primitives.constant true)).State) : Prop := True
 
 private theorem trueImplements :
-    Implements (.primitive (Primitives.constant true))
-      (Reduction.identityCycleContract .bit trueValue)
+    Contracts.Cycle.Implements (.primitive (Primitives.constant true))
+      (Composition.Reduction.identityCycleContract .bit trueValue)
       trueStateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
@@ -142,8 +147,8 @@ private theorem trueImplements :
   · intro rule
     cases rule
     rcases proposal with ⟨outputs, nextState⟩
-    simp only [Reduction.identityCycleContract]
-    simp only [Reduction.identityOutputRule, CycleOutputRule.Holds,
+    simp only [Composition.Reduction.identityCycleContract]
+    simp only [Composition.Reduction.identityOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
       SignalSelection.Matches, SignalSelection.project, SignalMap.select]
     change outputs .output = _ ∧ True
     constructor
@@ -151,7 +156,7 @@ private theorem trueImplements :
     · trivial
   · rfl
 
-private def trueImplementation : Reduction.IdentityImplementation .bit trueValue where
+private def trueImplementation : Composition.Reduction.IdentityImplementation .bit trueValue where
   moduleStructure := .primitive (Primitives.constant true)
   certification := {
     stateCorresponds := trueStateCorresponds
@@ -161,10 +166,10 @@ private def trueImplementation : Reduction.IdentityImplementation .bit trueValue
       (Primitives.constantCertified true).structuralResultUnique
     implements := trueImplements }
 
-private def tree (width : Nat) : Reduction.Tree := Reduction.Tree.balanced width
+private def tree (width : Nat) : Composition.Reduction.Tree := Composition.Reduction.Tree.balanced width
 
 @[reducible] def ports (width : Nat) : ModulePorts :=
-  Reduction.ports .bit (tree width)
+  Composition.Reduction.ports .bit (tree width)
 
 def input (width : Nat) (index : Fin width) : (ports width).inputs.Label :=
   .leaf ⟨index.val, by
@@ -188,29 +193,29 @@ private def widthIndex (width : Nat)
 @[simp] private theorem input_widthIndex (width : Nat)
     (index : Fin (tree width).leafCount) :
     input width (widthIndex width index) = .leaf index := by
-  apply congrArg Reduction.Input.leaf
+  apply congrArg Composition.Reduction.Input.leaf
   apply Fin.ext
   rfl
 
 inductive Rule | apply
 deriving Enumeration
 
-def outputRule (width : Nat) : CycleOutputRule (ports width) emptySignalMap
-    { inputTypes := SignalTypes.ofList (Reduction.inputMap .bit (tree width)).types
+def outputRule (width : Nat) : Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap
+    { inputTypes := SignalTypes.ofList (Composition.Reduction.inputMap .bit (tree width)).types
       outputTypes := .cons .bit .nil } where
-  readsInputs := (Reduction.inputMap .bit (tree width)).allSelection
-  writesOutputs := (Reduction.outputMap .bit).select .output
+  readsInputs := (Composition.Reduction.inputMap .bit (tree width)).allSelection
+  writesOutputs := (Composition.Reduction.outputMap .bit).select .output
   target := fun packed _ =>
     (every (tree width).leafCount fun index =>
-      (Reduction.inputMap .bit (tree width)).unpack packed
-        (Reduction.Input.leaf index), ())
+      (Composition.Reduction.inputMap .bit (tree width)).unpack packed
+        (Composition.Reduction.Input.leaf index), ())
 
-@[reducible] def cycleContract (width : Nat) : ModuleCycleContract (ports width) where
+@[reducible] def cycleContract (width : Nat) : Contracts.Cycle.ModuleCycleContract (ports width) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule | .apply => ⟨_, outputRule width⟩
-  stateRule := CycleStateRule.empty _
+  stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
 @[simp] theorem outputRule_holds_iff (width : Nat)
@@ -220,15 +225,15 @@ def outputRule (width : Nat) : CycleOutputRule (ports width) emptySignalMap
       outputs .output = every (tree width).leafCount
         (fun index => inputs (.leaf index)) := by
   have values_eq :
-      (fun index => (Reduction.inputMap .bit (tree width)).unpack
-        ((Reduction.inputMap .bit (tree width)).allSelection.project inputs)
-          (Reduction.Input.leaf index)) =
-      (fun index => inputs (Reduction.Input.leaf index)) := by
+      (fun index => (Composition.Reduction.inputMap .bit (tree width)).unpack
+        ((Composition.Reduction.inputMap .bit (tree width)).allSelection.project inputs)
+          (Composition.Reduction.Input.leaf index)) =
+      (fun index => inputs (Composition.Reduction.Input.leaf index)) := by
     funext index
     exact congrFun
-      (SignalMap.unpack_project (Reduction.inputMap .bit (tree width)) inputs)
-      (Reduction.Input.leaf index)
-  simp only [outputRule, CycleOutputRule.Holds, SignalSelection.Matches,
+      (SignalMap.unpack_project (Composition.Reduction.inputMap .bit (tree width)) inputs)
+      (Composition.Reduction.Input.leaf index)
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalMap.select]
   rw [values_eq]
   simp
@@ -256,14 +261,16 @@ theorem output_eq_true_iff_of_holds (width : Nat)
     rw [input_widthIndex] at result
     exact result
 
+/-! ## Hardware structure and certification -/
+
 def moduleStructure (width : Nat) : ModuleStructure (ports width) :=
-  Reduction.moduleStructure andImplementation trueImplementation (tree width)
+  Composition.Reduction.moduleStructure andImplementation trueImplementation (tree width)
 
 private def reductionImplementation (width : Nat) :=
-  Reduction.certification andImplementation trueImplementation (tree width)
+  Composition.Reduction.certification andImplementation trueImplementation (tree width)
 
 private theorem implements (width : Nat) :
-    Implements (moduleStructure width) (cycleContract width)
+    Contracts.Cycle.Implements (moduleStructure width) (cycleContract width)
       (reductionImplementation width).stateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
   have contractState_eq : contractState = SignalMap.emptyValues := by
@@ -282,20 +289,20 @@ private theorem implements (width : Nat) :
   · intro rule
     cases rule
     rw [outputRule_holds_iff]
-    have reductionEquation := evaluates.1 Reduction.Rule.apply
-    rw [Reduction.outputRule_holds_iff] at reductionEquation
+    have reductionEquation := evaluates.1 Composition.Reduction.Rule.apply
+    rw [Composition.Reduction.outputRule_holds_iff] at reductionEquation
     exact reductionEquation.trans (fold_eq_every (tree width) _)
   · rfl
 
 private def implementation (width : Nat) :
-    ModuleCycleCertification (moduleStructure width) (cycleContract width) where
+    Contracts.Cycle.ModuleCycleCertification (moduleStructure width) (cycleContract width) where
   stateCorresponds := (reductionImplementation width).stateCorresponds
   hasCorrespondingState := (reductionImplementation width).hasCorrespondingState
   hasStructuralResult := (reductionImplementation width).hasStructuralResult
   structuralResultUnique := (reductionImplementation width).structuralResultUnique
   implements := implements width
 
-def certified (width : Nat) : ModuleCycleCertified (ports width) :=
+def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=
   (implementation width).bundle
 
 @[simp] theorem certified_cycleContract (width : Nat) :
@@ -308,10 +315,10 @@ namespace Silean.Modules.All.Naming
 open Silean Silean.Naming
 
 def ports (width : Nat) : ModulePortsNaming (Modules.All.ports width) :=
-  Reduction.Naming.ports .bit (Modules.All.tree width)
+  Composition.Reduction.Naming.ports .bit (Modules.All.tree width)
 
 def naming (width : Nat) : ModuleNaming (Modules.All.moduleStructure width) :=
-  Reduction.Naming.naming "all" Modules.All.andImplementation
+  Composition.Reduction.Naming.naming "all" Modules.All.andImplementation
     Modules.All.trueImplementation Primitive.and (Primitive.constant true)
     (Modules.All.tree width) |>.withKey ⟨"all", "bit", [.natural width]⟩
 

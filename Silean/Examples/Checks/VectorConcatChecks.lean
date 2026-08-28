@@ -1,6 +1,6 @@
 import Silean.FIRRTL
 import Silean.Modules.VectorConcat
-import Silean.SignalLogic
+import Silean.Composition.SignalLogic
 
 namespace Silean.Examples.Checks.VectorConcat
 
@@ -8,19 +8,19 @@ open Silean Silean.FIRRTL
 
 def pairBits : SignalType := .tuple (.cons .bit (.cons .bit .nil))
 
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.VectorConcat.ports .bit 0 3) :=
   Modules.VectorConcat.certified .bit 0 3
 
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.VectorConcat.ports .bit 2 0) :=
   Modules.VectorConcat.certified .bit 2 0
 
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.VectorConcat.ports .bit 2 3) :=
   Modules.VectorConcat.certified .bit 2 3
 
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.VectorConcat.ports pairBits 1 2) :=
   Modules.VectorConcat.certified pairBits 1 2
 

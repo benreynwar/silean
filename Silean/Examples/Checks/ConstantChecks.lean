@@ -14,7 +14,7 @@ def value : signalType.Denote :=
 def typeNaming : SignalTypeNaming signalType :=
   .tuple (.cons "payload" (.vector .bit) (.cons "valid" .bit .nil))
 
-noncomputable example : ModuleCycleCertified (Modules.Constant.ports signalType) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Constant.ports signalType) :=
   Modules.Constant.certified signalType value
 
 example (inputs : (Modules.Constant.ports signalType).inputs.Values)

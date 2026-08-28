@@ -4,7 +4,7 @@ namespace Silean.Examples.Checks.LeafwiseLogic
 
 open Silean
 
-def emptyState (certified : ModuleCycleCertified modulePorts) :
+def emptyState (certified : Contracts.Cycle.ModuleCycleCertified modulePorts) :
     certified.moduleStructure.State :=
   certified.moduleStructure.structuralState.defaultValues
 

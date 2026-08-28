@@ -95,25 +95,25 @@ example :
       enabledTupleInputs tupleState).2 .stored = tupleReset := by
   rfl
 
-noncomputable example : ModuleCycleCertified (Modules.ResetRegister.ports .bit) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.ResetRegister.ports .bit) :=
   Modules.ResetRegister.certified .bit false
 
-noncomputable example : ModuleCycleCertified (Modules.ResetRegister.ports vectorType) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.ResetRegister.ports vectorType) :=
   Modules.ResetRegister.certified vectorType vectorReset
 
-noncomputable example : ModuleCycleCertified (Modules.ResetRegister.ports tupleType) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.ResetRegister.ports tupleType) :=
   Modules.ResetRegister.certified tupleType tupleReset
 
 noncomputable example :
-    ModuleCycleCertified (Modules.EnabledResetRegister.ports .bit) :=
+    Contracts.Cycle.ModuleCycleCertified (Modules.EnabledResetRegister.ports .bit) :=
   Modules.EnabledResetRegister.certified .bit false
 
 noncomputable example :
-    ModuleCycleCertified (Modules.EnabledResetRegister.ports vectorType) :=
+    Contracts.Cycle.ModuleCycleCertified (Modules.EnabledResetRegister.ports vectorType) :=
   Modules.EnabledResetRegister.certified vectorType vectorReset
 
 noncomputable example :
-    ModuleCycleCertified (Modules.EnabledResetRegister.ports tupleType) :=
+    Contracts.Cycle.ModuleCycleCertified (Modules.EnabledResetRegister.ports tupleType) :=
   Modules.EnabledResetRegister.certified tupleType tupleReset
 
 private def contains (text fragment : String) : Bool :=

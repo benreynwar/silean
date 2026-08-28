@@ -1,4 +1,4 @@
-import Silean.SignalAdapterCertified
+import Silean.Composition.SignalAdapterImplementation
 
 namespace Silean.Examples.Checks.SignalAdapter
 
@@ -8,8 +8,8 @@ def vectorValue : (SignalType.vector 2 .bit).Denote
   | ⟨0, _⟩ => true
   | ⟨1, _⟩ => false
 
-@[reducible] def vectorSplitter : SignalSplitter := .vector 2 .bit
-@[reducible] def vectorCombiner : SignalCombiner := .vector 2 .bit
+@[reducible] def vectorSplitter : Composition.SignalSplitter := .vector 2 .bit
+@[reducible] def vectorCombiner : Composition.SignalCombiner := .vector 2 .bit
 
 example : vectorSplitter.outputValues (fun | .value => vectorValue) 0 = true := rfl
 example : vectorSplitter.outputValues (fun | .value => vectorValue) 1 = false := rfl
@@ -22,8 +22,8 @@ def tupleFields : SignalTypes :=
 def tupleValue : (SignalType.tuple tupleFields).Denote :=
   (true, (vectorValue, ()))
 
-@[reducible] def tupleSplitter : SignalSplitter := .tuple tupleFields
-@[reducible] def tupleCombiner : SignalCombiner := .tuple tupleFields
+@[reducible] def tupleSplitter : Composition.SignalSplitter := .tuple tupleFields
+@[reducible] def tupleCombiner : Composition.SignalCombiner := .tuple tupleFields
 
 example : tupleCombiner.outputValues
     (tupleSplitter.outputValues (fun | .value => tupleValue)) .value = tupleValue :=

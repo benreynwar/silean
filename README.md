@@ -29,6 +29,23 @@ The current approach combines type-safe wiring, order-independent structural
 semantics, independent behavioral contracts, and direct FIRRTL traversal of
 the hardware hierarchy.
 
+## Current implementation
+
+The most complex design currently implemented is a generic FIFO with
+`2 ^ addressWidth` entries. Its hardware is assembled from a register bank,
+extended read and write counters, and combinational pointer-control logic. The
+extra pointer bit distinguishes full from empty when the storage addresses are
+equal. The FIFO has synchronous reset and a standard valid/ready boundary.
+
+This is an end-to-end example rather than only a collection of isolated
+lemmas. Its hierarchy can be emitted directly as FIRRTL, its exact cycle
+behavior is certified against the structural equations, and that behavior is
+further proved to satisfy a latency-independent FIFO contract. The proof
+establishes bounded capacity and that produced payloads are an ordered prefix
+of accepted payloads; the sequences are equal when the FIFO is drained. There
+are also one-entry and serially composed FIFOs, but the register-bank FIFO is
+the largest individual hardware design currently in the project.
+
 ## The hardware model
 
 Signals are recursively typed as bits, vectors, and tuples. `SignalMap` adds
@@ -40,11 +57,11 @@ A `ModuleStructure` is the complete hierarchical definition of a module:
 ```lean
 inductive ModuleStructure : ModulePorts → Type 1
   | primitive (primitive : Primitive) : ModuleStructure primitive.ports
-  | splitter (splitter : SignalSplitter) : ModuleStructure splitter.ports
-  | combiner (combiner : SignalCombiner) : ModuleStructure combiner.ports
+  | splitter (splitter : Composition.SignalSplitter) : ModuleStructure splitter.ports
+  | combiner (combiner : Composition.SignalCombiner) : ModuleStructure combiner.ports
   | composite (body : ModuleBody)
-      (childStructure : (name : body.context.instances.Name) →
-        ModuleStructure (body.context.instances.ports name)) :
+      (childStructure : (name : body.context.instancePorts.Name) →
+        ModuleStructure (body.context.instancePorts.ports name)) :
       ModuleStructure body.context.ports
 ```
 
@@ -64,7 +81,7 @@ wiring:
 ```lean
 structure ModuleBody where
   context : EndpointContext
-  wiring : Wiring context.ports context.instances
+  wiring : Wiring context.ports context.instancePorts
 ```
 
 A primitive is a leaf whose output and next-state equations are given
@@ -108,16 +125,21 @@ relation is chained to define execution over finite sequences of cycles.
 
 ## Contracts and proofs
 
-Behavior is specified independently of structure. The most basic contract form
-is `ModuleCycleContract`. It has its own abstract state, a set of named output
-rules, and a next-state rule. Each output rule declares exactly which inputs it
-reads and which outputs it writes. The contract says what a module does, but
-says nothing about its child instances, wiring, or evaluation schedule. For
-example, a register-bank contract is phrased in terms of reading and updating a
-vector of values, not in terms of its decoder, mux tree, and individual
-registers.
+Behavior is specified independently of structure. The project currently has
+three contract forms which illustrate how contracts can build from exact local
+behavior toward more abstract externally visible properties.
 
-A `ModuleCycleCertified` packages a structure and a contract with proofs that:
+### Exact cycle contracts
+
+`Contracts.Cycle.ModuleCycleContract` is the foundation. It has its own
+behavioral state, a set of named output rules, and one complete next-state rule.
+Each output rule declares exactly which inputs it reads and which outputs it
+writes. The contract says what a module does on one cycle, but says nothing
+about its child instances, wiring, or evaluation schedule. For example, a
+register-bank contract is phrased in terms of reading and updating a vector of
+values, not in terms of its decoder, mux tree, and individual registers.
+
+A `Contracts.Cycle.ModuleCycleCertified` packages a structure and a contract with proofs that:
 
 1. every structural state corresponds to some abstract contract state;
 2. a structural solution exists for every input and current state;
@@ -138,23 +160,108 @@ equations have at most one solution, but they do not define the equations'
 meaning. Existence is proved separately, usually by constructing a proposal
 from the existence guarantees of the certified children.
 
-Cycle contracts are not intended to be the only kind of contract. A
-`ModuleResetContract` specifies behavior over a trace beginning from an unknown
-hardware state. Before reset it places no requirements on the outputs; reset
-synchronizes the specification, after which each cycle must follow the
-contract. Certification is then a direct relation between structural and
-contract traces, with no exposed correspondence between their internal states.
+### Reset-synchronized contracts
 
-Removing that state-correspondence requirement allows the specification state
-to take a more natural form than the implementation state. For example, the
-reset contract for a FIFO can describe its contents as a `List` of data rather
-than reproducing the implementation's circular buffer, pointers, and storage.
-From there, module-specific theorems establish properties such as capacity,
-conservation of data, and FIFO ordering.
+`Contracts.Reset.ModuleResetContract` moves from one-cycle correspondence to
+trace behavior. A trace may begin from an unknown hardware state, so behavior
+before reset is unconstrained. Reset synchronizes the specification, after
+which every cycle must match. Its specification state may be any Lean type and
+does not require an exposed mapping to structural state. Outputs can be
+specified as zero, one, or `dontCare` on each cycle.
+
+This form is useful when exact cycle timing matters but reproducing the
+implementation's state layout would make the specification unnatural or
+unwieldy.
+
+### Latency-independent FIFO contracts
+
+`Contracts.Fifo.FifoContract` is more abstract still. It observes valid/ready
+transfers at the input and output interfaces rather than requiring outputs to
+match on particular cycles. After reset, it tracks an abstract bounded queue
+and requires every produced payload to be the next queued accepted payload;
+unproduced inputs remain in the queue. Both combinational fall-through and
+registered latency are allowed.
+
+The register-bank FIFO demonstrates how these levels compose. Its structural
+implementation is first certified against an exact cycle contract. A private
+refinement maps that cycle contract's pointer-and-storage state to an abstract
+Lean `List`, proving the public latency-independent FIFO contract. The final
+FIFO certificate exposes the structure and abstract FIFO guarantee; the
+state-mapping details remain part of the proof.
 
 As more complex designs are added, we expect to need both additional
 general-purpose contract forms and custom theorems expressing the important
 properties of particular modules.
+
+## What is and is not proved
+
+WARNING: Just a quick reminder from that the content here (but not these two sentences)
+was written by an LLM.  I'm not yet confident myself about exactly what is and
+isn't proven.
+
+Lean proves the connection from `ModuleStructure`'s simultaneous equations to
+the cycle contracts and onward to the reset and FIFO trace contracts described
+above. The exported FIFO certificate contains existence and uniqueness of each
+structural result, so its correctness theorem is not made vacuous by an
+inconsistent circuit. The development contains no `sorry`, `admit`, custom
+axiom, or unsafe definition; exported FIFO certificates use only Lean's
+standard classical and quotient axioms.
+
+The FIRRTL renderer is not yet proved semantics-preserving. Its metadata is
+dependent on the exact `ModuleStructure`, preventing a supported primitive
+from being named as a different operation, and generated FIRRTL is compiled
+and tested with firtool, Verilator, and cocotb. Nevertheless, the current
+formal claim ends at the structural model rather than the generated FIRRTL or
+SystemVerilog.
+
+The structural semantics are also two-state: signal values are Lean `Bool`s.
+They do not model `X`, `Z`, analogue behavior, timing, metastability, or clock
+domain crossings. Reset-synchronized contracts avoid assuming a particular
+Boolean power-up state, but this is not a four-state initialization proof.
+
+## Building and running
+
+The recommended environment is the checked-in Nix flake. From the repository
+root, enter it with:
+
+```sh
+nix develop
+```
+
+Build and check all Lean definitions and proofs with:
+
+```sh
+lake build
+```
+
+Run the complete generated-hardware regression with:
+
+```sh
+make test
+```
+
+This emits configured designs as FIRRTL, lowers them to SystemVerilog with
+CIRCT `firtool`, compiles them with Verilator, and runs their cocotb tests. The
+generated files and simulator builds are placed under `build/`.
+
+Individual hardware regressions can be run with:
+
+```sh
+make test-bit-register
+make test-structured-fifo
+make test-register-bank
+make test-pointer-fifo
+```
+
+The corresponding `firrtl-*` and `verilog-*` targets stop after emission or
+SystemVerilog generation. For example:
+
+```sh
+make firrtl-pointer-fifo
+make verilog-pointer-fifo
+```
+
+Use `make clean` to remove generated build artifacts.
 
 ## Where to look
 
@@ -174,6 +281,5 @@ properties of particular modules.
   direction into the proposed top-level children, state ownership, signal
   flow, and proof-staging order.
 
-The project builds with `lake build`. The checked-in Nix flake supplies Lean,
-CIRCT, Verilator, and the Python/cocotb simulation tools used by the `Makefile`
-regressions.
+The checked-in Nix flake supplies Lean, CIRCT, Verilator, and the Python/cocotb
+simulation tools used by the `Makefile` regressions.

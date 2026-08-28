@@ -16,7 +16,7 @@ shape:
 3. one combiner instance for each recursively shaped public output; and
 4. direct broadcast wiring for fixed-shape public inputs.
 
-The module boundary labels remain chosen by the module. `LeafwiseInterface`
+The module boundary labels remain chosen by the module. `Composition.LeafwiseInterface`
 classifies those labels as recursive or fixed only for constructing the
 hierarchy. It does not expose artificial unary/pair APIs.
 
@@ -47,7 +47,7 @@ inputs, combiner inputs, and boundary outputs. Four equations connect those
 views to the actual wiring. `AggregateProposalConstruction.hasStructuralResult` then
 enumerates the splitter, recursive component, and combiner certificates and
 constructs a satisfying composite proposal. The construction is a private proof
-witness; it is not retained in `ModuleCycleCertified` or in the structure.
+witness; it is not retained in `Contracts.Cycle.ModuleCycleCertified` or in the structure.
 
 This boundary removes the formerly repeated dependent enumeration and proposal
 assembly while keeping each module's wiring equations visible.
@@ -68,7 +68,7 @@ module contract:
   empty.
 
 The generic schedule library owns finite-family construction and selected
-dependency scheduling. `LeafwiseInterface.callComponentsAfter` specializes
+dependency scheduling. `Composition.LeafwiseInterface.callComponentsAfter` specializes
 that genuinely shared operation to the component family. The module files keep
 the readiness proofs that explain why their particular contract reads are
 available. Moving those proofs into a record would not make them generic; it

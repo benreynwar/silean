@@ -1,6 +1,6 @@
-import Silean.ModuleCycleContract
+import Silean.Contracts.Cycle.CycleContract
 import Silean.Structure.ModuleStructure
-import Silean.Primitives.Not
+import Silean.Primitives.NotPrimitive
 
 namespace Silean.Examples.Fixtures.DoubleNot
 
@@ -11,7 +11,7 @@ inductive Instance
   | second
 deriving Enumeration
 
-@[reducible] def instances : Instances :=
+@[reducible] def instancePorts : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .first | .second => Primitives.not.ports
 
@@ -33,9 +33,9 @@ def ports : ModulePorts := ⟨inputMap, outputMap⟩
 
 @[reducible] def context : EndpointContext where
   ports := ports
-  instances := instances
+  instancePorts := instancePorts
 
-def wiring : Wiring context.ports context.instances where
+def wiring : Wiring context.ports context.instancePorts where
   moduleOutput
     | .result => context.instanceOutput .second .output
   instanceInput
@@ -50,8 +50,8 @@ end Silean.Examples.Fixtures.DoubleNot
 
 namespace Silean.Examples.Fixtures.DoubleNot
 open Silean
-def childStructure : (name : Examples.Fixtures.DoubleNot.instances.Name) →
-    ModuleStructure (Examples.Fixtures.DoubleNot.instances.ports name)
+def childStructure : (name : Examples.Fixtures.DoubleNot.instancePorts.Name) →
+    ModuleStructure (Examples.Fixtures.DoubleNot.instancePorts.ports name)
   | .first | .second => .primitive Primitives.not
 def moduleStructure : ModuleStructure Examples.Fixtures.DoubleNot.ports :=
   .composite Examples.Fixtures.DoubleNot.body childStructure
@@ -61,16 +61,16 @@ namespace Silean.Examples.Fixtures.DoubleNot
 open Silean
 inductive Rule | apply
 deriving Enumeration
-def outputRule : CycleOutputRule Examples.Fixtures.DoubleNot.ports emptySignalMap
+def outputRule : Contracts.Cycle.CycleOutputRule Examples.Fixtures.DoubleNot.ports emptySignalMap
     (.ofLists [.bit] [.bit]) where
   readsInputs := Examples.Fixtures.DoubleNot.ports.inputs.select .value
   writesOutputs := Examples.Fixtures.DoubleNot.ports.outputs.select .result
   target | (input, ()), _ => (input, ())
-def cycleContract : ModuleCycleContract Examples.Fixtures.DoubleNot.ports where
+def cycleContract : Contracts.Cycle.ModuleCycleContract Examples.Fixtures.DoubleNot.ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule | .apply => ⟨_, outputRule⟩
-  stateRule := CycleStateRule.empty Examples.Fixtures.DoubleNot.ports
+  stateRule := Contracts.Cycle.CycleStateRule.empty Examples.Fixtures.DoubleNot.ports
   outputCoverage := by rfl
 end Silean.Examples.Fixtures.DoubleNot

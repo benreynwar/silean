@@ -5,13 +5,13 @@ namespace Silean.Examples.Checks.Increment
 
 open Silean Silean.FIRRTL
 
-noncomputable example : ModuleCycleCertified (Modules.Increment.ports 0) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Increment.ports 0) :=
   Modules.Increment.certified 0
-noncomputable example : ModuleCycleCertified (Modules.Increment.ports 1) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Increment.ports 1) :=
   Modules.Increment.certified 1
-noncomputable example : ModuleCycleCertified (Modules.Increment.ports 3) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Increment.ports 3) :=
   Modules.Increment.certified 3
-noncomputable example : ModuleCycleCertified (Modules.Increment.ports 4) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.Increment.ports 4) :=
   Modules.Increment.certified 4
 
 def bits0 : Fin 0 → Bool := fun index => Fin.elim0 index

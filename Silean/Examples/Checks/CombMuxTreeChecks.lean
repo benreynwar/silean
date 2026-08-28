@@ -1,6 +1,6 @@
 import Silean.FIRRTL
 import Silean.Modules.CombMuxTree
-import Silean.SignalLogic
+import Silean.Composition.SignalLogic
 
 namespace Silean.Examples.Checks.CombMuxTree
 
@@ -8,15 +8,15 @@ open Silean Silean.FIRRTL
 
 def pairBits : SignalType := .tuple (.cons .bit (.cons .bit .nil))
 
-noncomputable example : ModuleCycleCertified (Modules.CombMuxTree.ports .bit 0) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.CombMuxTree.ports .bit 0) :=
   Modules.CombMuxTree.certified .bit 0
-noncomputable example : ModuleCycleCertified (Modules.CombMuxTree.ports .bit 1) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.CombMuxTree.ports .bit 1) :=
   Modules.CombMuxTree.certified .bit 1
-noncomputable example : ModuleCycleCertified (Modules.CombMuxTree.ports .bit 2) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.CombMuxTree.ports .bit 2) :=
   Modules.CombMuxTree.certified .bit 2
-noncomputable example : ModuleCycleCertified (Modules.CombMuxTree.ports .bit 3) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.CombMuxTree.ports .bit 3) :=
   Modules.CombMuxTree.certified .bit 3
-noncomputable example : ModuleCycleCertified (Modules.CombMuxTree.ports pairBits 2) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.CombMuxTree.ports pairBits 2) :=
   Modules.CombMuxTree.certified pairBits 2
 
 def inputs0 : (Modules.CombMuxTree.ports .bit 0).inputs.Values

@@ -1,10 +1,14 @@
 import Silean.Foundation.BitVector
-import Silean.ModuleCycleContract
-import Silean.ModuleCycleEvaluation
+import Silean.Contracts.Cycle.CycleContract
+import Silean.Contracts.Cycle.CycleEvaluation
 
 namespace Silean.Examples.PicoRV.Regs
 
 open Silean
+
+/-! Cycle contract for PicoRV32's 32-entry integer register file. Register zero
+always reads as zero and ignores writes. The structural implementation has not
+yet been added. -/
 
 abbrev Word := Fin 32 → Bool
 abbrev RegisterAddress := Fin 5 → Bool
@@ -36,7 +40,9 @@ deriving Enumeration
 
 @[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
 
-inductive State | cpuregs
+inductive State
+  /-- The 32 architectural integer registers. -/
+  | cpuregs
 deriving Enumeration
 
 @[reducible] def stateMap : SignalMap :=
@@ -66,7 +72,7 @@ inductive Rule
 deriving Enumeration
 
 def cpuregsRs1Rule :
-    CycleOutputRule ports stateMap
+    Contracts.Cycle.CycleOutputRule ports stateMap
       { inputTypes := .cons (.vector 5 .bit) .nil
         outputTypes := .cons (.vector 32 .bit) .nil } where
   readsInputs := inputMap.select .decoded_rs1
@@ -76,7 +82,7 @@ def cpuregsRs1Rule :
         (readRegister decoded_rs1 (state .cpuregs), ())
 
 def cpuregsRs2Rule :
-    CycleOutputRule ports stateMap
+    Contracts.Cycle.CycleOutputRule ports stateMap
       { inputTypes := .cons (.vector 5 .bit) .nil
         outputTypes := .cons (.vector 32 .bit) .nil } where
   readsInputs := inputMap.select .decoded_rs2
@@ -85,7 +91,7 @@ def cpuregsRs2Rule :
     | (decoded_rs2, ()), state =>
         (readRegister decoded_rs2 (state .cpuregs), ())
 
-def stateRule : CycleStateRule ports stateMap where
+def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   inputTypes := .cons .bit
     (.cons .bit (.cons (.vector 5 .bit) (.cons (.vector 32 .bit) .nil)))
   readsInputs := ((((inputMap.select .cpuregs_wrdata).prepend .latched_rd).prepend
@@ -96,7 +102,7 @@ def stateRule : CycleStateRule ports stateMap where
           | .cpuregs => nextRegisters resetn cpuregs_write latched_rd
               cpuregs_wrdata (state .cpuregs)
 
-@[reducible] def cycleContract : ModuleCycleContract ports where
+@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := stateMap
   RuleName := Rule
   ruleNames := inferInstance
@@ -159,7 +165,7 @@ theorem nextRegisters_other (resetn cpuregs_write : Bool)
     (outputs : ports.outputs.Values) :
     cpuregsRs1Rule.Holds inputs state outputs ↔
       outputs .cpuregs_rs1 = readRegister (inputs .decoded_rs1) (state .cpuregs) := by
-  simp [cpuregsRs1Rule, CycleOutputRule.Holds, SignalSelection.Matches,
+  simp [cpuregsRs1Rule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select]
 
 @[simp] theorem cpuregsRs2Rule_holds_iff
@@ -167,7 +173,7 @@ theorem nextRegisters_other (resetn cpuregs_write : Bool)
     (outputs : ports.outputs.Values) :
     cpuregsRs2Rule.Holds inputs state outputs ↔
       outputs .cpuregs_rs2 = readRegister (inputs .decoded_rs2) (state .cpuregs) := by
-  simp [cpuregsRs2Rule, CycleOutputRule.Holds, SignalSelection.Matches,
+  simp [cpuregsRs2Rule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select]
 
 end Silean.Examples.PicoRV.Regs

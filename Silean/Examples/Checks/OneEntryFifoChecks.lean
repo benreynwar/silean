@@ -1,5 +1,5 @@
-import Silean.ModuleCycleEvaluation
-import Silean.Modules.OneEntryFifo
+import Silean.Contracts.Cycle.CycleEvaluation
+import Silean.Modules.OneEntryFifo.OneEntryFifo
 
 namespace Silean.Examples.Checks.OneEntryFifo
 
@@ -16,15 +16,20 @@ def fullFalseDataState : (OneEntryFifo.stateMap .bit).Values
   | .storedValid => true
   | .storedData => false
 
-def captureInputs : (NoResetFifo.ports .bit).inputs.Values
+def captureInputs : (Silean.Interfaces.Fifo.ports .bit).inputs.Values
   | .inputValid | .inputData => true
-  | .outputReady => false
+  | .outputReady | .reset => false
 
-def stalledInputs : (NoResetFifo.ports .bit).inputs.Values
-  | .inputValid | .inputData | .outputReady => false
+def stalledInputs : (Silean.Interfaces.Fifo.ports .bit).inputs.Values
+  | .inputValid | .inputData | .outputReady | .reset => false
 
-def replaceInputs : (NoResetFifo.ports .bit).inputs.Values
+def replaceInputs : (Silean.Interfaces.Fifo.ports .bit).inputs.Values
   | .inputValid | .inputData | .outputReady => true
+  | .reset => false
+
+def resetInputs : (Silean.Interfaces.Fifo.ports .bit).inputs.Values
+  | .inputValid | .outputReady => false
+  | .inputData | .reset => true
 
 /-! An empty FIFO is fall-through and simultaneously captures an unaccepted
 input when the downstream is not ready. -/
@@ -66,6 +71,19 @@ example : ((OneEntryFifo.cycleContract .bit).evaluate replaceInputs fullFalseDat
 example : ((OneEntryFifo.cycleContract .bit).evaluate replaceInputs fullFalseDataState).2
     .storedData = true := rfl
 
+/-! Reset is synchronous: outputs still observe the old state in the reset
+cycle, but the following valid state is empty. Payload storage is deliberately
+not reset and may retain its previous value. -/
+
+example : ((OneEntryFifo.cycleContract .bit).evaluate resetInputs fullTrueState).1
+    .outputValid = true := rfl
+
+example : ((OneEntryFifo.cycleContract .bit).evaluate resetInputs fullTrueState).2
+    .storedValid = false := rfl
+
+example : ((OneEntryFifo.cycleContract .bit).evaluate resetInputs fullTrueState).2
+    .storedData = true := rfl
+
 /-! The same certified FIFO carries aggregate payloads without changing its
 bit-valued valid/ready protocol. -/
 
@@ -84,10 +102,10 @@ def vectorEmptyState : (OneEntryFifo.stateMap vectorType).Values
   | .storedValid => false
   | .storedData => fun _ => false
 
-def vectorCaptureInputs : (NoResetFifo.ports vectorType).inputs.Values
+def vectorCaptureInputs : (Silean.Interfaces.Fifo.ports vectorType).inputs.Values
   | .inputValid => true
   | .inputData => vectorValue
-  | .outputReady => false
+  | .outputReady | .reset => false
 
 example : ((OneEntryFifo.cycleContract vectorType).evaluate
     vectorCaptureInputs vectorEmptyState).1 .outputData = vectorValue := rfl
@@ -120,10 +138,11 @@ def nestedFullState : (OneEntryFifo.stateMap nestedType).Values
   | .storedValid => true
   | .storedData => nestedOld
 
-def nestedReplaceInputs : (NoResetFifo.ports nestedType).inputs.Values
+def nestedReplaceInputs : (Silean.Interfaces.Fifo.ports nestedType).inputs.Values
   | .inputValid => true
   | .inputData => nestedNew
   | .outputReady => true
+  | .reset => false
 
 example : ((OneEntryFifo.cycleContract nestedType).evaluate
     nestedReplaceInputs nestedFullState).1 .outputData = nestedOld := rfl

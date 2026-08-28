@@ -2,9 +2,9 @@ import Silean.Naming.ModuleNaming
 
 namespace Silean.Naming.SignalAdapter
 
-open Silean Silean.Naming
+open Silean Silean.Composition Silean.Naming
 
-def splitterPortsWithNaming : (splitter : SignalSplitter) →
+def splitterPortsWithNaming : (splitter : Composition.SignalSplitter) →
     SignalTypeNaming splitter.aggregateType → ModulePortsNaming splitter.ports
   | .vector length element, aggregateNaming =>
       { inputs := .indexed (aggregateSignalMap (.vector length element)) "aggregate"
@@ -17,7 +17,7 @@ def splitterPortsWithNaming : (splitter : SignalSplitter) →
         inputTypes := fun | .value => aggregateNaming
         outputTypes := fun component => aggregateNaming.component component }
 
-def combinerPortsWithNaming : (combiner : SignalCombiner) →
+def combinerPortsWithNaming : (combiner : Composition.SignalCombiner) →
     SignalTypeNaming combiner.aggregateType → ModulePortsNaming combiner.ports
   | .vector length element, aggregateNaming =>
       { inputs := .indexed (SignalType.vectorComponents length element) "component"
@@ -30,28 +30,28 @@ def combinerPortsWithNaming : (combiner : SignalCombiner) →
         inputTypes := fun component => aggregateNaming.component component
         outputTypes := fun | .value => aggregateNaming }
 
-def splitterPorts (splitter : SignalSplitter) : ModulePortsNaming splitter.ports :=
+def splitterPorts (splitter : Composition.SignalSplitter) : ModulePortsNaming splitter.ports :=
   splitterPortsWithNaming splitter (.positional splitter.aggregateType)
 
-def combinerPorts (combiner : SignalCombiner) : ModulePortsNaming combiner.ports :=
+def combinerPorts (combiner : Composition.SignalCombiner) : ModulePortsNaming combiner.ports :=
   combinerPortsWithNaming combiner (.positional combiner.aggregateType)
 
-def splitterWithNaming (value : SignalSplitter)
+def splitterWithNaming (value : Composition.SignalSplitter)
     (aggregateNaming : SignalTypeNaming value.aggregateType) :
     ModuleNaming (.splitter value) :=
   .splitter value ⟨"split", "aggregate", [.shape value.aggregateType]⟩
     (splitterPortsWithNaming value aggregateNaming)
 
-def combinerWithNaming (value : SignalCombiner)
+def combinerWithNaming (value : Composition.SignalCombiner)
     (aggregateNaming : SignalTypeNaming value.aggregateType) :
     ModuleNaming (.combiner value) :=
   .combiner value ⟨"combine", "aggregate", [.shape value.aggregateType]⟩
     (combinerPortsWithNaming value aggregateNaming)
 
-def splitter (value : SignalSplitter) : ModuleNaming (.splitter value) :=
+def splitter (value : Composition.SignalSplitter) : ModuleNaming (.splitter value) :=
   splitterWithNaming value (.positional value.aggregateType)
 
-def combiner (value : SignalCombiner) : ModuleNaming (.combiner value) :=
+def combiner (value : Composition.SignalCombiner) : ModuleNaming (.combiner value) :=
   combinerWithNaming value (.positional value.aggregateType)
 
 end Silean.Naming.SignalAdapter

@@ -1,9 +1,9 @@
 import Silean.FIRRTL
-import Silean.Modules.Fifo
+import Silean.Modules.Fifo.Fifo
 
 namespace Silean.Examples.Checks.Fifo
 
-open Silean Silean.FIRRTL Silean.Modules.Fifo
+open Silean Silean.FIRRTL Silean.Interfaces.Fifo Silean.Modules.Fifo
 
 def pointer1 (value : Fin 4) : Pointer 1
   | 0 => value.val % 2 = 1
@@ -109,8 +109,8 @@ def oneEnqueued := (cycle0 true true false false (state0 false false false)).2
 #guard (cycle0 false false false false oneEnqueued).1 .outputValid
 #guard !(cycle0 false false false false oneEnqueued).1 .inputReady
 
-noncomputable example : ModuleCycleCertified (ports .bit) := certified .bit 0
-noncomputable example : ModuleCycleCertified (ports (.vector 3 .bit)) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports .bit) := certified .bit 0
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports (.vector 3 .bit)) :=
   certified (.vector 3 .bit) 2
 
 noncomputable def structuralState (element : SignalType) (addressWidth : Nat) :

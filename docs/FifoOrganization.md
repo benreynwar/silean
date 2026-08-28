@@ -1,94 +1,77 @@
 # FIFO organization
 
-There are two deliberately separate FIFO families. `Fifo` is the primary
-resettable address-plus-wrap implementation. `NoResetFifo` and
-`SerialDepthFifo` provide the fall-through serial-composition model used by
-the existing trace and capacity proofs.
+All FIFO implementations use `Interfaces/FifoPorts.lean`. Its
+`Silean.Interfaces.Fifo` namespace owns the
+canonical input/output labels and defines the two boundary interfaces:
+`Interfaces.ValidReadySink` for traffic entering the FIFO and
+`Interfaces.ValidReadySource` for
+traffic leaving it. Interfaces identify and interpret ports; they do not state
+FIFO ordering or expose implementation state.
 
-## Responsibility map
+## Public behavioral contract
 
-| Source | Owns | Does not own |
-| --- | --- | --- |
-| `Modules/FifoInterface.lean` | Primary FIFO ready/valid/data/reset port vocabulary | Structure, contracts, or proofs |
-| `Modules/Fifo.lean` | Primary resettable FIFO contract, exact four-child pointer/bank hierarchy, certification, public cycle laws, and naming | Trace execution or a memory backend |
-| `Modules/FifoResetContract.lean` | Natural `List T` reset-synchronized contract, ternary observations, queue transfers, capacity, and trace laws | FIFO structure, cycle contract, or reset certification |
-| `Modules/FifoResetCertified.lean` | Direct trace refinement from the canonical structure to the List-based reset contract | A generic cycle-to-reset bridge or public state relation |
-| `Modules/FifoProperties.lean` | Logical occupancy and queue contents, reachable invariant, reset-aware execution, cycle correctness, and arbitrary-trace FIFO theorems | Structural children or certification internals |
-| `Modules/NoResetFifoInterface.lean` | No-reset fall-through ready/valid/data interface and rule names | Storage, hierarchy, execution, or proofs |
-| `Modules/OneEntryFifoControl.lean` | Combinational update/ready control used only by OneEntryFifo | Generic pointer FIFO control |
-| `Modules/OneEntryFifo.lean` | One-entry structural hierarchy, its cycle contract, certification, public contract equations, and naming | Finite execution or trace properties |
-| `Modules/NoResetFifoCycleBehavior.lean` | Forward/ready/next-state behavior, conversion to a cycle contract, serial behavior composition, and certified behavior packaging | Structural schedules or finite traces |
-| `Modules/SerialFifo.lean` | Two-child structural wiring and certification against serial cycle behavior | A separate evaluator |
-| `Modules/SerialDepthFifo.lean` | Positive-depth recursive structure, behavior, contract, certification, and naming | Conservation/capacity proofs |
-| `Modules/NoResetFifoExecution.lean` | The single generic interpretation of FIFO cycle behavior and its serial step decomposition | Module hierarchy or logical FIFO contents |
-| `Modules/OneEntryFifoProperties.lean` | One-entry logical contents, conservation, capacity, and ready-stall proofs | A second implementation of cycle evaluation |
-| `Modules/SerialDepthFifoProperties.lean` | Generic certified views, serial property composition, and positive-depth capacity/latency results | Structural proof construction |
-| `Contracts/NoResetFifo*.lean` | Implementation-independent no-reset traces, execution laws, views, and serial theorems | Knowledge of Silean module instances |
-| `Contracts/ResetFifo.lean` | Reset-aware accepted transfers, queue-step semantics, finite transitions, and generic trace lifting | Knowledge of Silean modules or storage layout |
-| `Foundation/Execution.lean` | Deterministic step results and finite folding over an input list | FIFO transfers, reset, queue contents, or module structure |
+`Contracts/Fifo/FifoContract.lean` defines the latency-independent
+`Contracts.Fifo.FifoContract`. It owns:
 
-The no-reset serial family progresses as:
+- one valid/ready sink and one valid/ready source with the same payload shape;
+- a synchronous reset input;
+- a capacity;
+- boundary input and output transfers derived from the interfaces; and
+- a reset-synchronized finite-trace relation over a logical bounded queue.
 
-`interface → cycle behavior/contract → certified structure → execution → properties`
+Behavior is unconstrained before the first reset and on each reset cycle. The
+state following reset is the empty logical queue. On ordinary synchronized
+cycles the queue equation is
 
-Structure and contract remain independent descriptions. Certification connects
-them. Execution interprets the already-certified contract; it is not another
-structural semantics and is not stored in `ModuleStructure`.
+`oldQueue ++ acceptedInput = acceptedOutput ++ nextQueue`.
 
-The reset certification consumes the existing cycle certificate only as a
-private proof technique. Its trace induction keeps cycle/structural
-correspondence before reset, establishes empty bounded logical contents on a
-reset edge, and preserves that alignment on ordinary edges. The exported
-`Fifo.resetCertified` contains only structure, reset contract, structural
-totality, and trace refinement. Totality is obtained from the existing cycle
-certificate and ensures the reset refinement has real executions to constrain.
+This equation permits fall-through and registered implementations without
+constraining latency or internal state. Generic trace laws prove conservation
+over reset-free synchronized suffixes, output ordering from an empty queue,
+and the capacity bound on every synchronized logical queue.
 
-## Retained abstractions
+`Contracts.Fifo.FifoCertified` pairs a structure with this contract. Its `hasSolution` field
+requires a structural result for every structural state and cycle input, so an
+inconsistent structure cannot satisfy refinement vacuously. Its implementation
+field says every finite structural execution is accepted by the contract.
 
-- `NoResetFifo.CycleBehavior` is useful because serial composition can be stated once
-  over forward, ready, and next-state functions and then converted to ordinary
-  `ModuleCycleContract` rules.
-- `NoResetFifo.CertifiedCycleBehavior` is the typed child interface needed by
-  structural serial composition: it carries the public behavior, exact
-  structure, and their certification without exposing how the proof was built.
-- `NoResetFifo.Execution` is useful because all FIFO shapes execute through one generic
-  `ModuleCycleContract.evaluate` bridge. One-entry and positive-depth FIFOs do
-  not define competing evaluators.
-- `NoResetFifo.View` packages only the logical contents interpretation and its
-  capacity/ready-latency bounds. Its serial laws are independent of hardware
-  hierarchy and can be reused by other FIFO implementations.
+## Proof bridge
 
-## Public surface
+`Contracts/Fifo/FifoCycleRefinement.lean` defines the private-proof adapter used
+by current implementations. A `Contracts.Fifo.FifoCycleRefinement` supplies an invariant and a logical
+queue interpretation for an already cycle-certified module. It proves reset
+establishment, ordinary-cycle queue preservation, and the capacity bound. The
+adapter then performs the trace induction and produces a public
+`Contracts.Fifo.FifoCertified`; neither the invariant nor the state interpretation appears in
+that result.
 
-The primary FIFO exposes its ports, logical pointer/entry state, natural cycle
-contract, contract-level laws, computable `moduleStructure`, `certified`
-bundle, and naming. Synchronous reset affects pointer next state; current-cycle
-handshakes and an accepted bank write are determined from pre-edge state. The
-following state is empty without clearing storage.
+## Implementations
 
-`Fifo.Properties` interprets a state satisfying its occupancy `Invariant` as a
-logical queue. Its
-occupancy is the circular distance between the extended pointers, and its
-contents are the corresponding entries beginning at the read address. The
-reachable invariant bounds that distance by `2 ^ addressWidth`. Public proofs
-show that empty/full agree with occupancy zero/capacity, each ordinary cycle
-obeys queue conservation (including simultaneous transfers and wraparound),
-reset clears the logical queue, the invariant is preserved, and every finite
-execution satisfies the reset-aware transition relation. For a reset-free
-trace, accepted outputs are a prefix of accepted inputs when starting empty,
-so values cannot be lost, duplicated, or reordered. These proofs use only the
-public cycle contract, never the FIFO's structural children.
+| Source | Responsibility |
+| --- | --- |
+| `Modules/OneEntryFifo/OneEntryFifo.lean` | One-entry structure, exact cycle contract, certification, and naming |
+| `Modules/OneEntryFifo/OneEntryFifoControl.lean` | Private combinational control child used only by OneEntryFifo |
+| `Modules/OneEntryFifo/OneEntryFifoCycleBehavior.lean` | Natural exact cycle behavior for the one-entry implementation |
+| `Modules/OneEntryFifo/OneEntryFifoCertified.lean` | Capacity-one logical queue refinement and public FIFO certification |
+| `Composition/FifoSerialComposition.lean` | Generic two-child serial structure and cycle certification |
+| `Composition/FifoSerialRefinement.lean` | Generic composition of two child FIFO refinements; downstream contents precede upstream contents and the internal transfer cancels |
+| `Modules/SerialDepthFifo/SerialDepthFifo.lean` | Recursive positive-depth concrete structure, exact cycle contract, certification, and naming |
+| `Modules/SerialDepthFifo/SerialDepthFifoCertified.lean` | Recursive FIFO certification with capacity equal to depth |
+| `Modules/Fifo/Fifo.lean` | Pointer/register-bank structure and exact cycle contract |
+| `Modules/Fifo/FifoPointerControl.lean` | Private pointer interpretation and transfer-control child used by the FIFO built from a register bank and pointers |
+| `Modules/Fifo/FifoProperties.lean` | Circular-buffer occupancy, logical contents, invariant, and one-cycle queue lemmas |
+| `Modules/Fifo/FifoCertified.lean` | Pointer-FIFO refinement and public capacity-`2^addressWidth` FIFO certification |
 
-The finite runner is shared with the no-reset FIFO family, but only at the
-mechanical level: it folds a deterministic step and records observations.
-FIFO-specific inputs, cycles, reset semantics, transition relations,
-conservation, and ordering remain in their respective contract namespaces.
+The serial composition proof consumes only child cycle behaviors and FIFO
+refinements. It does not inspect either child structure or the schedules used
+to certify it. The pointer implementation uses its public cycle contract and
+logical circular-buffer lemmas; it does not retain a separate FIFO evaluator
+or trace-view API.
 
-The no-reset family exposes its interface, cycle behavior, certified serial
-structures, generic execution, and proven capacity/ready-latency properties.
-Both families keep child identities, schedules, proposal construction,
-state-correspondence witnesses, and refinement constructors private.
+## Separation from generation
 
-This organization keeps FIRRTL generation straightforward: it consumes the
-computable `ModuleStructure` and naming metadata directly. None of the behavior,
-execution, view, or property layers is required to render the circuit.
+FIRRTL generation consumes only `ModuleStructure` and naming metadata. FIFO
+contracts, logical queues, invariants, and proof adapters are not required to
+render a circuit. Synchronous reset remains ordinary module wiring and state
+behavior: current outputs are from the pre-edge state, while the following
+logical FIFO state is empty.

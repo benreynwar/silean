@@ -2,6 +2,8 @@ namespace Silean
 
 /-! Constructive positions and finite executable enumerations. -/
 
+/-- A computational path to `value` in a list. Unlike ordinary membership in
+`Prop`, it records a position that can drive dependent lookup. -/
 inductive ListIndex {α : Type u} (value : α) : List α → Type u
   | head : ListIndex value (value :: rest)
   | tail : ListIndex value rest → ListIndex value (other :: rest)
@@ -56,6 +58,8 @@ theorem get_map_eq {α : Type u} {β : Type v}
 
 end ListIndex
 
+/-- Values corresponding to a list of keys, where the value type may depend on
+the key. A `ListIndex` selects a key and permits lookup at its `Value key` type. -/
 inductive DependentList {α : Type u} (Value : α → Type v) : List α → Type (max u v)
   | nil : DependentList Value []
   | cons (head : Value key) (tail : DependentList Value keys) :
@@ -117,6 +121,10 @@ theorem finRange_nodup : ∀ width, (List.finRange width).Nodup
 
 end List
 
+/-- An ordered list containing every value of `α` exactly once. In practice,
+this turns finite symbolic types, especially inductive label types, into lists
+that can be traversed and indexed. `locate` constructively witnesses that no
+value is omitted. -/
 class Enumeration (α : Type u) where
   values : List α
   nodup : values.Nodup
@@ -153,38 +161,6 @@ namespace Enumeration
     | .inl value => (left.locate value).map Sum.inl |>.appendRight _
     | .inr value => (right.locate value).map Sum.inr |>.prependMany _
 
-inductive Framed (α : Type u)
-  | start
-  | item (value : α)
-  | finish
-
-@[reducible] def framed (inner : Enumeration α) : Enumeration (Framed α) where
-  values := .start :: (inner.values.map Framed.item ++ [.finish])
-  nodup := by
-    apply List.Pairwise.cons
-    · intro value member equal
-      rcases List.mem_append.mp member with member | member
-      · rcases List.mem_map.mp member with ⟨source, _, rfl⟩
-        cases equal
-      · simp only [List.mem_singleton] at member
-        cases member
-        cases equal
-    · apply List.nodup_append.mpr
-      refine ⟨List.nodup_map_of_injective Framed.item
-        (by intro left right equal; cases equal; rfl) inner.nodup, by simp, ?_⟩
-      intro left leftMem right rightMem equal
-      rcases List.mem_map.mp leftMem with ⟨source, _, rfl⟩
-      simp only [List.mem_singleton] at rightMem
-      cases rightMem
-      cases equal
-  locate
-    | .start => .head
-    | .item value => .tail (ListIndex.appendRight [Framed.finish]
-        ((inner.locate value).map Framed.item))
-    | .finish => .tail (ListIndex.prependMany
-        (inner.values.map Framed.item)
-        (.head : ListIndex (Framed.finish : Framed α) [Framed.finish]))
-
 def ordinal (enumeration : Enumeration α) (value : α) :
     Fin enumeration.values.length := (enumeration.locate value).toFin
 
@@ -220,6 +196,9 @@ theorem exists_pi {Value : α → Type v}
 
 end Enumeration
 
+/-- A mapping that bundles its key type with a complete traversal order.
+This allows structures to carry an otherwise-hidden finite key type while
+still providing a value for, and permitting iteration over, every key. -/
 structure EnumeratedMap (Value : Type v) where
   Key : Type u
   keys : Enumeration Key

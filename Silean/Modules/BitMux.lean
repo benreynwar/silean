@@ -1,4 +1,4 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives
 
@@ -6,14 +6,19 @@ namespace Silean.Modules.BitMux
 
 open Silean
 
+/-- A one-bit combinational mux built directly from Boolean gates. -/
 inductive Instance
+  /-- Produces the complement of `select`. -/
   | invertSelect
+  /-- Passes `whenFalse` only when `select` is low. -/
   | chooseFalse
+  /-- Passes `whenTrue` only when `select` is high. -/
   | chooseTrue
+  /-- Combines the mutually exclusive selected values. -/
   | combine
 deriving Enumeration
 
-@[reducible] def instances : Instances :=
+@[reducible] def instancePorts : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .invertSelect => Primitives.not.ports
     | .chooseFalse | .chooseTrue => Primitives.and.ports
@@ -40,22 +45,27 @@ deriving Enumeration
 
 @[reducible] def context : EndpointContext where
   ports := ports
-  instances := instances
+  instancePorts := instancePorts
 
-def wiring : Wiring context.ports context.instances where
+def wiring : Wiring context.ports context.instancePorts where
   moduleOutput
+    -- The OR gate produces the selected result.
     | .result => context.instanceOutput .combine .output
   instanceInput
+    -- Generate the low-select condition.
     | .invertSelect, .input =>
         context.moduleInput .select
+    -- Select the false input when select is low.
     | .chooseFalse, .left =>
         context.moduleInput .whenFalse
     | .chooseFalse, .right =>
         context.instanceOutput .invertSelect .output
+    -- Select the true input when select is high.
     | .chooseTrue, .left =>
         context.moduleInput .whenTrue
     | .chooseTrue, .right =>
         context.moduleInput .select
+    -- Combine the two selected branches.
     | .combine, .left =>
         context.instanceOutput .chooseFalse .output
     | .combine, .right =>
@@ -71,15 +81,15 @@ namespace Silean.Modules.BitMux
 
 open Silean
 
-@[reducible] def children : Certified.Children body
+@[reducible] def children : Contracts.Cycle.Certification.Children body
   | .invertSelect => Primitives.notCertified
   | .chooseFalse | .chooseTrue => Primitives.andCertified
   | .combine => Primitives.orCertified
 
-@[reducible] def childStructure := Certified.childStructure children
+@[reducible] def childStructure := Contracts.Cycle.Certification.childStructure children
 
 def moduleStructure : ModuleStructure Modules.BitMux.ports :=
-  Certified.moduleStructure body children
+  Contracts.Cycle.Certification.moduleStructure body children
 
 end Silean.Modules.BitMux
 
@@ -107,7 +117,7 @@ def childNaming : (child : Modules.BitMux.Instance) →
   | .combine => Silean.Naming.Primitive.or
 
 def naming : ModuleNaming Modules.BitMux.moduleStructure := by
-  unfold Modules.BitMux.moduleStructure Certified.moduleStructure
+  unfold Modules.BitMux.moduleStructure Contracts.Cycle.Certification.moduleStructure
   exact .composite ⟨"mux", "bit_gates", []⟩ ports instanceName childNaming
 
 end Silean.Modules.BitMux.Naming
@@ -120,7 +130,7 @@ inductive Rule
   | select
 deriving Enumeration
 
-def selectRule : CycleOutputRule Modules.BitMux.ports emptySignalMap
+def selectRule : Contracts.Cycle.CycleOutputRule Modules.BitMux.ports emptySignalMap
     (.ofLists [.bit, .bit, .bit] [.bit]) where
   readsInputs := ((Modules.BitMux.inputMap.select .whenTrue).prepend .whenFalse).prepend .select
   writesOutputs := Modules.BitMux.outputMap.select .result
@@ -128,10 +138,10 @@ def selectRule : CycleOutputRule Modules.BitMux.ports emptySignalMap
     | (select, (whenFalse, (whenTrue, ()))), _ =>
         (bif select then whenTrue else whenFalse, ())
 
-def stateRule : CycleStateRule Modules.BitMux.ports emptySignalMap :=
-  CycleStateRule.empty Modules.BitMux.ports
+def stateRule : Contracts.Cycle.CycleStateRule Modules.BitMux.ports emptySignalMap :=
+  Contracts.Cycle.CycleStateRule.empty Modules.BitMux.ports
 
-def cycleContract : ModuleCycleContract Modules.BitMux.ports where
+def cycleContract : Contracts.Cycle.ModuleCycleContract Modules.BitMux.ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
@@ -139,16 +149,16 @@ def cycleContract : ModuleCycleContract Modules.BitMux.ports where
   stateRule := stateRule
   outputCoverage := by rfl
 
-abbrev invertRule : Certified.RuleOccurrence children :=
+abbrev invertRule : Contracts.Cycle.Certification.RuleOccurrence children :=
   ⟨.invertSelect, Primitives.NotRule.apply⟩
 
-abbrev falseRule : Certified.RuleOccurrence children :=
+abbrev falseRule : Contracts.Cycle.Certification.RuleOccurrence children :=
   ⟨.chooseFalse, Primitives.AndRule.apply⟩
 
-abbrev trueRule : Certified.RuleOccurrence children :=
+abbrev trueRule : Contracts.Cycle.Certification.RuleOccurrence children :=
   ⟨.chooseTrue, Primitives.AndRule.apply⟩
 
-abbrev combineRule : Certified.RuleOccurrence children :=
+abbrev combineRule : Contracts.Cycle.Certification.RuleOccurrence children :=
   ⟨.combine, Primitives.OrRule.apply⟩
 
 @[simp] theorem invertRule_reads : invertRule.reads = [.input] := rfl
@@ -160,25 +170,25 @@ abbrev combineRule : Certified.RuleOccurrence children :=
 @[simp] theorem trueRule_writes : trueRule.writes = [.output] := rfl
 @[simp] theorem combineRule_writes : combineRule.writes = [.output] := rfl
 
-def outputSchedule : Certified.OutputSchedule body children cycleContract .select :=
+def outputSchedule : Contracts.Cycle.Certification.OutputSchedule body children cycleContract .select :=
   .call invertRule
     (by intro port member; cases port
         simp [cycleContract, selectRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Certified.sourceAvailable,
+          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
           body, wiring, context, EndpointContext.moduleInput])
     (by simp)
   (.call falseRule
     (by intro input member
         cases input with
         | left => simp [cycleContract, selectRule, SignalSelection.prepend,
-            SignalMap.select, SignalSelection.labels, Certified.sourceAvailable,
+            SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
             body, wiring, context, EndpointContext.moduleInput]
         | right => exact ⟨.apply, by simp, by simp⟩)
     (by simp)
   (.call trueRule
     (by intro input member; cases input <;>
       simp [cycleContract, selectRule, SignalSelection.prepend,
-        SignalMap.select, SignalSelection.labels, Certified.sourceAvailable,
+        SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
         body, wiring, context, EndpointContext.moduleInput])
     (by simp)
   (.call combineRule
@@ -190,21 +200,21 @@ def outputSchedule : Certified.OutputSchedule body children cycleContract .selec
   (.done (by
     intro output member
     cases output
-    change Certified.outputAvailable
+    change Contracts.Cycle.Certification.outputAvailable
       ([combineRule, trueRule, falseRule, invertRule] :
-        Certified.Availability children) Instance.combine .output
+        Contracts.Cycle.Certification.Availability children) Instance.combine .output
     exact ⟨Primitives.OrRule.apply, by simp, by simp⟩)))))
 
-def stateSchedule : Certified.StateSchedule body children :=
+def stateSchedule : Contracts.Cycle.Certification.StateSchedule body children :=
   .done (by
     intro child input member
     cases child <;>
       simp [children, Primitives.notCertified, Primitives.notCycleContract,
         Primitives.andCertified, Primitives.andCycleContract,
         Primitives.orCertified, Primitives.orCycleContract,
-        CycleStateRule.empty, SignalSelection.labels] at member)
+        Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
 
-def ruleSchedules : Certified.RuleSchedules body children cycleContract where
+def ruleSchedules : Contracts.Cycle.Certification.RuleSchedules body children cycleContract where
   output | .select => outputSchedule
   state := stateSchedule
 
@@ -214,31 +224,31 @@ theorem coversChildren : ruleSchedules.CoversChildren := by
   | invertSelect =>
     change Primitives.NotRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs ruleSchedules .select
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .select
     change invertRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Certified.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
   | chooseFalse =>
     change Primitives.AndRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs ruleSchedules .select
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .select
     change falseRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Certified.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
   | chooseTrue =>
     change Primitives.AndRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs ruleSchedules .select
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .select
     change trueRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Certified.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
   | combine =>
     change Primitives.OrRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs ruleSchedules .select
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .select
     change combineRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Certified.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
 
 theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution :=
   ruleSchedules.hasAtMostOneSolution coversChildren
@@ -333,18 +343,18 @@ theorem selectRule_holds_iff (inputs : ports.inputs.Values)
     (state : cycleContract.state.Values) (outputs : ports.outputs.Values) :
     selectRule.Holds inputs state outputs ↔
       outputs .result = bif inputs .select then inputs .whenTrue else inputs .whenFalse := by
-  simp [CycleOutputRule.Holds, selectRule, SignalSelection.Matches,
+  simp [Contracts.Cycle.CycleOutputRule.Holds, selectRule, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select, SignalSelection.prepend]
 
-private theorem implements : Implements moduleStructure cycleContract stateCorresponds := by
+private theorem implements : Contracts.Cycle.Implements moduleStructure cycleContract stateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have invertImplements := Certified.childImplements children inputs structuralState
+  have invertImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
     proposal satisfies .invertSelect SignalMap.emptyValues (by trivial)
-  have falseImplements := Certified.childImplements children inputs structuralState
+  have falseImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
     proposal satisfies .chooseFalse SignalMap.emptyValues (by trivial)
-  have trueImplements := Certified.childImplements children inputs structuralState
+  have trueImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
     proposal satisfies .chooseTrue SignalMap.emptyValues (by trivial)
-  have combineImplements := Certified.childImplements children inputs structuralState
+  have combineImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
     proposal satisfies .combine SignalMap.emptyValues (by trivial)
   have boundary := satisfies.1
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
@@ -359,7 +369,7 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
     rcases combineImplements with ⟨_, combineEvaluates, _⟩
     have boundary' : outputs .result = (children .combine).outputs .output := by
       simpa [ProposedValues.boundaryOutputsSatisfy, body, wiring, context,
-        instances, EndpointContext.instanceOutput, SignalSource.value] using
+        instancePorts, EndpointContext.instanceOutput, SignalSource.value] using
           boundary Output.result
     have invertBit := (Primitives.notOutputRule_holds_iff _ _ _).mp
       (invertEvaluates.1 Primitives.NotRule.apply)
@@ -378,22 +388,22 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
       ((children .chooseFalse).outputs .output ||
         (children .chooseTrue).outputs .output) at combineBit
     rw [selectRule_holds_iff]
-    simp only [ProposedValues.outputs, moduleStructure, Certified.moduleStructure]
+    simp only [ProposedValues.outputs, moduleStructure, Contracts.Cycle.Certification.moduleStructure]
     rw [boundary', combineBit, falseBit, trueBit, invertBit]
     cases inputs .select <;> cases inputs .whenFalse <;>
       cases inputs .whenTrue <;> rfl
-  · simp [cycleContract, stateRule, CycleStateRule.empty,
-      CycleStateRule.apply, SignalSelection.project]
+  · simp [cycleContract, stateRule, Contracts.Cycle.CycleStateRule.empty,
+      Contracts.Cycle.CycleStateRule.apply, SignalSelection.project]
 
 noncomputable opaque certification :
-    ModuleCycleCertification moduleStructure cycleContract := {
+    Contracts.Cycle.ModuleCycleCertification moduleStructure cycleContract := {
   stateCorresponds := stateCorresponds,
   hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
   hasStructuralResult := hasStructuralResult,
   structuralResultUnique := hasAtMostOneSolution,
   implements := implements }
 
-noncomputable def certified : ModuleCycleCertified ports :=
+noncomputable def certified : Contracts.Cycle.ModuleCycleCertified ports :=
   certification.bundle
 
 theorem hasExactlyOneSolution (inputs : ports.inputs.Values)

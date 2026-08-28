@@ -1,5 +1,5 @@
 import Silean.Foundation.SignalExpectation
-import Silean.DeriveEnumeration
+import Silean.Foundation.DeriveEnumeration
 
 namespace Silean.Examples.Checks.SignalExpectation
 

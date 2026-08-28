@@ -1,6 +1,6 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Examples.Fixtures.DualNot
-import Silean.Primitives.Not
+import Silean.Primitives.NotPrimitive
 
 namespace Silean.Examples.Fixtures.HierarchicalDualNot
 
@@ -11,17 +11,17 @@ inductive Instance
   | backwardNot
 deriving Enumeration
 
-@[reducible] def instances : Instances :=
+@[reducible] def instancePorts : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .forwardNot | .backwardNot => Primitives.not.ports
 
 @[reducible] def context : EndpointContext where
   ports := Examples.Fixtures.DualNot.ports
-  instances := instances
+  instancePorts := instancePorts
 
 @[reducible] def ports : ModulePorts := context.ports
 
-def wiring : Wiring context.ports context.instances where
+def wiring : Wiring context.ports context.instancePorts where
   moduleOutput
     | .forward => context.instanceOutput .forwardNot .output
     | .backward => context.instanceOutput .backwardNot .output
@@ -31,12 +31,12 @@ def wiring : Wiring context.ports context.instances where
 
 @[reducible] def body : ModuleBody := ⟨context, wiring⟩
 
-@[reducible] def children : Certified.Children body
+@[reducible] def children : Contracts.Cycle.Certification.Children body
   | .forwardNot | .backwardNot => Primitives.notCertified
 
-@[reducible] def childStructure := Certified.childStructure children
+@[reducible] def childStructure := Contracts.Cycle.Certification.childStructure children
 
 def moduleStructure : ModuleStructure ports :=
-  Certified.moduleStructure body children
+  Contracts.Cycle.Certification.moduleStructure body children
 
 end Silean.Examples.Fixtures.HierarchicalDualNot

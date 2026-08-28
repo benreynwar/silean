@@ -5,11 +5,11 @@ namespace Silean.Examples.Checks.RegisterBank
 
 open Silean Silean.FIRRTL
 
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.RegisterBank.ports .bit 0) :=
   Modules.RegisterBank.certified .bit 0
 
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.RegisterBank.ports (.vector 3 .bit) 2) :=
   Modules.RegisterBank.certified (.vector 3 .bit) 2
 

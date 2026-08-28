@@ -1,6 +1,6 @@
 import Silean.Emitters.StructuredPayload
 import Silean.FIRRTL.Emit
-import Silean.Modules.Fifo
+import Silean.Modules.Fifo.Fifo
 
 namespace Silean.Emitters.PointerFifo
 

@@ -5,15 +5,15 @@ namespace Silean.Examples.Checks.All
 
 open Silean Silean.FIRRTL
 
-noncomputable example : ModuleCycleCertified (Modules.All.ports 0) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.All.ports 0) :=
   Modules.All.certified 0
 
-noncomputable example : ModuleCycleCertified (Modules.All.ports 5) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.All.ports 5) :=
   Modules.All.certified 5
 
-example : (Modules.Reduction.Tree.balanced 11).leafCount = 11 := by simp
+example : (Composition.Reduction.Tree.balanced 11).leafCount = 11 := by simp
 
-example : (Modules.Reduction.Tree.balanced 11).IsBalanced := by simp
+example : (Composition.Reduction.Tree.balanced 11).IsBalanced := by simp
 
 def allTrue3 : (Modules.All.ports 3).inputs.Values := fun | .leaf _ => true
 

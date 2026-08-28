@@ -1,10 +1,14 @@
 import Silean.Foundation.BitVector
-import Silean.ModuleCycleContract
-import Silean.ModuleCycleEvaluation
+import Silean.Contracts.Cycle.CycleContract
+import Silean.Contracts.Cycle.CycleEvaluation
 
 namespace Silean.Examples.PicoRV.Alu
 
 open Silean
+
+/-! Cycle contract for the combinational PicoRV32 ALU, retaining the port names
+and operation-selection behavior of the target Verilog configuration. The
+structural implementation has not yet been added. -/
 
 abbrev Word := Fin 32 → Bool
 
@@ -170,7 +174,7 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule :
-    CycleOutputRule ports emptySignalMap
+    Contracts.Cycle.CycleOutputRule ports emptySignalMap
       { inputTypes := .cons (.vector 32 .bit)
           (.cons (.vector 32 .bit)
             (.cons .bit (.cons .bit (.cons .bit (.cons .bit (.cons .bit
@@ -208,12 +212,12 @@ def outputRule :
     }
     (aluOut inputs, (aluOut0 inputs, ()))
 
-@[reducible] def cycleContract : ModuleCycleContract ports where
+@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule | .apply => ⟨_, outputRule⟩
-  stateRule := CycleStateRule.empty _
+  stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
 def valuesOf (inputs : ports.inputs.Values) : Values where

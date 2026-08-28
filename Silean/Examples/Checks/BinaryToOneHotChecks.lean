@@ -5,13 +5,13 @@ namespace Silean.Examples.Checks.BinaryToOneHot
 
 open Silean Silean.FIRRTL
 
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.BinaryToOneHot.ports 0) := Modules.BinaryToOneHot.certified 0
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.BinaryToOneHot.ports 1) := Modules.BinaryToOneHot.certified 1
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.BinaryToOneHot.ports 2) := Modules.BinaryToOneHot.certified 2
-noncomputable example : ModuleCycleCertified
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.BinaryToOneHot.ports 3) := Modules.BinaryToOneHot.certified 3
 
 def inputs0 : (Modules.BinaryToOneHot.ports 0).inputs.Values

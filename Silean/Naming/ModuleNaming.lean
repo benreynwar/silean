@@ -126,19 +126,19 @@ inductive ModuleNaming : {ports : ModulePorts} → ModuleStructure ports → Typ
       (state : SignalMapNaming primitive.localState)
       (operation : PrimitiveOperation primitive) :
       ModuleNaming (.primitive primitive)
-  | splitter (splitter : SignalSplitter)
+  | splitter (splitter : Composition.SignalSplitter)
       (key : ModuleKey) (ports : ModulePortsNaming splitter.ports) :
       ModuleNaming (.splitter splitter)
-  | combiner (combiner : SignalCombiner)
+  | combiner (combiner : Composition.SignalCombiner)
       (key : ModuleKey) (ports : ModulePortsNaming combiner.ports) :
       ModuleNaming (.combiner combiner)
   | composite {body : ModuleBody}
-      {children : (name : body.context.instances.Name) →
-        ModuleStructure (body.context.instances.ports name)}
+      {children : (name : body.context.instancePorts.Name) →
+        ModuleStructure (body.context.instancePorts.ports name)}
       (key : ModuleKey)
       (ports : ModulePortsNaming body.context.ports)
-      (instanceName : body.context.instances.Name → SourceName)
-      (childNaming : (name : body.context.instances.Name) →
+      (instanceName : body.context.instancePorts.Name → SourceName)
+      (childNaming : (name : body.context.instancePorts.Name) →
         ModuleNaming (children name)) :
       ModuleNaming (.composite body children)
 

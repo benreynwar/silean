@@ -1,4 +1,5 @@
 import Silean.Foundation.SignalType
+import Silean.Foundation.DeriveEnumeration
 import Silean.Foundation.Enumeration
 import Silean.Foundation.SignalMap
 import Silean.Foundation.SignalExpectation

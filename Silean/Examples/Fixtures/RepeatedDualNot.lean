@@ -1,4 +1,4 @@
-import Silean.ModuleCycleContract
+import Silean.Contracts.Cycle.CycleContract
 import Silean.Examples.Fixtures.HierarchicalDualNot
 
 namespace Silean.Examples.Fixtures.RepeatedDualNot
@@ -10,17 +10,17 @@ inductive Instance
   | second
 deriving Enumeration
 
-@[reducible] def instances : Instances :=
+@[reducible] def instancePorts : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .first | .second => Examples.Fixtures.HierarchicalDualNot.ports
 
 @[reducible] def context : EndpointContext where
   ports := Examples.Fixtures.DualNot.ports
-  instances := instances
+  instancePorts := instancePorts
 
 @[reducible] def ports : ModulePorts := context.ports
 
-def wiring : Wiring context.ports context.instances where
+def wiring : Wiring context.ports context.instancePorts where
   moduleOutput
     | .forward => context.instanceOutput .second .forward
     | .backward => context.instanceOutput .second .backward
@@ -32,7 +32,7 @@ def wiring : Wiring context.ports context.instances where
 
 def body : ModuleBody := ⟨context, wiring⟩
 
-def childStructure : (name : instances.Name) → ModuleStructure (instances.ports name)
+def childStructure : (name : instancePorts.Name) → ModuleStructure (instancePorts.ports name)
   | .first | .second => Examples.Fixtures.HierarchicalDualNot.moduleStructure
 
 def moduleStructure : ModuleStructure ports :=
@@ -51,19 +51,19 @@ def outputSelection : (output : Examples.Fixtures.DualNot.Output) →
   | .forward => Examples.Fixtures.DualNot.ports.outputs.select .forward
   | .backward => Examples.Fixtures.DualNot.ports.outputs.select .backward
 def outputRule (input : Examples.Fixtures.DualNot.Input) (output : Examples.Fixtures.DualNot.Output) :
-    CycleOutputRule Examples.Fixtures.DualNot.ports emptySignalMap (.ofLists [.bit] [.bit]) where
+    Contracts.Cycle.CycleOutputRule Examples.Fixtures.DualNot.ports emptySignalMap (.ofLists [.bit] [.bit]) where
   readsInputs := inputSelection input
   writesOutputs := outputSelection output
   target | (value, ()), _ => (value, ())
 inductive Rule | forward | backward
 deriving Enumeration
-def cycleContract : ModuleCycleContract Examples.Fixtures.DualNot.ports where
+def cycleContract : Contracts.Cycle.ModuleCycleContract Examples.Fixtures.DualNot.ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
     | .forward => ⟨_, outputRule .forward .forward⟩
     | .backward => ⟨_, outputRule .backward .backward⟩
-  stateRule := CycleStateRule.empty Examples.Fixtures.DualNot.ports
+  stateRule := Contracts.Cycle.CycleStateRule.empty Examples.Fixtures.DualNot.ports
   outputCoverage := by rfl
 end Silean.Examples.Fixtures.RepeatedDualNot

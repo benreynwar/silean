@@ -4,7 +4,7 @@ namespace Silean.Examples.Checks.BitMux
 
 open Silean
 
-example : Modules.BitMux.instances.names.values =
+example : Modules.BitMux.instancePorts.names.values =
     [Modules.BitMux.Instance.invertSelect, Modules.BitMux.Instance.chooseFalse,
       Modules.BitMux.Instance.chooseTrue, Modules.BitMux.Instance.combine] := rfl
 

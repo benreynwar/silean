@@ -1,4 +1,4 @@
-import Silean.ModuleResetCertified
+import Silean.Contracts.Reset.ResetImplementation
 
 namespace Silean.Examples.Checks.ModuleResetCertified
 
@@ -8,11 +8,11 @@ section AbstractStructure
 
 variable {ports : ModulePorts}
 variable (moduleStructure : ModuleStructure ports)
-variable (contract : ModuleResetContract ports)
+variable (contract : Contracts.Reset.ModuleResetContract ports)
 variable (available : moduleStructure.HasSolution)
-variable (refines : ImplementsResetContract moduleStructure contract)
+variable (refines : Contracts.Reset.ImplementsResetContract moduleStructure contract)
 
-def certified : Silean.ModuleResetCertified ports where
+def certified : Silean.Contracts.Reset.ModuleResetCertified ports where
   moduleStructure := moduleStructure
   resetContract := contract
   hasSolution := available

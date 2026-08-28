@@ -1,10 +1,11 @@
-import Silean.ModuleCycleCertified
-import Silean.PrimitivePorts
+import Silean.Contracts.Cycle.CycleImplementation
+import Silean.Primitives.PrimitivePorts
 
 namespace Silean.Primitives
 
 open Silean
 
+/-- Stateless one-bit AND primitive. -/
 @[reducible] def and : Primitive where
   ports := binaryPorts
   localState := emptySignalMap
@@ -19,17 +20,17 @@ open Silean
 
 inductive AndRule | apply
 deriving Enumeration
-def andOutputRule : CycleOutputRule and.ports emptySignalMap
+def andOutputRule : Contracts.Cycle.CycleOutputRule and.ports emptySignalMap
     (.ofLists [.bit, .bit] [.bit]) where
   readsInputs := (and.ports.inputs.select .right).prepend .left
   writesOutputs := and.ports.outputs.select .output
   target | (left, (right, ())), _ => (left && right, ())
-def andCycleContract : ModuleCycleContract and.ports where
+def andCycleContract : Contracts.Cycle.ModuleCycleContract and.ports where
   state := emptySignalMap
   RuleName := AndRule
   ruleNames := inferInstance
   outputRule | .apply => ⟨_, andOutputRule⟩
-  stateRule := CycleStateRule.empty and.ports
+  stateRule := Contracts.Cycle.CycleStateRule.empty and.ports
   outputCoverage := by rfl
 
 @[simp] theorem andOutputRule_holds_iff
@@ -38,13 +39,13 @@ def andCycleContract : ModuleCycleContract and.ports where
     (outputs : and.ports.outputs.Values) :
     andOutputRule.Holds inputs state outputs ↔
       outputs .output = (inputs .left && inputs .right) := by
-  simp [andOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+  simp [andOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
     SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
 
 private def andStateCorresponds (_ : andCycleContract.state.Values)
     (_ : (ModuleStructure.primitive and).State) : Prop := True
 
-private theorem andImplements : Implements (.primitive and) andCycleContract
+private theorem andImplements : Contracts.Cycle.Implements (.primitive and) andCycleContract
     andStateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
@@ -57,11 +58,11 @@ private theorem andImplements : Implements (.primitive and) andCycleContract
       simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
         Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
       rw [satisfies.1]
-      simp [andOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+      simp [andOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
         SignalSelection.Matches, SignalMap.select, SignalSelection.prepend, and]
   · rfl
 
-def andCertified : ModuleCycleCertified and.ports where
+def andCertified : Contracts.Cycle.ModuleCycleCertified and.ports where
   moduleStructure := .primitive and
   cycleContract := andCycleContract
   certification := {

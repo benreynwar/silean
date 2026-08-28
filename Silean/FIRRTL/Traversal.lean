@@ -23,18 +23,18 @@ def portOccurrences (ports : ModulePorts) : List (PortOccurrence ports) :=
 
 structure ConnectionOccurrence (body : ModuleBody) where
   signalType : SignalType
-  sink : SignalSink body.context.ports body.context.instances signalType
-  driver : SignalSource body.context.ports body.context.instances signalType
+  sink : SignalSink body.context.ports body.context.instancePorts signalType
+  driver : SignalSource body.context.ports body.context.instancePorts signalType
 
 def connectionOccurrences (body : ModuleBody) : List (ConnectionOccurrence body) :=
   body.context.ports.outputs.labels.values.map (fun output =>
       { signalType := body.context.ports.outputs.signalType output
         sink := .moduleOutput output
         driver := body.wiring.moduleOutput output }) ++
-    body.context.instances.names.values.flatMap (fun child =>
-      (body.context.instances.ports child).inputs.labels.values.map (fun input =>
+    body.context.instancePorts.names.values.flatMap (fun child =>
+      (body.context.instancePorts.ports child).inputs.labels.values.map (fun input =>
         { signalType :=
-            (body.context.instances.ports child).inputs.signalType input
+            (body.context.instancePorts.ports child).inputs.signalType input
           sink := .instanceInput child input
           driver := body.wiring.instanceInput child input }))
 
@@ -46,7 +46,7 @@ def instanceOccurrences :
     (naming : ModuleNaming moduleStructure) → List InstanceOccurrence
   | .primitive .. | .splitter .. | .combiner .. => []
   | @ModuleNaming.composite body _ _ _ instanceName childNaming =>
-      body.context.instances.names.values.map fun name =>
+      body.context.instancePorts.names.values.map fun name =>
         ⟨instanceName name, (childNaming name).key⟩
 
 structure ModuleOccurrence where
@@ -63,7 +63,7 @@ private def collectOccurrencesAt (path : List SourceName) :
       [⟨path, ⟨_, _, .combiner combiner key ports⟩⟩]
   | @ModuleNaming.composite body children key ports instanceName childNaming =>
       ⟨path, ⟨_, _, .composite key ports instanceName childNaming⟩⟩ ::
-        body.context.instances.names.values.flatMap (fun child =>
+        body.context.instancePorts.names.values.flatMap (fun child =>
           collectOccurrencesAt (path ++ [instanceName child]) (childNaming child))
 
 def collectOccurrences (naming : ModuleNaming moduleStructure) : List ModuleOccurrence :=
@@ -88,7 +88,7 @@ private def collectDefinitionsInto (definitions : List NamedModule) :
   | .combiner combiner key ports =>
       insertDefinition definitions ⟨_, _, .combiner combiner key ports⟩
   | @ModuleNaming.composite body children key ports instanceName childNaming =>
-      let withChildren := body.context.instances.names.values.foldl
+      let withChildren := body.context.instancePorts.names.values.foldl
         (fun collected child => collectDefinitionsInto collected (childNaming child))
         definitions
       insertDefinition withChildren

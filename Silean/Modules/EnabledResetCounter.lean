@@ -1,4 +1,4 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Modules.EnabledResetRegister
 import Silean.Modules.Increment
 
@@ -6,6 +6,8 @@ namespace Silean.Modules.EnabledResetCounter
 
 open Silean
 
+/-- A wrapping binary counter which increments when enabled and can
+synchronously reset to a fixed bit-vector value. -/
 abbrev Value (width : Nat) := Fin width → Bool
 
 @[reducible] def valueType (width : Nat) : SignalType :=
@@ -38,21 +40,21 @@ inductive Rule | observe
 deriving Enumeration
 
 def outputRule (width : Nat) :
-    CycleOutputRule (ports width) (Register.stateMap (valueType width))
+    Contracts.Cycle.CycleOutputRule (ports width) (Register.stateMap (valueType width))
       { inputTypes := .nil, outputTypes := .cons (valueType width) .nil } where
   readsInputs := .nil
   writesOutputs := (outputMap width).select .value
   target | (), state => (state .stored, ())
 
 def stateRule (width : Nat) (resetValue : Value width) :
-    CycleStateRule (ports width) (Register.stateMap (valueType width)) where
+    Contracts.Cycle.CycleStateRule (ports width) (Register.stateMap (valueType width)) where
   inputTypes := .cons .bit (.cons .bit .nil)
   readsInputs := (inputMap.select .reset).prepend .enable
   target := fun | (enable, (reset, ())), state => fun
     | .stored => nextValue width resetValue enable reset (state .stored)
 
 def cycleContract (width : Nat) (resetValue : Value width) :
-    ModuleCycleContract (ports width) where
+    Contracts.Cycle.ModuleCycleContract (ports width) where
   state := Register.stateMap (valueType width)
   RuleName := Rule
   ruleNames := inferInstance
@@ -66,7 +68,7 @@ def cycleContract (width : Nat) (resetValue : Value width) :
     (outputs : (ports width).outputs.Values) :
     (outputRule width).Holds inputs state outputs ↔
       outputs .value = state .stored := by
-  simp [CycleOutputRule.Holds, outputRule, SignalSelection.Matches,
+  simp [Contracts.Cycle.CycleOutputRule.Holds, outputRule, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select]
 
 @[simp] theorem stateRule_apply_stored (width : Nat)
@@ -111,44 +113,52 @@ theorem next_toNat_of_enabled (width : Nat) (resetValue : Value width)
   rw [next_stored_of_enabled width resetValue inputs state notReset enabled]
   exact Increment.incrementValue_toNat width (state .stored)
 
+/-! ## Hardware structure -/
+
 private inductive Instance
+  /-- Computes the current value plus one, wrapping on overflow. -/
   | increment
+  /-- Retains, loads, or resets the counter value. -/
   | storage
 deriving Enumeration
 
-@[reducible] private def instances (width : Nat) : Instances :=
+@[reducible] private def instancePorts (width : Nat) : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .increment => Increment.ports width
     | .storage => EnabledResetRegister.ports (valueType width)
 
 @[reducible] private def context (width : Nat) : EndpointContext where
   ports := ports width
-  instances := instances width
+  instancePorts := instancePorts width
 
 private def wiring (width : Nat) :
-    Wiring (context width).ports (context width).instances where
-  moduleOutput
-    | .value => (context width).instanceOutput .storage .value
-  instanceInput
-    | .increment, .value => (context width).instanceOutput .storage .value
-    | .storage, .value => (context width).instanceOutput .increment .result
-    | .storage, .enable => (context width).moduleInput .enable
-    | .storage, .reset => (context width).moduleInput .reset
+    Wiring (context width).ports (context width).instancePorts :=
+  let c := context width
+  { moduleOutput := fun
+    -- Expose the stored counter value.
+    | .value => c.instanceOutput .storage .value
+    instanceInput := fun
+    -- Continuously compute the candidate incremented value.
+    | .increment, .value => c.instanceOutput .storage .value
+    -- Load that candidate when enabled; reset is handled by the storage child.
+    | .storage, .value => c.instanceOutput .increment .result
+    | .storage, .enable => c.moduleInput .enable
+    | .storage, .reset => c.moduleInput .reset }
 
 @[reducible] private def body (width : Nat) : ModuleBody :=
   ⟨context width, wiring width⟩
 
 @[reducible] private noncomputable def children (width : Nat)
-    (resetValue : Value width) : Certified.Children (body width)
+    (resetValue : Value width) : Contracts.Cycle.Certification.Children (body width)
   | .increment => Increment.certified width
   | .storage => EnabledResetRegister.certified (valueType width) resetValue
 
 @[reducible] private noncomputable def childStructure (width : Nat)
-    (resetValue : Value width) := Certified.childStructure (children width resetValue)
+    (resetValue : Value width) := Contracts.Cycle.Certification.childStructure (children width resetValue)
 
 @[reducible] private def structuralChildren (width : Nat)
     (resetValue : Value width) :
-    (name : (instances width).Name) → ModuleStructure ((instances width).ports name)
+    (name : (instancePorts width).Name) → ModuleStructure ((instancePorts width).ports name)
   | .increment => Increment.moduleStructure width
   | .storage => EnabledResetRegister.moduleStructure (valueType width) resetValue
 
@@ -158,18 +168,18 @@ def moduleStructure (width : Nat) (resetValue : Value width) :
 
 private theorem moduleStructure_eq (width : Nat) (resetValue : Value width) :
     moduleStructure width resetValue =
-      Certified.moduleStructure (body width) (children width resetValue) := by
-  unfold moduleStructure Certified.moduleStructure
+      Contracts.Cycle.Certification.moduleStructure (body width) (children width resetValue) := by
+  unfold moduleStructure Contracts.Cycle.Certification.moduleStructure
   congr
   funext child
   cases child <;> rfl
 
 private abbrev incrementRule (width : Nat) (resetValue : Value width) :
-    Certified.RuleOccurrence (children width resetValue) :=
+    Contracts.Cycle.Certification.RuleOccurrence (children width resetValue) :=
   ⟨.increment, Increment.Rule.apply⟩
 
 private abbrev storageRule (width : Nat) (resetValue : Value width) :
-    Certified.RuleOccurrence (children width resetValue) :=
+    Contracts.Cycle.Certification.RuleOccurrence (children width resetValue) :=
   ⟨.storage, EnabledResetRegister.Rule.observe⟩
 
 @[simp] private theorem incrementRule_reads (width : Nat)
@@ -189,7 +199,7 @@ private abbrev storageRule (width : Nat) (resetValue : Value width) :
     (storageRule width resetValue).writes = [.value] := rfl
 
 private def outputSchedule (width : Nat) (resetValue : Value width) :
-    Certified.OutputSchedule (body width) (children width resetValue)
+    Contracts.Cycle.Certification.OutputSchedule (body width) (children width resetValue)
       (cycleContract width resetValue) .observe :=
   .call (storageRule width resetValue)
     (by intro input member; rw [storageRule_reads] at member; cases member)
@@ -200,7 +210,7 @@ private def outputSchedule (width : Nat) (resetValue : Value width) :
     exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩))
 
 private def stateSchedule (width : Nat) (resetValue : Value width) :
-    Certified.StateSchedule (body width) (children width resetValue) :=
+    Contracts.Cycle.Certification.StateSchedule (body width) (children width resetValue) :=
   .call (storageRule width resetValue)
     (by intro input member; rw [storageRule_reads] at member; cases member)
     (by simp)
@@ -212,7 +222,7 @@ private def stateSchedule (width : Nat) (resetValue : Value width) :
     intro child input member
     cases child with
     | increment =>
-        change input ∈ (CycleStateRule.empty _).readsInputs.labels at member
+        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
         exact nomatch member
     | storage =>
         cases input with
@@ -220,7 +230,7 @@ private def stateSchedule (width : Nat) (resetValue : Value width) :
         | enable | reset => trivial)))
 
 private def ruleSchedules (width : Nat) (resetValue : Value width) :
-    Certified.RuleSchedules (body width) (children width resetValue)
+    Contracts.Cycle.Certification.RuleSchedules (body width) (children width resetValue)
       (cycleContract width resetValue) where
   output | .observe => outputSchedule width resetValue
   state := stateSchedule width resetValue
@@ -232,22 +242,22 @@ private theorem coversChildren (width : Nat) (resetValue : Value width) :
   | increment =>
       change Increment.Rule at rule
       cases rule
-      apply Certified.RuleSchedules.Combined.add_includes
+      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
       change incrementRule width resetValue ∈
         (stateSchedule width resetValue).finalAvailability
-      simp [stateSchedule, Certified.Schedule.finalAvailability]
+      simp [stateSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
   | storage =>
       change EnabledResetRegister.Rule at rule
       cases rule
-      apply Certified.RuleSchedules.Combined.add_preserves
-      apply Certified.RuleSchedules.mem_combineOutputs
+      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+      apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
         (ruleSchedules width resetValue) .observe
       change storageRule width resetValue ∈
         (outputSchedule width resetValue).finalAvailability
-      simp [outputSchedule, Certified.Schedule.finalAvailability]
+      simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
 
 private theorem hasAtMostOneSolution (width : Nat) (resetValue : Value width) :
-    (Certified.moduleStructure (body width)
+    (Contracts.Cycle.Certification.moduleStructure (body width)
       (children width resetValue)).HasAtMostOneSolution :=
   (ruleSchedules width resetValue).hasAtMostOneSolution
     (coversChildren width resetValue)
@@ -266,9 +276,9 @@ private noncomputable def storageInputs (width : Nat) (resetValue : Value width)
 
 private theorem hasStructuralResult (width : Nat) (resetValue : Value width)
     (inputs : (ports width).inputs.Values)
-    (currentState : (Certified.moduleStructure (body width)
+    (currentState : (Contracts.Cycle.Certification.moduleStructure (body width)
       (children width resetValue)).State) :
-    ∃ proposal, (Certified.moduleStructure (body width)
+    ∃ proposal, (Contracts.Cycle.Certification.moduleStructure (body width)
       (children width resetValue)).IsSolution inputs currentState proposal := by
   rcases (children width resetValue .storage).hasCorrespondingState
       (currentState .storage) with ⟨storageState, storageCorresponds⟩
@@ -317,16 +327,16 @@ private theorem hasStructuralResult (width : Nat) (resetValue : Value width)
 
 private def stateCorresponds (width : Nat) (resetValue : Value width)
     (contractState : (cycleContract width resetValue).state.Values)
-    (structuralState : (Certified.moduleStructure (body width)
+    (structuralState : (Contracts.Cycle.Certification.moduleStructure (body width)
       (children width resetValue)).State) : Prop :=
   (children width resetValue .storage).stateCorresponds contractState
     (structuralState .storage)
 
 private theorem implements (width : Nat) (resetValue : Value width) :
-    Implements (Certified.moduleStructure (body width) (children width resetValue))
+    Contracts.Cycle.Implements (Contracts.Cycle.Certification.moduleStructure (body width) (children width resetValue))
       (cycleContract width resetValue) (stateCorresponds width resetValue) := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have storageMatches := Certified.childSolutionMatchesContract
+  have storageMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
     (children width resetValue) inputs structuralState proposal satisfies
       .storage contractState corresponds
   rcases (children width resetValue .increment).hasCorrespondingState
@@ -335,7 +345,7 @@ private theorem implements (width : Nat) (resetValue : Value width) :
     funext statePort
     exact nomatch statePort
   subst incrementState
-  have incrementMatches := Certified.childSolutionMatchesContract
+  have incrementMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
     (children width resetValue) inputs structuralState proposal satisfies
       .increment SignalMap.emptyValues incrementCorresponds
   rcases proposal with ⟨outputs, proposals⟩
@@ -380,8 +390,8 @@ private theorem implements (width : Nat) (resetValue : Value width) :
 
 private noncomputable def proofCertification (width : Nat)
     (resetValue : Value width) :
-    ModuleCycleCertification
-      (Certified.moduleStructure (body width) (children width resetValue))
+    Contracts.Cycle.ModuleCycleCertification
+      (Contracts.Cycle.Certification.moduleStructure (body width) (children width resetValue))
       (cycleContract width resetValue) where
   stateCorresponds := stateCorresponds width resetValue
   hasCorrespondingState := fun structuralState =>
@@ -393,13 +403,13 @@ private noncomputable def proofCertification (width : Nat)
 
 private noncomputable opaque certification (width : Nat)
     (resetValue : Value width) :
-    ModuleCycleCertification (moduleStructure width resetValue)
+    Contracts.Cycle.ModuleCycleCertification (moduleStructure width resetValue)
       (cycleContract width resetValue) :=
   (proofCertification width resetValue).transportStructure
     (moduleStructure_eq width resetValue).symm
 
 noncomputable def certified (width : Nat) (resetValue : Value width) :
-    ModuleCycleCertified (ports width) :=
+    Contracts.Cycle.ModuleCycleCertified (ports width) :=
   (certification width resetValue).bundle
 
 @[simp] theorem certified_moduleStructure (width : Nat) (resetValue : Value width) :

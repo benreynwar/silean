@@ -40,7 +40,7 @@ independent statement of desired observable behavior.
 - `SignalMap` gives a structural shape readable symbolic labels and typed
   `Values`.
 - `ModulePorts` contains only module inputs and outputs.
-- `Instances` maps each symbolic child name to its exact ports.
+- `InstancePorts` maps each symbolic child name to its exact ports.
 - `Wiring` gives every boundary output and child input exactly one same-typed
   source. Fan-out is ordinary source reuse; undriven sinks are unrepresentable.
 - `Primitive` is an open leaf-description record containing ports, local state,
@@ -65,7 +65,7 @@ state at primitive leaves. Child inputs and composite next state are derived.
 order-independent meaning of one cycle. It requires primitive equations, child
 equations, and boundary wiring to hold. It does not prescribe evaluation order.
 
-`StructuralExecution.lean` lifts this same meaning across clock cycles without
+`Semantics/StructuralExecution.lean` lifts this same meaning across clock cycles without
 introducing a contract or chosen evaluator. `ModuleStructure.Transition` hides
 one satisfying `ProposedValues` while exposing only its boundary outputs and
 derived next structural state. `ModuleStructure.Executes` chains those
@@ -82,9 +82,9 @@ need a constructive algorithm proved to satisfy the same structural relation.
 
 `StructuralRule` is the small semantic dependency fact that selected module
 inputs determine selected outputs among arbitrary satisfying proposals. Every
-named rule of a `ModuleCycleCertified` child generically induces this fact.
+named rule of a `Contracts.Cycle.ModuleCycleCertified` child generically induces this fact.
 
-`Certified.Schedule` is parent proof data. A call names a child and one of that
+`Contracts.Cycle.Certification.Schedule` is parent proof data. A call names a child and one of that
 child's contract rules. It neither contains a child structural rule nor calls a
 child evaluator or child schedule. One schedule is supplied for each parent
 output rule and one for state. Their rule occurrences are combined with
@@ -106,7 +106,7 @@ refinement proofs to connect that result to behavior.
 
 ## Behavioral contracts
 
-`ModuleCycleContract` is separate from `ModuleStructure` and owns abstract
+`Contracts.Cycle.ModuleCycleContract` is separate from `ModuleStructure` and owns abstract
 contract state. It contains:
 
 - output rules with precise input-read and output-write selections;
@@ -114,8 +114,8 @@ contract state. It contains:
 - one total next-state rule.
 
 `CycleOutputRule.Holds` says one rule agrees with complete output values.
-`ModuleCycleContract.OutputRulesHold` requires this for every rule.
-`ModuleCycleContract.EvaluatesTo` adds the next-state requirement. This relational
+`Contracts.Cycle.ModuleCycleContract.OutputRulesHold` requires this for every rule.
+`Contracts.Cycle.ModuleCycleContract.EvaluatesTo` adds the next-state requirement. This relational
 form is useful in refinement because it can be applied directly to structural
 outputs.
 
@@ -135,7 +135,7 @@ tuple hierarchy by placing those choices only at bit leaves. Labelled
 concrete value, and all-don't-care expectations match every value. This is
 value vocabulary shared by contract forms.
 
-`ModuleResetContract` is the second behavioral contract form. It owns an
+`Contracts.Reset.ModuleResetContract` is the second behavioral contract form. It owns an
 arbitrary Lean state type, a distinguished bit reset input, a reset state, and
 one natural step function producing ternary output expectations and next
 state. Its finite-trace relation begins unsynchronized: ordinary cycles before
@@ -160,7 +160,7 @@ stronger than mentioning only traces whose first cycle resets: pre-reset
 outputs are unconstrained by `Accepts`, while any reset in the trace starts the
 exact-cycle obligations and every later reset restarts them.
 
-`ModuleResetCertified` packages the independently chosen structure and reset
+`Contracts.Reset.ModuleResetCertified` packages the independently chosen structure and reset
 contract with structural `HasSolution` and that refinement proof. Totality
 prevents refinement from holding merely because the structure has no
 executions; it also supplies an execution, and an accepted execution, for every
@@ -291,35 +291,18 @@ Validated refinement examples are:
   and the ordinary bank write use pre-edge state even when reset is asserted;
   reset wins in the pointer next states. Child schedules,
   construction, structural-state correspondence, and refinement remain
-  private. Independently, `Fifo.resetContract T addressWidth` describes the
-  reset-synchronized behavior with the natural Lean state `List T`. Empty and
-  nonempty queues determine ready/valid and head-data expectations directly;
-  invalid output data is `dontCare`. Its total ordinary step removes an
-  accepted output and appends an accepted input, with capacity derived solely
-  from `2 ^ addressWidth`. This contract imports only the FIFO interface and
-  is connected to the canonical structure by `Fifo.resetCertified`.
+  private. Independently, the shared `Contracts.Fifo.FifoContract` observes only transfers at
+  the valid/ready sink and source, reset, and capacity. `Fifo.fifoCertified`
+  connects the canonical structure to that latency-independent contract.
   Address width zero is the ordinary one-entry member of this family.
 
-The FIFO reset certification is a direct concrete proof. It starts from the
-existing cycle certificate's existential cycle state for an arbitrary
-structural state. Before reset, it carries only that private correspondence and
-places no requirements on outputs. A reset evaluation establishes zero
-pointers, the invariant, and empty logical contents without assuming the
-initial state was reachable. Ordinary cycles then use three public logical
-observation equations and the four queue-update laws to match the reset
-contract while preserving capacity. The local trace induction carries this
-evidence through every later reset. None of the cycle state, structural-state
-correspondence, invariant, or induction witness occurs in the resulting
-`ModuleResetCertified` value. Structural totality is carried separately from
-that private correspondence, using the FIFO's existing cycle certification.
-
-This concrete proof suggests a possible future generic constructor would need
-three proof ingredients: initial implementation-state coverage, reset
-establishment of behavioral alignment, and ordinary-cycle output matching with
-alignment preservation. Those ingredients would remain proof inputs rather
-than fields of the resulting certificate. The pattern has not been extracted
-yet; one example is not enough evidence that the abstraction would simplify
-another certification.
+The reusable `Contracts.Fifo.FifoCycleRefinement` proof adapter starts from an exact cycle
+certificate, a private invariant, and a private logical queue interpretation.
+Reset must establish an empty bounded queue from every cycle state; ordinary
+cycles must preserve the queue equation. Its trace induction produces a
+`Contracts.Fifo.FifoCertified` containing only the structure, FIFO contract, structural
+totality, and universal trace refinement. Structural totality separately
+prevents inconsistent structures from satisfying refinement vacuously.
 
 This distinction is intentional: proof-facing helper contracts may expose the
 precise behavior needed to compose a generic construction, while the reusable
@@ -336,15 +319,18 @@ correspondence and refinement remain module proofs because they express
 constant generation, storage, masking, and disjunction semantics rather than
 hierarchy mechanics.
 
-The structural vocabulary also expresses a generic one-entry fall-through
+The structural vocabulary also expresses a generic resettable one-entry fall-through
 FIFO. `OneEntryFifoControl` computes bit-valued upstream readiness and the shared
-storage-update condition. `OneEntryFifo T` composes `EnabledRegister .bit` for
+storage-update condition. `OneEntryFifo T` composes
+`EnabledResetRegister .bit false` for
 valid state, `EnabledRegister T` for payload state, that control module, an OR
 primitive, and `Mux T`. Its contract records bit-valued validity and
 `T`-valued stored data with separate forward and ready output dependencies.
+Reset synchronously clears validity but does not clear or constrain payload
+storage; current-cycle outputs continue to observe pre-edge state.
 Its schedules and child uniqueness proofs establish a unique structural
 result, while its existence and refinement proofs consume only the public
-child certificates. The result is exported as `ModuleCycleCertified` for every
+child certificates. The result is exported as `Contracts.Cycle.ModuleCycleCertified` for every
 signal type. Direct checks cover fall-through, capture, backpressure, and
 simultaneous dequeue/replacement for bit, vector, and nested tuple payloads.
 
@@ -354,7 +340,7 @@ Every reusable module exposes its `moduleStructure` directly as a computable
 definition. This is the structural API consumed by hierarchy traversal,
 naming, and direct FIRRTL generation; evaluating it never evaluates a proof.
 
-`ModuleCycleCertification structure contract` contains only correctness
+`Contracts.Cycle.ModuleCycleCertification structure contract` contains only correctness
 evidence indexed by an already chosen structure and contract: their state
 correspondence, correspondence coverage, `Implements`, and order-independent
 existence and uniqueness. A generic transport operation moves the complete
@@ -362,11 +348,12 @@ dependent proof across a proved structure identity, so concrete proofs do not
 contain scattered casts. Module certification values are opaque/noncomputable;
 they cannot accidentally become the source of emitted structure.
 
-`ModuleCycleCertified` remains the convenient composition bundle formed from
+`Contracts.Cycle.ModuleCycleCertified` remains the convenient composition bundle formed from
 the public structure, public contract, and indexed certification. It stores no
 schedules and no evaluator. The state-coverage field prevents an always-false
 relation from certifying a structure vacuously. Parent proofs use this bundle
-through contract-facing operations such as `Certified.childImplements`.
+through contract-facing operations such as
+`Contracts.Cycle.Certification.childImplements`.
 
 BitMux, OneEntryFifoControl, generic Register, Mask, BitwiseOr, Mux, EnabledRegister,
 and OneEntryFifo all follow this boundary. Their public structures are
@@ -379,24 +366,32 @@ computable; their proof implementations are opaque.
   ports, and structural-state shapes.
 - `Structure/`: named child interfaces, typed endpoints, total wiring, module
   bodies, and recursively owned module structures.
-- `Primitive`, `PrimitivePorts`, and `Primitives/`: the open primitive record,
-  shared bit-port shapes, and one file per supported single-bit primitive.
-- `SignalLayout`, `SignalAdapter`, `SignalAdapterCertified`: vector/tuple
+- `Interfaces/`: reusable, direction-correct selections from module ports with
+  their immediate boundary interpretation. `Interfaces.ValidReadySink` and
+  `Interfaces.ValidReadySource` project input/output values into the same sample type;
+  generic laws then extract exactly the payloads transferred when valid and
+  ready are both high. This layer does not prescribe FIFO behavior.
+- `Structure/Primitive.lean`, `Primitives/PrimitivePorts.lean`, and
+  `Primitives/`: the open primitive record, shared bit-port shapes, and one
+  distinctly named file per supported single-bit primitive.
+- `Composition/SignalLayout.lean`, `Composition/SignalAdapter.lean`, and
+  `Composition/SignalAdapterImplementation.lean`: vector/tuple
   immediate-component indexing plus the two closed, lossless structural
-  components `SignalSplitter` and `SignalCombiner` and their certificates.
-- `StructuralSemantics`: order-independent structural equations.
-- `StructuralDependency`: semantic dependency rules and the base at-most-one
+  components `Composition.SignalSplitter` and `Composition.SignalCombiner` and
+  their certificates.
+- `Semantics/StructuralEquations.lean`: order-independent structural equations.
+- `Semantics/StructuralDependency.lean`: semantic dependency rules and the base at-most-one
   proposition, independent of schedule construction.
-- `CertifiedComposition`: certified child collections, their derived composite
+- `Contracts/Cycle/CycleComposition.lean`: certified child collections, their derived composite
   structures, and the generic law for applying a child certificate to its part
   of a valid parent proposal.
-- `CertifiedSchedule`: named certified-child rule schedules, schedule
+- `Contracts/Cycle/CycleSchedule.lean`: named certified-child rule schedules, schedule
   combination/coverage, finite-family scheduling both from an empty prefix and
   after existing availability, and generic parent at-most-one proof.
-- `LeafwiseComposition`: generic recursive/fixed input classification,
+- `Composition/LeafwiseComposition.lean`: generic recursive/fixed input classification,
   split/component/combine hierarchy and wiring, certified child occurrences,
   component-family scheduling, and composite structural-existence construction.
-- `Modules/Reduction`: generic finite reduction shape, balanced-tree proof,
+- `Composition/Reduction.lean`: generic finite reduction shape, balanced-tree proof,
   hierarchy construction, schedules, and recursive certification.
 - `Modules/All`: the AND/true instantiation, its natural all-inputs contract,
   public behavioral theorem, and module-owned naming.
@@ -426,19 +421,21 @@ computable; their proof implementations are opaque.
 - `Modules/Increment`: natural modular-increment contract and public numeric
   law, backed by a private recursive ripple-carry hierarchy of HalfAdders and
   ordinary vector adapters.
-- `ModuleCycleContract`: behavioral rule declarations and coverage.
+- `Contracts.Cycle.ModuleCycleContract`: behavioral rule declarations and coverage.
 - `ModuleCycleEvaluation`: public contract evaluation relations/functions plus
   private typed assembly proofs.
-- `ModuleCycleCertified`: the generic one-cycle implementation property and
+- `Contracts.Cycle.ModuleCycleCertified`: the generic one-cycle implementation property and
   non-vacuous certified bundle.
-- `Contracts/NoResetFifo*`: implementation-independent FIFO traces, finite
-  execution, and module-facing capacity/latency views.
+- `Contracts/Fifo`: interface-based reset-synchronized FIFO traces, bounded
+  logical queues, conservation/order laws, and non-vacuous certification.
+- `FifoCycleCertified`: private invariant/queue refinement adapter from exact
+  cycle certification to the shared FIFO contract.
 - `Primitives/`: one file per concrete primitive, containing its structural
   definition and cycle contract; `PrimitivePorts` contains only shared
   single-bit port shapes.
 - `Modules/`: one file per reusable module, containing its hierarchy, wiring,
   structure, and cycle contract where present. Test-only module fixtures stay
-  in `Examples/`. Shared FIFO interface, cycle behavior, execution, and derived
+  in `Examples/`. Shared FIFO ports, cycle behavior, execution, and derived
   properties have separate files because they have different ownership.
 - `Naming/`: generic typed naming metadata plus primitive and signal-adapter
   naming. Each reusable module owns its specific naming alongside its structure.
@@ -457,10 +454,10 @@ meaning of evaluation.
 ## Deliberate omissions and remaining pressure tests
 
 There is currently no general automatic refinement composition, lowering,
-backend correctness proof, reset model, or negative cycle checker. The trace
-layer covers the no-reset one-entry FIFO and generic serial execution
-composition, while `SerialFifo` and `Fifo` provide reusable structural
-composition at arbitrary positive depth. Aggregate projection/assembly and
+backend correctness proof, or negative cycle checker. FIFO serial refinement
+is the first contract-specific composition law; `OneEntryFifo`,
+`SerialDepthFifo`, and `Fifo` are all certified against the same public
+contract. Aggregate projection/assembly and
 `Fin`/tuple-position indexed instance
 authoring are now validated by the recursively certified register and direct
 FIRRTL generation.
@@ -522,77 +519,36 @@ Its seeded cocotb scoreboard independently randomizes producer validity and
 consumer readiness, checks every transfer in FIFO order, and finishes with a
 forced-ready drain bounded by the configured capacity.
 
-## One-entry FIFO properties
+## FIFO behavioral correctness
 
-The no-reset FIFO layer is independent of module structure. A trace records
-accepted transfers and logical contents at its boundaries; its contract states
-exact conservation, a capacity bound, and a ready-propagation stall bound.
-Generic finite execution lifts single-cycle conservation and stall inequalities
-to arbitrary input sequences.
+`Contracts.Fifo.FifoContract` is independent of module structure and exact cycle state. Its
+sink and source interfaces extract accepted boundary payloads. Before the first
+reset behavior is unconstrained; reset establishes an empty bounded logical
+queue; ordinary synchronized cycles satisfy the queue equation. Generic trace
+induction proves conservation, capacity, and that outputs from an empty queue
+are an in-order prefix of inputs.
 
-`NoResetFifo.Execution.step` invokes `ModuleCycleContract.evaluate` for any
-`NoResetFifo.CycleBehavior`. `OneEntryFifo.Properties` specializes that one generic
-interpreter; it does not duplicate an evaluator or inspect child instances.
-Logical contents are empty when `storedValid` is false and contain exactly
-`storedData` otherwise. The resulting proofs establish single-cycle and
-whole-run conservation, capacity one, and zero-cycle ready propagation for
-every `SignalType` payload.
+`Contracts.Fifo.FifoCertified` adds two structural claims: every structural state and input
+has a solution, and every finite structural execution satisfies the contract.
+The first claim makes refinement non-vacuous. `Contracts.Fifo.FifoCycleRefinement` is the
+current proof adapter. It uses `Contracts.Cycle.ModuleCycleCertified.solution_matches_evaluate`
+to relate each structural transition to exact cycle behavior while carrying a
+private logical queue invariant across the trace.
 
-`ModuleCycleCertified.solution_matches_evaluate` is the generic bridge back to
-hardware structure: every structurally valid proposal has the contract
-evaluator's outputs, and its next structural state corresponds to the
-evaluator's next contract state. Thus contract execution is deterministic at
-the public contract boundary while certification proves the structure follows
-that execution; no structural evaluator or proof schedule is exposed.
+OneEntryFifo interprets its valid/data state as an empty or singleton queue.
+Generic serial refinement orders downstream contents before upstream contents,
+adds capacities, and cancels the internal transfer using the two child queue
+equations. SerialDepthFifo applies this theorem recursively, so its public
+capacity is its positive depth.
 
-## Serial FIFO execution and property composition
-
-Serial composition is proved entirely over FIFO observations. `SerialCycle`
-states the nine equalities connecting the external and internal valid/data/ready
-signals; `SerialCycles` lifts those equalities pointwise over a finite trace.
-The derived laws identify external transfers, cancel internal transfers, and
-relate the three ready-stall counts.
-
-`Contract.serial` uses only those laws and the two child contracts. Downstream
-contents precede upstream contents in dequeue order, conservation cancels the
-internal channel, capacities add, and ready-propagation latencies add. The
-generic execution `Serial` lifts a one-step decomposition to every finite run;
-`View.Execution.Constructor` then turns child satisfaction certificates into
-parent satisfaction without referring to `ModuleStructure`.
-
-`NoResetFifo.Execution.serial` proves that execution of a serially composed cycle
-behavior decomposes into execution of its children. `SerialDepthFifo.Properties` combines
-the child views using the generic no-reset FIFO constructor. Positive-depth
-FIFO checks exercise this composition at depths one, two, and three; no second
-hand-written two-stage evaluator is retained.
-
-## Resettable FIFO behavioral correctness
-
-The canonical pointer-and-register-bank `Fifo` is interpreted at its public
-cycle-contract boundary. `Fifo.Properties` defines logical occupancy as the
-circular distance between its extended read and write pointers and defines
-logical contents by reading that many register-bank entries from the read
-address. The reachable-state predicate is precisely the capacity bound on that
-distance; it rules out the unused half of the extended-pointer state space.
-
-Reusable arithmetic about circular distance, index advancement, logical reads,
-and functional writes lives in `Foundation/CircularBuffer.lean`.
-`Foundation/Execution.lean` contains contract-independent deterministic-run
-and relational-trace mechanics over finite input lists. Reset-aware
-accepted-transfer and finite-transition
-semantics lives in `Contracts/ResetFifo.lean`. The module property layer proves from
-`ModuleCycleContract.evaluate` that every valid cycle preserves the invariant
-and obeys the logical queue equation. Reset cycles accept no logical transfer
-and clear the next logical contents; ordinary cycles append accepted input and
-remove exactly the oldest accepted output. This covers stalls, simultaneous
-transfers, pointer wraparound, and capacity one uniformly.
-
-The generic finite-run induction then proves the transition relation for every
-input sequence. Reset-free segments have exact conservation; from empty, their
-accepted outputs are a prefix of accepted inputs. This is the ordering and
-no-loss/no-duplication theorem. Structural certification remains a separate
-fact: none of these behavioral proofs sees child instances, wiring, or private
-schedules.
+For the pointer-and-register-bank FIFO, `Fifo.Properties` defines occupancy as
+extended-pointer circular distance and logical contents as the corresponding
+register-bank entries beginning at the read address. The reachable invariant
+bounds occupancy by capacity. Its one-cycle lemmas cover stalls, enqueue,
+dequeue, simultaneous transfers, wraparound, and capacity one. Reset directly
+establishes the invariant and empty contents from arbitrary pointer state.
+`Contracts.Fifo.FifoCertified` lifts those facts through the generic trace adapter. No FIFO
+proof in this layer inspects child instances, wiring, or private schedules.
 
 ## Current review conclusion
 
@@ -616,22 +572,24 @@ verbosity that remains in concrete refinement checks comes mostly from exposing
 the exact wiring equations of those examples; it has not justified adding
 module-specific public helper APIs.
 
-## No-reset serial-depth FIFO hierarchy
+## Serial-depth FIFO hierarchy
 
 The FIFO now demonstrates the intended layering at arbitrary positive depth:
 
-- `NoResetFifo.CycleBehavior` describes forward data/valid, backward ready, and next state.
+- `Contracts.Fifo.Cycle.CycleBehavior` describes forward data/valid, backward ready,
+  synchronous reset, and next state.
   Serial behavior combines states with a labelled sum.
-- `SerialFifo` is the two-instance structural composition. Its schedules call
+- `Composition.FifoSerial` is the two-instance structural composition. Its schedules call
   only public upstream and downstream contract rules, and its certification
   consumes only public child certificates.
 - `SerialDepthFifo.moduleStructure`, `SerialDepthFifo.cycleBehavior`, and
   `SerialDepthFifo.cycleContract` are independently computable.
   `SerialDepthFifo.certification` is noncomputable evidence
   connecting those values.
-- `NoResetFifo.Execution` executes cycle contracts and supplies the generic serial
-  execution decomposition. `SerialDepthFifo.Properties` recursively combines certified
-  views, yielding exact capacity `depth` and zero ready latency.
+- `Composition.FifoSerial.serialRefinement` combines child invariants and logical queues
+  without inspecting child structures. `SerialDepthFifo.fifoCertified`
+  recursively applies it, yielding exact capacity `depth` and structural
+  totality.
 - `SerialDepthFifo.Naming.depthNamingWith` is module-owned metadata with depth-sensitive
   module keys and recursively propagated payload labels.
 

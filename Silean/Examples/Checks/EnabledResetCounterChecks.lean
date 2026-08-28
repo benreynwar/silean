@@ -45,8 +45,8 @@ def next (width : Nat) (resetValue stored : Value width)
 #guard BitVector.toNat 0 (next 0 bits0 bits0 true false) == 0
 #guard BitVector.toNat 0 (next 0 bits0 bits0 true true) == 0
 
-noncomputable example : ModuleCycleCertified (ports 0) := certified 0 bits0
-noncomputable example : ModuleCycleCertified (ports 3) := certified 3 bits3Two
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 0) := certified 0 bits0
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 3) := certified 3 bits3Two
 
 noncomputable def structuralState (width : Nat) (resetValue : Value width) :
     (moduleStructure width resetValue).State :=

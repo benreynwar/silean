@@ -1,4 +1,4 @@
-import Silean.Modules.FifoProperties
+import Silean.Modules.Fifo.FifoProperties
 
 namespace Silean.Examples.Checks.FifoProperties
 
@@ -23,12 +23,6 @@ def state0 (readWrap writeWrap entry : Bool) : ContractState .bit 0
   | .writePointer => pointer0 writeWrap
   | .entries => fun | 0 => entry
 
-def input (valid data ready reset : Bool) : Execution.Input .bit where
-  enqValid := valid
-  enqData := data
-  deqReady := ready
-  reset := reset
-
 -- Address width zero is a genuine one-entry FIFO.
 #guard capacity 0 == 1
 example : contents 0 (state0 false false false) = [] := rfl
@@ -43,41 +37,11 @@ example : Invariant 1 (state1 0 0 false false) := by
   decide
 example : contents 1 (state1 0 0 false false) = [] := rfl
 example : (contents 1 (state1 0 2 true false)).length = capacity 1 := rfl
-example : Silean.Modules.FifoPointerControl.full
+example : Silean.Modules.Fifo.PointerControl.full
     ((state1 0 2 true false) .readPointer)
     ((state1 0 2 true false) .writePointer) = true :=
   (contents_length_eq_capacity_iff_full 1 (state1 0 2 true false) (by
     unfold Invariant occupancy CircularBuffer.distance
     decide)).mp rfl
-
--- A stall and a simultaneous transfer are both covered by the cycle theorem.
-example : Contracts.ResetFifo.Step (contents 1 (state1 0 1 true false))
-    (Execution.step .bit 1 (state1 0 1 true false)
-      (input false false false false)).observation
-    (contents 1 (Execution.step .bit 1 (state1 0 1 true false)
-      (input false false false false)).nextState) :=
-  Execution.step_correct .bit 1 _ _ (by
-    unfold Invariant occupancy CircularBuffer.distance
-    decide)
-
-example : Contracts.ResetFifo.Step (contents 1 (state1 0 1 true false))
-    (Execution.step .bit 1 (state1 0 1 true false)
-      (input true false true false)).observation
-    (contents 1 (Execution.step .bit 1 (state1 0 1 true false)
-      (input true false true false)).nextState) :=
-  Execution.step_correct .bit 1 _ _ (by
-    unfold Invariant occupancy CircularBuffer.distance
-    decide)
-
--- Reset followed by traffic is handled by the same arbitrary-trace model.
-example : let inputs := [input true true false true, input true false false false,
-      input false false true false]
-    let result := (Execution.model .bit 1).run (state1 1 2 false true) inputs
-    Invariant 1 result.finalState ∧
-      Contracts.ResetFifo.Transitions (contents 1 (state1 1 2 false true))
-        result.observations (contents 1 result.finalState) := by
-  exact Execution.run_correct .bit 1 _ _ (by
-    unfold Invariant occupancy CircularBuffer.distance
-    decide)
 
 end Silean.Examples.Checks.FifoProperties

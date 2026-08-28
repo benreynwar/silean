@@ -104,71 +104,71 @@ private def primitiveStatements {primitive : Primitive}
   | .constant value =>
       [s!"connect {renderSourceName (ports.outputs.name .output)}, UInt<1>({if value then 1 else 0})"]
 
-private def splitterStatements (splitter : SignalSplitter)
+private def splitterStatements (splitter : Composition.SignalSplitter)
     (ports : ModulePortsNaming splitter.ports) : List String := match splitter with
   | .vector length element =>
-      let aggregate := renderSourceName (ports.inputs.name AggregatePort.value)
-      (SignalSplitter.vector length element).ports.outputs.labels.values.zipIdx.map
+      let aggregate := renderSourceName (ports.inputs.name Composition.AggregatePort.value)
+      (Composition.SignalSplitter.vector length element).ports.outputs.labels.values.zipIdx.map
         fun (label, index) =>
           s!"connect {renderSourceName (ports.outputs.name label)}, {aggregate}[{index}]"
   | .tuple fields =>
-      let aggregate := renderSourceName (ports.inputs.name AggregatePort.value)
-      let fieldNaming := match ports.inputTypes AggregatePort.value with
+      let aggregate := renderSourceName (ports.inputs.name Composition.AggregatePort.value)
+      let fieldNaming := match ports.inputTypes Composition.AggregatePort.value with
         | .tuple fieldNaming => fieldNaming
-      (SignalSplitter.tuple fields).ports.outputs.labels.values.map fun label =>
+      (Composition.SignalSplitter.tuple fields).ports.outputs.labels.values.map fun label =>
         s!"connect {renderSourceName (ports.outputs.name label)}, {aggregate}.{renderSourceName (fieldNaming.nameAt label)}"
 
-private def combinerStatements (combiner : SignalCombiner)
+private def combinerStatements (combiner : Composition.SignalCombiner)
     (ports : ModulePortsNaming combiner.ports) : List String := match combiner with
   | .vector length element =>
-      let aggregate := renderSourceName (ports.outputs.name AggregatePort.value)
-      (SignalCombiner.vector length element).ports.inputs.labels.values.zipIdx.map
+      let aggregate := renderSourceName (ports.outputs.name Composition.AggregatePort.value)
+      (Composition.SignalCombiner.vector length element).ports.inputs.labels.values.zipIdx.map
         fun (label, index) =>
           s!"connect {aggregate}[{index}], {renderSourceName (ports.inputs.name label)}"
   | .tuple fields =>
-      let aggregate := renderSourceName (ports.outputs.name AggregatePort.value)
-      let fieldNaming := match ports.outputTypes AggregatePort.value with
+      let aggregate := renderSourceName (ports.outputs.name Composition.AggregatePort.value)
+      let fieldNaming := match ports.outputTypes Composition.AggregatePort.value with
         | .tuple fieldNaming => fieldNaming
-      (SignalCombiner.tuple fields).ports.inputs.labels.values.map fun label =>
+      (Composition.SignalCombiner.tuple fields).ports.inputs.labels.values.map fun label =>
         s!"connect {aggregate}.{renderSourceName (fieldNaming.nameAt label)}, {renderSourceName (ports.inputs.name label)}"
 
 private def sourceReference {body : ModuleBody}
-    {children : (name : body.context.instances.Name) →
-      ModuleStructure (body.context.instances.ports name)}
+    {children : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name)}
     (ports : ModulePortsNaming body.context.ports)
-    (instanceName : body.context.instances.Name → SourceName)
-    (childNaming : (name : body.context.instances.Name) →
+    (instanceName : body.context.instancePorts.Name → SourceName)
+    (childNaming : (name : body.context.instancePorts.Name) →
       ModuleNaming (children name)) :
-    SignalSource body.context.ports body.context.instances signalType → String
+    SignalSource body.context.ports body.context.instancePorts signalType → String
   | .moduleInput port => renderSourceName (ports.inputs.name port)
   | .instanceOutput child port =>
       s!"{renderSourceName (instanceName child)}.{renderSourceName ((childNaming child).ports.outputs.name port)}"
 
 private def sinkReference {body : ModuleBody}
-    {children : (name : body.context.instances.Name) →
-      ModuleStructure (body.context.instances.ports name)}
+    {children : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name)}
     (ports : ModulePortsNaming body.context.ports)
-    (instanceName : body.context.instances.Name → SourceName)
-    (childNaming : (name : body.context.instances.Name) →
+    (instanceName : body.context.instancePorts.Name → SourceName)
+    (childNaming : (name : body.context.instancePorts.Name) →
       ModuleNaming (children name)) :
-    SignalSink body.context.ports body.context.instances signalType → String
+    SignalSink body.context.ports body.context.instancePorts signalType → String
   | .moduleOutput port => renderSourceName (ports.outputs.name port)
   | .instanceInput child port =>
       s!"{renderSourceName (instanceName child)}.{renderSourceName ((childNaming child).ports.inputs.name port)}"
 
 private def compositeStatements {body : ModuleBody}
-    {children : (name : body.context.instances.Name) →
-      ModuleStructure (body.context.instances.ports name)}
+    {children : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name)}
     (ports : ModulePortsNaming body.context.ports)
-    (instanceName : body.context.instances.Name → SourceName)
-    (childNaming : (name : body.context.instances.Name) →
+    (instanceName : body.context.instancePorts.Name → SourceName)
+    (childNaming : (name : body.context.instancePorts.Name) →
       ModuleNaming (children name)) : List String :=
-  let instances := body.context.instances.names.values.flatMap fun child =>
+  let instanceStatements := body.context.instancePorts.names.values.flatMap fun child =>
     [s!"inst {renderSourceName (instanceName child)} of {renderModuleKey (childNaming child).key}",
      s!"connect {renderSourceName (instanceName child)}.clock, clock"]
   let connections := (connectionOccurrences body).map fun connection =>
     s!"connect {sinkReference ports instanceName childNaming connection.sink}, {sourceReference ports instanceName childNaming connection.driver}"
-  instances ++ connections
+  instanceStatements ++ connections
 
 private def renderModuleBody :
     (naming : ModuleNaming moduleStructure) → RenderResult String
@@ -182,7 +182,7 @@ private def renderModuleBody :
       validateLocalNames ports.names
       pure (indentLines (renderPorts ports ++ combinerStatements combiner ports))
   | @ModuleNaming.composite body children _ ports instanceName childNaming => do
-      validateLocalNames (ports.names ++ body.context.instances.names.values.map instanceName)
+      validateLocalNames (ports.names ++ body.context.instancePorts.names.values.map instanceName)
       pure (indentLines (renderPorts ports ++
         compositeStatements ports instanceName childNaming))
 

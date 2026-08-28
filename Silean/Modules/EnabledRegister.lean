@@ -1,4 +1,4 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Modules.Mux
 import Silean.Modules.Register
 
@@ -6,12 +6,18 @@ namespace Silean.Modules.EnabledRegister
 
 open Silean
 
+/-! ## Hardware structure -/
+
+/-- A register which loads `value` when `enable` is high and otherwise retains
+its current value. -/
 inductive Instance
+  /-- Chooses between the new input and the stored value. -/
   | selection
+  /-- Holds the selected value across cycles. -/
   | storage
 deriving Enumeration
 
-@[reducible] def instances (signalType : SignalType) : Instances :=
+@[reducible] def instancePorts (signalType : SignalType) : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .selection => Modules.Mux.ports signalType
     | .storage => Modules.Register.ports signalType
@@ -38,33 +44,37 @@ deriving Enumeration
 
 @[reducible] def context (signalType : SignalType) : EndpointContext where
   ports := ports signalType
-  instances := instances signalType
+  instancePorts := instancePorts signalType
 
 def wiring (signalType : SignalType) :
-    Wiring (context signalType).ports (context signalType).instances where
-  moduleOutput
-    | .value => (context signalType).instanceOutput .storage .output
-  instanceInput
-    | .selection, .select => (context signalType).moduleInput .enable
+    Wiring (context signalType).ports (context signalType).instancePorts :=
+  let c := context signalType
+  { moduleOutput := fun
+    -- The stored value is exposed directly.
+    | .value => c.instanceOutput .storage .output
+    instanceInput := fun
+    -- Select the new input when enabled, or feed the stored value back.
+    | .selection, .select => c.moduleInput .enable
     | .selection, .whenFalse =>
-        (context signalType).instanceOutput .storage .output
-    | .selection, .whenTrue => (context signalType).moduleInput .value
-    | .storage, .input => (context signalType).instanceOutput .selection .result
+        c.instanceOutput .storage .output
+    | .selection, .whenTrue => c.moduleInput .value
+    -- Store the mux result on the next clock edge.
+    | .storage, .input => c.instanceOutput .selection .result }
 
 @[reducible] def body (signalType : SignalType) : ModuleBody :=
   ⟨context signalType, wiring signalType⟩
 
 @[reducible] noncomputable def children (signalType : SignalType) :
-    Certified.Children (body signalType)
+    Contracts.Cycle.Certification.Children (body signalType)
   | .selection => Modules.Mux.certified signalType
   | .storage => Modules.Register.certified signalType
 
 @[reducible] noncomputable def childStructure (signalType : SignalType) :=
-  Certified.childStructure (children signalType)
+  Contracts.Cycle.Certification.childStructure (children signalType)
 
 @[reducible] def structuralChildren (signalType : SignalType) :
-    (name : (instances signalType).Name) →
-      ModuleStructure ((instances signalType).ports name)
+    (name : (instancePorts signalType).Name) →
+      ModuleStructure ((instancePorts signalType).ports name)
   | .selection => Modules.Mux.moduleStructure signalType
   | .storage => Modules.Register.moduleStructure signalType
 
@@ -74,8 +84,8 @@ def moduleStructure (signalType : SignalType) :
 
 theorem moduleStructure_eq (signalType : SignalType) :
     moduleStructure signalType =
-      Certified.moduleStructure (body signalType) (children signalType) := by
-  unfold moduleStructure Certified.moduleStructure
+      Contracts.Cycle.Certification.moduleStructure (body signalType) (children signalType) := by
+  unfold moduleStructure Contracts.Cycle.Certification.moduleStructure
   congr
   funext child
   cases child <;> rfl
@@ -116,24 +126,26 @@ end Silean.Modules.EnabledRegister.Naming
 
 namespace Silean.Modules.EnabledRegister
 open Silean
+/-! ## Exact cycle behavior and certification -/
+
 inductive Rule | observe
 deriving Enumeration
 def outputRule (signalType : SignalType) :
-    CycleOutputRule (Modules.EnabledRegister.ports signalType)
+    Contracts.Cycle.CycleOutputRule (Modules.EnabledRegister.ports signalType)
       (Modules.Register.stateMap signalType)
       { inputTypes := .nil, outputTypes := .cons signalType .nil } where
   readsInputs := .nil
   writesOutputs := (Modules.EnabledRegister.ports signalType).outputs.select .value
   target | (), state => (state .stored, ())
 def stateRule (signalType : SignalType) :
-    CycleStateRule (Modules.EnabledRegister.ports signalType)
+    Contracts.Cycle.CycleStateRule (Modules.EnabledRegister.ports signalType)
       (Modules.Register.stateMap signalType) where
   inputTypes := .cons .bit (.cons signalType .nil)
   readsInputs := ((inputMap signalType).select .value).prepend .enable
   target := fun | (enable, (value, ())), state => fun
     | .stored => bif enable then value else state .stored
 def cycleContract (signalType : SignalType) :
-    ModuleCycleContract (Modules.EnabledRegister.ports signalType) where
+    Contracts.Cycle.ModuleCycleContract (Modules.EnabledRegister.ports signalType) where
   state := Modules.Register.stateMap signalType
   RuleName := Rule
   ruleNames := inferInstance
@@ -142,11 +154,11 @@ def cycleContract (signalType : SignalType) :
   outputCoverage := by rfl
 
 abbrev selectionRule (signalType : SignalType) :
-    Certified.RuleOccurrence (children signalType) :=
+    Contracts.Cycle.Certification.RuleOccurrence (children signalType) :=
   ⟨.selection, Mux.Rule.select⟩
 
 abbrev storageRule (signalType : SignalType) :
-    Certified.RuleOccurrence (children signalType) :=
+    Contracts.Cycle.Certification.RuleOccurrence (children signalType) :=
   ⟨.storage, Primitives.RegisterRule.observe⟩
 
 @[simp] theorem selectionRule_reads (signalType) :
@@ -159,7 +171,7 @@ abbrev storageRule (signalType : SignalType) :
     (storageRule signalType).writes = [.output] := rfl
 
 def outputSchedule (signalType : SignalType) :
-    Certified.OutputSchedule (body signalType) (children signalType)
+    Contracts.Cycle.Certification.OutputSchedule (body signalType) (children signalType)
       (cycleContract signalType) .observe :=
   .call (storageRule signalType)
     (by intro port member; cases port; cases member)
@@ -167,12 +179,12 @@ def outputSchedule (signalType : SignalType) :
   (.done (by
     intro output member
     cases output
-    change Certified.outputAvailable ([storageRule signalType] :
-      Certified.Availability (children signalType)) .storage .output
+    change Contracts.Cycle.Certification.outputAvailable ([storageRule signalType] :
+      Contracts.Cycle.Certification.Availability (children signalType)) .storage .output
     exact ⟨Primitives.RegisterRule.observe, by simp, by simp⟩))
 
 def stateSchedule (signalType : SignalType) :
-    Certified.StateSchedule (body signalType) (children signalType) :=
+    Contracts.Cycle.Certification.StateSchedule (body signalType) (children signalType) :=
   .call (storageRule signalType)
     (by intro port member; cases port; cases member)
     (by simp)
@@ -189,14 +201,14 @@ def stateSchedule (signalType : SignalType) :
     cases child with
     | selection =>
         rw [Mux.certified_cycleContract] at member
-        simp [Mux.cycleContract, Mux.stateRule, CycleStateRule.empty,
+        simp [Mux.cycleContract, Mux.stateRule, Contracts.Cycle.CycleStateRule.empty,
           SignalSelection.labels] at member
     | storage =>
         cases input
         exact ⟨Mux.Rule.select, by simp, by simp⟩)))
 
 def ruleSchedules (signalType : SignalType) :
-    Certified.RuleSchedules (body signalType) (children signalType)
+    Contracts.Cycle.Certification.RuleSchedules (body signalType) (children signalType)
       (cycleContract signalType) where
   output | .observe => outputSchedule signalType
   state := stateSchedule signalType
@@ -208,19 +220,19 @@ theorem coversChildren (signalType : SignalType) :
   | selection =>
     change Mux.Rule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_includes
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
     change selectionRule signalType ∈ (stateSchedule signalType).finalAvailability
-    simp [stateSchedule, Certified.Schedule.finalAvailability]
+    simp [stateSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
   | storage =>
     change Register.Rule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs (ruleSchedules signalType) .observe
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs (ruleSchedules signalType) .observe
     change storageRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Certified.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
 
 theorem hasAtMostOneSolution (signalType : SignalType) :
-    (Certified.moduleStructure (body signalType)
+    (Contracts.Cycle.Certification.moduleStructure (body signalType)
       (children signalType)).HasAtMostOneSolution :=
   (ruleSchedules signalType).hasAtMostOneSolution (coversChildren signalType)
 
@@ -239,10 +251,10 @@ noncomputable def storageInputs (signalType : SignalType)
 
 theorem hasStructuralResult (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
-    (currentState : (Certified.moduleStructure (body signalType)
+    (currentState : (Contracts.Cycle.Certification.moduleStructure (body signalType)
       (children signalType)).State) :
     ∃ proposal,
-      (Certified.moduleStructure (body signalType)
+      (Contracts.Cycle.Certification.moduleStructure (body signalType)
         (children signalType)).IsSolution inputs currentState proposal := by
   rcases (children signalType .storage).hasCorrespondingState
       (currentState .storage) with ⟨storageState, storageCorresponds⟩
@@ -301,7 +313,7 @@ theorem hasStructuralResult (signalType : SignalType)
 
 def stateCorresponds (signalType : SignalType)
     (contractState : (cycleContract signalType).state.Values)
-    (structuralState : (Certified.moduleStructure (body signalType)
+    (structuralState : (Contracts.Cycle.Certification.moduleStructure (body signalType)
       (children signalType)).State) : Prop :=
   (children signalType .storage).stateCorresponds contractState
     (structuralState .storage)
@@ -312,15 +324,15 @@ def stateCorresponds (signalType : SignalType)
     (outputs : (ports signalType).outputs.Values) :
     (outputRule signalType).Holds inputs state outputs ↔
       outputs .value = state .stored := by
-  simp [CycleOutputRule.Holds, outputRule, SignalSelection.Matches,
+  simp [Contracts.Cycle.CycleOutputRule.Holds, outputRule, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select]
 
 private theorem implements (signalType : SignalType) :
-    Implements (Certified.moduleStructure (body signalType)
+    Contracts.Cycle.Implements (Contracts.Cycle.Certification.moduleStructure (body signalType)
       (children signalType)) (cycleContract signalType)
       (stateCorresponds signalType) := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have storageMatches := Certified.childSolutionMatchesContract (children signalType)
+  have storageMatches := Contracts.Cycle.Certification.childSolutionMatchesContract (children signalType)
     inputs structuralState proposal satisfies .storage contractState corresponds
   rcases (children signalType .selection).hasCorrespondingState
       (structuralState .selection) with ⟨selectionState, selectionCorresponds⟩
@@ -328,7 +340,7 @@ private theorem implements (signalType : SignalType) :
     funext statePort
     exact nomatch statePort
   subst selectionState
-  have selectionMatches := Certified.childSolutionMatchesContract (children signalType)
+  have selectionMatches := Contracts.Cycle.Certification.childSolutionMatchesContract (children signalType)
     inputs structuralState proposal satisfies .selection SignalMap.emptyValues
       selectionCorresponds
   have boundary := satisfies.1
@@ -355,7 +367,7 @@ private theorem implements (signalType : SignalType) :
       rfl
     have selected := selectionEvaluates.1 Mux.Rule.select
     change (Mux.selectRule signalType).Holds _ SignalMap.emptyValues _ at selected
-    simp [CycleOutputRule.Holds, Mux.selectRule, SignalSelection.Matches,
+    simp [Contracts.Cycle.CycleOutputRule.Holds, Mux.selectRule, SignalSelection.Matches,
       SignalSelection.project, SignalMap.select, SignalSelection.prepend] at selected
     change (childProposals .selection).outputs .result =
       bif inputs .enable then inputs .value
@@ -365,15 +377,15 @@ private theorem implements (signalType : SignalType) :
     funext statePort
     cases statePort
     rw [storageNextValue]
-    simp only [cycleContract, stateRule, CycleStateRule.apply,
+    simp only [cycleContract, stateRule, Contracts.Cycle.CycleStateRule.apply,
       SignalSelection.project, SignalSelection.prepend, SignalMap.select]
     change (childProposals .selection).outputs .result =
       bif inputs .enable then inputs .value else contractState .stored
     rw [selected, storageCurrent]
 
 noncomputable def proofCertification (signalType : SignalType) :
-    ModuleCycleCertification
-      (Certified.moduleStructure (body signalType) (children signalType))
+    Contracts.Cycle.ModuleCycleCertification
+      (Contracts.Cycle.Certification.moduleStructure (body signalType) (children signalType))
       (cycleContract signalType) where
   stateCorresponds := stateCorresponds signalType
   hasCorrespondingState := fun structuralState =>
@@ -384,13 +396,13 @@ noncomputable def proofCertification (signalType : SignalType) :
   implements := implements signalType
 
 noncomputable opaque certification (signalType : SignalType) :
-    ModuleCycleCertification (moduleStructure signalType)
+    Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType)
       (cycleContract signalType) :=
   (proofCertification signalType).transportStructure
     (moduleStructure_eq signalType).symm
 
 noncomputable def certified (signalType : SignalType) :
-    ModuleCycleCertified (ports signalType) :=
+    Contracts.Cycle.ModuleCycleCertified (ports signalType) :=
   (certification signalType).bundle
 
 @[simp] theorem certified_cycleContract (signalType : SignalType) :

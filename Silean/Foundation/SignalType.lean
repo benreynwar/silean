@@ -2,7 +2,12 @@ namespace Silean
 
 /-! Structural signal shapes. Tuples are anonymous ordered products: symbolic
 field identities are supplied by the same `SignalMap` abstraction later used
-for module ports. -/
+for module ports.
+
+`SignalTypes` is the list-shaped half of this mutual definition. Although it
+contains the same information as `List SignalType`, defining it mutually with
+`SignalType` makes the recursive relationship between tuple shapes and their
+fields explicit, simplifying dependent definitions and termination proofs. -/
 
 mutual
   inductive SignalType where

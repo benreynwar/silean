@@ -10,25 +10,30 @@ open Silean
 example : Primitives.not.localState = emptySignalMap := rfl
 
 example : Examples.Fixtures.HierarchicalDualNot.moduleStructure.structuralState =
-    .children Examples.Fixtures.HierarchicalDualNot.Instance Examples.Fixtures.HierarchicalDualNot.instances.names
-      (fun | .forwardNot | .backwardNot => .local emptySignalMap) := by
+    .children
+      { Key := Examples.Fixtures.HierarchicalDualNot.Instance
+        keys := Examples.Fixtures.HierarchicalDualNot.instancePorts.names
+        value := fun _ => .leaf emptySignalMap } := by
   simp [Examples.Fixtures.HierarchicalDualNot.moduleStructure, ModuleStructure.structuralState,
     Examples.Fixtures.HierarchicalDualNot.body, Examples.Fixtures.HierarchicalDualNot.context,
-      Examples.Fixtures.HierarchicalDualNot.instances]
+      Examples.Fixtures.HierarchicalDualNot.instancePorts]
   funext name
   cases name <;> rfl
 
 example : Examples.Fixtures.RepeatedDualNot.moduleStructure.structuralState =
-    .children Examples.Fixtures.RepeatedDualNot.Instance Examples.Fixtures.RepeatedDualNot.instances.names
-      (fun | .first | .second => Examples.Fixtures.HierarchicalDualNot.moduleStructure.structuralState) := by
+    .children
+      { Key := Examples.Fixtures.RepeatedDualNot.Instance
+        keys := Examples.Fixtures.RepeatedDualNot.instancePorts.names
+        value := fun _ =>
+          Examples.Fixtures.HierarchicalDualNot.moduleStructure.structuralState } := by
   simp [Examples.Fixtures.RepeatedDualNot.moduleStructure, ModuleStructure.structuralState,
-    Examples.Fixtures.RepeatedDualNot.body, Examples.Fixtures.RepeatedDualNot.context, Examples.Fixtures.RepeatedDualNot.instances,
+    Examples.Fixtures.RepeatedDualNot.body, Examples.Fixtures.RepeatedDualNot.context, Examples.Fixtures.RepeatedDualNot.instancePorts,
     Examples.Fixtures.RepeatedDualNot.childStructure]
   funext name
   cases name <;> rfl
 
-example : (Examples.Fixtures.RepeatedDualNot.instances.names.ordinal .first).val = 0 := rfl
-example : (Examples.Fixtures.RepeatedDualNot.instances.names.ordinal .second).val = 1 := rfl
+example : (Examples.Fixtures.RepeatedDualNot.instancePorts.names.ordinal .first).val = 0 := rfl
+example : (Examples.Fixtures.RepeatedDualNot.instancePorts.names.ordinal .second).val = 1 := rfl
 
 example : (Examples.Fixtures.RepeatedDualNot.childStructure .first).structuralState =
     Examples.Fixtures.HierarchicalDualNot.moduleStructure.structuralState := rfl

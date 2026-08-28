@@ -2,7 +2,7 @@ import Silean.FIRRTL
 import Silean.Modules.BitMux
 import Silean.Modules.Register
 import Silean.Modules.EnabledRegister
-import Silean.Modules.OneEntryFifo
+import Silean.Modules.OneEntryFifo.OneEntryFifo
 
 namespace Silean.Examples.Checks.FIRRTL
 
@@ -33,8 +33,9 @@ private def containsAll (result : RenderResult String) (fragments : List String)
 
 #guard containsAll (renderCircuit (Modules.OneEntryFifo.Naming.naming (.vector 2 .bit)))
   ["public module one_entry_fifo_structural_v2_bit",
-   "inst valid_storage of enabled_register_structural_bit",
+   "inst valid_storage of enabled_reset_register_structural_bit_0",
    "inst data_storage of enabled_register_structural_v2_bit",
+   "connect valid_storage.reset, reset",
    "connect data_storage.clock, clock", "reg stored : UInt<1>, clock"]
 
 end Silean.Examples.Checks.FIRRTL

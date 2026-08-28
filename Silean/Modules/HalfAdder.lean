@@ -1,4 +1,4 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.And
 import Silean.Primitives.Xor
@@ -7,6 +7,7 @@ namespace Silean.Modules.HalfAdder
 
 open Silean
 
+/-- A one-bit half adder. `sum` is XOR and `carry` is AND. -/
 inductive Input | left | right
 deriving Enumeration
 
@@ -27,59 +28,67 @@ def carryValue (left right : Bool) : Bool := left && right
 inductive Rule | sum | carry
 deriving Enumeration
 
-def sumRule : CycleOutputRule ports emptySignalMap
+def sumRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap
     (.ofLists [.bit, .bit] [.bit]) where
   readsInputs := (inputMap.select .right).prepend .left
   writesOutputs := outputMap.select .sum
   target | (left, (right, ())), _ => (sumValue left right, ())
 
-def carryRule : CycleOutputRule ports emptySignalMap
+def carryRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap
     (.ofLists [.bit, .bit] [.bit]) where
   readsInputs := (inputMap.select .right).prepend .left
   writesOutputs := outputMap.select .carry
   target | (left, (right, ())), _ => (carryValue left right, ())
 
-def cycleContract : ModuleCycleContract ports where
+def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
     | .sum => ⟨_, sumRule⟩
     | .carry => ⟨_, carryRule⟩
-  stateRule := CycleStateRule.empty ports
+  stateRule := Contracts.Cycle.CycleStateRule.empty ports
   outputCoverage := by rfl
 
 @[simp] theorem sumRule_holds_iff (inputs : ports.inputs.Values)
     (state : cycleContract.state.Values) (outputs : ports.outputs.Values) :
     sumRule.Holds inputs state outputs ↔
       outputs .sum = sumValue (inputs .left) (inputs .right) := by
-  simp [sumRule, CycleOutputRule.Holds, SignalSelection.Matches,
+  simp [sumRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select, SignalSelection.prepend]
 
 @[simp] theorem carryRule_holds_iff (inputs : ports.inputs.Values)
     (state : cycleContract.state.Values) (outputs : ports.outputs.Values) :
     carryRule.Holds inputs state outputs ↔
       outputs .carry = carryValue (inputs .left) (inputs .right) := by
-  simp [carryRule, CycleOutputRule.Holds, SignalSelection.Matches,
+  simp [carryRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select, SignalSelection.prepend]
 
-private inductive Instance | sumGate | carryGate
+/-! ## Hardware structure -/
+
+private inductive Instance
+  /-- XOR gate producing the sum bit. -/
+  | sumGate
+  /-- AND gate producing the carry bit. -/
+  | carryGate
 deriving Enumeration
 
-@[reducible] private def instances : Instances :=
+@[reducible] private def instancePorts : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .sumGate => Primitives.xor.ports
     | .carryGate => Primitives.and.ports
 
 @[reducible] private def context : EndpointContext where
   ports := ports
-  instances := instances
+  instancePorts := instancePorts
 
-private def wiring : Wiring context.ports context.instances where
+private def wiring : Wiring context.ports context.instancePorts where
   moduleOutput
+    -- Each gate drives its corresponding boundary output.
     | .sum => context.instanceOutput .sumGate .output
     | .carry => context.instanceOutput .carryGate .output
   instanceInput
+    -- Both gates observe the same two operand bits.
     | .sumGate, .left | .carryGate, .left => context.moduleInput .left
     | .sumGate, .right | .carryGate, .right => context.moduleInput .right
 
@@ -87,28 +96,30 @@ private def wiring : Wiring context.ports context.instances where
   context := context
   wiring := wiring
 
-@[reducible] private def children : Certified.Children body
+@[reducible] private def children : Contracts.Cycle.Certification.Children body
   | .sumGate => Primitives.xorCertified
   | .carryGate => Primitives.andCertified
 
-@[reducible] private def childStructure := Certified.childStructure children
+@[reducible] private def childStructure := Contracts.Cycle.Certification.childStructure children
 
 def moduleStructure : ModuleStructure ports :=
-  Certified.moduleStructure body children
+  Contracts.Cycle.Certification.moduleStructure body children
 
-private abbrev sumOccurrence : Certified.RuleOccurrence children :=
+/-! ## Cycle certification -/
+
+private abbrev sumOccurrence : Contracts.Cycle.Certification.RuleOccurrence children :=
   ⟨.sumGate, Primitives.XorRule.apply⟩
 
-private abbrev carryOccurrence : Certified.RuleOccurrence children :=
+private abbrev carryOccurrence : Contracts.Cycle.Certification.RuleOccurrence children :=
   ⟨.carryGate, Primitives.AndRule.apply⟩
 
 @[simp] private theorem sumOccurrence_writes : sumOccurrence.writes = [.output] := rfl
 @[simp] private theorem carryOccurrence_writes : carryOccurrence.writes = [.output] := rfl
 
-private def sumSchedule : Certified.OutputSchedule body children cycleContract .sum :=
+private def sumSchedule : Contracts.Cycle.Certification.OutputSchedule body children cycleContract .sum :=
   .call sumOccurrence
     (by intro input _; cases input <;> simp [cycleContract, sumRule,
-      Certified.sourceAvailable, body, wiring, context, EndpointContext.moduleInput,
+      Contracts.Cycle.Certification.sourceAvailable, body, wiring, context, EndpointContext.moduleInput,
       SignalSelection.prepend, SignalMap.select, SignalSelection.labels])
     (by simp)
     (.done (by
@@ -119,10 +130,10 @@ private def sumSchedule : Certified.OutputSchedule body children cycleContract .
         simp [cycleContract, sumRule, SignalSelection.labels,
           SignalMap.select] at member))
 
-private def carrySchedule : Certified.OutputSchedule body children cycleContract .carry :=
+private def carrySchedule : Contracts.Cycle.Certification.OutputSchedule body children cycleContract .carry :=
   .call carryOccurrence
     (by intro input _; cases input <;> simp [cycleContract, carryRule,
-      Certified.sourceAvailable, body, wiring, context, EndpointContext.moduleInput,
+      Contracts.Cycle.Certification.sourceAvailable, body, wiring, context, EndpointContext.moduleInput,
       SignalSelection.prepend, SignalMap.select, SignalSelection.labels])
     (by simp)
     (.done (by
@@ -133,15 +144,15 @@ private def carrySchedule : Certified.OutputSchedule body children cycleContract
           SignalMap.select] at member
       | carry => exact ⟨Primitives.AndRule.apply, by simp, by simp⟩))
 
-private def stateSchedule : Certified.StateSchedule body children :=
+private def stateSchedule : Contracts.Cycle.Certification.StateSchedule body children :=
   .done (by
     intro child input member
     cases child <;>
       simp [children, Primitives.xorCertified, Primitives.xorCycleContract,
         Primitives.andCertified, Primitives.andCycleContract,
-        CycleStateRule.empty, SignalSelection.labels] at member)
+        Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
 
-private def ruleSchedules : Certified.RuleSchedules body children cycleContract where
+private def ruleSchedules : Contracts.Cycle.Certification.RuleSchedules body children cycleContract where
   output
     | .sum => sumSchedule
     | .carry => carrySchedule
@@ -153,17 +164,17 @@ private theorem coversChildren : ruleSchedules.CoversChildren := by
   | sumGate =>
     change Primitives.XorRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs ruleSchedules .sum
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .sum
     change sumOccurrence ∈ sumSchedule.finalAvailability
-    simp [sumSchedule, Certified.Schedule.finalAvailability]
+    simp [sumSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
   | carryGate =>
     change Primitives.AndRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs ruleSchedules .carry
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .carry
     change carryOccurrence ∈ carrySchedule.finalAvailability
-    simp [carrySchedule, Certified.Schedule.finalAvailability]
+    simp [carrySchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
 
 private theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution :=
   ruleSchedules.hasAtMostOneSolution coversChildren
@@ -209,11 +220,11 @@ private theorem hasStructuralResult (inputs : ports.inputs.Values)
 private def stateCorresponds (_ : cycleContract.state.Values)
     (_ : moduleStructure.State) : Prop := True
 
-private theorem implements : Implements moduleStructure cycleContract stateCorresponds := by
+private theorem implements : Contracts.Cycle.Implements moduleStructure cycleContract stateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have sumImplements := Certified.childImplements children inputs structuralState
+  have sumImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
     proposal satisfies .sumGate SignalMap.emptyValues (by trivial)
-  have carryImplements := Certified.childImplements children inputs structuralState
+  have carryImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
     proposal satisfies .carryGate SignalMap.emptyValues (by trivial)
   have boundary := satisfies.1
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
@@ -241,14 +252,14 @@ private theorem implements : Implements moduleStructure cycleContract stateCorre
   · rfl
 
 private noncomputable def proofCertification :
-    ModuleCycleCertification moduleStructure cycleContract where
+    Contracts.Cycle.ModuleCycleCertification moduleStructure cycleContract where
   stateCorresponds := stateCorresponds
   hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
   hasStructuralResult := hasStructuralResult
   structuralResultUnique := hasAtMostOneSolution
   implements := implements
 
-noncomputable def certified : ModuleCycleCertified ports :=
+noncomputable def certified : Contracts.Cycle.ModuleCycleCertified ports :=
   proofCertification.bundle
 
 theorem sum_of_evaluatesTo (inputs : ports.inputs.Values)

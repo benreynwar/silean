@@ -1,6 +1,6 @@
-import Silean.ModuleCycleContract
+import Silean.Contracts.Cycle.CycleContract
 import Silean.Structure.ModuleStructure
-import Silean.Primitives.Not
+import Silean.Primitives.NotPrimitive
 
 namespace Silean.Examples.Fixtures.Not
 
@@ -10,7 +10,7 @@ inductive Instance
   | inverter
 deriving Enumeration
 
-@[reducible] def instances : Instances :=
+@[reducible] def instancePorts : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .inverter => Primitives.not.ports
 
@@ -32,9 +32,9 @@ def ports : ModulePorts := ⟨inputMap, outputMap⟩
 
 @[reducible] def context : EndpointContext where
   ports := ports
-  instances := instances
+  instancePorts := instancePorts
 
-def wiring : Wiring context.ports context.instances where
+def wiring : Wiring context.ports context.instancePorts where
   moduleOutput
     | .inverted => context.instanceOutput .inverter .output
   instanceInput
@@ -50,8 +50,8 @@ namespace Silean.Examples.Fixtures.Not
 
 open Silean
 
-def childStructure : (name : Examples.Fixtures.Not.instances.Name) →
-    ModuleStructure (Examples.Fixtures.Not.instances.ports name)
+def childStructure : (name : Examples.Fixtures.Not.instancePorts.Name) →
+    ModuleStructure (Examples.Fixtures.Not.instancePorts.ports name)
   | .inverter => .primitive Primitives.not
 
 def moduleStructure : ModuleStructure Examples.Fixtures.Not.ports :=
@@ -66,18 +66,18 @@ open Silean
 inductive Rule | apply
 deriving Enumeration
 
-def outputRule : CycleOutputRule Examples.Fixtures.Not.ports emptySignalMap
+def outputRule : Contracts.Cycle.CycleOutputRule Examples.Fixtures.Not.ports emptySignalMap
     (.ofLists [.bit] [.bit]) where
   readsInputs := Examples.Fixtures.Not.inputMap.select .value
   writesOutputs := Examples.Fixtures.Not.outputMap.select .inverted
   target | (value, ()), _ => (!value, ())
 
-def cycleContract : ModuleCycleContract Examples.Fixtures.Not.ports where
+def cycleContract : Contracts.Cycle.ModuleCycleContract Examples.Fixtures.Not.ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule | .apply => ⟨_, outputRule⟩
-  stateRule := CycleStateRule.empty Examples.Fixtures.Not.ports
+  stateRule := Contracts.Cycle.CycleStateRule.empty Examples.Fixtures.Not.ports
   outputCoverage := by rfl
 
 end Silean.Examples.Fixtures.Not

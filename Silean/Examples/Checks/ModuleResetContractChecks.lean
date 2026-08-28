@@ -1,5 +1,5 @@
-import Silean.ModuleResetContract
-import Silean.DeriveEnumeration
+import Silean.Contracts.Reset.ResetContract
+import Silean.Foundation.DeriveEnumeration
 
 namespace Silean.Examples.Checks.ResetContract
 
@@ -36,7 +36,7 @@ def pushAsserted (inputs : ports.inputs.Values) : Bool :=
     pushAsserted (input reset push) = push := by
   rfl
 
-def contract : Silean.ModuleResetContract ports where
+def contract : Silean.Contracts.Reset.ModuleResetContract ports where
   State := List Bool
   resetInput := .reset
   resetInputType := rfl
@@ -94,7 +94,7 @@ example (inputs : List ports.inputs.Values) (outputs : List ports.outputs.Values
     (lengths : outputs.length = inputs.length)
     (ordinary : ∀ input, input ∈ inputs → contract.resetAsserted input = false) :
     contract.TraceMatches none inputs outputs none :=
-  Silean.ModuleResetContract.TraceMatches.before_first_reset contract
+  Silean.Contracts.Reset.ModuleResetContract.TraceMatches.before_first_reset contract
     lengths ordinary
 
 end Silean.Examples.Checks.ResetContract

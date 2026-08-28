@@ -1,5 +1,5 @@
-import Silean.ModuleCycleCertified
-import Silean.PrimitivePorts
+import Silean.Contracts.Cycle.CycleImplementation
+import Silean.Primitives.PrimitivePorts
 
 namespace Silean.Primitives
 
@@ -8,6 +8,7 @@ open Silean
 def xorValue (left right : Bool) : Bool :=
   (left && !right) || (!left && right)
 
+/-- Stateless one-bit XOR primitive. -/
 @[reducible] def xor : Primitive where
   ports := binaryPorts
   localState := emptySignalMap
@@ -23,18 +24,18 @@ def xorValue (left right : Bool) : Bool :=
 inductive XorRule | apply
 deriving Enumeration
 
-def xorOutputRule : CycleOutputRule xor.ports emptySignalMap
+def xorOutputRule : Contracts.Cycle.CycleOutputRule xor.ports emptySignalMap
     (.ofLists [.bit, .bit] [.bit]) where
   readsInputs := (xor.ports.inputs.select .right).prepend .left
   writesOutputs := xor.ports.outputs.select .output
   target | (left, (right, ())), _ => (xorValue left right, ())
 
-def xorCycleContract : ModuleCycleContract xor.ports where
+def xorCycleContract : Contracts.Cycle.ModuleCycleContract xor.ports where
   state := emptySignalMap
   RuleName := XorRule
   ruleNames := inferInstance
   outputRule | .apply => ⟨_, xorOutputRule⟩
-  stateRule := CycleStateRule.empty xor.ports
+  stateRule := Contracts.Cycle.CycleStateRule.empty xor.ports
   outputCoverage := by rfl
 
 @[simp] theorem xorOutputRule_holds_iff
@@ -43,7 +44,7 @@ def xorCycleContract : ModuleCycleContract xor.ports where
     (outputs : xor.ports.outputs.Values) :
     xorOutputRule.Holds inputs state outputs ↔
       outputs .output = xorValue (inputs .left) (inputs .right) := by
-  simp [xorOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+  simp [xorOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
     SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
 
 theorem xor_eq_true_iff (left right : Bool) :
@@ -58,7 +59,7 @@ theorem xor_toNat_add_twice_and (left right : Bool) :
 private def stateCorresponds (_ : xorCycleContract.state.Values)
     (_ : (ModuleStructure.primitive xor).State) : Prop := True
 
-private theorem implements : Implements (.primitive xor) xorCycleContract
+private theorem implements : Contracts.Cycle.Implements (.primitive xor) xorCycleContract
     stateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
@@ -71,11 +72,11 @@ private theorem implements : Implements (.primitive xor) xorCycleContract
       simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
         Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
       rw [satisfies.1]
-      simp [xorOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+      simp [xorOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
         SignalSelection.Matches, SignalMap.select, SignalSelection.prepend, xor]
   · rfl
 
-def xorCertified : ModuleCycleCertified xor.ports where
+def xorCertified : Contracts.Cycle.ModuleCycleCertified xor.ports where
   moduleStructure := .primitive xor
   cycleContract := xorCycleContract
   certification := {

@@ -5,7 +5,7 @@ namespace Silean.Examples.Checks.HalfAdder
 
 open Silean Silean.FIRRTL
 
-noncomputable example : ModuleCycleCertified Modules.HalfAdder.ports :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified Modules.HalfAdder.ports :=
   Modules.HalfAdder.certified
 
 def inputs (left right : Bool) : Modules.HalfAdder.ports.inputs.Values

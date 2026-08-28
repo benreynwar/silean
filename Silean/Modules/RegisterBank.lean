@@ -1,16 +1,18 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Modules.BinaryToOneHot
 import Silean.Modules.CombMuxTree
 import Silean.Modules.EnabledRegister
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.And
-import Silean.SignalAdapterCertified
+import Silean.Composition.SignalAdapterImplementation
 
 namespace Silean.Modules.RegisterBank
 
 open Silean
 
+/-- A combinational-read, synchronous-write bank containing `2 ^ addressWidth`
+entries of `element`. -/
 abbrev entryCount (addressWidth : Nat) := BinaryToOneHot.size addressWidth
 
 inductive Input
@@ -35,7 +37,9 @@ deriving Enumeration
 @[reducible] def ports (element : SignalType) (addressWidth : Nat) : ModulePorts :=
   ⟨inputMap element addressWidth, outputMap element⟩
 
-inductive State | entries
+inductive State
+  /-- The value currently held in every bank entry. -/
+  | entries
 deriving Enumeration
 
 @[reducible] def stateMap (element : SignalType) (addressWidth : Nat) : SignalMap :=
@@ -55,7 +59,7 @@ def nextEntries (addressWidth : Nat) (writeEnable : Bool)
     else entries index
 
 def readRule (element : SignalType) (addressWidth : Nat) :
-    CycleOutputRule (ports element addressWidth) (stateMap element addressWidth)
+    Contracts.Cycle.CycleOutputRule (ports element addressWidth) (stateMap element addressWidth)
       { inputTypes := .cons (.vector addressWidth .bit) .nil
         outputTypes := .cons element .nil } where
   readsInputs := (inputMap element addressWidth).select .readAddress
@@ -65,7 +69,7 @@ def readRule (element : SignalType) (addressWidth : Nat) :
         (state .entries (BitVector.toIndex addressWidth readAddress), ())
 
 def stateRule (element : SignalType) (addressWidth : Nat) :
-    CycleStateRule (ports element addressWidth) (stateMap element addressWidth) where
+    Contracts.Cycle.CycleStateRule (ports element addressWidth) (stateMap element addressWidth) where
   inputTypes := .cons .bit
     (.cons (.vector addressWidth .bit) (.cons element .nil))
   readsInputs := (((inputMap element addressWidth).select .writeValue).prepend
@@ -76,7 +80,7 @@ def stateRule (element : SignalType) (addressWidth : Nat) :
             (state .entries)
 
 @[reducible] def cycleContract (element : SignalType) (addressWidth : Nat) :
-    ModuleCycleContract (ports element addressWidth) where
+    Contracts.Cycle.ModuleCycleContract (ports element addressWidth) where
   state := stateMap element addressWidth
   RuleName := Rule
   ruleNames := inferInstance
@@ -91,7 +95,7 @@ def stateRule (element : SignalType) (addressWidth : Nat) :
     (readRule element addressWidth).Holds inputs state outputs ↔
       outputs .readValue =
         state .entries (BitVector.toIndex addressWidth (inputs .readAddress)) := by
-  simp [readRule, CycleOutputRule.Holds, SignalSelection.Matches,
+  simp [readRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select]
 
 @[simp] theorem nextEntries_selected (addressWidth : Nat)
@@ -117,15 +121,20 @@ theorem nextEntries_other (addressWidth : Nat) (writeEnable : Bool)
       entries index := by
   simp [nextEntries, different]
 
-/-! The implementation has one decoder, one write-enable gate and enabled
-register per entry, one vector combiner, and one combinational read mux. -/
+/-! ## Hardware structure -/
 
 private inductive Instance (addressWidth : Nat)
+  /-- Decodes the binary write address into one-hot form. -/
   | decoder
+  /-- Exposes the individual one-hot write-select bits. -/
   | decodeSplit
+  /-- Combines global write enable with one entry's select bit. -/
   | gate (index : Fin (entryCount addressWidth))
+  /-- Stores one data entry. -/
   | storage (index : Fin (entryCount addressWidth))
+  /-- Collects all stored entries into a vector. -/
   | combine
+  /-- Selects the asynchronously read entry. -/
   | readMux
 
 @[reducible] private def instanceEnumeration (addressWidth : Nat) :
@@ -196,15 +205,15 @@ private abbrev storage (index : Fin (entryCount addressWidth)) : Instance addres
 private abbrev combine : Instance addressWidth := .combine
 private abbrev readMux : Instance addressWidth := .readMux
 
-private def entryCombiner (element : SignalType) (addressWidth : Nat) : SignalCombiner :=
+private def entryCombiner (element : SignalType) (addressWidth : Nat) : Composition.SignalCombiner :=
   .vector (entryCount addressWidth) element
 
-@[reducible] private def instances (element : SignalType) (addressWidth : Nat) : Instances where
+@[reducible] private def instancePorts (element : SignalType) (addressWidth : Nat) : InstancePorts where
   Key := Instance addressWidth
   keys := instanceEnumeration addressWidth
   value
     | .decoder => BinaryToOneHot.ports addressWidth
-    | .decodeSplit => (SignalSplitter.vector (entryCount addressWidth) .bit).ports
+    | .decodeSplit => (Composition.SignalSplitter.vector (entryCount addressWidth) .bit).ports
     | .gate _ => Primitives.and.ports
     | .storage _ => EnabledRegister.ports element
     | .combine => (entryCombiner element addressWidth).ports
@@ -212,48 +221,54 @@ private def entryCombiner (element : SignalType) (addressWidth : Nat) : SignalCo
 
 @[reducible] private def context (element : SignalType) (addressWidth : Nat) : EndpointContext where
   ports := ports element addressWidth
-  instances := instances element addressWidth
+  instancePorts := instancePorts element addressWidth
 
 private def wiring (element : SignalType) (addressWidth : Nat) :
-    Wiring (context element addressWidth).ports (context element addressWidth).instances where
-  moduleOutput
-    | .readValue => (context element addressWidth).instanceOutput .readMux .result
-  instanceInput
-    | .decoder, .value => (context element addressWidth).moduleInput .writeAddress
+    Wiring (context element addressWidth).ports (context element addressWidth).instancePorts :=
+  let c := context element addressWidth
+  { moduleOutput := fun
+    -- The read mux directly drives the bank output.
+    | .readValue => c.instanceOutput .readMux .result
+    instanceInput := fun
+    -- Decode the write address and expose each one-hot bit.
+    | .decoder, .value => c.moduleInput .writeAddress
     | .decodeSplit, .value =>
-        (context element addressWidth).instanceOutput .decoder .result
+        c.instanceOutput .decoder .result
+    -- Enable only the addressed entry when a write is requested.
     | .gate _, .left =>
-        (context element addressWidth).moduleInput .writeEnable
+        c.moduleInput .writeEnable
     | .gate index, .right =>
-        (context element addressWidth).instanceOutput .decodeSplit index
+        c.instanceOutput .decodeSplit index
+    -- Every entry sees the write value; its local gate controls loading.
     | .storage _, .value =>
-        (context element addressWidth).moduleInput .writeValue
+        c.moduleInput .writeValue
     | .storage index, .enable =>
-        (context element addressWidth).instanceOutput (.gate index) .output
+        c.instanceOutput (.gate index) .output
+    -- Collect the entries and select one using the read address.
     | .combine, index =>
-        (context element addressWidth).instanceOutput (.storage index) .value
+        c.instanceOutput (.storage index) .value
     | .readMux, .values =>
-        (context element addressWidth).instanceOutput .combine .value
+        c.instanceOutput .combine .value
     | .readMux, .index =>
-        (context element addressWidth).moduleInput .readAddress
+        c.moduleInput .readAddress }
 
 @[reducible] private def body (element : SignalType) (addressWidth : Nat) : ModuleBody :=
   ⟨context element addressWidth, wiring element addressWidth⟩
 
 @[reducible] private noncomputable def children (element : SignalType) (addressWidth : Nat) :
-    Certified.Children (body element addressWidth)
+    Contracts.Cycle.Certification.Children (body element addressWidth)
   | .decoder => BinaryToOneHot.certified addressWidth
-  | .decodeSplit => (SignalSplitter.vector (entryCount addressWidth) .bit).certified
+  | .decodeSplit => (Composition.SignalSplitter.vector (entryCount addressWidth) .bit).certified
   | .gate _ => Primitives.andCertified
   | .storage _ => EnabledRegister.certified element
   | .combine => (entryCombiner element addressWidth).certified
   | .readMux => CombMuxTree.certified element addressWidth
 
 @[reducible] private def structuralChildren (element : SignalType) (addressWidth : Nat) :
-    (name : (instances element addressWidth).Name) →
-      ModuleStructure ((instances element addressWidth).ports name)
+    (name : (instancePorts element addressWidth).Name) →
+      ModuleStructure ((instancePorts element addressWidth).ports name)
   | .decoder => BinaryToOneHot.moduleStructure addressWidth
-  | .decodeSplit => (SignalSplitter.vector (entryCount addressWidth) .bit).certified.moduleStructure
+  | .decodeSplit => (Composition.SignalSplitter.vector (entryCount addressWidth) .bit).certified.moduleStructure
   | .gate _ => Primitives.andCertified.moduleStructure
   | .storage _ => EnabledRegister.moduleStructure element
   | .combine => (entryCombiner element addressWidth).certified.moduleStructure
@@ -265,40 +280,40 @@ def moduleStructure (element : SignalType) (addressWidth : Nat) :
 
 private theorem moduleStructure_eq (element : SignalType) (addressWidth : Nat) :
     moduleStructure element addressWidth =
-      Certified.moduleStructure (body element addressWidth)
+      Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
         (children element addressWidth) := by
-  unfold moduleStructure Certified.moduleStructure
+  unfold moduleStructure Contracts.Cycle.Certification.moduleStructure
   congr
   funext child
   cases child <;> rfl
 
 @[reducible] private noncomputable def childStructure (element : SignalType) (addressWidth : Nat) :=
-  Certified.childStructure (children element addressWidth)
+  Contracts.Cycle.Certification.childStructure (children element addressWidth)
 
 private abbrev decoderOccurrence (element : SignalType) (addressWidth : Nat) :
-    Certified.RuleOccurrence (children element addressWidth) :=
+    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
   ⟨.decoder, BinaryToOneHot.Rule.apply⟩
 
 private abbrev splitOccurrence (element : SignalType) (addressWidth : Nat) :
-    Certified.RuleOccurrence (children element addressWidth) :=
-  ⟨.decodeSplit, SignalComponentRule.apply⟩
+    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
+  ⟨.decodeSplit, Composition.SignalComponentRule.apply⟩
 
 private abbrev gateOccurrence (element : SignalType) (addressWidth : Nat)
     (index : Fin (entryCount addressWidth)) :
-    Certified.RuleOccurrence (children element addressWidth) :=
+    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
   ⟨.gate index, Primitives.AndRule.apply⟩
 
 private abbrev storageOccurrence (element : SignalType) (addressWidth : Nat)
     (index : Fin (entryCount addressWidth)) :
-    Certified.RuleOccurrence (children element addressWidth) :=
+    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
   ⟨.storage index, EnabledRegister.Rule.observe⟩
 
 private abbrev combineOccurrence (element : SignalType) (addressWidth : Nat) :
-    Certified.RuleOccurrence (children element addressWidth) :=
-  ⟨.combine, SignalComponentRule.apply⟩
+    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
+  ⟨.combine, Composition.SignalComponentRule.apply⟩
 
 private abbrev muxOccurrence (element : SignalType) (addressWidth : Nat) :
-    Certified.RuleOccurrence (children element addressWidth) :=
+    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
   ⟨.readMux, CombMuxTree.Rule.apply⟩
 
 @[simp] private theorem decoder_reads (element : SignalType) (addressWidth : Nat) :
@@ -310,7 +325,7 @@ private abbrev muxOccurrence (element : SignalType) (addressWidth : Nat) :
 @[simp] private theorem split_writes (element : SignalType) (addressWidth : Nat) :
     (splitOccurrence element addressWidth).writes =
       (Enumeration.fin (entryCount addressWidth)).values := by
-  change (SignalSplitter.vector (entryCount addressWidth) .bit).ports.outputs.allSelection.labels = _
+  change (Composition.SignalSplitter.vector (entryCount addressWidth) .bit).ports.outputs.allSelection.labels = _
   rw [SignalMap.allSelection_labels]
 @[simp] private theorem gate_reads (element : SignalType) (addressWidth : Nat)
     (index : Fin (entryCount addressWidth)) :
@@ -339,18 +354,18 @@ private abbrev muxOccurrence (element : SignalType) (addressWidth : Nat) :
 
 private noncomputable def storageFamilySchedule (element : SignalType)
     (addressWidth : Nat) :
-    Certified.Schedule (body element addressWidth) (children element addressWidth)
+    Contracts.Cycle.Certification.Schedule (body element addressWidth) (children element addressWidth)
       (fun input => input ∈
         (readRule element addressWidth).readsInputs.labels)
       (fun final =>
         (∀ index, storageOccurrence element addressWidth index ∈ final) ∧
         ∀ called, called ∈ final →
           ∃ index, called = storageOccurrence element addressWidth index) [] :=
-  Certified.Schedule.callFamily (Enumeration.fin (entryCount addressWidth))
+  Contracts.Cycle.Certification.Schedule.callFamily (Enumeration.fin (entryCount addressWidth))
     (storageOccurrence element addressWidth)
     (by
       intro left right equal
-      have childEqual := congrArg Certified.RuleOccurrence.child equal
+      have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
       exact Instance.storage.inj childEqual)
     (by
       intro index input member
@@ -358,7 +373,7 @@ private noncomputable def storageFamilySchedule (element : SignalType)
       cases member)
 
 private noncomputable def outputSchedule (element : SignalType) (addressWidth : Nat) :
-    Certified.OutputSchedule (body element addressWidth)
+    Contracts.Cycle.Certification.OutputSchedule (body element addressWidth)
       (children element addressWidth) (cycleContract element addressWidth) .read := by
   let family := storageFamilySchedule element addressWidth
   apply family.append
@@ -368,12 +383,12 @@ private noncomputable def outputSchedule (element : SignalType) (addressWidth : 
       simp⟩
   · intro member
     rcases family.finished.2 _ member with ⟨index, equal⟩
-    have childEqual := congrArg Certified.RuleOccurrence.child equal
+    have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
     cases childEqual
   · refine .call (muxOccurrence element addressWidth) ?_ ?_ (.done ?_)
     · intro input _
       cases input with
-      | values => exact ⟨SignalComponentRule.apply, by simp, by
+      | values => exact ⟨Composition.SignalComponentRule.apply, by simp, by
           simp⟩
       | index =>
           change Input.readAddress ∈
@@ -381,10 +396,10 @@ private noncomputable def outputSchedule (element : SignalType) (addressWidth : 
           simp [readRule, SignalMap.select, SignalSelection.labels]
     · intro member
       rcases List.mem_cons.mp member with equal | old
-      · have childEqual := congrArg Certified.RuleOccurrence.child equal
+      · have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
         cases childEqual
       · rcases family.finished.2 _ old with ⟨index, equal⟩
-        have childEqual := congrArg Certified.RuleOccurrence.child equal
+        have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
         cases childEqual
     · intro output member
       cases output
@@ -393,7 +408,7 @@ private noncomputable def outputSchedule (element : SignalType) (addressWidth : 
 
 private noncomputable def gateFamilyAfterDecode (element : SignalType)
     (addressWidth : Nat) :
-    Certified.Schedule (body element addressWidth) (children element addressWidth)
+    Contracts.Cycle.Certification.Schedule (body element addressWidth) (children element addressWidth)
       (fun _ => True)
       (fun final =>
         (∀ called, called ∈
@@ -405,31 +420,31 @@ private noncomputable def gateFamilyAfterDecode (element : SignalType)
             decoderOccurrence element addressWidth] ∨
           ∃ index, called = gateOccurrence element addressWidth index)
       [splitOccurrence element addressWidth, decoderOccurrence element addressWidth] :=
-  Certified.Schedule.callFamilyAfter
+  Contracts.Cycle.Certification.Schedule.callFamilyAfter
     [splitOccurrence element addressWidth, decoderOccurrence element addressWidth]
     (Enumeration.fin (entryCount addressWidth))
     (gateOccurrence element addressWidth)
     (by
       intro left right equal
-      have childEqual := congrArg Certified.RuleOccurrence.child equal
+      have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
       exact Instance.gate.inj childEqual)
     (by
       intro index member
       simp only [List.mem_cons, List.not_mem_nil, or_false] at member
       rcases member with equal | equal <;>
-        have childEqual := congrArg Certified.RuleOccurrence.child equal <;>
+        have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal <;>
         cases childEqual)
     (by
       intro index input _
       cases input with
       | left => trivial
-      | right => exact ⟨SignalComponentRule.apply, by simp, by
+      | right => exact ⟨Composition.SignalComponentRule.apply, by simp, by
           simpa [split_writes] using
             (ListIndex.get_eq ((Enumeration.fin _).locate index) ▸ List.get_mem _ _)⟩
       )
 
 private structure StateScheduleData (element : SignalType) (addressWidth : Nat) where
-  schedule : Certified.StateSchedule (body element addressWidth)
+  schedule : Contracts.Cycle.Certification.StateSchedule (body element addressWidth)
     (children element addressWidth)
   decoderMem : decoderOccurrence element addressWidth ∈ schedule.finalAvailability
   splitMem : splitOccurrence element addressWidth ∈ schedule.finalAvailability
@@ -440,29 +455,29 @@ private structure StateScheduleData (element : SignalType) (addressWidth : Nat) 
 private noncomputable def makeStateSchedule (element : SignalType) (addressWidth : Nat) :
     StateScheduleData element addressWidth := by
   let gates := gateFamilyAfterDecode element addressWidth
-  let stores := Certified.Schedule.callFamilyAfter
+  let stores := Contracts.Cycle.Certification.Schedule.callFamilyAfter
     (inputAvailable := fun _ => True) gates.finalAvailability
     (Enumeration.fin (entryCount addressWidth))
     (storageOccurrence element addressWidth)
     (by
       intro left right equal
-      have childEqual := congrArg Certified.RuleOccurrence.child equal
+      have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
       exact Instance.storage.inj childEqual)
     (by
       intro index member
       rcases gates.finished.2.2 _ member with old | ⟨gateIndex, equal⟩
       · simp only [List.mem_cons, List.not_mem_nil, or_false] at old
         rcases old with equal | equal <;>
-          have childEqual := congrArg Certified.RuleOccurrence.child equal <;>
+          have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal <;>
           cases childEqual
-      · have childEqual := congrArg Certified.RuleOccurrence.child equal
+      · have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
         cases childEqual)
     (by
       intro index input _
       cases input with
       | value => trivial
       | enable => exact ⟨Primitives.AndRule.apply, gates.finished.2.1 index, by simp⟩)
-  let finish : Certified.ChildrenStateInputsReady (body element addressWidth)
+  let finish : Contracts.Cycle.Certification.ChildrenStateInputsReady (body element addressWidth)
       (children element addressWidth) stores.finalAvailability := by
       intro child input member
       cases child with
@@ -470,7 +485,7 @@ private noncomputable def makeStateSchedule (element : SignalType) (addressWidth
         change input ∈ ([] : List BinaryToOneHot.Input) at member
         cases member
       | decodeSplit =>
-        change input ∈ ([] : List AggregatePort) at member
+        change input ∈ ([] : List Composition.AggregatePort) at member
         cases member
       | gate index =>
         change input ∈ ([] : List Primitives.BinaryInput) at member
@@ -487,16 +502,16 @@ private noncomputable def makeStateSchedule (element : SignalType) (addressWidth
       | readMux =>
         change input ∈ ([] : List (CombMuxTree.Input)) at member
         cases member
-  let tail : Certified.Schedule (body element addressWidth)
+  let tail : Contracts.Cycle.Certification.Schedule (body element addressWidth)
       (children element addressWidth) (fun _ => True)
-      (Certified.ChildrenStateInputsReady (body element addressWidth)
+      (Contracts.Cycle.Certification.ChildrenStateInputsReady (body element addressWidth)
         (children element addressWidth)) stores.finalAvailability :=
     .done finish
   let afterStores := stores.append tail
   let afterGates := gates.append afterStores
-  let afterSplit : Certified.Schedule (body element addressWidth)
+  let afterSplit : Contracts.Cycle.Certification.Schedule (body element addressWidth)
       (children element addressWidth) (fun _ => True)
-      (Certified.ChildrenStateInputsReady (body element addressWidth)
+      (Contracts.Cycle.Certification.ChildrenStateInputsReady (body element addressWidth)
         (children element addressWidth))
       [decoderOccurrence element addressWidth] :=
     .call (splitOccurrence element addressWidth)
@@ -505,40 +520,40 @@ private noncomputable def makeStateSchedule (element : SignalType) (addressWidth
         cases input
         exact ⟨BinaryToOneHot.Rule.apply, by simp, by simp⟩)
       (by simp) afterGates
-  let schedule : Certified.StateSchedule (body element addressWidth)
+  let schedule : Contracts.Cycle.Certification.StateSchedule (body element addressWidth)
       (children element addressWidth) :=
     .call (decoderOccurrence element addressWidth) (by intros; trivial)
       (by simp) afterSplit
   refine ⟨schedule, ?_, ?_, ?_, ?_⟩
   · dsimp [schedule, afterSplit]
-    simp only [Certified.Schedule.finalAvailability]
-    rw [Certified.Schedule.finalAvailability_append,
-      Certified.Schedule.finalAvailability_append]
+    simp only [Contracts.Cycle.Certification.Schedule.finalAvailability]
+    rw [Contracts.Cycle.Certification.Schedule.finalAvailability_append,
+      Contracts.Cycle.Certification.Schedule.finalAvailability_append]
     exact stores.finished.1 _ (gates.finished.1 _ (by simp))
   · dsimp [schedule, afterSplit]
-    simp only [Certified.Schedule.finalAvailability]
-    rw [Certified.Schedule.finalAvailability_append,
-      Certified.Schedule.finalAvailability_append]
+    simp only [Contracts.Cycle.Certification.Schedule.finalAvailability]
+    rw [Contracts.Cycle.Certification.Schedule.finalAvailability_append,
+      Contracts.Cycle.Certification.Schedule.finalAvailability_append]
     exact stores.finished.1 _ (gates.finished.1 _ (by simp))
   · intro index
     dsimp [schedule, afterSplit]
-    simp only [Certified.Schedule.finalAvailability]
-    rw [Certified.Schedule.finalAvailability_append,
-      Certified.Schedule.finalAvailability_append]
+    simp only [Contracts.Cycle.Certification.Schedule.finalAvailability]
+    rw [Contracts.Cycle.Certification.Schedule.finalAvailability_append,
+      Contracts.Cycle.Certification.Schedule.finalAvailability_append]
     exact stores.finished.1 _ (gates.finished.2.1 index)
   · intro index
     dsimp [schedule, afterSplit]
-    simp only [Certified.Schedule.finalAvailability]
-    rw [Certified.Schedule.finalAvailability_append,
-      Certified.Schedule.finalAvailability_append]
+    simp only [Contracts.Cycle.Certification.Schedule.finalAvailability]
+    rw [Contracts.Cycle.Certification.Schedule.finalAvailability_append,
+      Contracts.Cycle.Certification.Schedule.finalAvailability_append]
     exact stores.finished.2.1 index
 
 private noncomputable def stateSchedule (element : SignalType) (addressWidth : Nat) :
-    Certified.StateSchedule (body element addressWidth) (children element addressWidth) :=
+    Contracts.Cycle.Certification.StateSchedule (body element addressWidth) (children element addressWidth) :=
   (makeStateSchedule element addressWidth).schedule
 
 private noncomputable def ruleSchedules (element : SignalType) (addressWidth : Nat) :
-    Certified.RuleSchedules (body element addressWidth)
+    Contracts.Cycle.Certification.RuleSchedules (body element addressWidth)
       (children element addressWidth) (cycleContract element addressWidth) where
   output | .read => outputSchedule element addressWidth
   state := stateSchedule element addressWidth
@@ -547,15 +562,15 @@ private theorem output_mem_combine (element : SignalType) (addressWidth : Nat) :
     combineOccurrence element addressWidth ∈
       (outputSchedule element addressWidth).finalAvailability := by
   unfold outputSchedule
-  rw [Certified.Schedule.finalAvailability_append]
-  simp [Certified.Schedule.finalAvailability]
+  rw [Contracts.Cycle.Certification.Schedule.finalAvailability_append]
+  simp [Contracts.Cycle.Certification.Schedule.finalAvailability]
 
 private theorem output_mem_mux (element : SignalType) (addressWidth : Nat) :
     muxOccurrence element addressWidth ∈
       (outputSchedule element addressWidth).finalAvailability := by
   unfold outputSchedule
-  rw [Certified.Schedule.finalAvailability_append]
-  simp [Certified.Schedule.finalAvailability]
+  rw [Contracts.Cycle.Certification.Schedule.finalAvailability_append]
+  simp [Contracts.Cycle.Certification.Schedule.finalAvailability]
 
 private theorem state_mem_decoder (element : SignalType) (addressWidth : Nat) :
     decoderOccurrence element addressWidth ∈
@@ -587,36 +602,36 @@ private theorem coversChildren (element : SignalType) (addressWidth : Nat) :
   | decoder =>
     change BinaryToOneHot.Rule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_includes
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
     change decoderOccurrence element addressWidth ∈
       (stateSchedule element addressWidth).finalAvailability
     exact state_mem_decoder element addressWidth
   | decodeSplit =>
-    change SignalComponentRule at rule
+    change Composition.SignalComponentRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_includes
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
     change splitOccurrence element addressWidth ∈
       (stateSchedule element addressWidth).finalAvailability
     exact state_mem_split element addressWidth
   | gate index =>
     change Primitives.AndRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_includes
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
     change gateOccurrence element addressWidth index ∈
       (stateSchedule element addressWidth).finalAvailability
     exact state_mem_gate element addressWidth index
   | storage index =>
     change EnabledRegister.Rule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_includes
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
     change storageOccurrence element addressWidth index ∈
       (stateSchedule element addressWidth).finalAvailability
     exact state_mem_storage element addressWidth index
   | combine =>
-    change SignalComponentRule at rule
+    change Composition.SignalComponentRule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
       (ruleSchedules element addressWidth) .read
     change combineOccurrence element addressWidth ∈
       (outputSchedule element addressWidth).finalAvailability
@@ -624,15 +639,15 @@ private theorem coversChildren (element : SignalType) (addressWidth : Nat) :
   | readMux =>
     change CombMuxTree.Rule at rule
     cases rule
-    apply Certified.RuleSchedules.Combined.add_preserves
-    apply Certified.RuleSchedules.mem_combineOutputs
+    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
+    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
       (ruleSchedules element addressWidth) .read
     change muxOccurrence element addressWidth ∈
       (outputSchedule element addressWidth).finalAvailability
     exact output_mem_mux element addressWidth
 
 private theorem hasAtMostOneSolution (element : SignalType) (addressWidth : Nat) :
-    (Certified.moduleStructure (body element addressWidth)
+    (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
       (children element addressWidth)).HasAtMostOneSolution :=
   (ruleSchedules element addressWidth).hasAtMostOneSolution
     (coversChildren element addressWidth)
@@ -645,7 +660,7 @@ private def decoderInputs (element : SignalType) (addressWidth : Nat)
 private noncomputable def splitInputs (addressWidth : Nat)
     (decoderProposal : ProposedValues
       (children element addressWidth .decoder).moduleStructure) :
-    (SignalSplitter.vector (entryCount addressWidth) .bit).ports.inputs.Values
+    (Composition.SignalSplitter.vector (entryCount addressWidth) .bit).ports.inputs.Values
   | .value => decoderProposal.outputs .result
 
 private noncomputable def gateInputs (element : SignalType) (addressWidth : Nat)
@@ -681,9 +696,9 @@ private noncomputable def muxInputs (element : SignalType) (addressWidth : Nat)
 
 private theorem hasStructuralResult (element : SignalType) (addressWidth : Nat)
     (inputs : (ports element addressWidth).inputs.Values)
-    (currentState : (Certified.moduleStructure (body element addressWidth)
+    (currentState : (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
       (children element addressWidth)).State) :
-    ∃ proposal, (Certified.moduleStructure (body element addressWidth)
+    ∃ proposal, (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
       (children element addressWidth)).IsSolution inputs currentState proposal := by
   rcases (children element addressWidth .decoder).hasStructuralResult
       (decoderInputs element addressWidth inputs) (currentState .decoder) with
@@ -794,7 +809,7 @@ private theorem hasStructuralResult (element : SignalType) (addressWidth : Nat)
 
 def stateCorresponds (element : SignalType) (addressWidth : Nat)
     (contractState : (stateMap element addressWidth).Values)
-    (structuralState : (Certified.moduleStructure (body element addressWidth)
+    (structuralState : (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
       (children element addressWidth)).State) : Prop :=
   ∀ index : Fin (entryCount addressWidth),
     (children element addressWidth (storage index)).stateCorresponds
@@ -802,7 +817,7 @@ def stateCorresponds (element : SignalType) (addressWidth : Nat)
       (structuralState (storage index))
 
 private theorem hasCorrespondingState (element : SignalType) (addressWidth : Nat)
-    (structuralState : (Certified.moduleStructure (body element addressWidth)
+    (structuralState : (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
       (children element addressWidth)).State) :
     ∃ contractState, stateCorresponds element addressWidth contractState structuralState := by
   let Property := fun index contractState =>
@@ -819,7 +834,7 @@ private theorem hasCorrespondingState (element : SignalType) (addressWidth : Nat
   exact ⟨contractState, fun index => corresponds index⟩
 
 private theorem implements (element : SignalType) (addressWidth : Nat) :
-    Implements (Certified.moduleStructure (body element addressWidth)
+    Contracts.Cycle.Implements (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
       (children element addressWidth)) (cycleContract element addressWidth)
       (stateCorresponds element addressWidth) := by
   intro inputs contractState structuralState proposal corresponds satisfies
@@ -840,7 +855,7 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
           (fun | .stored => contractState .entries index))
         (proposal.2 (storage index)).nextState := by
     intro index
-    exact Certified.childSolutionMatchesContract (children element addressWidth)
+    exact Contracts.Cycle.Certification.childSolutionMatchesContract (children element addressWidth)
       inputs structuralState proposal satisfies (storage index)
       (fun | .stored => contractState .entries index) (corresponds index)
   have storageCurrent : ∀ index : Fin (entryCount addressWidth),
@@ -854,7 +869,7 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
   have decoderState_eq : decoderState = SignalMap.emptyValues := by
     funext port; exact nomatch port
   subst decoderState
-  have decoderMatches := Certified.childSolutionMatchesContract
+  have decoderMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
     (children element addressWidth) inputs structuralState proposal satisfies decoder
     SignalMap.emptyValues decoderCorresponds
   have decoderValue (index : Fin (entryCount addressWidth)) :
@@ -872,21 +887,21 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
   have splitState_eq : splitState = SignalMap.emptyValues := by
     funext port; exact nomatch port
   subst splitState
-  have splitMatches := Certified.childSolutionMatchesContract
+  have splitMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
     (children element addressWidth) inputs structuralState proposal satisfies decodeSplit
     SignalMap.emptyValues splitCorresponds
   have splitValue (index : Fin (entryCount addressWidth)) :
       (proposal.2 decodeSplit).outputs index = (proposal.2 decoder).outputs .result index := by
-    have equal := (SignalSplitter.outputRule_holds_iff
-      (SignalSplitter.vector (entryCount addressWidth) .bit) _ _ _).mp
-      (splitMatches.1.1 SignalComponentRule.apply)
+    have equal := (Composition.SignalSplitter.outputRule_holds_iff
+      (Composition.SignalSplitter.vector (entryCount addressWidth) .bit) _ _ _).mp
+      (splitMatches.1.1 Composition.SignalComponentRule.apply)
     exact congrFun equal index
 
   have gateValue (index : Fin (entryCount addressWidth)) :
       (proposal.2 (gate index)).outputs .output =
         (BinaryToOneHot.oneHot addressWidth (inputs .writeAddress) index &&
           inputs .writeEnable) := by
-    have gateMatches := Certified.childSolutionMatchesContract
+    have gateMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
       (children element addressWidth) inputs structuralState proposal satisfies (gate index)
       SignalMap.emptyValues (by trivial)
     have held := gateMatches.1.1 Primitives.AndRule.apply
@@ -906,22 +921,22 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
   have combineState_eq : combineState = SignalMap.emptyValues := by
     funext port; exact nomatch port
   subst combineState
-  have combineMatches := Certified.childSolutionMatchesContract
+  have combineMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
     (children element addressWidth) inputs structuralState proposal satisfies combine
     SignalMap.emptyValues combineCorresponds
   have combineValue : (proposal.2 combine).outputs .value =
       fun index => (proposal.2 (storage index)).outputs .value := by
-    have equal := (SignalCombiner.outputRule_holds_iff
+    have equal := (Composition.SignalCombiner.outputRule_holds_iff
       (entryCombiner element addressWidth) _ _ _).mp
-      (combineMatches.1.1 SignalComponentRule.apply)
-    exact congrFun equal AggregatePort.value
+      (combineMatches.1.1 Composition.SignalComponentRule.apply)
+    exact congrFun equal Composition.AggregatePort.value
 
   rcases (children element addressWidth readMux).hasCorrespondingState
       (structuralState readMux) with ⟨muxState, muxCorresponds⟩
   have muxState_eq : muxState = SignalMap.emptyValues := by
     funext port; exact nomatch port
   subst muxState
-  have muxMatches := Certified.childSolutionMatchesContract
+  have muxMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
     (children element addressWidth) inputs structuralState proposal satisfies readMux
     SignalMap.emptyValues muxCorresponds
   have muxValue : (proposal.2 readMux).outputs .result =
@@ -969,7 +984,7 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
           (fun | .stored => contractState .entries index) by
       funext statePort
       cases statePort
-      simp only [CycleStateRule.apply]
+      simp only [Contracts.Cycle.CycleStateRule.apply]
       change (if inputs .writeEnable && decide (index = BitVector.toIndex addressWidth
           (inputs .writeAddress)) then inputs .writeValue else contractState .entries index) =
         bif (proposal.2 (gate index)).outputs .output then inputs .writeValue
@@ -988,8 +1003,8 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
     exact nextCorresponds
 
 private noncomputable def proofCertification (element : SignalType) (addressWidth : Nat) :
-    ModuleCycleCertification
-      (Certified.moduleStructure (body element addressWidth)
+    Contracts.Cycle.ModuleCycleCertification
+      (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
         (children element addressWidth))
       (cycleContract element addressWidth) where
   stateCorresponds := stateCorresponds element addressWidth
@@ -999,13 +1014,13 @@ private noncomputable def proofCertification (element : SignalType) (addressWidt
   implements := implements element addressWidth
 
 noncomputable opaque certification (element : SignalType) (addressWidth : Nat) :
-    ModuleCycleCertification (moduleStructure element addressWidth)
+    Contracts.Cycle.ModuleCycleCertification (moduleStructure element addressWidth)
       (cycleContract element addressWidth) :=
   (proofCertification element addressWidth).transportStructure
     (moduleStructure_eq element addressWidth).symm
 
 noncomputable def certified (element : SignalType) (addressWidth : Nat) :
-    ModuleCycleCertified (ports element addressWidth) :=
+    Contracts.Cycle.ModuleCycleCertified (ports element addressWidth) :=
   (certification element addressWidth).bundle
 
 @[simp] theorem certified_moduleStructure (element : SignalType) (addressWidth : Nat) :
@@ -1119,7 +1134,7 @@ def namingWith (element : SignalType) (addressWidth : Nat)
           EnabledRegister.Naming.namingWith element elementNaming
       | .combine =>
           Silean.Naming.SignalAdapter.combinerWithNaming
-            (SignalSplitter.vector
+            (Composition.SignalSplitter.vector
               (Modules.RegisterBank.entryCount addressWidth) element).combiner
             (.vector elementNaming)
       | .readMux =>

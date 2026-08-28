@@ -17,7 +17,7 @@ appropriate behavioral specification for every direct child:
 
 Contract form follows the natural abstraction. In particular, the memory and
 RVFI specifications are temporal properties; they must not be forced into a
-`ModuleCycleContract` merely because that contract form already exists.
+`Contracts.Cycle.ModuleCycleContract` merely because that contract form already exists.
 
 Keep source names from `picorv32.v` in structural port maps. Lean-facing
 interpretations may introduce clearer datatypes and projections without

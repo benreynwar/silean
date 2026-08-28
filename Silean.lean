@@ -1,13 +1,9 @@
 import Silean.Foundation
+import Silean.Interfaces
 import Silean.Primitives
 import Silean.Structure
-import Silean.SignalLayout
-import Silean.SignalAdapterCertified
-import Silean.SignalLogic
-import Silean.StructuralExecution
-import Silean.ModuleCycleEvaluation
-import Silean.CertifiedComposition
-import Silean.CertifiedSchedule
+import Silean.Composition
+import Silean.Semantics
 import Silean.Contracts
 import Silean.Modules
 import Silean.Naming

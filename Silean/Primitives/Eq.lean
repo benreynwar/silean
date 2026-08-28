@@ -1,10 +1,11 @@
-import Silean.ModuleCycleCertified
-import Silean.PrimitivePorts
+import Silean.Contracts.Cycle.CycleImplementation
+import Silean.Primitives.PrimitivePorts
 
 namespace Silean.Primitives
 
 open Silean
 
+/-- Stateless one-bit equality primitive. -/
 @[reducible] def eq : Primitive where
   ports := binaryPorts
   localState := emptySignalMap
@@ -21,19 +22,19 @@ open Silean
 
 inductive EqRule | apply
 deriving Enumeration
-def eqOutputRule : CycleOutputRule eq.ports emptySignalMap
+def eqOutputRule : Contracts.Cycle.CycleOutputRule eq.ports emptySignalMap
     (.ofLists [.bit, .bit] [.bit]) where
   readsInputs := (eq.ports.inputs.select .right).prepend .left
   writesOutputs := eq.ports.outputs.select .output
   target
     | (left, (right, ())), _ =>
         ((left && right) || (!left && !right), ())
-def eqCycleContract : ModuleCycleContract eq.ports where
+def eqCycleContract : Contracts.Cycle.ModuleCycleContract eq.ports where
   state := emptySignalMap
   RuleName := EqRule
   ruleNames := inferInstance
   outputRule | .apply => ⟨_, eqOutputRule⟩
-  stateRule := CycleStateRule.empty eq.ports
+  stateRule := Contracts.Cycle.CycleStateRule.empty eq.ports
   outputCoverage := by rfl
 
 @[simp] theorem eqOutputRule_holds_iff
@@ -44,13 +45,13 @@ def eqCycleContract : ModuleCycleContract eq.ports where
       outputs .output =
         ((inputs .left && inputs .right) ||
           (!inputs .left && !inputs .right)) := by
-  simp [eqOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+  simp [eqOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
     SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
 
 private def eqStateCorresponds (_ : eqCycleContract.state.Values)
     (_ : (ModuleStructure.primitive eq).State) : Prop := True
 
-private theorem eqImplements : Implements (.primitive eq) eqCycleContract
+private theorem eqImplements : Contracts.Cycle.Implements (.primitive eq) eqCycleContract
     eqStateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
@@ -63,11 +64,11 @@ private theorem eqImplements : Implements (.primitive eq) eqCycleContract
       simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
         Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
       rw [satisfies.1]
-      simp [eqOutputRule, CycleOutputRule.Holds, SignalSelection.project,
+      simp [eqOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
         SignalSelection.Matches, SignalMap.select, SignalSelection.prepend, eq]
   · rfl
 
-def eqCertified : ModuleCycleCertified eq.ports where
+def eqCertified : Contracts.Cycle.ModuleCycleCertified eq.ports where
   moduleStructure := .primitive eq
   cycleContract := eqCycleContract
   certification := {

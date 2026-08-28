@@ -1,9 +1,9 @@
 import Silean.FIRRTL
-import Silean.Modules.FifoPointerControl
+import Silean.Modules.Fifo.FifoPointerControl
 
 namespace Silean.Examples.Checks.FifoPointerControl
 
-open Silean Silean.Modules.FifoPointerControl
+open Silean Silean.Modules.Fifo.PointerControl
 open Silean.FIRRTL
 
 -- Pointer bits are LSB-first: address bits precede the final wrap bit.
@@ -97,8 +97,8 @@ example (readPointer writePointer : Pointer 2)
     empty readPointer writePointer = false :=
   full_implies_not_empty readPointer writePointer isFull
 
-noncomputable example : ModuleCycleCertified (ports 0) := certified 0
-noncomputable example : ModuleCycleCertified (ports 2) := certified 2
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 0) := certified 0
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 2) := certified 2
 
 noncomputable def structuralState (addressWidth : Nat) :
     (moduleStructure addressWidth).State :=

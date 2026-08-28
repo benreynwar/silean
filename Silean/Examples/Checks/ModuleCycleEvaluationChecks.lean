@@ -1,4 +1,4 @@
-import Silean.ModuleCycleEvaluation
+import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Modules.BitMux
 import Silean.Examples.Fixtures.DualNot
 import Silean.Modules.EnabledRegister

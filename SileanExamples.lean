@@ -1,10 +1,9 @@
 import Silean.Modules
 import Silean.Examples.Checks.FoundationChecks
+import Silean.Examples.Checks.ValidReadyChecks
 import Silean.Examples.Checks.SignalExpectationChecks
 import Silean.Examples.Checks.ModuleResetContractChecks
 import Silean.Examples.Checks.ModuleResetCertifiedChecks
-import Silean.Examples.Checks.FifoResetContractChecks
-import Silean.Examples.Checks.FifoResetCertifiedChecks
 import Silean.Examples.Checks.EndpointChecks
 import Silean.Examples.Checks.SignalAdapterChecks
 import Silean.Examples.Checks.RegisterChecks
@@ -16,7 +15,7 @@ import Silean.Examples.Checks.LeafwiseLogicChecks
 import Silean.Examples.Checks.BitMuxChecks
 import Silean.Examples.Checks.ModuleCycleContractChecks
 import Silean.Examples.Checks.HierarchyChecks
-import Silean.Examples.Checks.StructuralSemanticsChecks
+import Silean.Examples.Checks.StructuralEquationsChecks
 import Silean.Examples.Checks.StructuralExecutionChecks
 import Silean.Examples.Checks.VectorConcatChecks
 import Silean.Examples.Checks.BinaryToOneHotChecks
@@ -34,7 +33,7 @@ import Silean.Examples.Checks.HalfAdderChecks
 import Silean.Examples.Checks.IncrementChecks
 import Silean.Examples.Checks.FifoPointerControlChecks
 import Silean.Examples.Checks.EqualityChecks
-import Silean.Examples.Checks.OneEntryFifoPropertiesChecks
+import Silean.Examples.Checks.FifoContractChecks
 import Silean.Examples.Checks.SerialDepthFifoChecks
 import Silean.Examples.PicoRV.Regs
 import Silean.Examples.PicoRV.Alu

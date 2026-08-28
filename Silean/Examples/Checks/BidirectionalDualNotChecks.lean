@@ -1,27 +1,27 @@
-import Silean.CertifiedSchedule
+import Silean.Contracts.Cycle.CycleSchedule
 import Silean.Examples.Checks.HierarchicalDualNotCertificationChecks
 
 namespace Silean.Examples.Checks.BidirectionalDualNot
 
 open Silean
-open Silean.Certified
+open Silean.Contracts.Cycle.Certification
 
 inductive Instance
   | a
   | b
 deriving Enumeration
 
-@[reducible] def instances : Instances :=
+@[reducible] def instancePorts : InstancePorts :=
   EnumeratedMap.of Instance fun
     | .a | .b => Examples.Fixtures.DualNot.ports
 
 @[reducible] def context : EndpointContext where
   ports := Examples.Fixtures.DualNot.ports
-  instances := instances
+  instancePorts := instancePorts
 
 @[reducible] def ports : ModulePorts := context.ports
 
-def wiring : Wiring context.ports context.instances where
+def wiring : Wiring context.ports context.instancePorts where
   moduleOutput
     | .forward => context.instanceOutput .b .forward
     | .backward => context.instanceOutput .a .backward
@@ -33,11 +33,11 @@ def wiring : Wiring context.ports context.instances where
 
 @[reducible] def body : ModuleBody := ⟨context, wiring⟩
 
-def children : Certified.Children body
+def children : Contracts.Cycle.Certification.Children body
   | .a | .b => Examples.Checks.HierarchicalDualNotCertification.dualNotCertified
 
 def moduleStructure : ModuleStructure ports :=
-  Certified.moduleStructure body children
+  Contracts.Cycle.Certification.moduleStructure body children
 
 def inputSelection : (input : Examples.Fixtures.DualNot.Input) →
     SignalSelection ports.inputs (.ofList [.bit])
@@ -51,7 +51,7 @@ def outputSelection : (output : Examples.Fixtures.DualNot.Output) →
 
 def outputRule (input : Examples.Fixtures.DualNot.Input)
     (output : Examples.Fixtures.DualNot.Output) :
-    CycleOutputRule ports emptySignalMap (.ofLists [.bit] [.bit]) where
+    Contracts.Cycle.CycleOutputRule ports emptySignalMap (.ofLists [.bit] [.bit]) where
   readsInputs := inputSelection input
   writesOutputs := outputSelection output
   target | (value, ()), _ => (value, ())
@@ -61,14 +61,14 @@ inductive Rule
   | backward
 deriving Enumeration
 
-def cycleContract : ModuleCycleContract ports where
+def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
     | .forward => ⟨_, outputRule .forward .forward⟩
     | .backward => ⟨_, outputRule .backward .backward⟩
-  stateRule := CycleStateRule.empty ports
+  stateRule := Contracts.Cycle.CycleStateRule.empty ports
   outputCoverage := by rfl
 
 abbrev aForward : RuleOccurrence children := ⟨.a, .forward⟩
@@ -133,7 +133,7 @@ def stateSchedule : StateSchedule body children :=
     cases child <;>
       simp [children, Examples.Checks.HierarchicalDualNotCertification.dualNotCertified,
         Examples.Fixtures.DualNot.cycleContract, Examples.Fixtures.DualNot.stateRule,
-        CycleStateRule.empty, SignalSelection.labels] at member)
+        Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
 
 def ruleSchedules : RuleSchedules body children cycleContract where
   output
@@ -179,7 +179,7 @@ private theorem certifiedForward
   have holds := evaluates.1 Examples.Fixtures.DualNot.Rule.forward
   change Examples.Fixtures.DualNot.forwardRule.Holds inputs contractState
     proposal.outputs at holds
-  simpa [Examples.Fixtures.DualNot.forwardRule, CycleOutputRule.Holds,
+  simpa [Examples.Fixtures.DualNot.forwardRule, Contracts.Cycle.CycleOutputRule.Holds,
     SignalSelection.project, SignalSelection.Matches, SignalMap.select] using holds
 
 private theorem certifiedBackward
@@ -197,7 +197,7 @@ private theorem certifiedBackward
   have holds := evaluates.1 Examples.Fixtures.DualNot.Rule.backward
   change Examples.Fixtures.DualNot.backwardRule.Holds inputs contractState
     proposal.outputs at holds
-  simpa [Examples.Fixtures.DualNot.backwardRule, CycleOutputRule.Holds,
+  simpa [Examples.Fixtures.DualNot.backwardRule, Contracts.Cycle.CycleOutputRule.Holds,
     SignalSelection.project, SignalSelection.Matches, SignalMap.select] using holds
 
 def aInputs (inputs : ports.inputs.Values) :
@@ -287,7 +287,7 @@ theorem hasStructuralResult (inputs : ports.inputs.Values)
 def stateCorresponds (_ : cycleContract.state.Values)
     (_ : moduleStructure.State) : Prop := True
 
-theorem implements : Implements moduleStructure cycleContract stateCorresponds := by
+theorem implements : Contracts.Cycle.Implements moduleStructure cycleContract stateCorresponds := by
   intro inputs contractState structuralState proposal corresponds satisfies
   rcases proposal with ⟨outputs, childProposals⟩
   rcases satisfies with ⟨boundary, childSatisfies⟩
@@ -327,23 +327,23 @@ theorem implements : Implements moduleStructure cycleContract stateCorresponds :
     cases rule with
     | forward =>
         simp only [cycleContract, outputRule, inputSelection, outputSelection,
-          CycleOutputRule.Holds, SignalSelection.project,
+          Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
           SignalSelection.Matches, SignalMap.select]
         constructor
         · simpa only [ProposedValues.outputs, moduleStructure,
-            Certified.moduleStructure] using outputForward
+            Contracts.Cycle.Certification.moduleStructure] using outputForward
         · trivial
     | backward =>
         simp only [cycleContract, outputRule, inputSelection, outputSelection,
-          CycleOutputRule.Holds, SignalSelection.project,
+          Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
           SignalSelection.Matches, SignalMap.select]
         constructor
         · simpa only [ProposedValues.outputs, moduleStructure,
-            Certified.moduleStructure] using outputBackward
+            Contracts.Cycle.Certification.moduleStructure] using outputBackward
         · trivial
   · rfl
 
-def certified : ModuleCycleCertified ports where
+def certified : Contracts.Cycle.ModuleCycleCertified ports where
   moduleStructure := moduleStructure
   cycleContract := cycleContract
   certification := {

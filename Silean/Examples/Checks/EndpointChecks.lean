@@ -6,26 +6,26 @@ namespace Silean.Examples.Checks.Endpoint
 open Silean
 
 def moduleInput :
-    SignalSource Examples.Fixtures.Not.ports Examples.Fixtures.Not.instances .bit :=
+    SignalSource Examples.Fixtures.Not.ports Examples.Fixtures.Not.instancePorts .bit :=
   Examples.Fixtures.Not.context.moduleInput .value
 
 def inverterOutput :
-    SignalSource Examples.Fixtures.Not.ports Examples.Fixtures.Not.instances .bit :=
+    SignalSource Examples.Fixtures.Not.ports Examples.Fixtures.Not.instancePorts .bit :=
   Examples.Fixtures.Not.context.instanceOutput .inverter .output
 
 def moduleOutput :
-    SignalSink Examples.Fixtures.Not.ports Examples.Fixtures.Not.instances .bit :=
+    SignalSink Examples.Fixtures.Not.ports Examples.Fixtures.Not.instancePorts .bit :=
   Examples.Fixtures.Not.context.moduleOutput .inverted
 
 def inverterInput :
-    SignalSink Examples.Fixtures.Not.ports Examples.Fixtures.Not.instances .bit :=
+    SignalSink Examples.Fixtures.Not.ports Examples.Fixtures.Not.instancePorts .bit :=
   Examples.Fixtures.Not.context.instanceInput .inverter .input
 
 example : Examples.Fixtures.Not.wiring.drive inverterInput = moduleInput := rfl
 
 example : Examples.Fixtures.Not.wiring.drive moduleOutput = inverterOutput := rfl
 
-example : Examples.Fixtures.DoubleNot.instances.names.values =
+example : Examples.Fixtures.DoubleNot.instancePorts.names.values =
     [Examples.Fixtures.DoubleNot.Instance.first, Examples.Fixtures.DoubleNot.Instance.second] := rfl
 
 example : Examples.Fixtures.DoubleNot.wiring.moduleOutput .result =

@@ -1,10 +1,9 @@
 import Silean.FIRRTL.Render
-import Silean.Modules.SerialDepthFifoProperties
+import Silean.Modules.SerialDepthFifo.SerialDepthFifoCertified
 
 namespace Silean.Examples.Checks.SerialDepthFifo
 
 open Silean Silean.Modules Silean.Naming Silean.FIRRTL
-open Silean.Contracts
 
 def pairType : SignalType := .tuple (.cons .bit (.cons .bit .nil))
 def bType : SignalType := .tuple (.cons .bit (.cons (.vector 2 pairType) .nil))
@@ -18,35 +17,42 @@ def bNaming : SignalTypeNaming bType :=
 def payloadNaming : SignalTypeNaming payloadType :=
   .tuple (.cons "a" (.vector .bit) (.cons "b" bNaming .nil))
 
-example : ModuleStructure (NoResetFifo.ports payloadType) :=
+example : ModuleStructure (Silean.Interfaces.Fifo.ports payloadType) :=
   SerialDepthFifo.moduleStructure payloadType 1 (by omega)
 
-example : ModuleStructure (NoResetFifo.ports payloadType) :=
+example : ModuleStructure (Silean.Interfaces.Fifo.ports payloadType) :=
   SerialDepthFifo.moduleStructure payloadType 2 (by omega)
 
-example : ModuleStructure (NoResetFifo.ports payloadType) :=
+example : ModuleStructure (Silean.Interfaces.Fifo.ports payloadType) :=
   SerialDepthFifo.moduleStructure payloadType 3 (by omega)
 
-noncomputable example : ModuleCycleCertified (NoResetFifo.ports payloadType) :=
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (Silean.Interfaces.Fifo.ports payloadType) :=
   SerialDepthFifo.certified payloadType 3 (by omega)
 
-example : (SerialDepthFifo.Properties.certifiedView payloadType 1 (by omega)).view.capacity = 1 := by
-  simp
+def bitResetInputs : (Silean.Interfaces.Fifo.ports .bit).inputs.Values
+  | .inputValid | .inputData | .outputReady => false
+  | .reset => true
 
-example : (SerialDepthFifo.Properties.certifiedView payloadType 2 (by omega)).view.capacity = 2 := by
-  simp
+def fullBitState : (OneEntryFifo.stateMap .bit).Values
+  | .storedValid | .storedData => true
 
-example : (SerialDepthFifo.Properties.certifiedView payloadType 3 (by omega)).view.capacity = 3 := by
-  simp
+def fullDepthTwoState :
+    (SerialDepthFifo.cycleBehavior .bit 2 (by omega)).state.Values :=
+  Contracts.Fifo.Cycle.combineState fullBitState fullBitState
 
-example : (SerialDepthFifo.Properties.certifiedView payloadType 3
-    (by omega)).view.readyPropagationLatency = 0 := by
-  simp
+example : Contracts.Fifo.Cycle.leftState
+    ((SerialDepthFifo.cycleContract .bit 2 (by omega)).evaluate
+      bitResetInputs fullDepthTwoState).2 .storedValid = false := rfl
 
-example : NoResetFifo.View.Satisfies
-    (SerialDepthFifo.Properties.certifiedView payloadType 3 (by omega)).view
-    (NoResetFifo.Execution.model (SerialDepthFifo.cycleBehavior payloadType 3 (by omega))).executes :=
-  (SerialDepthFifo.Properties.certifiedView payloadType 3 (by omega)).satisfies
+example : Contracts.Fifo.Cycle.rightState
+    ((SerialDepthFifo.cycleContract .bit 2 (by omega)).evaluate
+      bitResetInputs fullDepthTwoState).2 .storedValid = false := rfl
+
+example : (SerialDepthFifo.fifoCertified payloadType 3 (by omega)).contract.capacity = 3 := by
+  rfl
+
+example : (SerialDepthFifo.fifoCertified payloadType 3 (by omega)).moduleStructure.HasSolution :=
+  (SerialDepthFifo.fifoCertified payloadType 3 (by omega)).hasSolution
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
