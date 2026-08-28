@@ -4,7 +4,7 @@ WARNING:  On a scale of 0 to 10, where 0 is a project I wrote myself, and 10 is
 a project entirely written by an LLM, this project is an 8.
 
 My main role has been setting goals and keeping it going in vaguely the right
-direction.  It's an experiment to see if a proof-assistent-embedded approach to
+direction.  It's an experiment to see if a proof-assistant-embedded approach to
 hardware design is practical yet. The "documentation" files are all LLM
 generated at the moment and I wouldn't trust them too much.
 
