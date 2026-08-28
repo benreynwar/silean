@@ -274,12 +274,6 @@ Use `make clean` to remove generated build artifacts.
 - [`docs/Architecture.md`](docs/Architecture.md) gives the detailed current
   design, and [`docs/SourceMap.md`](docs/SourceMap.md) maps concepts to files.
 - [`Roadmap.md`](Roadmap.md) records the current direction and remaining work.
-- [`docs/PicoRV32ModuleHierarchy.md`](docs/PicoRV32ModuleHierarchy.md) records
-  the provisional module and contract plan for the long-term direct PicoRV32
-  port.
-- [`docs/PicoRV32TopLevelPlan.md`](docs/PicoRV32TopLevelPlan.md) refines that
-  direction into the proposed top-level children, state ownership, signal
-  flow, and proof-staging order.
 
 The checked-in Nix flake supplies Lean, CIRCT, Verilator, and the Python/cocotb
 simulation tools used by the `Makefile` regressions.
