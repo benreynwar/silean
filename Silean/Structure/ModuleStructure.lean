@@ -23,6 +23,9 @@ structure has one well-defined result. -/
 inductive ModuleStructure : ModulePorts → Type 1
   /-- A leaf implemented by a primitive. -/
   | primitive (primitive : Primitive) : ModuleStructure primitive.ports
+  /-- An opaque leaf whose equations give assumed boundary behavior. This is
+  used to compose and verify a parent before the child's structure exists. -/
+  | blackbox (behavior : Primitive) : ModuleStructure behavior.ports
   /-- A leaf that separates an aggregate signal into its components. -/
   | splitter (splitter : Composition.SignalSplitter) : ModuleStructure splitter.ports
   /-- A leaf that joins component signals into an aggregate signal. -/
@@ -41,6 +44,7 @@ the state of the actual child module attached at each name. -/
 def ModuleStructure.structuralState (module : ModuleStructure ports) : StructuralState :=
   match module with
   | .primitive gate => .leaf gate.localState
+  | .blackbox behavior => .leaf behavior.localState
   | .splitter _ => .leaf emptySignalMap
   | .combiner _ => .leaf emptySignalMap
   | .composite body childStructure =>

@@ -175,6 +175,9 @@ private def renderModuleBody :
   | .primitive _ ports state operation => do
       validateLocalNames (ports.names ++ state.names)
       pure (indentLines (renderPorts ports ++ primitiveStatements ports state operation))
+  | .blackbox _ ports state => do
+      validateLocalNames (ports.names ++ state.names)
+      pure (indentLines (renderPorts ports))
   | .splitter splitter _ ports => do
       validateLocalNames ports.names
       pure (indentLines (renderPorts ports ++ splitterStatements splitter ports))
@@ -186,9 +189,14 @@ private def renderModuleBody :
       pure (indentLines (renderPorts ports ++
         compositeStatements ports instanceName childNaming))
 
+private def isBlackbox : ModuleNaming moduleStructure → Bool
+  | .blackbox .. => true
+  | _ => false
+
 private def renderDefinition (isPublic : Bool) (module : NamedModule) : RenderResult String := do
   let body ← renderModuleBody module.naming
-  let qualifier := if isPublic then "public module" else "module"
+  let qualifier := if isBlackbox module.naming then "extmodule"
+    else if isPublic then "public module" else "module"
   pure s!"  {qualifier} {renderModuleKey module.key} :\n{body}"
 
 private def validateDefinitionBodies :

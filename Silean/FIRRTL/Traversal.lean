@@ -44,7 +44,7 @@ structure InstanceOccurrence where
 
 def instanceOccurrences :
     (naming : ModuleNaming moduleStructure) → List InstanceOccurrence
-  | .primitive .. | .splitter .. | .combiner .. => []
+  | .primitive .. | .blackbox .. | .splitter .. | .combiner .. => []
   | @ModuleNaming.composite body _ _ _ instanceName childNaming =>
       body.context.instancePorts.names.values.map fun name =>
         ⟨instanceName name, (childNaming name).key⟩
@@ -57,6 +57,8 @@ private def collectOccurrencesAt (path : List SourceName) :
     (naming : ModuleNaming moduleStructure) → List ModuleOccurrence
   | .primitive key ports state operation =>
       [⟨path, ⟨_, _, .primitive key ports state operation⟩⟩]
+  | .blackbox key ports state =>
+      [⟨path, ⟨_, _, .blackbox key ports state⟩⟩]
   | .splitter splitter key ports =>
       [⟨path, ⟨_, _, .splitter splitter key ports⟩⟩]
   | .combiner combiner key ports =>
@@ -83,6 +85,8 @@ private def collectDefinitionsInto (definitions : List NamedModule) :
     (naming : ModuleNaming moduleStructure) → List NamedModule
   | .primitive key ports state operation =>
       insertDefinition definitions ⟨_, _, .primitive key ports state operation⟩
+  | .blackbox key ports state =>
+      insertDefinition definitions ⟨_, _, .blackbox key ports state⟩
   | .splitter splitter key ports =>
       insertDefinition definitions ⟨_, _, .splitter splitter key ports⟩
   | .combiner combiner key ports =>

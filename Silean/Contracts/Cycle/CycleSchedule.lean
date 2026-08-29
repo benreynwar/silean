@@ -66,6 +66,23 @@ def sourceAvailable {body : ModuleBody} {children : Children body}
   | .moduleInput input => inputAvailable input
   | .instanceOutput child output => outputAvailable available child output
 
+/-- An output written by an already-called rule is available.  Keeping this
+small witness generic avoids unfolding a composite module's dependent wiring
+and child maps in every concrete schedule proof. -/
+theorem sourceAvailable_instanceOutput
+    {body : ModuleBody} {children : Children body}
+    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {available : Availability children}
+    {child : body.context.instancePorts.Name}
+    {rule : (children child).cycleContract.RuleName}
+    {output : (body.context.instancePorts.ports child).outputs.Label}
+    (called : RuleOccurrence.mk child rule ∈ available)
+    (written : output ∈
+      (RuleOccurrence.mk child rule : RuleOccurrence children).writes) :
+    sourceAvailable inputAvailable available
+      (SignalSource.instanceOutput child output) :=
+  ⟨rule, called, written⟩
+
 def ChildOutputsAgree {body : ModuleBody} {children : Children body}
     (available : Availability children)
     (left right : (name : body.context.instancePorts.Name) →
@@ -159,6 +176,20 @@ theorem finished {body : ModuleBody} {children : Children body}
   induction schedule with
   | done finished => exact finished
   | call _ _ _ _ induction => exact induction
+
+/-- Reuse a schedule when its finish fact implies a different finish fact.
+The call sequence and all availability proofs are unchanged. -/
+noncomputable def mapFinish {body : ModuleBody} {children : Children body}
+    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {FirstFinish SecondFinish : Availability children → Prop}
+    {initial : Availability children}
+    (schedule : Schedule body children inputAvailable FirstFinish initial)
+    (implies : ∀ available, FirstFinish available → SecondFinish available) :
+    Schedule body children inputAvailable SecondFinish initial := by
+  induction schedule with
+  | done finished => exact .done (implies _ finished)
+  | call occurrence readsAvailable fresh rest induction =>
+      exact .call occurrence readsAvailable fresh induction
 
 theorem finishAgreement
     {body : ModuleBody} {children : Children body}
@@ -539,6 +570,57 @@ theorem childStateRuleApply_eq
     leftSatisfies rightSatisfies child]
 
 end StateSchedule
+
+/-! A complete child-rule schedule is sufficient to prove uniqueness of a
+composite's simultaneous structural equations. This theorem does not require a
+parent behavioral contract; contracts are needed only when certifying what the
+parent means, not when checking that its wiring is acyclic. -/
+theorem Schedule.hasAtMostOneSolution
+    {body : ModuleBody} {children : Children body}
+    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {Finish : Availability children → Prop}
+    (schedule : Schedule body children inputAvailable Finish [])
+    (allInputsAvailable : ∀ input, inputAvailable input)
+    (covers : CoversAllRules children schedule.finalAvailability) :
+    (moduleStructure body children).HasAtMostOneSolution := by
+  intro inputs currentState left right leftSatisfies rightSatisfies
+  rcases left with ⟨leftOutputs, leftChildren⟩
+  rcases right with ⟨rightOutputs, rightChildren⟩
+  change ProposedValues.boundaryOutputsSatisfy body (childStructure children)
+      inputs leftOutputs leftChildren ∧ _ at leftSatisfies
+  change ProposedValues.boundaryOutputsSatisfy body (childStructure children)
+      inputs rightOutputs rightChildren ∧ _ at rightSatisfies
+  have childOutputsAgree := schedule.finishAgreement
+    inputs inputs (fun _ _ => rfl) currentState leftChildren rightChildren
+    leftSatisfies.2 rightSatisfies.2
+    (by intro occurrence member; cases member)
+  have childInputsEqual : ∀ name,
+      ProposedValues.childInputs body (childStructure children)
+          inputs leftChildren name =
+        ProposedValues.childInputs body (childStructure children)
+          inputs rightChildren name := by
+    intro name
+    funext input
+    exact source_value_eq_of_available childOutputsAgree inputAvailable
+      inputs inputs (fun _ _ => rfl) (body.wiring.instanceInput name input)
+      (sourceAvailable_mono (fun input _ => allInputsAvailable input) (fun _ member => member)
+        (sourceAvailable_of_covers covers _))
+  have childrenEqual : leftChildren = rightChildren := by
+    funext name
+    apply (children name).structuralResultUnique
+    · exact leftSatisfies.2 name
+    · rw [childInputsEqual name]
+      exact rightSatisfies.2 name
+  have outputsEqual : leftOutputs = rightOutputs := by
+    funext output
+    rw [leftSatisfies.1 output, rightSatisfies.1 output]
+    exact source_value_eq_of_available childOutputsAgree inputAvailable
+      inputs inputs (fun _ _ => rfl) (body.wiring.moduleOutput output)
+      (sourceAvailable_mono (fun input _ => allInputsAvailable input) (fun _ member => member)
+        (sourceAvailable_of_covers covers _))
+  cases outputsEqual
+  cases childrenEqual
+  rfl
 
 structure RuleSchedules (body : ModuleBody) (children : Children body)
     (contract : ModuleCycleContract body.context.ports) where

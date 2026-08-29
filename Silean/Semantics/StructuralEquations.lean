@@ -59,6 +59,7 @@ structure PrimitiveProposedValues (primitive : Primitive) where
 def ProposedValues {ports : ModulePorts} (module : ModuleStructure ports) : Type :=
   match module with
   | .primitive primitive => PrimitiveProposedValues primitive
+  | .blackbox behavior => PrimitiveProposedValues behavior
   | .splitter splitter => splitter.ports.outputs.Values
   | .combiner combiner => combiner.ports.outputs.Values
   | .composite body childStructure =>
@@ -72,6 +73,12 @@ def primitive {primitive : Primitive}
     (outputs : primitive.ports.outputs.Values)
     (nextState : primitive.localState.Values) :
     ProposedValues (ModuleStructure.primitive primitive) :=
+  ⟨outputs, nextState⟩
+
+def blackbox {behavior : Primitive}
+    (outputs : behavior.ports.outputs.Values)
+    (nextState : behavior.localState.Values) :
+    ProposedValues (ModuleStructure.blackbox behavior) :=
   ⟨outputs, nextState⟩
 
 def splitter {splitter : Composition.SignalSplitter}
@@ -97,6 +104,7 @@ def outputs {ports : ModulePorts} {module : ModuleStructure ports} :
     ProposedValues module → ports.outputs.Values :=
   match module with
   | .primitive _ => fun proposal => PrimitiveProposedValues.outputs proposal
+  | .blackbox _ => fun proposal => PrimitiveProposedValues.outputs proposal
   | .splitter _ => fun proposal => proposal
   | .combiner _ => fun proposal => proposal
   | .composite _ _ => fun proposal => proposal.1
@@ -105,6 +113,7 @@ def nextStateFor {ports : ModulePorts} (module : ModuleStructure ports) :
     ProposedValues module → module.State :=
   match module with
   | .primitive _ => fun proposal => PrimitiveProposedValues.nextState proposal
+  | .blackbox _ => fun proposal => PrimitiveProposedValues.nextState proposal
   | .splitter _ => fun _ => SignalMap.emptyValues
   | .combiner _ => fun _ => SignalMap.emptyValues
   | .composite _ childStructure => fun proposal name =>
@@ -157,6 +166,10 @@ def IsSolution {ports : ModulePorts} (module : ModuleStructure ports)
   match module with
   | .primitive gate =>
       gate.IsSolution inputs currentState
+        (PrimitiveProposedValues.nextState proposal)
+        (PrimitiveProposedValues.outputs proposal)
+  | .blackbox behavior =>
+      behavior.IsSolution inputs currentState
         (PrimitiveProposedValues.nextState proposal)
         (PrimitiveProposedValues.outputs proposal)
   | .splitter splitter => splitter.IsSolution inputs proposal

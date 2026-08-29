@@ -3,6 +3,7 @@ import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Contracts.Cycle.CycleImplementation
 import Silean.Contracts.Cycle.CycleComposition
 import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleBlackbox
 import Silean.Contracts.Reset.ResetContract
 import Silean.Contracts.Reset.ResetImplementation
 import Silean.Contracts.Fifo.FifoContract
