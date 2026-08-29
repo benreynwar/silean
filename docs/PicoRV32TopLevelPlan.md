@@ -11,6 +11,10 @@ without renaming the hardware being ported. The submodule boundaries below are
 new—the original is mostly monolithic—but each boundary follows an existing
 Verilog region and the signals that cross into or out of it.
 
+The configured main-block register and crossing-signal audit is recorded in
+`PicoRV32MainBlockInventory.md`; it is authoritative for the control/datapath
+boundary summarized here.
+
 ## Fixed source configuration
 
 The first port specializes `picorv32` to:
@@ -44,10 +48,9 @@ The first port specializes `picorv32` to:
 | `PROGADDR_IRQ` | `0x00000010` | irrelevant with IRQ disabled |
 | `STACKADDR` | `0xffffffff` | no special reset write to `x2` |
 
-PCPI, IRQ, counter-CSR, and trace ports may therefore be absent from this
-specialized module. Build the verification form with `RISCV_FORMAL`
-observations enabled. Preserve both the ordinary memory interface and the
-unconditionally present `mem_la_*` look-ahead interface.
+PCPI, IRQ, counter-CSR, trace, and `RISCV_FORMAL` instrumentation are absent
+from this specialized module. Preserve both the ordinary memory interface and
+the unconditionally present `mem_la_*` look-ahead interface.
 
 Reset remains the source's active-low synchronous `resetn`. Each state-owning
 child receives `resetn` and implements the reset behavior of its corresponding
@@ -72,34 +75,24 @@ outputs
   mem_la_wstrb              : vector bit 4
 ```
 
-The verification build additionally exposes the source RVFI names:
-
-```text
-rvfi_valid, rvfi_trap, rvfi_halt, rvfi_intr : bit
-rvfi_order                                  : vector bit 64
-rvfi_insn                                   : word32
-rvfi_mode, rvfi_ixl                         : vector bit 2
-rvfi_rs1_addr, rvfi_rs2_addr, rvfi_rd_addr : vector bit 5
-rvfi_rs1_rdata, rvfi_rs2_rdata, rvfi_rd_wdata : word32
-rvfi_pc_rdata, rvfi_pc_wdata                : word32
-rvfi_mem_addr                               : word32
-rvfi_mem_rmask, rvfi_mem_wmask              : vector bit 4
-rvfi_mem_rdata, rvfi_mem_wdata              : word32
-```
-
-The final architectural specification is a retirement-trace relation over
-RVFI observations, not a cycle contract that exposes internal state.
+The eventual public correctness theorem will observe memory-mapped-I/O and
+termination/trap behavior after composing the core with an external address
+decoder and memory environment. PicoRV32 itself does not distinguish ordinary
+RAM from memory-mapped I/O; `mem_instr` distinguishes instruction fetches from
+data accesses only. A stronger correspondence between completed data-memory
+transactions and architectural loads/stores will probably be used internally
+to prove the public theorem. It will not port or emit PicoRV32's `RISCV_FORMAL`
+RVFI instrumentation.
 
 ## Direct children
 
 ```text
 picorv32
 ├── control  : PicoRV32Control
+├── datapath : PicoRV32Datapath
 ├── mem      : PicoRV32Memory
 ├── decoder  : PicoRV32Decoder
-├── cpuregs  : PicoRV32Regs
-├── alu      : PicoRV32Alu
-└── rvfi     : PicoRV32Rvfi
+└── cpuregs  : PicoRV32Regs
 ```
 
 These instance boundaries are introduced for the Silean port. `cpuregs`
@@ -107,70 +100,138 @@ retains the instance name used by PicoRV32 when an external register-file
 module is selected. The other names follow headings and vocabulary in the
 source.
 
-Small primitives and reusable modules belong inside the state-owning or
-combinational child whose behavior they implement. For example, the registers
-implementing `reg_pc` and `reg_op1` are children of `control`, not siblings of
-`control` at the `picorv32` top level.
+Small primitives and reusable modules belong inside the subsystem whose
+hardware behavior they implement. State follows the value path that owns it:
+registering an intermediate datapath value does not by itself make that
+register control state.
 
 ## `control : PicoRV32Control`
 
-This module ports the large main sequential state-machine block and the small
-combinational selections directly associated with it. It owns:
+The contract for this module is defined in `Examples/PicoRV/Control.lean`.
+This module owns sequencing: which phase the processor is in, which operation
+may advance, and which child is commanded on the current cycle. It owns:
 
 - `cpu_state`;
-- `reg_pc`, `reg_next_pc`, `reg_op1`, `reg_op2`, `reg_out`, and `reg_sh`;
 - `latched_store`, `latched_stalu`, `latched_branch`, `latched_rd`,
   `latched_is_lu`, `latched_is_lh`, and `latched_is_lb`;
 - `mem_do_prefetch`, `mem_do_rinst`, `mem_do_rdata`, `mem_do_wdata`, and
   `mem_wordsize`;
-- `decoder_trigger`, `decoder_trigger_q`, `decoder_pseudo_trigger`, and
-  `decoder_pseudo_trigger_q`; and
-- any remaining enabled registers assigned by that same source block.
+- `decoder_trigger` and `decoder_pseudo_trigger`; and
+- the registered top-level `trap` output.
 
 Disabled counter, IRQ, PCPI, compressed-instruction, and trace registers are
 not ported.
 
-Its inputs are the current outputs of the other source regions:
+Its inputs are the current outputs of the other source regions, including
+datapath completion and condition results:
 
 ```text
-decoder: instr_*, is_*, decoded_*, compressed_instr/instr_trap as applicable
-cpuregs: cpuregs_rs1, cpuregs_rs2
-alu:     alu_out, alu_out_0
-mem:     mem_busy, mem_done, mem_rdata_word
+decoder: enabled instr_*/is_* classifiers, instr_trap, decoded_rd
+datapath: reg_pc, reg_op1, reg_sh, alu_out_0
+mem:     mem_done
 top:     resetn
 ```
 
 Its outputs are the source signals consumed elsewhere:
 
 ```text
-to alu:      reg_op1, reg_op2 and relevant instr_*/is_* selectors
-to mem:      next_pc, reg_op1, reg_op2, mem_do_*, mem_wordsize, trap
-to decoder:  mem_do_rinst, mem_done/trigger-related control
-to cpuregs:  cpuregs_write, cpuregs_wrdata, latched_rd
-to rvfi:     current/writeback/debug facts needed by the source RVFI block
+to datapath: cpu_state, registered writeback/load metadata, memory command state,
+             decoder_trigger
+to mem:      mem_do_*, mem_wordsize, trap
+to decoder:  mem_do_rinst, decoder_trigger, decoder_pseudo_trigger
+to cpuregs:  cpuregs_write, latched_rd
 top:         trap
 ```
+
+Decoder selectors and register-file values connect directly to the datapath;
+memory data also connects directly to it. Control does not forward values it
+does not interpret.
 
 State is private to this module. A local exact-cycle specification may help
 port and test the state machine, but higher-level users should rely on temporal
 progress and retirement properties rather than a public state mapping.
 
-The iterative shift transition remains here because PicoRV32 updates
-`reg_op1`, `reg_sh`, `latched_store`, and `cpu_state` together in
-`cpu_state_shift`. Reusable fixed shift and decrement children may implement
-the datapath internally; a separate stateful top-level shifter would invent a
-start/done boundary absent from the source.
+The control contract should expose sequencing facts, not duplicate arithmetic
+or value-flow behavior. In particular, the iterative shift's variable latency
+crosses this boundary: control starts and advances it, while the datapath owns
+the shifting value and count.
+
+The exact transition preserves the source's nonblocking timing and the final
+priority of its common memory-command clear/set logic. It covers reset, trap,
+fetch and decoder handoff, both operand-load phases, execute and branch
+coordination, iterative-shift completion, load/store issue and completion,
+decoder pseudo-triggers, misalignment traps, and registered writeback
+metadata. `cpuregs_write` is a combinational view of current control state.
+
+The contract also exposes the memory-command compatibility predicate and a
+theorem equating it with `PicoRV32Memory.CommandsWellFormed`. Data read and
+write commands are exclusive with all others, but `mem_do_prefetch` and
+`mem_do_rinst` may be asserted together: this is how the source promotes a
+prefetch. Focused checks cover reset, promotion, completion, and invalid data
+overlap. A global invariant is necessarily reset-reachable rather than a fact
+about arbitrary cycle-contract state, so it belongs in the later top-level
+trace proof.
+
+## `datapath : PicoRV32Datapath`
+
+The contract for this module is defined in `Examples/PicoRV/Datapath.lean`.
+This module owns the execution values that flow through several processor
+cycles: `reg_pc`, `reg_next_pc`, `reg_op1`, `reg_op2`, `reg_sh`, `reg_out`, and
+`alu_out_q`. It contains
+the combinational `PicoRV32Alu` child and implements ALU execution, iterative
+shifting, effective-address calculation, and the common result path used for
+writeback.
+
+This is not a separately invented accelerator protocol. Its ports should be
+the source-named values and enables already crossing the relevant regions of
+`picorv32.v`. For an ordinary ALU operation the contract can state the exact
+registered result timing. For iterative shifts it should state that a start
+event eventually produces the mathematical RV32 shift result; the latency
+depends on the shift amount because the configured implementation shifts by
+four and then by one.
+
+`reg_pc` and `reg_next_pc` belong to this datapath. Sequential, JAL, JALR, and
+branch PC flow shares decoder inputs and the common execution-result path, and
+has no independent protocol. A separate PC child would therefore add a broad
+artificial interface rather than isolate a source subsystem.
+
+The exact state transition specializes the source's main state-machine block:
+only `reg_pc` and `reg_next_pc` reset; `alu_out_q` captures the current
+combinational ALU result on every edge; and each enabled processor phase
+updates only its live datapath registers. Source `x` assignments are
+totalized by retaining the previous value, which constrains no live use.
+
+The output contract is deliberately divided by real dependencies. Current
+`reg_pc`, `reg_op1`, `reg_op2`, and `reg_sh` read state only; `next_pc` reads branch
+metadata; `alu_out_0` reads the comparison selectors; and `cpuregs_wrdata`
+reads writeback metadata. Memory completion and register-file data are needed
+for the state transition but not falsely attached to every current output.
+
+Focused checks cover reset, sequential and JAL PC updates, JALR/branch target
+selection, immediate and register operand capture, ALU-result capture, load
+and store effective addresses, signed/unsigned load results, writeback, and
+iterative logical/arithmetic shifting. A nine-bit shift demonstrates the
+configured four/four/one sequence followed by the result-capture cycle. No
+`ModuleStructure` or certification exists yet.
 
 ## `mem : PicoRV32Memory`
 
-This module ports the `// Memory Interface` region. It owns:
+The contract for this module is defined in `Examples/PicoRV/Memory.lean`. It
+ports the live behavior of the `// Memory Interface` region after specializing
+`COMPRESSED_ISA = 0` and `LATCHED_MEM_RDATA = 0`. It owns:
 
 - `mem_state`, `mem_valid`, `mem_instr`, `mem_addr`, `mem_wdata`, and
   `mem_wstrb`;
-- `mem_rdata_q` and response-capture state;
-- look-ahead bookkeeping that remains relevant with `COMPRESSED_ISA = 0`; and
-- any other register assigned by the enabled branches of the memory-region
-  sequential blocks.
+- `mem_rdata_q`.
+
+`mem_rdata_word`, `mem_rdata_latched`, `mem_busy`, `mem_done`, and all
+`mem_la_*` values are combinational, even where Verilog uses `reg` as an
+assignment-category keyword. `mem_wordsize` and the four `mem_do_*` commands
+are assigned by control and cross into this child as inputs. The source still
+declares compressed-instruction bookkeeping such as `mem_la_secondword`,
+`mem_la_firstword_reg`, `last_mem_valid`, `prefetched_high_word`, and
+`mem_16bit_buffer`; every live use is disabled in the fixed configuration, so
+these dead registers are not state of the specialized child.
 
 It accepts the source-named control and external inputs:
 
@@ -181,30 +242,79 @@ next_pc, reg_op1, reg_op2, mem_wordsize
 mem_ready, mem_rdata
 ```
 
-It produces the ordinary and look-ahead memory ports plus `mem_busy`,
-`mem_done`, `mem_rdata_word`, `mem_rdata_latched`, and
-`next_insn_opcode` where those source signals cross into other regions.
+It produces the registered ordinary memory request, combinational look-ahead
+ports, `mem_done`, formatted `mem_rdata_word`,
+`mem_rdata_latched` and `mem_rdata_q`.
 
-Its natural public specification is temporal: a request remains stable while
-stalled, accepted requests complete once, and load/store formatting matches
-width and address. A private cycle description may mirror `mem_state` for its
-structural proof. Load and store formatters are children inside `mem`.
+The exact cycle contract mirrors the four source phases: idle, read request,
+write request, and transferred prefetch. Its separate natural protocol view
+represents the sole external request as an `Option Request`. Public laws prove
+that this request is stable while stalled, that no ordinary completion occurs
+without a transfer, that an active instruction/data read or write completes on
+its transfer and returns idle, and that a pure prefetch transfer instead
+completes exactly once when a later `mem_do_rinst` consumes it without another
+external transfer. This distinction is required by the Verilog.
+
+The source requires data reads and writes to be exclusive with all other
+commands, while allowing `mem_do_prefetch` and `mem_do_rinst` together during
+prefetch promotion. Commands remain asserted as required and are dropped after
+`mem_done`. `CommandsWellFormed` names this compatibility condition;
+`InputsWellFormed` additionally requires the source's live `mem_wordsize`
+encodings 0, 1, or 2. Encoding 3 reaches a Verilog `full_case` don't-care; the
+two-state contract totalizes it with word formatting, while every public
+formatting claim assumes `InputsWellFormed`. The eventual control contract must
+prove the full caller discipline. Without deassertion, a held level command
+correctly starts a new request after the memory state returns idle, so an
+unconditional global “one completion ever” claim would be false.
+
+Synchronous active-low reset sets `mem_state` to idle and clears `mem_valid`.
+Other request and captured-data registers retain their values. `trap` stops
+state-machine progress and clears `mem_valid` only when `mem_ready` permits the
+outstanding external transfer to finish, exactly as in the source. Focused
+checks cover stalls, transfer/completion, instruction/data classification,
+word/half/byte formatting and lanes, response capture, prefetch promotion, and
+reset. No memory `ModuleStructure` exists yet.
 
 ## `decoder : PicoRV32Decoder`
 
-This module ports the registered instruction-decoder blocks. It owns the
-enabled `instr_*`, `is_*`, `decoded_rs1`, `decoded_rs2`, `decoded_rd`,
-`decoded_imm`, `decoded_imm_j`, and related registered decode signals. It does
-not own `decoder_trigger`; that register is updated in the main control block.
+The contract for this module is defined in `Examples/PicoRV/Decoder.lean`. It
+owns the live registered instruction-decoder state: enabled `instr_*`, `is_*`,
+`decoded_rs1`, `decoded_rs2`, `decoded_rd`, `decoded_imm`, `decoded_imm_j`, and
+`compressed_instr`. Only signals read outside the decoder are exported as
+ports; intermediate opcode-class and recognition registers remain private.
+It does not own
+`decoder_trigger` or `decoder_pseudo_trigger`; those registers are updated in
+the main control block.
 
-Its inputs are the exact source signals needed to update those registers,
-principally `resetn`, `mem_do_rinst`, `mem_done`, `mem_rdata_latched`, and the
-trigger state supplied by `control`. Outputs retain their original names.
+Its exact source-facing inputs are:
 
-Its specification should describe registered decode timing and provide a
-natural Lean interpretation of the resulting signals. Public facts should
-cover each supported RV32I encoding, immediate construction, legality, and the
-mutual-exclusion assumptions used by PicoRV32's parallel cases.
+```text
+resetn, mem_do_rinst, mem_done, mem_rdata_latched,
+decoder_trigger, decoder_pseudo_trigger, mem_rdata_q
+```
+
+The behavior has two independently enabled registered stages. On
+`mem_do_rinst && mem_done`, the capture stage records opcode classes, register
+indices, `decoded_imm_j`, and the always-false specialized
+`compressed_instr`. On `decoder_trigger && !decoder_pseudo_trigger`, the
+resolve stage uses the previously captured classes and `mem_rdata_q` to record
+the detailed instruction flags and `decoded_imm`. If both stages fire on one
+edge, all right-hand sides observe the same pre-edge state, matching Verilog
+nonblocking assignments.
+
+Six summary flags are assigned unconditionally from the previous detailed
+flags. The resolve block then clears two of them, so their apparent extra cycle
+of latency is intentional source behavior. Active-low `resetn` is synchronous
+and clears only the subset explicitly cleared by `picorv32.v`; the remaining
+decoder registers stay unconstrained until written. `instr_trap` is a
+combinational output over the registered recognized-instruction flags rather
+than decoder state. In the Verilog default branch, `decoded_imm` is `x`; the
+two-state contract chooses its previous value there, which is permitted by the
+source's don't-care and creates no additional externally required behavior.
+
+Focused checks cover capture and resolve timing, all five RV32I immediate
+layouts, the delayed summary update, partial reset, and recognized versus
+illegal instruction output. No decoder `ModuleStructure` exists yet.
 
 ## `cpuregs : PicoRV32Regs`
 
@@ -229,40 +339,28 @@ reusable bank is developed.
 
 ## `alu : PicoRV32Alu`
 
-This combinational module ports the enabled ALU region. Inputs retain
+This combinational child of `PicoRV32Datapath` ports the enabled ALU region. Inputs retain
 `reg_op1`, `reg_op2`, `instr_sub`, and the relevant `instr_*`/`is_*` selector
-names. Outputs are `alu_out` and `alu_out_0`. There are no `alu_out_q` or
-`alu_out_0_q` registers because `TWO_CYCLE_ALU = TWO_CYCLE_COMPARE = 0`.
+names. Outputs are `alu_out` and `alu_out_0`. The ALU itself has no state
+because `TWO_CYCLE_ALU = TWO_CYCLE_COMPARE = 0`. The source nevertheless
+captures `alu_out` in `alu_out_q`; that following-cycle value belongs to the
+datapath, not to this combinational child.
 
 Its natural specification is a total pure function interpreting the enabled
 selector combinations. It should prove the selected result for addition,
-subtraction, comparison, AND, OR, and XOR. Iterative shifts remain in
-`control`. The implementation eventually uses reusable arithmetic, comparison,
+subtraction, comparison, AND, OR, and XOR. The implementation eventually uses reusable arithmetic, comparison,
 and bitwise children.
-
-## `rvfi : PicoRV32Rvfi`
-
-This module ports the `RISCV_FORMAL` observation block and owns `rvfi_order`
-and any other RVFI registers assigned there. It observes control, decoder,
-register-file, and memory signals but does not influence functional execution.
-
-Its contract should state how each completed PicoRV32 instruction produces an
-RVFI event. This is a temporal observation contract, not necessarily a cycle
-contract. The later architectural proof relates the emitted sequence to RV32I
-instruction retirement and may use Sail through a narrow wrapper.
-
-Keeping RVFI separate prevents verification bookkeeping from becoming core
-state while preserving the source block that constructs it.
 
 ## State ownership summary
 
 | Source state | Owning child |
 | --- | --- |
-| `cpu_state`, `reg_*`, `latched_*`, `mem_do_*`, decoder triggers | `control` |
+| `cpu_state`, sequencing `latched_*`, `mem_do_*`, decoder triggers | `control` |
+| `reg_op1`, `reg_op2`, `reg_sh`, `reg_out`, `alu_out_q` | `datapath` |
+| `reg_pc`, `reg_next_pc` | `datapath` |
 | `mem_state`, memory request registers, captured memory data | `mem` |
 | registered `instr_*`, `is_*`, and `decoded_*` signals | `decoder` |
 | integer architectural registers | `cpuregs` |
-| `rvfi_*` observation registers | `rvfi` |
 | ALU | stateless |
 
 This ownership should be checked mechanically against assignments in the
@@ -279,14 +377,13 @@ schedules should express that distinction rather than changing the hardware.
 A representative order is:
 
 ```text
-control current-state outputs (`reg_*`, `mem_do_*`, selectors)
+control current-state outputs (`mem_do_*`, enables, selectors)
 decoder current registered outputs
 cpuregs combinational reads
-alu combinational outputs
+datapath current values and ALU combinational outputs
 mem current/request/completion outputs
-control next-state and writeback outputs
-decoder/mem/cpuregs/control next states
-rvfi observations and next state
+control decisions and datapath/writeback outputs
+decoder/mem/cpuregs/datapath/control next states
 top-level outputs
 ```
 
@@ -297,7 +394,7 @@ semantics.
 ## Blackbox staging
 
 The first top-level composition may use behavioral guarantees for `mem`,
-`decoder`, `cpuregs`, `alu`, and `rvfi` while their structures are developed.
+`decoder`, `cpuregs`, `datapath`, and `alu` while their structures are developed.
 `control` contains the central ported algorithm and should not remain an
 assumption when claiming meaningful top-level progress.
 
@@ -310,21 +407,41 @@ There are two explicit statuses:
 
 The appropriate specification form varies: pure combinational behavior for
 `alu`, registered decode behavior for `decoder`, a stateful register-file
-contract for `cpuregs`, temporal protocol behavior for `mem`, and retirement
-traces for `rvfi` and the complete CPU.
+contract for `cpuregs`, and temporal protocol behavior for `mem`. Retirement
+is a semantic property of the complete CPU rather than another hardware child.
 
-## Work before implementation
+## Boundary review status
 
-1. Mechanically list every register assigned in the enabled source branches
-   and assign it to exactly one child above.
-2. Mechanically list signals crossing each proposed boundary and preserve
-   their source names, widths, and directions.
-3. Check that per-output schedules exist for the proposed bidirectional
-   `control`/`mem` and `control`/`decoder` interfaces without altering timing.
-4. Review those tables against `picorv32.v`; only then freeze child ports.
-5. Implement the top-level composition using specification blackboxes, then
-   port `control` instruction family by instruction family.
+All five direct-child cycle contracts now exist. The joint review against the
+fixed configuration of `picorv32.v` is recorded in
+`PicoRV32MainBlockInventory.md`. A focused Lean check exhaustively maps every
+child input to its named producer and verifies matching signal types. Output
+rules preserve the actual same-cycle dependencies, so later proof schedules
+will not be forced through unrelated inputs.
 
-This inventory is the next design step. Sail integration and the final
-retirement proof can wait until the hardware port has enough instruction
-behavior to make them useful.
+The configured top-level `ModuleStructure` is now implemented in
+`Examples/PicoRV/PicoRV.lean` with exactly these five contract-backed blackbox
+children. `PicoRVSchedule.lean` supplies proof-only parent-output,
+child-state-input, and complete-rule schedules and proves uniqueness of
+structural solutions. This is composition verification, not a claim that any
+child has a concrete structure or that the CPU is architecturally correct.
+Sail integration and the retirement proof remain later work.
+
+### Assembled-boundary review
+
+The implemented boundary was checked again against the configured regions of
+`picorv32.v`, rather than only against the earlier planning table:
+
+- the external inputs and outputs match the source's reset, ordinary memory,
+  look-ahead memory, and trap ports; `clk` remains Silean's implicit global
+  clock, while disabled PCPI, IRQ, trace, and formal ports are absent;
+- every input of `control`, `datapath`, `mem`, `decoder`, and `cpuregs` is
+  supplied exactly once by either a top-level input or the source-owning child;
+- all eleven functional outputs are driven by the same owning region as in the
+  source (`trap` by control and both memory interfaces by `mem`); and
+- no forwarding-only ports or duplicate state owners were introduced.
+
+The exhaustive `Wiring` definition makes missing sinks a type error, while
+`PicoRVBoundaryChecks.lean` independently checks the producer classification
+and signal shapes. `PicoRVTopChecks.lean` checks the constructed blackbox
+children and completed schedules.

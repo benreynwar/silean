@@ -16,7 +16,8 @@ introduced when those statements cannot be expressed naturally by the
 existing ones.
 
 The concrete first-pass top-level child interfaces and state ownership are
-refined in `PicoRV32TopLevelPlan.md`.
+refined in `PicoRV32TopLevelPlan.md`; the source-level evidence for the main
+block split is in `PicoRV32MainBlockInventory.md`.
 
 The direct port preserves existing `picorv32.v` module, port, register, and
 wire names in its structural interface. Friendlier Lean views belong in
@@ -31,30 +32,30 @@ Misalignment and illegal-instruction trapping are enabled.
 
 ```text
 PicoRV32
-├── control : PicoRV32Control                  stateful main RTL block
-│   └── reusable shift/add/select logic as needed
+├── control : PicoRV32Control                  sequencing state
+├── datapath : PicoRV32Datapath                registered value flow
+│   ├── alu : PicoRV32Alu                      combinational ALU region
+│   │   ├── AddSub (32-bit)
+│   │   │   └── Add
+│   │   │       └── FullAdder (one per bit)
+│   │   │           ├── HalfAdder
+│   │   │           └── primitive bit logic
+│   │   ├── Equality
+│   │   ├── UnsignedLessThan
+│   │   ├── SignedLessThan
+│   │   ├── BitwiseAnd
+│   │   ├── BitwiseOr
+│   │   └── BitwiseXor
+│   └── reusable shift/select logic as needed
 ├── mem     : PicoRV32Memory                   stateful memory RTL region
 │   ├── LoadDataFormatter
 │   └── StoreDataFormatter
 ├── decoder : PicoRV32Decoder                  stateful decoder RTL region
-├── cpuregs : PicoRV32Regs                     stateful register-file region
-│   └── MultiReadRegisterBank (32-bit, 2 reads)
-│       ├── EnabledRegister (one per entry)
-│       ├── BinaryToOneHot
-│       └── CombMuxTree (one per read port)
-├── alu     : PicoRV32Alu                      combinational ALU region
-│   ├── AddSub (32-bit)
-│   │   └── Add
-│   │       └── FullAdder (one per bit)
-│   │           ├── HalfAdder
-│   │           └── primitive bit logic
-│   ├── Equality
-│   ├── UnsignedLessThan
-│   ├── SignedLessThan
-│   ├── BitwiseAnd
-│   ├── BitwiseOr
-│   └── BitwiseXor
-└── rvfi    : PicoRV32Rvfi                     stateful formal observer
+└── cpuregs : PicoRV32Regs                     stateful register-file region
+    └── MultiReadRegisterBank (32-bit, 2 reads)
+        ├── EnabledRegister (one per entry)
+        ├── BinaryToOneHot
+        └── CombMuxTree (one per read port)
 ```
 
 This is a proof and construction hierarchy, not necessarily the final emitted
@@ -65,10 +66,10 @@ has no explanatory value.
 
 ### `PicoRV32`
 
-Owns the externally visible instruction/data memory handshake, reset, trap or
-fault indication, and eventual retirement observation. It connects the
-decoder, controller, register file, ALU, shifter, memory interface, PC, and
-operand/result registers.
+Owns the externally visible instruction/data memory handshake, reset, and trap
+or fault indication. It connects the decoder, controller, register file,
+registered execution datapath, and memory interface. The datapath owns the PC
+path, as fixed by the source inventory.
 
 Its primary specification should not be a cycle contract reproducing the
 implementation state machine. It should relate the externally observable
@@ -92,6 +93,19 @@ identify the fields and immediate for each supported RV32I encoding, establish
 the meaning of the legality result, and establish any one-hot or mutual-
 exclusion fact relied upon by downstream selectors.
 
+### `PicoRV32Datapath`
+
+Owns the registered execution value flow: `reg_op1`, `reg_op2`, `reg_sh`,
+`reg_out`, and `alu_out_q`. It contains the combinational ALU and carries
+ordinary arithmetic, iterative shifts, effective addresses, and results
+through the cycles in which PicoRV32 uses them. Its temporal contract should
+describe completed values naturally; a shift may take a value-dependent
+number of cycles.
+
+`reg_pc` and `reg_next_pc` are part of this broader datapath. Sequential,
+branch, and jump PC flow directly shares the execution result path and does
+not have a clean independent protocol in the configured source.
+
 ### `PicoRV32Alu`
 
 Combines reusable arithmetic, comparison, and bitwise children and selects the
@@ -106,8 +120,8 @@ for every operation value rather than relying on Verilog `case` assumptions.
 ### `PicoRV32Control`
 
 Owns the ported fetch, operand-load, execute, iterative-shift, store, load, and
-trap states, datapath registers, and registered control flags that cross those states. It tells
-the datapath which values to capture and tells the memory interface which
+trap sequencing plus registered control flags that cross those states. It tells
+the datapath which values to capture or advance and tells the memory interface which
 transaction to request.
 
 If an exact state-machine cycle contract is helpful while porting, it may state
@@ -127,11 +141,15 @@ protocol and returns completed read data. It must preserve the address,
 write-data, byte mask, and instruction/data classification for as long as the
 external request is stalled.
 
-Its contract should describe transaction acceptance and completion directly.
-Important laws are request stability under backpressure, at most one
-outstanding request, exactly one completion for each accepted command, and the
-absence of a write request for reads. Prefetch and compressed-instruction
-special cases are absent from the initial configuration.
+Its contract now describes transaction acceptance and completion directly.
+Public laws cover request stability under backpressure, the single outstanding
+request, ordinary completion on external transfer, and the source's special
+case in which an accepted prefetch completes only when a later instruction
+command consumes it. Compressed-instruction buffering is absent from the
+initial configuration. Correct one-for-one command completion depends on the
+source control discipline: commands are dropped after `mem_done`, data
+commands are exclusive with every other command, and prefetch plus
+instruction-read is the sole allowed overlap during prefetch promotion.
 
 ## Reusable state and datapath modules
 
@@ -218,11 +236,12 @@ signal values belong in the generic signal-logic namespace.
 
 `ShiftLeftStep`, `ShiftRightLogicalStep`, and `ShiftRightArithmeticStep`
 perform a fixed structural shift, including the appropriate zero or sign fill.
-They are reusable combinational children inside `PicoRV32Control`. The source
-control block continues to own `reg_op1`, `reg_sh`, and the shift-state
-transition; do not introduce a separate stateful shifter interface.
+They are reusable combinational children inside `PicoRV32Datapath`. The
+datapath owns `reg_op1` and `reg_sh`; control owns the shift-state transition
+and commands each advance. Do not introduce an additional stateful shifter
+protocol between them.
 
-Step-module contracts should use direct vector indexing. `PicoRV32Control`
+Step-module contracts should use direct vector indexing. `PicoRV32Datapath`
 should prove that repeated shift-state transitions terminate with the
 mathematical RV32 shift result. Do not require the architectural CPU proof to
 reason about that internal sequence once the final-result theorem is
@@ -266,8 +285,8 @@ natural contract and repeated use make the hierarchy or proofs clearer.
 
 ## Specification blackboxes and completion status
 
-Top-level work should not wait for every reusable child structure. A planned
-module may first be used through its real ports and natural specification,
+Top-level work does not wait for every reusable child structure. A child may
+first be used through its real ports and natural specification,
 using whichever contract form matches that boundary. Parent proofs should be
 parameterized by the relevant behavioral guarantee and should not inspect
 child structure or private proof schedules. This may require modular

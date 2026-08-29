@@ -58,6 +58,11 @@ translation is not part of the correctness proof at this stage.
   reset-synchronized FIFO contract.
 - Module-owned naming feeds direct FIRRTL generation; FIRRTL is converted to
   SystemVerilog and exercised with Verilator and cocotb.
+- The configured PicoRV32 top level composes the reviewed Control, Datapath,
+  Memory, Decoder, and register-file contracts as explicit behavioral
+  blackboxes. Its source-named boundary is concrete, and proof-only schedules
+  establish parent-output availability, child-state-input readiness, complete
+  rule coverage, and uniqueness of structural solutions.
 
 ## Working constraints
 
@@ -446,18 +451,24 @@ use `Contracts.Fifo.FifoContract` for the claim that a complete module behaves a
 ## Long-term RISC-V direction
 
 A possible much later application is a small RV32I CPU made by directly
-porting a simple configuration of PicoRV32 into Silean. The intended
-correctness boundary is architectural instruction retirement rather than
-correspondence between the original and ported implementations' internal
-cycles or state-machine state. The Sail model is an independent architectural
-specification against which to verify the port; it is not the source design.
+porting a simple configuration of PicoRV32 into Silean. The intended public
+correctness boundary is observable external behavior rather than equality of
+architectural and physical state. For a configured memory environment, the
+PicoRV32 and reference executions should have the same memory-mapped-I/O trace
+and termination or trap behavior. Progress under a responsive environment is
+a separate property. A stronger correspondence between completed data-memory
+transactions or instruction steps will probably be simpler proof machinery;
+it is not the public definition of correctness. The Sail model is an
+independent architectural specification against which to verify the port; it
+is not the source design.
 The provisional construction hierarchy, specification-blackbox staging
 boundary, and ideas for each module's appropriate behavioral specification
 are recorded in `docs/PicoRV32ModuleHierarchy.md`.
 The proposed first top-level child interfaces, state ownership, acyclic signal
 flow, and implementation staging are recorded in
-`docs/PicoRV32TopLevelPlan.md`; its remaining interface choices must be
-reviewed before implementation begins.
+`docs/PicoRV32TopLevelPlan.md`. The configured main-block audit in
+`docs/PicoRV32MainBlockInventory.md` freezes the control/datapath boundary and
+records why PC state belongs to the datapath.
 
 The locally available `sail-riscv32-lean` repository is a candidate upstream
 specification dependency when this work becomes timely. It contains the
@@ -467,15 +478,16 @@ traps. It is currently generated, very large, unpolished, and described by its
 authors as non-executable, so integrating it is deliberately not near-term
 work.
 
-Before depending on it, make a small feasibility study around one ordinary
-RV32I instruction. Check Lean and `lean-sail` version compatibility, isolate a
-small stable wrapper for the architectural observations we require, and assess
-proof and build performance. If direct use is practical, keep the generated
-model as an external dependency rather than copying it into Silean. Otherwise,
-use it as the authoritative source for a clean RV32I-facing specification and
-prove a bridge to that interface. Initial CPU verification should exclude
-extensions, interrupts, privileged behavior, and exceptional memory cases
-until the base retirement relation is established.
+The first feasibility study is recorded in
+`docs/SailIntegrationExperiment.md`. The model builds and exposes useful
+whole-step and per-instruction definitions, but its initial build is far too
+slow for Silean's ordinary feedback loop, its pinned Lean version differs, and
+its concrete memory monad does not currently expose an operation trace. The
+next isolated study should instrument one load and one store, preferably via a
+small `lean-sail` extension, before deciding between a direct adapter and a
+separate clean RV32I-facing specification with a Sail bridge. Initial CPU
+verification should exclude extensions, interrupts, privileged behavior, and
+exceptional memory cases until the base retirement relation is established.
 
 Likely reusable modules needed while porting the simple PicoRV32 configuration
 are:
@@ -499,24 +511,30 @@ are:
 - possibly a reusable single-outstanding ready/valid transaction holder once
   the memory-controller boundary is understood during the port.
 
-After the contract-first milestone below, arithmetic is a likely early
-implementation foundation: `FullAdder`, `Add`, and their generic proofs unlock
-PC updates, address calculation, arithmetic instructions, subtraction, and
-comparisons. Do not design a generic monolithic ALU in advance; keep
-PicoRV32-specific decode and operation selection in the CPU until the port
-demonstrates a genuinely reusable boundary.
+The top-level composition is now understood, so these reusable modules are
+implementation candidates while the independent RV32I reference work
+continues. Arithmetic is a likely early foundation: `FullAdder`, `Add`, and
+their generic proofs unlock PC updates, address calculation, arithmetic
+instructions, subtraction, and comparisons.
+Do not design a generic monolithic ALU in advance; keep PicoRV32-specific
+decode and operation selection in the CPU until the port demonstrates a
+genuinely reusable boundary.
 
-## Later milestone: PicoRV32 child contracts
+## Completed milestone: PicoRV32 child contracts
 
-Before implementing any PicoRV32 child structure, define and review the
-interfaces and behavioral specifications of every direct top-level child. The
+The interfaces and behavioral specifications of every direct top-level child
+are defined and reviewed. The
 PicoRV32-specific files live in `Silean/Examples/PicoRV/`; reusable contract
 machinery belongs in the general library only when a real specification needs
 it.
 
-The direct children are `PicoRV32Control`, `PicoRV32Memory`,
-`PicoRV32Decoder`, `PicoRV32Regs`, `PicoRV32Alu`, and `PicoRV32Rvfi`. Work in
-this milestone should:
+The direct children are sequencing-only `PicoRV32Control`,
+registered `PicoRV32Datapath`, `PicoRV32Memory`, `PicoRV32Decoder`, and
+`PicoRV32Regs`. The combinational `PicoRV32Alu` is inside the datapath, which
+also owns `reg_pc` and `reg_next_pc`; the source inventory found no clean
+independent PC protocol. PicoRV32's
+`RISCV_FORMAL` RVFI block is verification instrumentation and is not part of
+the Silean hardware port. This milestone established:
 
 1. mechanically inventory the configured Verilog registers and crossing
    signals, assigning every state element to exactly one child;
@@ -526,7 +544,7 @@ this milestone should:
    contract form independently at each boundary;
 4. state the public laws the eventual parent proof may use, without exposing
    child structure, schedules, or proof-construction state;
-5. check that the six specifications collectively describe the enabled
+5. check that the specifications collectively describe the enabled
    PicoRV32 behavior and give the top level enough information to connect and
    verify them; and
 6. review naming, state ownership, reset behavior, unspecified values, and
@@ -535,16 +553,86 @@ this milestone should:
 Likely specification styles are pure combinational behavior for
 `PicoRV32Alu`, registered decode behavior for `PicoRV32Decoder`, architectural
 state/read/write behavior for `PicoRV32Regs`, exact internal transition support
-plus useful temporal properties for `PicoRV32Control`, a temporal ready/valid
-protocol for `PicoRV32Memory`, and an instruction-retirement observation trace
-for `PicoRV32Rvfi`. These are starting points, not a requirement that every
-child use `Contracts.Cycle.ModuleCycleContract`.
+plus useful temporal properties for `PicoRV32Control`, natural temporal result
+properties for `PicoRV32Datapath`, and a temporal ready/valid protocol for
+`PicoRV32Memory`. These are starting points, not a requirement
+that every child use `Contracts.Cycle.ModuleCycleContract`. Architectural
+retirement will be specified semantically over the completed functional CPU,
+without adding RVFI registers or ports to the generated design.
 
-The milestone ends with a contract-only build and a written interface review.
-No `ModuleStructure` implementation, FIRRTL emission, cocotb test, Sail
-integration, `FullAdder`, or other bottom-up datapath work is part of this
-milestone. Those begin only after the complete child boundary has been
-reviewed.
+All five direct-child contracts are defined: register file, decoder, memory,
+datapath, and control. The combinational ALU contract used by the datapath is
+also defined.
+Review of the source's main sequential block found that the earlier monolithic
+control boundary was misleading: `reg_op1`, `reg_op2`, `reg_sh`, `reg_out`,
+and `alu_out_q` form a registered execution datapath and should not be modeled
+as control state. `reg_pc` and `reg_next_pc` join that datapath because their
+branch and jump updates share its result path. The exact state and
+crossing-signal evidence is recorded in
+`docs/PicoRV32MainBlockInventory.md`. The
+decoder contract has been checked directly against the fixed-configuration
+Verilog region and preserves its capture/resolve pipeline, nonblocking
+assignment timing, partial synchronous reset, immediate layouts, and
+combinational illegal-instruction indication. The memory contract preserves
+the configured single-outstanding state machine, registered request stability,
+response capture, prefetch promotion, and word/half/byte formatting. Its public
+protocol laws state the exact relationship between external transfers and
+`mem_done`, including the command-discipline obligation that control must
+eventually prove. The control contract now preserves the complete configured
+state-machine sequencing and links its command-compatibility predicate to the
+memory contract. That review corrected the earlier over-strong claim that all
+four commands were mutually exclusive: prefetch and instruction-read overlap
+during promotion, while data commands remain exclusive. The datapath contract
+preserves exact configured PC, operand, ALU capture,
+effective-address, load, writeback, and iterative-shift timing while keeping
+its output-rule dependencies narrow enough for top-level scheduling.
+
+The joint review of all five child contracts as one top-level boundary is now
+complete. It removed debug-only `next_insn_opcode` and functionally dead
+`instr_ecall_ebreak` state, kept decoder-internal registers private rather than
+exporting them as crossing ports, narrowed the datapath comparison rule to its
+actual selectors, and split memory outputs by their real same-cycle
+dependencies. `PicoRVBoundaryChecks.lean` exhaustively assigns every child
+input to a named producer and proves matching signal types. The reviewed state
+ownership, reset/timing decisions, and acyclic dependency order are recorded in
+`docs/PicoRV32MainBlockInventory.md`.
+
+## Completed milestone: PicoRV32 top-level structure
+
+The structural `PicoRV32` top level now has:
+
+1. exactly the five reviewed direct children as explicit specification
+   blackboxes;
+2. source-named connections according to
+   `docs/PicoRV32MainBlockInventory.md` and the existing memory/decoder paths;
+3. the configured functional PicoRV32 memory, reset, and trap ports;
+4. total typed wiring, parent-output and child-state-input schedules, complete
+   child-rule coverage, and a uniqueness proof for structural solutions; and
+5. an assembled-boundary review against `picorv32.v`.
+
+It does not prove architectural correctness, and none of the five children is
+presented as a concrete implementation.
+
+## Later milestone: PicoRV32 top-level verification design
+
+The next milestone should decide how to state and prove the useful top-level
+correctness property. Study the composed child contracts and determine:
+
+1. the public trace of memory-mapped-I/O and termination/trap observations;
+2. how the external address decoder and memory environment project completed
+   CPU memory transactions into that trace;
+3. how variable-latency internal cycles correspond to zero or one
+   architectural transitions;
+4. what reset, responsiveness, and progress assumptions are required;
+5. which existing contract form can express the property, or what new
+   contract form is genuinely needed; and
+6. whether and how a narrow Sail wrapper should supply the independent RV32I
+   transition and ordered memory-operation semantics.
+
+This milestone produces a reviewed verification plan and top-level contract
+shape. It precedes all concrete child structures. Only after it is complete do
+we choose an implementation order and begin reusable arithmetic, register-bank,
+datapath, control, or other child structures.
 
 Each architectural goal ends with a plain-language review, focused timing,
 full Lean verification, and relevant external simulation.
