@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives
 
@@ -60,15 +60,14 @@ def wiring : Wiring context.ports context.instancePorts where
 
 @[reducible] def body : ModuleBody := ⟨context, wiring⟩
 
-@[reducible] def children : Contracts.Cycle.Certification.Children body
-  | .invertValid => Primitives.notCertified
-  | .readyOr => Primitives.orCertified
-  | .updateEq => Primitives.eqCertified
-
-@[reducible] def childStructure := Contracts.Cycle.Certification.childStructure children
+@[reducible] def structuralChildren : (child : Instance) →
+    ModuleStructure (instancePorts.ports child)
+  | .invertValid => .primitive Primitives.not
+  | .readyOr => .primitive Primitives.or
+  | .updateEq => .primitive Primitives.eq
 
 def moduleStructure : ModuleStructure ports :=
-  Contracts.Cycle.Certification.moduleStructure body children
+  .composite body structuralChildren
 
 /-! ## Exact cycle behavior and certification -/
 
@@ -94,11 +93,16 @@ def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   stateRule := Contracts.Cycle.CycleStateRule.empty ports
   outputCoverage := by rfl
 
-abbrev invertRule : Contracts.Cycle.Certification.RuleOccurrence children :=
+@[reducible] def childContracts : Contracts.Cycle.ChildCycleContracts body
+  | .invertValid => Primitives.notCycleContract
+  | .readyOr => Primitives.orCycleContract
+  | .updateEq => Primitives.eqCycleContract
+
+abbrev invertRule : Contracts.Cycle.Certification.Layer.RuleOccurrence body childContracts :=
   ⟨.invertValid, Primitives.NotRule.apply⟩
-abbrev readyRule : Contracts.Cycle.Certification.RuleOccurrence children :=
+abbrev readyRule : Contracts.Cycle.Certification.Layer.RuleOccurrence body childContracts :=
   ⟨.readyOr, Primitives.OrRule.apply⟩
-abbrev updateRule : Contracts.Cycle.Certification.RuleOccurrence children :=
+abbrev updateRule : Contracts.Cycle.Certification.Layer.RuleOccurrence body childContracts :=
   ⟨.updateEq, Primitives.EqRule.apply⟩
 
 @[simp] theorem invertRule_reads : invertRule.reads = [.input] := rfl
@@ -108,51 +112,54 @@ abbrev updateRule : Contracts.Cycle.Certification.RuleOccurrence children :=
 @[simp] theorem readyRule_writes : readyRule.writes = [.output] := rfl
 @[simp] theorem updateRule_writes : updateRule.writes = [.output] := rfl
 
-def outputSchedule : Contracts.Cycle.Certification.OutputSchedule body children cycleContract .control :=
+def outputSchedule :
+    Contracts.Cycle.Certification.Layer.OutputSchedule body childContracts cycleContract .control :=
   .call invertRule
     (by intro port member; cases port; simp [cycleContract, controlRule,
       SignalSelection.prepend, SignalMap.select, SignalSelection.labels,
-      Contracts.Cycle.Certification.sourceAvailable, body, wiring, context,
+      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
       EndpointContext.moduleInput])
     (by simp)
   (.call readyRule
     (by intro input member
         cases input with
         | left => simp [cycleContract, controlRule, SignalSelection.prepend,
-            SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
+            SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
             body, wiring, context, EndpointContext.moduleInput]
         | right => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩)
     (by simp)
   (.call updateRule
     (by intro input member; cases input <;>
       simp [cycleContract, controlRule, SignalSelection.prepend,
-        SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
+        SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
         body, wiring, context, EndpointContext.moduleInput])
     (by simp)
   (.done (by
     intro output member
     cases output with
     | upstreamReady =>
-        change Contracts.Cycle.Certification.outputAvailable
-          ([updateRule, readyRule, invertRule] : Contracts.Cycle.Certification.Availability children)
+        change Contracts.Cycle.Certification.Layer.outputAvailable
+          ([updateRule, readyRule, invertRule] :
+            Contracts.Cycle.Certification.Layer.Availability body childContracts)
           Instance.readyOr .output
         exact ⟨Primitives.OrRule.apply, by simp, by simp⟩
     | storageUpdate =>
-        change Contracts.Cycle.Certification.outputAvailable
-          ([updateRule, readyRule, invertRule] : Contracts.Cycle.Certification.Availability children)
+        change Contracts.Cycle.Certification.Layer.outputAvailable
+          ([updateRule, readyRule, invertRule] :
+            Contracts.Cycle.Certification.Layer.Availability body childContracts)
           Instance.updateEq .output
         exact ⟨Primitives.EqRule.apply, by simp, by simp⟩))))
 
-def stateSchedule : Contracts.Cycle.Certification.StateSchedule body children :=
+def stateSchedule : Contracts.Cycle.Certification.Layer.StateSchedule body childContracts :=
   .done (by
     intro child input member
     cases child <;>
-      simp [children, Primitives.notCertified, Primitives.notCycleContract,
-        Primitives.orCertified, Primitives.orCycleContract,
-        Primitives.eqCertified, Primitives.eqCycleContract,
+      simp [childContracts, Primitives.notCycleContract,
+        Primitives.orCycleContract, Primitives.eqCycleContract,
         Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
 
-def ruleSchedules : Contracts.Cycle.Certification.RuleSchedules body children cycleContract where
+def ruleSchedules :
+    Contracts.Cycle.Certification.Layer.RuleSchedules body childContracts cycleContract where
   output | .control => outputSchedule
   state := stateSchedule
 
@@ -162,87 +169,24 @@ theorem coversChildren : ruleSchedules.CoversChildren := by
   | invertValid =>
     change Primitives.NotRule at rule
     cases rule
-    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .control
+    right
+    refine ⟨.control, ?_⟩
     change invertRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | readyOr =>
     change Primitives.OrRule at rule
     cases rule
-    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .control
+    right
+    refine ⟨.control, ?_⟩
     change readyRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | updateEq =>
     change Primitives.EqRule at rule
     cases rule
-    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs ruleSchedules .control
+    right
+    refine ⟨.control, ?_⟩
     change updateRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
-
-theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution :=
-  ruleSchedules.hasAtMostOneSolution coversChildren
-
-def invertInputs (inputs : ports.inputs.Values) : Primitives.not.ports.inputs.Values
-  | .input => inputs .storedValid
-def readyInputs (inputs : ports.inputs.Values)
-    (invert : ProposedValues (children .invertValid).moduleStructure) :
-    Primitives.or.ports.inputs.Values
-  | .left => inputs .downstreamReady
-  | .right => invert.outputs .output
-def updateInputs (inputs : ports.inputs.Values) : Primitives.eq.ports.inputs.Values
-  | .left => inputs .downstreamReady
-  | .right => inputs .storedValid
-
-theorem hasStructuralResult (inputs : ports.inputs.Values)
-    (currentState : moduleStructure.State) :
-    ∃ proposal, moduleStructure.IsSolution inputs currentState proposal := by
-  rcases (children .invertValid).hasStructuralResult (invertInputs inputs)
-      (currentState .invertValid) with ⟨invert, invertSatisfies⟩
-  rcases (children .readyOr).hasStructuralResult (readyInputs inputs invert)
-      (currentState .readyOr) with ⟨ready, readySatisfies⟩
-  rcases (children .updateEq).hasStructuralResult (updateInputs inputs)
-      (currentState .updateEq) with ⟨update, updateSatisfies⟩
-  let childProposals : (name : Instance) → ProposedValues (childStructure name)
-    | .invertValid => invert
-    | .readyOr => ready
-    | .updateEq => update
-  let outputs : ports.outputs.Values := fun
-    | .upstreamReady => ready.outputs .output
-    | .storageUpdate => update.outputs .output
-  refine ⟨ProposedValues.composite outputs childProposals, ?_⟩
-  constructor
-  · intro output; cases output <;> rfl
-  · intro child
-    cases child with
-    | invertValid =>
-        change (children .invertValid).moduleStructure.IsSolution
-          (ProposedValues.childInputs body childStructure inputs childProposals
-            .invertValid) (currentState .invertValid) invert
-        rw [show ProposedValues.childInputs body childStructure inputs
-          childProposals .invertValid = invertInputs inputs by
-            funext port; cases port; rfl]
-        exact invertSatisfies
-    | readyOr =>
-        change (children .readyOr).moduleStructure.IsSolution
-          (ProposedValues.childInputs body childStructure inputs childProposals
-            .readyOr) (currentState .readyOr) ready
-        rw [show ProposedValues.childInputs body childStructure inputs
-          childProposals .readyOr = readyInputs inputs invert by
-            funext port; cases port <;> rfl]
-        exact readySatisfies
-    | updateEq =>
-        change (children .updateEq).moduleStructure.IsSolution
-          (ProposedValues.childInputs body childStructure inputs childProposals
-            .updateEq) (currentState .updateEq) update
-        rw [show ProposedValues.childInputs body childStructure inputs
-          childProposals .updateEq = updateInputs inputs by
-            funext port; cases port <;> rfl]
-        exact updateSatisfies
-
-private def stateCorresponds (_ : cycleContract.state.Values)
-    (_ : moduleStructure.State) : Prop := True
+    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
 theorem controlRule_holds_iff (inputs : ports.inputs.Values)
     (state : cycleContract.state.Values) (outputs : ports.outputs.Values) :
@@ -255,14 +199,21 @@ theorem controlRule_holds_iff (inputs : ports.inputs.Values)
   simp [Contracts.Cycle.CycleOutputRule.Holds, controlRule, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select, SignalSelection.prepend]
 
-private theorem implements : Contracts.Cycle.Implements moduleStructure cycleContract stateCorresponds := by
+section LayerCertification
+
+variable (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
+  body childContracts)
+
+private theorem implements : Contracts.Cycle.Implements
+    (Contracts.Cycle.Certification.Layer.moduleStructure body layerChildren)
+    cycleContract (fun _ _ => True) := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have invertImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
-    proposal satisfies .invertValid SignalMap.emptyValues (by trivial)
-  have readyImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
-    proposal satisfies .readyOr SignalMap.emptyValues (by trivial)
-  have updateImplements := Contracts.Cycle.Certification.childImplements children inputs structuralState
-    proposal satisfies .updateEq SignalMap.emptyValues (by trivial)
+  have childMatches :=
+    Contracts.Cycle.Certification.Layer.childSolutionsMatchContracts_of_subsingletonState
+      layerChildren inputs structuralState proposal satisfies
+      (fun child => by cases child <;> exact SignalMap.emptyValues)
+      (by intro child; cases child <;>
+        change Subsingleton emptySignalMap.Values <;> infer_instance)
   have boundary := satisfies.1
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
@@ -271,9 +222,9 @@ private theorem implements : Contracts.Cycle.Implements moduleStructure cycleCon
     change controlRule.Holds inputs contractState proposal.outputs
     rw [controlRule_holds_iff]
     rcases proposal with ⟨outputs, children⟩
-    rcases invertImplements with ⟨_, invertEvaluates, _⟩
-    rcases readyImplements with ⟨_, readyEvaluates, _⟩
-    rcases updateImplements with ⟨_, updateEvaluates, _⟩
+    have invertEvaluates := (childMatches .invertValid).1
+    have readyEvaluates := (childMatches .readyOr).1
+    have updateEvaluates := (childMatches .updateEq).1
     have invertOutput := (Primitives.notOutputRule_holds_iff _ _ _).mp
       (invertEvaluates.1 Primitives.NotRule.apply)
     have readyOutput := (Primitives.orOutputRule_holds_iff _ _ _).mp
@@ -317,13 +268,27 @@ private theorem implements : Contracts.Cycle.Implements moduleStructure cycleCon
     · exact updateEq.trans updateChild
   · rfl
 
+end LayerCertification
+
+/-- The control wiring implements its contract for any children satisfying the
+three declared primitive contracts. -/
+noncomputable opaque certifiedLayer :
+    Contracts.Cycle.ModuleCycleCertifiedLayer body childContracts cycleContract :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    ruleSchedules coversChildren (fun _ _ _ => True)
+    (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩) implements
+
+@[reducible] noncomputable def certifiedChildren :
+    Contracts.Cycle.Certification.Layer.ChildStructures body childContracts
+  | .invertValid => Primitives.notCertified.certifiedStructure
+  | .readyOr => Primitives.orCertified.certifiedStructure
+  | .updateEq => Primitives.eqCertified.certifiedStructure
+
 noncomputable opaque certification :
-    Contracts.Cycle.ModuleCycleCertification moduleStructure cycleContract := {
-  stateCorresponds := stateCorresponds,
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-  hasStructuralResult := hasStructuralResult,
-  structuralResultUnique := hasAtMostOneSolution,
-  implements := implements }
+    Contracts.Cycle.ModuleCycleCertification moduleStructure cycleContract :=
+  certifiedLayer.certifyComposite structuralChildren certifiedChildren (by
+    intro child
+    cases child <;> rfl)
 
 noncomputable def certified : Contracts.Cycle.ModuleCycleCertified ports :=
   certification.bundle
@@ -353,7 +318,7 @@ def ports : ModulePortsNaming Modules.OneEntryFifo.Control.ports where
     | .storageUpdate => "storage_update"⟩
 
 def naming : ModuleNaming Modules.OneEntryFifo.Control.moduleStructure := by
-  unfold Modules.OneEntryFifo.Control.moduleStructure Contracts.Cycle.Certification.moduleStructure
+  unfold Modules.OneEntryFifo.Control.moduleStructure
   exact .composite ⟨"one_entry_fifo_control", "structural", []⟩ ports
     (fun
       | .invertValid => "invert_valid"

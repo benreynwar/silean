@@ -52,11 +52,13 @@ Signals are recursively typed as bits, vectors, and tuples. `SignalMap` adds
 symbolic labels to collections of these signal types, and `ModulePorts` uses
 those maps to describe a module's inputs and outputs.
 
-A `ModuleStructure` is the complete hierarchical definition of a module:
+A `ModuleStructure` is the typed hierarchical definition of a module. It may
+contain explicit behavioral blackboxes while a design is being assembled:
 
 ```lean
 inductive ModuleStructure : ModulePorts → Type 1
   | primitive (primitive : Primitive) : ModuleStructure primitive.ports
+  | blackbox (behavior : Primitive) : ModuleStructure behavior.ports
   | splitter (splitter : Composition.SignalSplitter) : ModuleStructure splitter.ports
   | combiner (combiner : Composition.SignalCombiner) : ModuleStructure combiner.ports
   | composite (body : ModuleBody)
@@ -65,9 +67,10 @@ inductive ModuleStructure : ModulePorts → Type 1
       ModuleStructure body.context.ports
 ```
 
-The four forms are:
+The five forms are:
 
 - `primitive`: a leaf operation with its own output and next-state equations;
+- `blackbox`: an explicitly opaque leaf with assumed boundary equations;
 - `splitter`: structural wiring that exposes the immediate components of a
   vector or tuple;
 - `combiner`: structural wiring that assembles immediate components into a
@@ -75,8 +78,14 @@ The four forms are:
 - `composite`: a wired collection of named child modules, each of which has
   its own `ModuleStructure`.
 
-A composite's body contains its boundary, named child instances, and complete
-wiring:
+`ModuleStructure.HasNoBlackboxes` recursively certifies that every leaf has a
+concrete Silean structure. Closed synthesis entry points require this proof;
+ordinary rendering remains available for staged designs and intentional
+external modules.
+
+A composite's body is an uninstantiated structural layer. It contains its
+boundary, named child-instance boundaries, and complete wiring, but does not
+choose implementations for those children:
 
 ```lean
 structure ModuleBody where
@@ -155,10 +164,19 @@ Proofs are compositional. When proving a composite module, each child is used
 through its public contract and certification rather than by unfolding its
 implementation. The parent's wiring connects those child-level facts into the
 parent contract. Parent-owned certified schedules record which child contract
-rules make each result available; these schedules prove that the structural
-equations have at most one solution, but they do not define the equations'
-meaning. Existence is proved separately, usually by constructing a proposal
-from the existence guarantees of the certified children.
+rules make each result available. Generic schedule machinery uses them to
+construct a structural solution and prove that it is the only solution; the
+schedules are proof witnesses and do not define the equations' meaning.
+
+The preferred composition interface is structure-first. `ModuleBody` declares
+one uninstantiated structural layer: named child boundaries and wiring, but no
+child implementations. `ModuleCycleCertifiedLayer` proves that this fixed
+layer implements its parent contract for *every* family of child structures
+certified against the declared child contracts. Contract-only schedules are
+part of that proof and therefore cannot depend on a chosen child hierarchy.
+Concrete child structures are selected separately and `instantiate` combines
+them with the certified layer. HalfAdder and FullAdder validate this boundary,
+with directly computable structures and opaque exported proof objects.
 
 ### Reset-synchronized contracts
 
@@ -187,7 +205,10 @@ implementation is first certified against an exact cycle contract. A private
 refinement maps that cycle contract's pointer-and-storage state to an abstract
 Lean `List`, proving the public latency-independent FIFO contract. The final
 FIFO certificate exposes the structure and abstract FIFO guarantee; the
-state-mapping details remain part of the proof.
+state-mapping details remain private proof machinery. After reset, accepted
+and produced transfers obey the abstract bounded-queue transition on every
+cycle. Consequently, produced payloads are an ordered prefix of accepted
+payloads, and the sequences are equal once the FIFO is drained.
 
 As more complex designs are added, we expect to need both additional
 general-purpose contract forms and custom theorems expressing the important
@@ -203,9 +224,11 @@ Lean proves the connection from `ModuleStructure`'s simultaneous equations to
 the cycle contracts and onward to the reset and FIFO trace contracts described
 above. The exported FIFO certificate contains existence and uniqueness of each
 structural result, so its correctness theorem is not made vacuous by an
-inconsistent circuit. The development contains no `sorry`, `admit`, custom
-axiom, or unsafe definition; exported FIFO certificates use only Lean's
-standard classical and quotient axioms.
+inconsistent circuit. The development contains no `sorry`, `admit`,
+project-defined axiom, or unsafe definition. `#print axioms` reports exactly
+`propext`, `Classical.choice`, and `Quot.sound` for
+`Silean.Modules.Fifo.fifoCertified` and its public structure and contract
+projections.
 
 The FIRRTL renderer is not yet proved semantics-preserving. Its metadata is
 dependent on the exact `ModuleStructure`, preventing a supported primitive
@@ -273,6 +296,8 @@ Use `make clean` to remove generated build artifacts.
   contracts, and certification proofs.
 - [`docs/Architecture.md`](docs/Architecture.md) gives the detailed current
   design, and [`docs/SourceMap.md`](docs/SourceMap.md) maps concepts to files.
+- [`docs/PicoRV32Plan.md`](docs/PicoRV32Plan.md) is the authoritative plan and
+  status document for the PicoRV32 port.
 - [`Roadmap.md`](Roadmap.md) records the current direction and remaining work.
 
 The checked-in Nix flake supplies Lean, CIRCT, Verilator, and the Python/cocotb

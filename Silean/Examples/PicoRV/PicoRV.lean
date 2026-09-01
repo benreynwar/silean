@@ -1,5 +1,5 @@
 import Silean.Contracts.Cycle.CycleBlackbox
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Examples.PicoRV.Control
 import Silean.Examples.PicoRV.Datapath
 import Silean.Examples.PicoRV.Decoder
@@ -202,15 +202,23 @@ def wiring : Wiring context.ports context.instancePorts where
 
 @[reducible] def body : ModuleBody := ⟨context, wiring⟩
 
-@[reducible] def children : Contracts.Cycle.Certification.Children body
-  | .control => Control.cycleContract.blackboxCertified
-  | .datapath => Datapath.cycleContract.blackboxCertified
-  | .mem => Memory.cycleContract.blackboxCertified
-  | .decoder => Decoder.cycleContract.blackboxCertified
-  | .cpuregs => Regs.cycleContract.blackboxCertified
+@[reducible] def childContracts : Contracts.Cycle.ChildCycleContracts body
+  | .control => Control.cycleContract
+  | .datapath => Datapath.cycleContract
+  | .mem => Memory.cycleContract
+  | .decoder => Decoder.cycleContract
+  | .cpuregs => Regs.cycleContract
+
+@[reducible] def children : Contracts.Cycle.Certification.Layer.ChildStructures
+    body childContracts
+  | .control => Control.cycleContract.blackboxCertified.certifiedStructure
+  | .datapath => Datapath.cycleContract.blackboxCertified.certifiedStructure
+  | .mem => Memory.cycleContract.blackboxCertified.certifiedStructure
+  | .decoder => Decoder.cycleContract.blackboxCertified.certifiedStructure
+  | .cpuregs => Regs.cycleContract.blackboxCertified.certifiedStructure
 
 /-! The top-level structure is real wiring around explicitly opaque children. -/
 def moduleStructure : ModuleStructure ports :=
-  Contracts.Cycle.Certification.moduleStructure body children
+  Contracts.Cycle.Certification.Layer.moduleStructure body children
 
 end Silean.Examples.PicoRV.PicoRV

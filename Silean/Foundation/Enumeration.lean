@@ -10,6 +10,35 @@ inductive ListIndex {α : Type u} (value : α) : List α → Type u
 
 namespace ListIndex
 
+/-- Recover a computational list position from ordinary membership when the
+element type has decidable equality. This is useful at proof/execution
+boundaries where a propositionally checked schedule must drive dependent
+lookup. -/
+noncomputable def ofMem {α : Type u} [DecidableEq α]
+    {value : α} {values : List α}
+    (member : value ∈ values) : ListIndex value values := by
+  induction values with
+  | nil => simp at member
+  | cons head tail induction =>
+      if equal : value = head then
+        subst head
+        exact .head
+      else
+        exact .tail (induction (by simpa [equal] using member))
+
+@[simp] theorem ofMem_cons_self {α : Type u} [DecidableEq α]
+    (value : α) (values : List α)
+    (member : value ∈ value :: values) :
+    ofMem member = (.head : ListIndex value (value :: values)) := by
+  simp [ofMem]
+
+theorem ofMem_cons_of_ne {α : Type u} [DecidableEq α]
+    {value head : α} {values : List α} (different : value ≠ head)
+    (member : value ∈ values) :
+    ofMem (List.mem_cons_of_mem head member) =
+      (.tail (ofMem member) : ListIndex value (head :: values)) := by
+  simp [ofMem, different]
+
 def map {α : Type u} {β : Type v} (transform : α → β)
     {value : α} {values : List α} :
     ListIndex value values → ListIndex (transform value) (values.map transform)
@@ -92,6 +121,45 @@ theorem exists_of_forall_exists {α : Type u} {Value : α → Type v}
 end DependentList
 
 namespace List
+
+/-- A member's mapped list occurs as a sublist of the flattened family. -/
+theorem sublist_flatMap_of_mem {values : List α} {value : α}
+    (transform : α → List β) (member : value ∈ values) :
+    (transform value).Sublist (values.flatMap transform) := by
+  induction values with
+  | nil => cases member
+  | cons head tail induction =>
+      rcases List.mem_cons.mp member with equal | member
+      · subst head
+        exact List.sublist_append_left _ _
+      · exact (induction member).trans
+          (List.sublist_append_right (transform head) _)
+
+/-- In a duplicate-free flattened family, two member lists containing the same
+value must come from the same outer member. -/
+theorem eq_of_mem_of_mem_of_flatMap_nodup
+    {values : List α} (transform : α → List β)
+    (nodup : (values.flatMap transform).Nodup)
+    {left right : α} (leftMem : left ∈ values) (rightMem : right ∈ values)
+    {value : β} (inLeft : value ∈ transform left)
+    (inRight : value ∈ transform right) : left = right := by
+  induction values generalizing left right value with
+  | nil => cases leftMem
+  | cons head tail induction =>
+      have parts := List.nodup_append.mp nodup
+      rcases List.mem_cons.mp leftMem with leftEqual | leftTail
+      · subst left
+        rcases List.mem_cons.mp rightMem with rightEqual | rightTail
+        · exact rightEqual.symm
+        · exfalso
+          exact parts.2.2 value inLeft value
+            (List.mem_flatMap.mpr ⟨right, rightTail, inRight⟩) rfl
+      · rcases List.mem_cons.mp rightMem with rightEqual | rightTail
+        · subst right
+          exfalso
+          exact parts.2.2 value inRight value
+            (List.mem_flatMap.mpr ⟨left, leftTail, inLeft⟩) rfl
+        · exact induction parts.2.1 leftTail rightTail inLeft inRight
 
 theorem nodup_map_of_injective (transform : α → β)
     (injective : Function.Injective transform) :

@@ -1,638 +1,125 @@
 # Silean roadmap
 
-This roadmap records the current destination and remaining work. The current
-design is described in `docs/Architecture.md`; source ownership is summarized
-in `docs/SourceMap.md`.
-
-## Direction
-
-Silean represents hardware as a typed recursive hierarchy with total wiring
-and primitive storage. Its meaning is the order-independent
-`ModuleStructure.IsSolution` relation. Independently declared behavioral
-contracts describe what users may observe, and separate certifications connect
-them to structure. The existing cycle contracts support rule-local
-hierarchical reasoning and an explicit correspondence between contract and
-structural state. They are one contract form rather than a requirement for all
-future modules. Module certificates supply structural existence; certified
-schedules establish uniqueness.
-
-The same computable hierarchy is consumed directly by naming and FIRRTL
-generation. We do not lower to a second semantic netlist, and backend
-translation is not part of the correctness proof at this stage.
-
-## Established foundation
-
-- Bits, vectors, and heterogeneous tuples have typed values and stable finite
-  labels.
-- Ternary zero/one/don't-care expectations retain those same recursive shapes
-  and labelled maps, with generic componentwise matching laws.
-- Reset-synchronized contracts use arbitrary Lean state and specify exact-cycle
-  ternary output expectations after synchronous reset, with no structural-state
-  mapping or dependency on another contract form.
-- Module ports contain connectivity only; structural state is derived from
-  primitive storage and recursive child ownership.
-- Named child-port requirements, endpoints, and total typed wiring describe
-  composite structure.
-- Structural equations have an evaluation-order-independent meaning.
-- Contract-independent structural transitions chain those equations across
-  finite input lists; per-cycle existence and uniqueness lift to unique finite
-  output traces and final structural states without selecting an evaluator.
-- Cycle contracts own independent abstract state, rule-local output
-  dependencies, and an explicit-input next-state rule.
-- Certified child rules and output/state schedules establish hierarchical
-  availability and structural uniqueness without becoming circuit semantics.
-- `Contracts.Cycle.ModuleCycleCertified` packages a computable structure, cycle contract, state
-  correspondence, refinement proof, and structural existence/uniqueness.
-- Generic Constant, balanced Reduction, All, recursive Equality, VectorConcat,
-  BinaryToOneHot, CombMuxTree, RegisterBank, HalfAdder, Increment, Register, Mask,
-  BitwiseOr, Mux,
-  EnabledRegister,
-  OneEntryFifo, serial FIFO composition, and arbitrary positive-depth FIFO
-  currently validate the hierarchy using shared resettable FIFO ports.
-- `LeafwiseComposition` provides the shared recursive/fixed-input
-  split/component/combine hierarchy, proposal-existence construction, and
-  component-family scheduling used by Constant, Register, Mask, and BitwiseOr.
-- FIFO cycle behavior, latency-independent interface contracts, and private
-  refinement proofs are separate layers. OneEntryFifo, SerialDepthFifo, and
-  the pointer-based Fifo are all non-vacuously certified against the same
-  reset-synchronized FIFO contract.
-- Module-owned naming feeds direct FIRRTL generation; FIRRTL is converted to
-  SystemVerilog and exercised with Verilator and cocotb.
-- The configured PicoRV32 top level composes the reviewed Control, Datapath,
-  Memory, Decoder, and register-file contracts as explicit behavioral
-  blackboxes. Its source-named boundary is concrete, and proof-only schedules
-  establish parent-output availability, child-state-input readiness, complete
-  rule coverage, and uniqueness of structural solutions.
-
-## Working constraints
-
-- Keep structure, contracts, proof schedules, naming, and backend rendering in
-  separate ownership layers.
-- Treat stateless modules as having zero-bit state, not as a separate kind.
-- Prefer fully generic proof laws; do not add helpers specialized to one module
-  merely to shorten a proof.
-- Keep module structures computable and proof packages opaque when needed.
-- Do not introduce lowering or raw numeric identities as semantic
-  prerequisites.
-- Keep focused Lean targets below five seconds.
-- Do not use `sorry`, new axioms, `Classical.choice`, or `native_decide`.
-
-## Completed repository cleanup
-
-The repository-facing semantic-no-op cleanup established:
-
-- one authoritative architecture document and one source map;
-- aggregate imports and namespaces reflecting contract, interface,
-  composition, semantics, and concrete-module ownership;
-- globally distinctive filenames and per-module directories only where a
-  concrete module owns several sources;
-- implementation-only child modules colocated with their parent;
-- removal of provisional APIs with no real consumer;
-- separate test fixtures and regression checks; and
-- verified Lean, FIRRTL conversion, and cocotb regressions.
-
-## Completed leafwise composition review
-
-Register, Mask, and BitwiseOr now share a generic aggregate hierarchy and one
-generic structural-existence proof. Register validates recursive state, Mask
-validates a broadcast bit beside one recursive input, and BitwiseOr validates
-two recursive inputs. Their schedules retain the contract-specific dependency
-facts, while their state-correspondence and refinement proofs retain the actual
-operation semantics. The retention boundary and comparison are recorded in
-`docs/LeafwiseComposition.md`.
-
-## Completed FIFO organization review
-
-FIFO organization is consolidated around shared ports, cycle behavior,
-one-entry storage, serial composition, positive depth, execution, and derived
-properties. Module structures remain free of execution data; proof-construction
-schedules and witnesses are private. The resulting organization and its
-retention decisions are recorded in `docs/FifoOrganization.md`.
-
-## Completed constant generation
-
-A Boolean constant primitive and certified generic `Constant T value` module
-now generate arbitrary bit, vector, and tuple values. Aggregate constants use
-the leafwise component/combiner hierarchy with empty input families and
-value-dependent recursive leaves. Naming keys include the flattened value, and
-direct FIRRTL checks cover primitive and nested aggregate constants. Constants
-are available when a concrete design needs them; no equality-with-constant
-module is currently planned.
-
-## Completed balanced Boolean reduction
-
-`Reduction` constructs and certifies a balanced hierarchy over any finite
-family of same-typed inputs from a certified binary operation and certified
-identity source. Empty families instantiate the identity, singleton families
-are direct wires, and internal nodes recursively reduce two nearly equal
-halves before applying the binary child. The tree construction proves both its
-leaf count and recursive balance; generic schedules prove structural
-uniqueness in left/right/combine order.
-
-`All` instantiates that machinery with bit AND and constant true. Its public
-contract deliberately does not expose tree parenthesization: it uses the
-ordinary Lean recursion `every` and states that the result is true exactly
-when every indexed input is true. A private certification bridge proves the
-balanced structural reduction implements that natural contract. Direct FIRRTL
-checks cover empty, singleton, and five-input hierarchies without adding a
-cocotb target.
-
-## Completed recursive equality
-
-`Equality T` has two `T` inputs and one bit result. Its natural contract uses
-the generic recursive value function `SignalType.equal`; the public law states
-that the result is true exactly when the two Lean values are equal. The bit
-case wraps the closed equality primitive. Vector and tuple structures split
-both inputs into immediate components, recursively instantiate Equality for
-corresponding components, and feed the indexed family of result bits into
-`All`. This preserves aggregate hierarchy and does not impose a global
-flattening order. Certification covers structural existence, schedule-based
-uniqueness, and refinement for empty and nonempty aggregates. Lean and direct
-FIRRTL checks cover bits, empty tuples, vectors, and nested tuples.
-
-## Completed generic vector concatenation
-
-`VectorConcat T leftWidth rightWidth` joins two vectors of `T` without
-flattening their elements. Its natural contract uses `Fin.addCases`: left
-elements occupy the indices below `leftWidth`, and right elements occupy the
-remaining indices. The structure uses one splitter for each input and one
-combiner for the result. Certification proves existence, schedule-based
-uniqueness, and refinement; public index laws expose both halves. Lean and
-direct FIRRTL checks cover either empty half, two nonempty halves, and
-aggregate element types.
-
-## Completed binary-to-one-hot decoding
-
-`BinaryToOneHot width` interprets bit index `i` with weight `2 ^ i` and
-produces `2 ^ width` result bits. Its contract is numeric: output index `i` is
-true exactly when `i` is the natural-number value of the input. The certified
-structure is recursive rather than an equality bank. Width zero emits the
-one-element constant `[true]`; each successor width splits off the leading
-bit, reconstructs and decodes the tail, masks the decoded vector with the bit
-and its inverse, and joins the two halves with `VectorConcat`. Public theorems
-connect the numeric law to the recursive decoder. Lean and direct FIRRTL checks
-cover widths zero through three; no cocotb target is needed for this module.
-
-## Completed combinational mux tree
-
-`CombMuxTree T indexWidth` takes `2 ^ indexWidth` values of type `T` and an
-LSB-first bit-vector index. Its natural contract returns the value at the
-numeric index. The recursive structure partitions the values with the generic
-certified `VectorSplit`, rebuilds the lower-index selector bits using ordinary signal
-  adapters, evaluates two smaller mux trees, and selects between their results
-with `Mux T`. `VectorSplit` is the reusable inverse-shaped counterpart of
-`VectorConcat`, rather than a mux-specific adapter. Certification proves
-existence, schedule-based uniqueness, and refinement. Lean and direct FIRRTL
-checks cover index widths zero through three and both bit and aggregate values.
-
-## Completed generic register bank
-
-`RegisterBank T addressWidth` contains `2 ^ addressWidth` entries with one
-synchronous write port and one combinational read port. Its natural contract
-stores a vector of `T`: reading returns the currently addressed pre-update
-entry, while an enabled write replaces exactly one next-state entry and all
-others remain unchanged. The structure decodes the write address with
-`BinaryToOneHot`, gates the global write enable per entry, instantiates one
-generic `EnabledRegister T` per entry, combines their outputs, and reads through
-`CombMuxTree T`. The state correspondence relates the contract vector
-pointwise to that register family. Certification proves structural existence,
-schedule-based uniqueness, and refinement, and public laws expose read,
-selected-write, and retention behavior. Lean checks, direct FIRRTL conversion,
-and a four-entry cocotb test cover initialization, reads, writes, retention,
-and same-address read-before-write behavior. The implementation uses a private
-named child-instance type rather than nested sums, keeps construction witnesses
-private, and shares `BitVector.toIndex` as the generic numeric interpretation
-used by the decoder, mux tree, and register bank.
-
-## Completed LSB-first numeric indexing
-
-Numeric bit vectors now use the conventional hardware ordering: vector index
-`i` has weight `2 ^ i`, so index zero is the least-significant bit.
-`BitVector.toNat` and `toIndex` recurse by removing the highest-index bit.
-`BinaryToOneHot` and `CombMuxTree` follow the same hierarchy directly: their
-recursive children receive the lower-index bits and the current high bit
-selects between equal output/value halves. RegisterBank addresses inherit this
-interpretation through those generic contracts, without reversal wiring or a
-bank-specific conversion. Asymmetric checks and the generated RegisterBank
-simulation distinguish this convention from the former MSB-first ordering.
-
-## Completed increment arithmetic foundation
-
-The closed XOR bit primitive has a natural Boolean contract and a numeric law
-relating XOR and AND to the sum of two input bits. `HalfAdder` composes one XOR
-and one AND child behind two named inputs and independent `sum` and `carry`
-contract rules. Its public laws expose the Boolean results and the arithmetic
-identity `sum + 2 * carry = left + right` without mentioning child structure.
-Its two output schedules and all construction witnesses remain private. Lean
-truth-table checks and direct FIRRTL rendering cover both the primitive and
-composite module.
-
-## Completed combinational increment
-
-`Increment width` has one LSB-first bit-vector input and result. Its contract is
-the natural modular arithmetic operation: the result's numeric value is the
-input value plus one modulo `2 ^ width`. The certified implementation fixes an
-initial carry to true and recursively processes the lower-index bits before a
-HalfAdder for the current highest-index bit, so carry flows from low to high.
-The carry-aware recursion, schedules, state correspondence, and construction
-witnesses are private implementation details. Public laws expose both the
-result vector and its modular numeric meaning. Lean checks cover width zero,
-one-bit overflow, asymmetric multi-bit carry propagation, and full-width
-overflow; FIRRTL checks confirm the recursive HalfAdder hierarchy and bit
-ordering. No separate simulation target is needed for this combinational module.
-
-## Completed certified FIFO pointer control
-
-`FifoPointerControl addressWidth` defines the natural combinational boundary
-between FIFO pointer state and the eventual FIFO structure. Its LSB-first read
-and write pointers contain `addressWidth` address bits followed by one wrap
-bit. The contract exposes both addresses, valid/ready flow control, and
-explicit read/write advance enables. Equal complete pointers mean empty;
-equal addresses with different wrap bits mean full. Transfer behavior is
-non-fall-through, so a full FIFO does not accept a simultaneous replacement
-and an empty FIFO does not bypass a simultaneous input.
-
-The natural contract and its public laws remain independent of the certified
-structure. Structurally, each extended pointer is split directly into bits;
-only its address bits are recombined. One generic Equality compares the two
-addresses and one primitive equality compares the wrap bits. AND/NOT logic
-then derives empty, full, ready, valid, and advance signals. There is no
-redundant whole-pointer comparison or one-element wrap vector. The same
-structure works when `addressWidth = 0`.
-
-Schedules, child identities, existence construction, uniqueness, and
-refinement remain private. Lean and direct FIRRTL checks cover asymmetric
-pointers, empty and full states, simultaneous transfers, and zero address
-width. Reset is deliberately absent because this module owns no state. The
-enclosing FIFO resets both pointer registers equally, from which this control
-naturally reports empty.
-
-## Completed generic synchronous-reset registers
-
-`ResetRegister T resetValue` is a certified generic composition of
-`Constant T`, `Mux T`, and `Register T`. It exposes current state and loads the
-configured constant when reset is high, otherwise loading its ordinary input.
-`EnabledResetRegister T resetValue` adds enable/hold selection around that
-module, so reset has highest priority, enable loads, and disable retains.
-Neither module adds reset behavior to primitives: reset is ordinary synchronous
-data-path logic evaluated on the existing clock.
-
-Both contracts state their next-state behavior directly, independent of the
-hierarchy. Public laws cover reset, loading, and retention; schedules and
-construction proofs remain private. Checks instantiate both modules for bits,
-vectors, and named tuples, including reset priority. Configured reset values
-are part of emitted module identities, preventing differently configured
-definitions from colliding.
-
-## Completed generic enabled-reset counter
-
-`EnabledResetCounter width resetValue` is a certified LSB-first modular
-counter with synchronous reset. Its natural contract exposes current state and
-defines next state directly: reset has highest priority, enable applies
-`Increment.incrementValue`, and otherwise the value is retained. The public
-numeric law relates enabled updates to addition modulo `2 ^ width`.
-
-The structure has exactly two children. The current output of
-`EnabledResetRegister (.vector width .bit) resetValue` feeds `Increment width`,
-whose result returns to the register's value input. Enable and reset connect
-directly to the register. All schedules, child identities, construction,
-correspondence, uniqueness, and refinement details are private. Contract,
-structural, and FIRRTL checks cover reset priority, retention, carry
-propagation, rollover, and width zero. No counter-specific primitive was added.
-
-## Completed certified generic FIFO
-
-`Fifo T addressWidth` is the primary pointer-and-storage FIFO implementation.
-Its natural contract state contains read and write pointers plus a vector of
-entries. The contract directly describes valid/ready observations, the oldest
-visible value, pointer advancement, and accepted writes without mentioning
-the child hierarchy. Synchronous reset has priority in both pointer updates,
-making the following state empty; storage is not cleared.
-Because reset is synchronous, current-cycle outputs and any accepted bank
-write use the pre-edge state; reset wins only in the pointer next states.
-
-The structure has exactly four children: two zero-reset
-`EnabledResetCounter (addressWidth + 1)` pointers, `FifoPointerControl`, and
-`RegisterBank T addressWidth`. Certification maps the three contract-state
-fields onto those three state-owning children; schedules and all
-construction/refinement details remain private. Checks cover ordering,
-boundary stalls, simultaneous transfers, carry and rollover, reset, and the
-one-entry `addressWidth = 0` case, plus structural uniqueness and FIRRTL.
-
-The recursive positive-depth implementation is `SerialDepthFifo`. It shares
-the resettable FIFO ports and propagates synchronous reset to every stage.
-`Contracts.Fifo.Cycle` owns reusable exact cycle behavior, while
-`Composition.FifoSerial` owns serial structural composition and refinement.
-
-## Completed generic FIFO behavioral proof
-
-The canonical `Fifo T addressWidth` now has a logical queue view derived from
-its public contract state. Circular extended-pointer distance defines
-occupancy; reading the register-bank entries from the read address defines
-contents. A reachable-state invariant bounds occupancy by
-`2 ^ addressWidth`.
-
-Contract-only proofs establish invariant preservation, empty/full
-equivalence, capacity, exact enqueue append, oldest-value dequeue,
-simultaneous transfer ordering, stalls, wraparound, and the one-entry
-`addressWidth = 0` case. These one-cycle facts feed the shared
-interface-based `Contracts.Fifo.FifoContract` refinement. Generic trace laws then prove exact
-conservation on synchronized reset-free suffixes and, from an empty queue,
-that accepted outputs are a prefix of accepted inputs. The proof does not
-inspect the FIFO hierarchy or its private certification machinery.
-
-## Reset-synchronized behavioral contracts
-
-Add a second contract form for exact cycle-by-cycle behavior after synchronous
-reset. This contract is independent of `Contracts.Cycle.ModuleCycleContract`: a module may
-have only a cycle contract, only a reset-synchronized contract, both, or other
-contract forms added later.
-
-The reset contract owns an arbitrary Lean specification-state type. Its state
-does not need to resemble structural state, and its public certification does
-not require or expose a mapping between them. Given the same concrete inputs,
-the specification and structure must produce matching outputs on corresponding
-cycles after reset has established a common behavioral starting point. Because
-reset is synchronous, the reset cycle itself may still observe pre-reset
-structural state; required matching begins on the following cycle. A later
-reset establishes a fresh comparison point in the same way.
-
-Specification outputs are shaped like module outputs, but every leaf bit is a
-ternary expectation: zero, one, or `dontCare`. Matching is recursive over bits,
-vectors, and named tuples. `dontCare` relaxes only the value of that bit on that
-particular cycle; it does not permit latency changes or matching an output on a
-different cycle. This generic expectation and matching foundation is now
-implemented independently of contracts in `Foundation/SignalExpectation.lean`.
-
-Certification is stated directly against multi-cycle `ModuleStructure`
-execution, so it does not depend on a cycle contract. For modules that already
-have `Contracts.Cycle.ModuleCycleCertified`, provide a reusable constructor that may use its
-evaluator, state correspondence, and refinement proof to establish the reset
-contract. That constructor is an optional proof technique and is absent from
-the resulting reset certificate's public requirements.
-
-The contract-only semantics are complete. `Contracts.Reset.ModuleResetContract` defines the
-reset input, arbitrary specification state, reset state, and ordinary step.
-Its trace begins unsynchronized, leaves outputs unconstrained before and on a
-reset cycle, checks corresponding ordinary cycles after synchronization, and
-supports repeated resets. Generic nil, cons, append, split, length,
-synchronization, and pre-reset-prefix laws are established without mentioning
-module structure or certification.
-
-`Contracts.Reset.ModuleResetCertified` is also complete. It packages structure, reset contract,
-structural totality, and the universal statement that every structural
-execution is accepted. Totality prevents a structure with no solutions from
-satisfying refinement vacuously and generically supplies finite executions for
-every initial structural state and input trace. Because acceptance is
-unconstrained before reset, refinement gives the intended behavior from
-arbitrary initial structural state; generic suffix laws expose matching after
-an initial reset or after a reset following any prefix. No cycle contract,
-evaluator, schedule, structural-state mapping, or uniqueness proof is stored in
-this certificate.
-
-Direct backend validation now emits a configured four-entry FIFO built from a
-register bank with read and write pointers, using the shared nested tuple/vector
-payload fixture. Register-bank naming propagates
-that payload metadata through its aggregate combiner as well as its storage and
-read path. A reproducibly seeded cocotb stream independently randomizes input
-valid and output ready, compares every accepted output immediately with the
-oldest accepted input, then forces downstream readiness and verifies bounded
-complete drainage and an empty FIFO.
-
-This milestone is complete.
-
-## Completed valid/ready channels and shared FIFO contract
-
-The reusable valid/ready boundary layer is complete. It keeps
-two explicit direction-correct forms rather than one role-indexed structure:
-
-- `Interfaces.ValidReadySink` selects a bit-valued valid input, a ready output, and an
-  ordered payload selection from module inputs;
-- `Interfaces.ValidReadySource` selects a bit-valued valid output, a ready input, and an
-  ordered payload selection from module outputs.
-
-Both forms project cycle input/output values into one shared valid/ready sample
-type. Generic semantics define a transfer exactly when valid and ready are
-both high and extract the ordered payload sequence from finite traces. Payloads
-may contain several signals; the implementation reuses typed
-`SignalSelection` rather than assuming a single data port. Transfer and trace
-append laws are generic, and compile-time checks instantiate both directions
-against `FifoPorts`.
-
-Reset is now part of every FIFO implementation. `OneEntryFifo` resets its valid
-state; stored data need not be cleared while invalid. `Composition.FifoSerial` distributes
-reset to both children, and `SerialDepthFifo` inherits that behavior
-recursively. All use `FifoPorts`; the obsolete parallel port definition was
-removed. Synchronous-reset semantics are preserved:
-the reset cycle may observe pre-edge state, and the following state is reset.
-
-`Contracts.Fifo.FifoContract` is now the behavioral claim that a module acts as
-a FIFO. It owns one `Interfaces.ValidReadySink`, one
-`Interfaces.ValidReadySource`, a synchronous reset signal,
-and a capacity. Before reset and on reset cycles outputs are unconstrained;
-reset establishes an empty bounded logical queue. Each ordinary synchronized
-cycle preserves the equation between the old queue, accepted input, accepted
-output, and next queue. This permits both fall-through and registered latency
-without exposing implementation state.
-
-`Contracts.Fifo.FifoCertified` includes structural totality as well as universal trace
-refinement, so a structure with no solutions cannot satisfy the contract
-vacuously. `Contracts.Fifo.FifoCycleRefinement` is a private-proof adapter from exact cycle
-certification: it carries an invariant and logical queue only during the
-proof. Generic serial refinement composes two child FIFO claims and cancels
-their internal transfer. OneEntryFifo, every positive-depth SerialDepthFifo,
-and the pointer/register-bank Fifo are certified. The former no-reset FIFO
-execution, view, and implementation-specific trace APIs have been removed.
-
-Do not introduce `FifoInterface`. Reserve “interface” for reusable port groups
-with behavioral interpretation, such as the valid/ready sink and source above;
-use `Contracts.Fifo.FifoContract` for the claim that a complete module behaves as a FIFO.
-
-## Long-term RISC-V direction
-
-A possible much later application is a small RV32I CPU made by directly
-porting a simple configuration of PicoRV32 into Silean. The intended public
-correctness boundary is observable external behavior rather than equality of
-architectural and physical state. For a configured memory environment, the
-PicoRV32 and reference executions should have the same memory-mapped-I/O trace
-and termination or trap behavior. Progress under a responsive environment is
-a separate property. A stronger correspondence between completed data-memory
-transactions or instruction steps will probably be simpler proof machinery;
-it is not the public definition of correctness. The Sail model is an
-independent architectural specification against which to verify the port; it
-is not the source design.
-The provisional construction hierarchy, specification-blackbox staging
-boundary, and ideas for each module's appropriate behavioral specification
-are recorded in `docs/PicoRV32ModuleHierarchy.md`.
-The proposed first top-level child interfaces, state ownership, acyclic signal
-flow, and implementation staging are recorded in
-`docs/PicoRV32TopLevelPlan.md`. The configured main-block audit in
-`docs/PicoRV32MainBlockInventory.md` freezes the control/datapath boundary and
-records why PC state belongs to the datapath.
-
-The locally available `sail-riscv32-lean` repository is a candidate upstream
-specification dependency when this work becomes timely. It contains the
-type-correct Lean translation of the official Sail RISC-V model, including
-RV32 decode, architectural state, instruction execution, memory effects, and
-traps. It is currently generated, very large, unpolished, and described by its
-authors as non-executable, so integrating it is deliberately not near-term
-work.
-
-The first feasibility study is recorded in
-`docs/SailIntegrationExperiment.md`. The model builds and exposes useful
-whole-step and per-instruction definitions, but its initial build is far too
-slow for Silean's ordinary feedback loop, its pinned Lean version differs, and
-its concrete memory monad does not currently expose an operation trace. The
-next isolated study should instrument one load and one store, preferably via a
-small `lean-sail` extension, before deciding between a direct adapter and a
-separate clean RV32I-facing specification with a Sail bridge. Initial CPU
-verification should exclude extensions, interrupts, privileged behavior, and
-exceptional memory cases until the base retirement relation is established.
-
-Likely reusable modules needed while porting the simple PicoRV32 configuration
-are:
-
-- `FullAdder` and generic fixed-width `Add`, followed by a shared `AddSub`
-  datapath;
-- generic `BitwiseAnd`, `BitwiseXor`, and, if useful in compositions,
-  `BitwiseNot`;
-- fixed-width unsigned and signed less-than comparison, alongside the existing
-  generic equality;
-- logical-left, logical-right, and arithmetic-right shifting, initially with
-  the iterative organization used by a simple PicoRV32 configuration rather
-  than assuming a barrel shifter;
-- a generic register bank with multiple combinational read ports and one
-  synchronous write port, with RISC-V's hardwired zero register kept in a
-  CPU-specific wrapper;
-- one-hot or priority family selection for PicoRV32's decoded control signals,
-  chosen according to the decoder validity guarantee;
-- clean static bit-vector slicing, concatenation, extension, and permutation
-  support for instruction fields and immediates; and
-- possibly a reusable single-outstanding ready/valid transaction holder once
-  the memory-controller boundary is understood during the port.
-
-The top-level composition is now understood, so these reusable modules are
-implementation candidates while the independent RV32I reference work
-continues. Arithmetic is a likely early foundation: `FullAdder`, `Add`, and
-their generic proofs unlock PC updates, address calculation, arithmetic
-instructions, subtraction, and comparisons.
-Do not design a generic monolithic ALU in advance; keep PicoRV32-specific
-decode and operation selection in the CPU until the port demonstrates a
-genuinely reusable boundary.
-
-## Completed milestone: PicoRV32 child contracts
-
-The interfaces and behavioral specifications of every direct top-level child
-are defined and reviewed. The
-PicoRV32-specific files live in `Silean/Examples/PicoRV/`; reusable contract
-machinery belongs in the general library only when a real specification needs
-it.
-
-The direct children are sequencing-only `PicoRV32Control`,
-registered `PicoRV32Datapath`, `PicoRV32Memory`, `PicoRV32Decoder`, and
-`PicoRV32Regs`. The combinational `PicoRV32Alu` is inside the datapath, which
-also owns `reg_pc` and `reg_next_pc`; the source inventory found no clean
-independent PC protocol. PicoRV32's
-`RISCV_FORMAL` RVFI block is verification instrumentation and is not part of
-the Silean hardware port. This milestone established:
-
-1. mechanically inventory the configured Verilog registers and crossing
-   signals, assigning every state element to exactly one child;
-2. define shared fixed-configuration types and source-named port maps without
-   adding implementation structure;
-3. define a natural behavioral specification for each child, choosing the
-   contract form independently at each boundary;
-4. state the public laws the eventual parent proof may use, without exposing
-   child structure, schedules, or proof-construction state;
-5. check that the specifications collectively describe the enabled
-   PicoRV32 behavior and give the top level enough information to connect and
-   verify them; and
-6. review naming, state ownership, reset behavior, unspecified values, and
-   same-cycle dependencies against `picorv32.v`.
-
-Likely specification styles are pure combinational behavior for
-`PicoRV32Alu`, registered decode behavior for `PicoRV32Decoder`, architectural
-state/read/write behavior for `PicoRV32Regs`, exact internal transition support
-plus useful temporal properties for `PicoRV32Control`, natural temporal result
-properties for `PicoRV32Datapath`, and a temporal ready/valid protocol for
-`PicoRV32Memory`. These are starting points, not a requirement
-that every child use `Contracts.Cycle.ModuleCycleContract`. Architectural
-retirement will be specified semantically over the completed functional CPU,
-without adding RVFI registers or ports to the generated design.
-
-All five direct-child contracts are defined: register file, decoder, memory,
-datapath, and control. The combinational ALU contract used by the datapath is
-also defined.
-Review of the source's main sequential block found that the earlier monolithic
-control boundary was misleading: `reg_op1`, `reg_op2`, `reg_sh`, `reg_out`,
-and `alu_out_q` form a registered execution datapath and should not be modeled
-as control state. `reg_pc` and `reg_next_pc` join that datapath because their
-branch and jump updates share its result path. The exact state and
-crossing-signal evidence is recorded in
-`docs/PicoRV32MainBlockInventory.md`. The
-decoder contract has been checked directly against the fixed-configuration
-Verilog region and preserves its capture/resolve pipeline, nonblocking
-assignment timing, partial synchronous reset, immediate layouts, and
-combinational illegal-instruction indication. The memory contract preserves
-the configured single-outstanding state machine, registered request stability,
-response capture, prefetch promotion, and word/half/byte formatting. Its public
-protocol laws state the exact relationship between external transfers and
-`mem_done`, including the command-discipline obligation that control must
-eventually prove. The control contract now preserves the complete configured
-state-machine sequencing and links its command-compatibility predicate to the
-memory contract. That review corrected the earlier over-strong claim that all
-four commands were mutually exclusive: prefetch and instruction-read overlap
-during promotion, while data commands remain exclusive. The datapath contract
-preserves exact configured PC, operand, ALU capture,
-effective-address, load, writeback, and iterative-shift timing while keeping
-its output-rule dependencies narrow enough for top-level scheduling.
-
-The joint review of all five child contracts as one top-level boundary is now
-complete. It removed debug-only `next_insn_opcode` and functionally dead
-`instr_ecall_ebreak` state, kept decoder-internal registers private rather than
-exporting them as crossing ports, narrowed the datapath comparison rule to its
-actual selectors, and split memory outputs by their real same-cycle
-dependencies. `PicoRVBoundaryChecks.lean` exhaustively assigns every child
-input to a named producer and proves matching signal types. The reviewed state
-ownership, reset/timing decisions, and acyclic dependency order are recorded in
-`docs/PicoRV32MainBlockInventory.md`.
-
-## Completed milestone: PicoRV32 top-level structure
-
-The structural `PicoRV32` top level now has:
-
-1. exactly the five reviewed direct children as explicit specification
-   blackboxes;
-2. source-named connections according to
-   `docs/PicoRV32MainBlockInventory.md` and the existing memory/decoder paths;
-3. the configured functional PicoRV32 memory, reset, and trap ports;
-4. total typed wiring, parent-output and child-state-input schedules, complete
-   child-rule coverage, and a uniqueness proof for structural solutions; and
-5. an assembled-boundary review against `picorv32.v`.
-
-It does not prove architectural correctness, and none of the five children is
-presented as a concrete implementation.
-
-## Later milestone: PicoRV32 top-level verification design
-
-The next milestone should decide how to state and prove the useful top-level
-correctness property. Study the composed child contracts and determine:
-
-1. the public trace of memory-mapped-I/O and termination/trap observations;
-2. how the external address decoder and memory environment project completed
-   CPU memory transactions into that trace;
-3. how variable-latency internal cycles correspond to zero or one
-   architectural transitions;
-4. what reset, responsiveness, and progress assumptions are required;
-5. which existing contract form can express the property, or what new
-   contract form is genuinely needed; and
-6. whether and how a narrow Sail wrapper should supply the independent RV32I
-   transition and ordered memory-operation semantics.
-
-This milestone produces a reviewed verification plan and top-level contract
-shape. It precedes all concrete child structures. Only after it is complete do
-we choose an implementation order and begin reusable arithmetic, register-bank,
-datapath, control, or other child structures.
-
-Each architectural goal ends with a plain-language review, focused timing,
-full Lean verification, and relevant external simulation.
+## Destination
+
+Silean is an experiment in writing structural hardware and useful correctness
+proofs in the same Lean program. The design should remain close enough to a
+conventional hierarchical HDL that hardware engineers can recognize ports,
+instances, wiring, state, and reusable modules.
+
+A structure denotes simultaneous equations. Proofs establish that those
+equations have one result and that every result satisfies an independently
+written behavioral contract. FIRRTL is emitted directly from the same
+structure.
+
+The long-term application is a small RV32I processor based on a fixed,
+source-faithful PicoRV32 configuration. Its public theorem should concern
+observable memory-mapped-I/O and termination/trap behavior, with stronger
+memory-transaction correspondence available as a supporting property.
+
+## Established capabilities
+
+The repository currently has:
+
+- recursive bit, vector, and named-tuple signal shapes;
+- finite symbolic labels and dependently typed signal maps;
+- total same-shaped wiring and recursively owned module structures;
+- primitive, splitter, combiner, composite, and explicit blackbox leaves;
+- simultaneous structural equations and finite structural execution;
+- an executable, proved-correct recursive no-blackbox check;
+- exact cycle contracts with independent behavioral state;
+- contract-only proof schedules establishing structural existence and
+  uniqueness without defining circuit meaning;
+- parametric certified layers whose proofs use child contracts rather than
+  child implementations;
+- reset-synchronized trace contracts with ternary output expectations;
+- latency-independent valid/ready FIFO contracts;
+- direct FIRRTL generation, CIRCT/Verilator lowering, and cocotb regression;
+- reusable generic registers, muxes, constants, equality, reductions,
+  decoders, mux trees, register banks, counters, arithmetic, and bitwise logic;
+- one-entry, serial-depth, and pointer/register-bank FIFOs; and
+- a public proof that the pointer FIFO satisfies the bounded abstract FIFO
+  contract after reset.
+
+The most developed hardware example is the generic pointer FIFO. The largest
+in-progress design is the configured PicoRV32 port: all five direct child
+contracts and the typed top-level blackbox composition exist, while only the
+ALU and register-file children currently have closed certified structures.
+
+## Current constraints
+
+- Signal semantics are two-state Boolean semantics.
+- A single global clock is implicit throughout the hierarchy.
+- Reset is synchronous and module-specific.
+- The formal correctness boundary ends at `ModuleStructure`; FIRRTL and
+  SystemVerilog are regression-tested but not proved semantics-preserving.
+- Blackboxes are explicit assumptions and must be absent from a closed design.
+- Contract state should be natural for specification and need not reproduce
+  the structural state tree.
+- High-level modules need not expose exact cycle contracts when a temporal or
+  observational contract is more appropriate.
+- New helpers should capture genuinely repeated proof or construction
+  patterns, not special cases for one module.
+
+## Near-term work
+
+### Commit the cleanup checkpoint
+
+The architectural cleanup has passed the full Lean and generated-hardware
+regressions. Commit the accumulated changes before beginning another PicoRV
+implementation. Split a large module later only when its private certification
+detail demonstrably obscures the public ports, contract, structure, laws, and
+naming; use a unique descriptive sibling filename when that becomes useful.
+
+### Replace PicoRV32 child blackboxes
+
+Implement and certify the remaining direct children against their existing
+contracts, one source-faithful subsystem at a time:
+
+1. decoder;
+2. memory interface;
+3. datapath, including iterative shifts and the already-certified ALU child;
+4. control state machine; and
+5. the top-level hierarchy with every blackbox replaced.
+
+Child order may change when dependency evidence suggests a better route, but
+all concrete structures must preserve the configured `picorv32.v` signal and
+state ownership described in [docs/PicoRV32Plan.md](docs/PicoRV32Plan.md).
+
+### Define and prove processor-level observation
+
+Before claiming CPU correctness:
+
+1. define the external memory environment and identify the memory-mapped-I/O
+   address region outside the processor core;
+2. define observable completed bus transactions, trap, and termination;
+3. adapt the Sail-derived RV32I transition model in the sibling
+   `sail-riscv32-lean` work into an instruction-retirement trace;
+4. prove that the source-faithful microarchitectural execution refines that
+   architectural trace; and
+5. derive the weak public theorem about I/O traces, with ordinary-memory
+   correspondence as a stronger supporting property where required.
+
+This verification must not introduce RVFI hardware into the emitted design.
+Any retirement record is a proof-level observation reconstructed from existing
+state and bus behavior.
+
+## Longer-term work
+
+- Prove a semantics-preservation bridge from the supported closed
+  `ModuleStructure` subset to emitted FIRRTL, or validate a smaller checked
+  backend representation if that gives a clearer theorem.
+- Add contract forms for other useful temporal abstractions as real designs
+  demand them.
+- Explore whether memory arrays deserve a structural primitive only when a
+  design requires one; current plans do not assume it.
+- Evaluate proof and elaboration performance as CPU structures replace
+  blackboxes, keeping focused builds comfortably interactive.
+
+## Completion standards
+
+A feature is complete only when its public structure and natural contract are
+clear, the relevant existence or non-vacuity condition is proved, reusable
+proofs do not depend on hidden child implementations, documentation states the
+actual correctness boundary, and the appropriate Lean and generated-hardware
+regressions pass.

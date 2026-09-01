@@ -1,10 +1,11 @@
 import Silean.Examples.PicoRV.Datapath
 
-namespace Silean.Examples.Checks.PicoRVDatapathFixtures
+namespace Silean.Examples.Fixtures.PicoRVDatapath
 
 open Silean
 open Silean.Examples.PicoRV.Datapath
 
+/-- Neutral datapath inputs used as a readable base for focused transition checks. -/
 def idleInputs : Inputs where
   resetn := true
   cpu_state := stateBits cpuStateTrap
@@ -64,4 +65,4 @@ def stateWith (pc nextPc op1 op2 result shift aluQ : Nat) : stateMap.Values :=
   let state := stateMap.set state .reg_sh (fiveBitsOfNat shift)
   stateMap.set state .alu_out_q (wordOfNat aluQ)
 
-end Silean.Examples.Checks.PicoRVDatapathFixtures
+end Silean.Examples.Fixtures.PicoRVDatapath

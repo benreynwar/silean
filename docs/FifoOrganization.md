@@ -55,6 +55,7 @@ that result.
 | `Modules/OneEntryFifo/OneEntryFifoCertified.lean` | Capacity-one logical queue refinement and public FIFO certification |
 | `Composition/FifoSerialComposition.lean` | Generic two-child serial structure and cycle certification |
 | `Composition/FifoSerialRefinement.lean` | Generic composition of two child FIFO refinements; downstream contents precede upstream contents and the internal transfer cancels |
+| `Naming/FifoSerialNaming.lean` | Presentation names for the generic serial hierarchy |
 | `Modules/SerialDepthFifo/SerialDepthFifo.lean` | Recursive positive-depth concrete structure, exact cycle contract, certification, and naming |
 | `Modules/SerialDepthFifo/SerialDepthFifoCertified.lean` | Recursive FIFO certification with capacity equal to depth |
 | `Modules/Fifo/Fifo.lean` | Pointer/register-bank structure and exact cycle contract |

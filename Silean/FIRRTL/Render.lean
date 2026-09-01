@@ -199,6 +199,12 @@ private def renderDefinition (isPublic : Bool) (module : NamedModule) : RenderRe
     else if isPublic then "public module" else "module"
   pure s!"  {qualifier} {renderModuleKey module.key} :\n{body}"
 
+/-- Render only a hierarchy root's FIRRTL module definition. This is useful
+for fast, focused checks of boundary ports and direct instance wiring; use
+`renderCircuit` to emit the complete transitive hierarchy. -/
+def renderRootModule (naming : ModuleNaming moduleStructure) : RenderResult String :=
+  renderDefinition true ⟨_, _, naming⟩
+
 private def validateDefinitionBodies :
     List (String × String) → List (String × String) → RenderResult Unit
   | _, [] => pure ()
@@ -224,5 +230,15 @@ def renderCircuit (naming : ModuleNaming moduleStructure) : RenderResult String 
   let rendered ← definitions.mapM fun definition =>
     renderDefinition (definition.key == rootKey) definition
   pure s!"FIRRTL version 4.0.0\ncircuit {renderModuleKey rootKey} :\n{String.intercalate "\n\n" rendered}\n"
+
+/-- Render a hierarchy only when the recursive structural check finds no
+behavioral blackboxes. Use `renderCircuit` when emitting intentional external
+modules or an incomplete design. `hasNoBlackboxes_eq_true_iff` proves once and
+for all that this executable check is equivalent to the logical property. -/
+def renderClosedCircuit (naming : ModuleNaming moduleStructure) : RenderResult String :=
+  if moduleStructure.hasNoBlackboxes then
+    renderCircuit naming
+  else
+    throw "cannot render a closed circuit whose hierarchy contains a blackbox"
 
 end Silean.FIRRTL

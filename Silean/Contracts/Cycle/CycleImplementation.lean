@@ -59,6 +59,108 @@ structure ModuleCycleCertified (ports : ModulePorts) where
   /-- Proof connecting the independent structure and contract. -/
   certification : ModuleCycleCertification moduleStructure cycleContract
 
+/-- A complete hardware hierarchy certified against one already chosen cycle
+contract. This is the child object consumed when instantiating a certified
+structural layer. -/
+structure ModuleCycleCertifiedStructure {ports : ModulePorts}
+    (cycleContract : ModuleCycleContract ports) where
+  /-- Concrete recursively instantiated hardware. -/
+  moduleStructure : ModuleStructure ports
+  /-- Proof that the concrete hierarchy implements the boundary contract. -/
+  certification : ModuleCycleCertification moduleStructure cycleContract
+
+namespace ModuleCycleCertified
+
+/-- View a public certified module at its already bundled contract. This is the
+form required when supplying it as a child of a certified structural layer. -/
+def certifiedStructure (certified : ModuleCycleCertified ports) :
+    ModuleCycleCertifiedStructure certified.cycleContract where
+  moduleStructure := certified.moduleStructure
+  certification := certified.certification
+
+end ModuleCycleCertified
+
+/-- Contracts required at the named child boundaries of one structural layer. -/
+abbrev ChildCycleContracts (body : ModuleBody) :=
+  (name : body.context.instancePorts.Name) →
+    ModuleCycleContract (body.context.instancePorts.ports name)
+
+namespace Certification.Layer
+
+/-- Concrete child hierarchies certified against a layer's declared child
+contracts. This is the implementation information supplied only when a
+certified layer is instantiated. -/
+abbrev ChildStructures (body : ModuleBody)
+    (childContracts : ChildCycleContracts body) :=
+  (name : body.context.instancePorts.Name) →
+    ModuleCycleCertifiedStructure (childContracts name)
+
+/-- The concrete composite hierarchy obtained by placing certified child
+structures behind a structural layer. -/
+abbrev moduleStructure (body : ModuleBody)
+    {childContracts : ChildCycleContracts body}
+    (children : ChildStructures body childContracts) :
+    ModuleStructure body.context.ports :=
+  .composite body fun name => (children name).moduleStructure
+
+end Certification.Layer
+
+/-- A cycle-certified, but still uninstantiated, structural layer. Its proof is
+parametric in the concrete child hierarchies: any children certified against
+the declared boundary contracts produce a parent hierarchy certified against
+`cycleContract`. -/
+structure ModuleCycleCertifiedLayer
+    (body : ModuleBody)
+    (childContracts : ChildCycleContracts body)
+    (cycleContract : ModuleCycleContract body.context.ports) where
+  certify : (children : Certification.Layer.ChildStructures body childContracts) →
+    ModuleCycleCertification (Certification.Layer.moduleStructure body children)
+      cycleContract
+
+namespace ModuleCycleCertifiedLayer
+
+/-- Instantiate a certified layer with certified child hierarchies. The
+resulting structure is computed solely from the body and the children's
+structure fields; proof fields contribute only the resulting certification. -/
+noncomputable def instantiate
+    (layer : ModuleCycleCertifiedLayer body childContracts cycleContract)
+    (children : Certification.Layer.ChildStructures body childContracts) :
+    ModuleCycleCertifiedStructure cycleContract where
+  moduleStructure := Certification.Layer.moduleStructure body children
+  certification := layer.certify children
+
+/-- Certify an independently declared composite structure using a certified
+layer and matching certified children. This keeps the routine dependent
+transport out of individual module files. -/
+noncomputable def certifyComposite
+    (layer : ModuleCycleCertifiedLayer body childContracts cycleContract)
+    (structuralChildren : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name))
+    (children : Certification.Layer.ChildStructures body childContracts)
+    (structureMatches : ∀ name,
+      (children name).moduleStructure = structuralChildren name) :
+    ModuleCycleCertification (.composite body structuralChildren) cycleContract := by
+  have equal : (fun name => (children name).moduleStructure) =
+      structuralChildren := by
+    funext name
+    exact structureMatches name
+  cases equal
+  exact layer.certify children
+
+end ModuleCycleCertifiedLayer
+
+namespace ModuleCycleCertifiedStructure
+
+/-- Forget the fixed contract index and recover the general public bundle. -/
+def bundle {ports : ModulePorts} {cycleContract : ModuleCycleContract ports}
+    (certified : ModuleCycleCertifiedStructure cycleContract) :
+    ModuleCycleCertified ports where
+  moduleStructure := certified.moduleStructure
+  cycleContract := cycleContract
+  certification := certified.certification
+
+end ModuleCycleCertifiedStructure
+
 def ModuleCycleCertification.bundle {ports : ModulePorts}
     {moduleStructure : ModuleStructure ports}
     {cycleContract : ModuleCycleContract ports}

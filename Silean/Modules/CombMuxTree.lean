@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.BinaryToOneHot
 import Silean.Modules.Mux
 import Silean.Modules.VectorSplit
@@ -197,23 +197,25 @@ private def Implementation.certified
     (implementation : Implementation element indexWidth) :
     Contracts.Cycle.ModuleCycleCertified (ports element indexWidth) := implementation.bundle
 
-@[reducible] private def baseChildren (element : SignalType) :
-    Contracts.Cycle.Certification.Children (baseBody element)
-  | .split => (baseSplitter element).certified
+@[reducible] private def baseChildContracts (element : SignalType) :
+    Contracts.Cycle.ChildCycleContracts (baseBody element)
+  | .split => (baseSplitter element).cycleContract
 
 private abbrev baseOccurrence (element : SignalType) :
-    Contracts.Cycle.Certification.RuleOccurrence (baseChildren element) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (baseBody element) (baseChildContracts element) :=
   ⟨.split, Composition.SignalComponentRule.apply⟩
 
 private def baseOutputSchedule (element : SignalType) :
-    Contracts.Cycle.Certification.OutputSchedule (baseBody element) (baseChildren element)
+    Contracts.Cycle.Certification.Layer.OutputSchedule
+      (baseBody element) (baseChildContracts element)
       (cycleContract element 0) .apply :=
   .call (baseOccurrence element)
     (by
       intro input _
       cases input
       simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable, baseBody, baseWiring,
+        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, baseBody, baseWiring,
         baseContext, EndpointContext.moduleInput])
     (by simp)
     (.done (by
@@ -230,7 +232,8 @@ private def baseOutputSchedule (element : SignalType) :
             List.get_mem _ _⟩))
 
 private def baseStateSchedule (element : SignalType) :
-    Contracts.Cycle.Certification.StateSchedule (baseBody element) (baseChildren element) :=
+    Contracts.Cycle.Certification.Layer.StateSchedule
+      (baseBody element) (baseChildContracts element) :=
   .done (by
     intro child input member
     cases child
@@ -238,7 +241,8 @@ private def baseStateSchedule (element : SignalType) :
     exact nomatch member)
 
 private def baseSchedules (element : SignalType) :
-    Contracts.Cycle.Certification.RuleSchedules (baseBody element) (baseChildren element)
+    Contracts.Cycle.Certification.Layer.RuleSchedules
+      (baseBody element) (baseChildContracts element)
       (cycleContract element 0) where
   output | .apply => baseOutputSchedule element
   state := baseStateSchedule element
@@ -249,48 +253,48 @@ private theorem baseCoversChildren (element : SignalType) :
   cases child
   change Composition.SignalComponentRule at rule
   cases rule
-  apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-  apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs (baseSchedules element) .apply
+  right
+  refine ⟨.apply, ?_⟩
   change baseOccurrence element ∈ (baseOutputSchedule element).finalAvailability
-  simp [baseOutputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+  simp [baseOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
 private def baseSplitInputs (element : SignalType)
     (inputs : (ports element 0).inputs.Values) :
     (baseSplitter element).ports.inputs.Values
   | .value => inputs .values
 
-private theorem baseHasStructuralResult (element : SignalType)
-    (inputs : (ports element 0).inputs.Values)
-    (state : (baseModuleStructure element).State) :
-    ∃ proposal, (baseModuleStructure element).IsSolution inputs state proposal := by
-  rcases (baseChildren element .split).hasStructuralResult
-      (baseSplitInputs element inputs) (state .split) with ⟨split, splitSatisfies⟩
-  let children : (child : BaseInstance) →
-      ProposedValues (Contracts.Cycle.Certification.childStructure (baseChildren element) child)
-    | .split => split
-  let outputs : (ports element 0).outputs.Values := fun
-    | .result => split.outputs ⟨0, by omega⟩
-  refine ⟨ProposedValues.composite outputs children, ?_⟩
-  constructor
-  · intro output; cases output; rfl
-  · intro child
-    cases child
-    change (baseChildren element .split).moduleStructure.IsSolution
-      (ProposedValues.childInputs (baseBody element) _ inputs children .split)
-      (state .split) split
-    rw [show ProposedValues.childInputs (baseBody element) _ inputs children .split =
-        baseSplitInputs element inputs by funext port; cases port; rfl]
-    exact splitSatisfies
-
-private theorem baseImplements (element : SignalType) :
-    Contracts.Cycle.Implements (baseModuleStructure element) (cycleContract element 0)
+private theorem baseImplements (element : SignalType)
+    (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
+      (baseBody element) (baseChildContracts element)) :
+    Contracts.Cycle.Implements
+      (Contracts.Cycle.Certification.Layer.moduleStructure (baseBody element) layerChildren)
+      (cycleContract element 0)
       (fun _ _ => True) := by
   intro inputs contractState structuralState proposal corresponds satisfies
   rcases proposal with ⟨outputs, children⟩
-  rcases satisfies with ⟨boundary, childSatisfies⟩
+  have boundary := satisfies.1
   have splitOutputs : (children .split).outputs =
-      (baseSplitter element).outputValues (baseSplitInputs element inputs) :=
-    childSatisfies .split
+      (baseSplitter element).outputValues (baseSplitInputs element inputs) := by
+    have stateSubsingleton :
+        Subsingleton (baseChildContracts element .split).state.Values := by
+      change Subsingleton emptySignalMap.Values
+      infer_instance
+    have evaluates :=
+      letI := stateSubsingleton
+      (Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
+        layerChildren inputs structuralState ⟨outputs, children⟩ satisfies
+        .split SignalMap.emptyValues).1
+    have holds := (Composition.SignalSplitter.outputRule_holds_iff
+      (baseSplitter element) _ _ _).mp
+      (evaluates.1 Composition.SignalComponentRule.apply)
+    have inputsEqual : ProposedValues.childInputs (baseBody element)
+        (fun child => (layerChildren child).moduleStructure) inputs children .split =
+        baseSplitInputs element inputs := by
+      funext port
+      cases port
+      rfl
+    rw [inputsEqual] at holds
+    exact holds
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
@@ -303,102 +307,106 @@ private theorem baseImplements (element : SignalType) :
     rfl
   · rfl
 
-private def baseImplementation (element : SignalType) : Implementation element 0 where
-  stateCorresponds := fun _ _ => True
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := baseHasStructuralResult element
-  structuralResultUnique := (baseSchedules element).hasAtMostOneSolution
-    (baseCoversChildren element)
-  implements := baseImplements element
+private noncomputable opaque baseCertifiedLayer (element : SignalType) :
+    Contracts.Cycle.ModuleCycleCertifiedLayer (baseBody element)
+      (baseChildContracts element) (cycleContract element 0) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (baseSchedules element) (baseCoversChildren element) (fun _ _ _ => True)
+    (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩) (baseImplements element)
 
-@[reducible] private noncomputable def succChildren (element : SignalType)
-    (indexWidth : Nat) (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.Children (succBody element indexWidth)
-  | .valuesSplit => VectorSplit.certified element
+private noncomputable def baseCertifiedChildren (element : SignalType) :
+    Contracts.Cycle.Certification.Layer.ChildStructures
+      (baseBody element) (baseChildContracts element)
+  | .split => (baseSplitter element).certified.certifiedStructure
+
+private noncomputable def baseImplementation (element : SignalType) : Implementation element 0 :=
+  ((baseCertifiedLayer element).certify (baseCertifiedChildren element)).transportStructure (by rfl)
+
+@[reducible] private def succChildContracts (element : SignalType) (indexWidth : Nat) :
+    Contracts.Cycle.ChildCycleContracts (succBody element indexWidth)
+  | .valuesSplit => VectorSplit.cycleContract element
       (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
-  | .indexSplit => (indexSplitter indexWidth).certified
-  | .indexLower => (indexLowerCombiner indexWidth).certified
-  | .lower | .upper => previous.certified
-  | .mux => Mux.certified element
+  | .indexSplit => (indexSplitter indexWidth).cycleContract
+  | .indexLower => (indexLowerCombiner indexWidth).cycleContract
+  | .lower | .upper => cycleContract element indexWidth
+  | .mux => Mux.cycleContract element
 
-private abbrev valuesSplitOccurrence (element) (indexWidth)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.RuleOccurrence (succChildren element indexWidth previous) :=
+private abbrev valuesSplitOccurrence (element) (indexWidth) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.valuesSplit, VectorSplit.Rule.apply⟩
-private abbrev indexSplitOccurrence (element) (indexWidth)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.RuleOccurrence (succChildren element indexWidth previous) :=
+private abbrev indexSplitOccurrence (element) (indexWidth) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.indexSplit, Composition.SignalComponentRule.apply⟩
-private abbrev indexLowerOccurrence (element) (indexWidth)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.RuleOccurrence (succChildren element indexWidth previous) :=
+private abbrev indexLowerOccurrence (element) (indexWidth) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.indexLower, Composition.SignalComponentRule.apply⟩
-private abbrev lowerOccurrence (element) (indexWidth)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.RuleOccurrence (succChildren element indexWidth previous) :=
+private abbrev lowerOccurrence (element) (indexWidth) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.lower, Rule.apply⟩
-private abbrev upperOccurrence (element) (indexWidth)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.RuleOccurrence (succChildren element indexWidth previous) :=
+private abbrev upperOccurrence (element) (indexWidth) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.upper, Rule.apply⟩
-private abbrev muxOccurrence (element) (indexWidth)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.RuleOccurrence (succChildren element indexWidth previous) :=
+private abbrev muxOccurrence (element) (indexWidth) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.mux, Mux.Rule.select⟩
 
 private theorem indexSplitWrites (element) (indexWidth)
-    (previous : Implementation element indexWidth)
     (index : Fin (indexWidth + 1)) :
-    index ∈ (indexSplitOccurrence element indexWidth previous).writes := by
+    index ∈ (indexSplitOccurrence element indexWidth).writes := by
   change index ∈ (indexSplitter indexWidth).ports.outputs.allSelection.labels
   rw [SignalMap.allSelection_labels]
   exact ListIndex.get_eq
     ((indexSplitter indexWidth).ports.outputs.labels.locate index) ▸
       List.get_mem _ _
 
-private def succOutputSchedule (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.OutputSchedule (succBody element indexWidth)
-      (succChildren element indexWidth previous)
+private def succOutputSchedule (element : SignalType) (indexWidth : Nat) :
+    Contracts.Cycle.Certification.Layer.OutputSchedule (succBody element indexWidth)
+      (succChildContracts element indexWidth)
       (cycleContract element (indexWidth + 1)) .apply :=
-  .call (valuesSplitOccurrence element indexWidth previous)
+  .call (valuesSplitOccurrence element indexWidth)
     (by
       intro input _
       cases input
       simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable, succBody, succWiring,
+        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, succBody, succWiring,
         succContext, EndpointContext.moduleInput])
     (by simp)
-  (.call (indexSplitOccurrence element indexWidth previous)
+  (.call (indexSplitOccurrence element indexWidth)
     (by
       intro input _
       cases input
       simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable, succBody, succWiring,
+        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, succBody, succWiring,
         succContext, EndpointContext.moduleInput])
     (by simp)
-  (.call (indexLowerOccurrence element indexWidth previous)
+  (.call (indexLowerOccurrence element indexWidth)
     (by intro lowerIndex _; exact ⟨Composition.SignalComponentRule.apply, by simp,
-      indexSplitWrites element indexWidth previous lowerIndex.castSucc⟩)
+      indexSplitWrites element indexWidth lowerIndex.castSucc⟩)
     (by simp)
-  (.call (lowerOccurrence element indexWidth previous)
+  (.call (lowerOccurrence element indexWidth)
     (by intro input _; cases input with
       | values => exact ⟨VectorSplit.Rule.apply, by simp,
           by change VectorSplit.Output.left ∈ [.left, .right]; simp⟩
       | index => exact ⟨Composition.SignalComponentRule.apply, by simp,
           by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩)
     (by simp)
-  (.call (upperOccurrence element indexWidth previous)
+  (.call (upperOccurrence element indexWidth)
     (by intro input _; cases input with
       | values => exact ⟨VectorSplit.Rule.apply, by simp,
           by change VectorSplit.Output.right ∈ [.left, .right]; simp⟩
       | index => exact ⟨Composition.SignalComponentRule.apply, by simp,
           by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩)
     (by simp)
-  (.call (muxOccurrence element indexWidth previous)
+  (.call (muxOccurrence element indexWidth)
     (by intro input _; cases input with
       | select => exact ⟨Composition.SignalComponentRule.apply, by simp,
-          indexSplitWrites element indexWidth previous (highIndex indexWidth)⟩
+          indexSplitWrites element indexWidth (highIndex indexWidth)⟩
       | whenFalse => exact ⟨Rule.apply, by simp,
           by change Output.result ∈ [Output.result]; simp⟩
       | whenTrue => exact ⟨Rule.apply, by simp,
@@ -410,10 +418,9 @@ private def succOutputSchedule (element : SignalType) (indexWidth : Nat)
     exact ⟨Mux.Rule.select, by simp,
       by change Mux.Output.result ∈ [Mux.Output.result]; simp⟩)))))))
 
-private def succStateSchedule (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.StateSchedule (succBody element indexWidth)
-      (succChildren element indexWidth previous) :=
+private def succStateSchedule (element : SignalType) (indexWidth : Nat) :
+    Contracts.Cycle.Certification.Layer.StateSchedule (succBody element indexWidth)
+      (succChildContracts element indexWidth) :=
   .done (by
     intro child input member
     cases child with
@@ -430,52 +437,49 @@ private def succStateSchedule (element : SignalType) (indexWidth : Nat)
         change input ∈ (Mux.cycleContract element).stateRule.readsInputs.labels at member
         exact nomatch member)
 
-private def succSchedules (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Certification.RuleSchedules (succBody element indexWidth)
-      (succChildren element indexWidth previous)
+private def succSchedules (element : SignalType) (indexWidth : Nat) :
+    Contracts.Cycle.Certification.Layer.RuleSchedules (succBody element indexWidth)
+      (succChildContracts element indexWidth)
       (cycleContract element (indexWidth + 1)) where
-  output | .apply => succOutputSchedule element indexWidth previous
-  state := succStateSchedule element indexWidth previous
+  output | .apply => succOutputSchedule element indexWidth
+  state := succStateSchedule element indexWidth
 
-private theorem succCoversChildren (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth) :
-    (succSchedules element indexWidth previous).CoversChildren := by
+private theorem succCoversChildren (element : SignalType) (indexWidth : Nat) :
+    (succSchedules element indexWidth).CoversChildren := by
   intro child rule
-  apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-  apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-    (succSchedules element indexWidth previous) .apply
+  right
+  refine ⟨.apply, ?_⟩
   cases child with
   | valuesSplit =>
       change VectorSplit.Rule at rule; cases rule
-      change valuesSplitOccurrence element indexWidth previous ∈
-        (succOutputSchedule element indexWidth previous).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      change valuesSplitOccurrence element indexWidth ∈
+        (succOutputSchedule element indexWidth).finalAvailability
+      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | indexSplit =>
       change Composition.SignalComponentRule at rule; cases rule
-      change indexSplitOccurrence element indexWidth previous ∈
-        (succOutputSchedule element indexWidth previous).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      change indexSplitOccurrence element indexWidth ∈
+        (succOutputSchedule element indexWidth).finalAvailability
+      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | indexLower =>
       change Composition.SignalComponentRule at rule; cases rule
-      change indexLowerOccurrence element indexWidth previous ∈
-        (succOutputSchedule element indexWidth previous).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      change indexLowerOccurrence element indexWidth ∈
+        (succOutputSchedule element indexWidth).finalAvailability
+      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | lower =>
       change Rule at rule; cases rule
-      change lowerOccurrence element indexWidth previous ∈
-        (succOutputSchedule element indexWidth previous).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      change lowerOccurrence element indexWidth ∈
+        (succOutputSchedule element indexWidth).finalAvailability
+      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | upper =>
       change Rule at rule; cases rule
-      change upperOccurrence element indexWidth previous ∈
-        (succOutputSchedule element indexWidth previous).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      change upperOccurrence element indexWidth ∈
+        (succOutputSchedule element indexWidth).finalAvailability
+      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | mux =>
       change Mux.Rule at rule; cases rule
-      change muxOccurrence element indexWidth previous ∈
-        (succOutputSchedule element indexWidth previous).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      change muxOccurrence element indexWidth ∈
+        (succOutputSchedule element indexWidth).finalAvailability
+      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
 private def valuesSplitInputs (element : SignalType) (indexWidth : Nat)
     (inputs : (ports element (indexWidth + 1)).inputs.Values) :
@@ -488,164 +492,90 @@ private def indexSplitInputs (element : SignalType) (indexWidth : Nat)
     (indexSplitter indexWidth).ports.inputs.Values
   | .value => inputs .index
 
-private noncomputable def indexLowerInputs (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth)
-    (split : ProposedValues
-      (succChildren element indexWidth previous .indexSplit).moduleStructure) :
+private def indexLowerInputs (indexWidth : Nat)
+    (split : (indexSplitter indexWidth).ports.outputs.Values) :
     (indexLowerCombiner indexWidth).ports.inputs.Values := fun lowerIndex =>
-  split.outputs lowerIndex.castSucc
+  split lowerIndex.castSucc
 
-private noncomputable def lowerInputs (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth)
-    (values : ProposedValues
-      (succChildren element indexWidth previous .valuesSplit).moduleStructure)
-    (lowerBits : ProposedValues
-      (succChildren element indexWidth previous .indexLower).moduleStructure) :
+private def lowerInputs (element : SignalType) (indexWidth : Nat)
+    (values : (VectorSplit.ports element (BinaryToOneHot.size indexWidth)
+      (BinaryToOneHot.size indexWidth)).outputs.Values)
+    (lowerBits : (indexLowerCombiner indexWidth).ports.outputs.Values) :
     (ports element indexWidth).inputs.Values
-  | .values => values.outputs .left
-  | .index => lowerBits.outputs .value
+  | .values => values .left
+  | .index => lowerBits .value
 
-private noncomputable def upperInputs (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth)
-    (values : ProposedValues
-      (succChildren element indexWidth previous .valuesSplit).moduleStructure)
-    (lowerBits : ProposedValues
-      (succChildren element indexWidth previous .indexLower).moduleStructure) :
+private def upperInputs (element : SignalType) (indexWidth : Nat)
+    (values : (VectorSplit.ports element (BinaryToOneHot.size indexWidth)
+      (BinaryToOneHot.size indexWidth)).outputs.Values)
+    (lowerBits : (indexLowerCombiner indexWidth).ports.outputs.Values) :
     (ports element indexWidth).inputs.Values
-  | .values => values.outputs .right
-  | .index => lowerBits.outputs .value
+  | .values => values .right
+  | .index => lowerBits .value
 
-private noncomputable def muxInputs (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth)
-    (index : ProposedValues
-      (succChildren element indexWidth previous .indexSplit).moduleStructure)
-    (lower : ProposedValues
-      (succChildren element indexWidth previous .lower).moduleStructure)
-    (upper : ProposedValues
-      (succChildren element indexWidth previous .upper).moduleStructure) :
+private def muxInputs (element : SignalType) (indexWidth : Nat)
+    (index : (indexSplitter indexWidth).ports.outputs.Values)
+    (lower upper : (ports element indexWidth).outputs.Values) :
     (Mux.ports element).inputs.Values
-  | .select => index.outputs (highIndex indexWidth)
-  | .whenFalse => lower.outputs .result
-  | .whenTrue => upper.outputs .result
-
-private theorem succHasStructuralResult (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth)
-    (inputs : (ports element (indexWidth + 1)).inputs.Values)
-    (state : (Contracts.Cycle.Certification.moduleStructure (succBody element indexWidth)
-      (succChildren element indexWidth previous)).State) :
-    ∃ proposal, (Contracts.Cycle.Certification.moduleStructure (succBody element indexWidth)
-      (succChildren element indexWidth previous)).IsSolution inputs state proposal := by
-  rcases (succChildren element indexWidth previous .valuesSplit).hasStructuralResult
-      (valuesSplitInputs element indexWidth inputs) (state .valuesSplit) with
-    ⟨values, valuesSatisfy⟩
-  rcases (succChildren element indexWidth previous .indexSplit).hasStructuralResult
-      (indexSplitInputs element indexWidth inputs) (state .indexSplit) with
-    ⟨index, indexSatisfies⟩
-  rcases (succChildren element indexWidth previous .indexLower).hasStructuralResult
-      (indexLowerInputs element indexWidth previous index) (state .indexLower) with
-    ⟨lowerBits, indexLowerSatisfies⟩
-  rcases (succChildren element indexWidth previous .lower).hasStructuralResult
-      (lowerInputs element indexWidth previous values lowerBits) (state .lower) with
-    ⟨lower, lowerSatisfies⟩
-  rcases (succChildren element indexWidth previous .upper).hasStructuralResult
-      (upperInputs element indexWidth previous values lowerBits) (state .upper) with
-    ⟨upper, upperSatisfies⟩
-  rcases (succChildren element indexWidth previous .mux).hasStructuralResult
-      (muxInputs element indexWidth previous index lower upper) (state .mux) with
-    ⟨mux, muxSatisfies⟩
-  let proposals : (child : SuccInstance) →
-      ProposedValues (Contracts.Cycle.Certification.childStructure
-        (succChildren element indexWidth previous) child)
-    | .valuesSplit => values
-    | .indexSplit => index
-    | .indexLower => lowerBits
-    | .lower => lower
-    | .upper => upper
-    | .mux => mux
-  let outputs : (ports element (indexWidth + 1)).outputs.Values := fun
-    | .result => mux.outputs .result
-  refine ⟨ProposedValues.composite outputs proposals, ?_⟩
-  constructor
-  · intro output; cases output; rfl
-  · intro child
-    cases child <;>
-      change (succChildren element indexWidth previous _).moduleStructure.IsSolution
-        (ProposedValues.childInputs (succBody element indexWidth) _ inputs proposals _)
-        (state _) _
-    · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .valuesSplit = valuesSplitInputs element indexWidth inputs by
-        funext port; cases port; rfl]
-      exact valuesSatisfy
-    · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .indexSplit = indexSplitInputs element indexWidth inputs by
-        funext port; cases port; rfl]
-      exact indexSatisfies
-    · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .indexLower =
-            indexLowerInputs element indexWidth previous index by
-        funext lowerIndex; rfl]
-      exact indexLowerSatisfies
-    · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .lower = lowerInputs element indexWidth previous values lowerBits by
-        funext port; cases port <;> rfl]
-      exact lowerSatisfies
-    · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .upper = upperInputs element indexWidth previous values lowerBits by
-        funext port; cases port <;> rfl]
-      exact upperSatisfies
-    · rw [show ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposals .mux = muxInputs element indexWidth previous index lower upper by
-        funext port; cases port <;> rfl]
-      exact muxSatisfies
+  | .select => index (highIndex indexWidth)
+  | .whenFalse => lower .result
+  | .whenTrue => upper .result
 
 private theorem succImplements (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth) :
-    Contracts.Cycle.Implements (Contracts.Cycle.Certification.moduleStructure (succBody element indexWidth)
-      (succChildren element indexWidth previous))
+    (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
+      (succBody element indexWidth) (succChildContracts element indexWidth)) :
+    Contracts.Cycle.Implements
+      (Contracts.Cycle.Certification.Layer.moduleStructure
+        (succBody element indexWidth) layerChildren)
       (cycleContract element (indexWidth + 1)) (fun _ _ => True) := by
   intro inputs contractState structuralState proposal corresponds satisfies
   have boundary := satisfies.1
-  have childSatisfies := satisfies.2
+  have childStates : ∀ child,
+      (succChildContracts element indexWidth child).state.Values := by
+    intro child
+    cases child <;> exact SignalMap.emptyValues
+  have childStateSubsingleton : ∀ child,
+      Subsingleton (succChildContracts element indexWidth child).state.Values := by
+    intro child
+    cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
+  have childMatches :=
+    Contracts.Cycle.Certification.Layer.childSolutionsMatchContracts_of_subsingletonState
+      layerChildren inputs structuralState proposal satisfies childStates childStateSubsingleton
   have indexOutputs : (proposal.snd .indexSplit).outputs =
       (indexSplitter indexWidth).outputValues
-        (indexSplitInputs element indexWidth inputs) := childSatisfies .indexSplit
+        (indexSplitInputs element indexWidth inputs) := by
+    have holds := (Composition.SignalSplitter.outputRule_holds_iff
+      (indexSplitter indexWidth) _ _ _).mp
+      ((childMatches .indexSplit).1.1 Composition.SignalComponentRule.apply)
+    have inputsEqual : ProposedValues.childInputs (succBody element indexWidth)
+        (fun child => (layerChildren child).moduleStructure)
+        inputs proposal.snd .indexSplit = indexSplitInputs element indexWidth inputs := by
+      funext port
+      cases port
+      rfl
+    rw [inputsEqual] at holds
+    exact holds
   have lowerOutputs : (proposal.snd .indexLower).outputs =
       (indexLowerCombiner indexWidth).outputValues
-        (ProposedValues.childInputs (succBody element indexWidth) _
-          inputs proposal.snd .indexLower) := childSatisfies .indexLower
+        (ProposedValues.childInputs (succBody element indexWidth)
+          (fun child => (layerChildren child).moduleStructure)
+          inputs proposal.snd .indexLower) := by
+    exact (Composition.SignalCombiner.outputRule_holds_iff
+      (indexLowerCombiner indexWidth) _ _ _).mp
+      ((childMatches .indexLower).1.1 Composition.SignalComponentRule.apply)
 
-  rcases (succChildren element indexWidth previous .valuesSplit).hasCorrespondingState
-      (structuralState .valuesSplit) with ⟨valuesState, valuesCorresponds⟩
-  rcases Contracts.Cycle.Certification.childImplements (succChildren element indexWidth previous) inputs
-      structuralState proposal satisfies .valuesSplit valuesState valuesCorresponds with
-    ⟨_, valuesEvaluate, _⟩
   have valuesEquation := (VectorSplit.outputRule_holds_iff element
     (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
-    _ valuesState _).mp (valuesEvaluate.1 VectorSplit.Rule.apply)
+    _ SignalMap.emptyValues _).mp ((childMatches .valuesSplit).1.1 VectorSplit.Rule.apply)
 
-  rcases (succChildren element indexWidth previous .lower).hasCorrespondingState
-      (structuralState .lower) with ⟨lowerState, lowerCorresponds⟩
-  rcases Contracts.Cycle.Certification.childImplements (succChildren element indexWidth previous) inputs
-      structuralState proposal satisfies .lower lowerState lowerCorresponds with
-    ⟨_, lowerEvaluate, _⟩
   have lowerEquation := (outputRule_holds_iff element indexWidth
-    _ lowerState _).mp (lowerEvaluate.1 Rule.apply)
+    _ SignalMap.emptyValues _).mp ((childMatches .lower).1.1 Rule.apply)
 
-  rcases (succChildren element indexWidth previous .upper).hasCorrespondingState
-      (structuralState .upper) with ⟨upperState, upperCorresponds⟩
-  rcases Contracts.Cycle.Certification.childImplements (succChildren element indexWidth previous) inputs
-      structuralState proposal satisfies .upper upperState upperCorresponds with
-    ⟨_, upperEvaluate, _⟩
   have upperEquation := (outputRule_holds_iff element indexWidth
-    _ upperState _).mp (upperEvaluate.1 Rule.apply)
+    _ SignalMap.emptyValues _).mp ((childMatches .upper).1.1 Rule.apply)
 
-  rcases (succChildren element indexWidth previous .mux).hasCorrespondingState
-      (structuralState .mux) with ⟨muxState, muxCorresponds⟩
-  rcases Contracts.Cycle.Certification.childImplements (succChildren element indexWidth previous) inputs
-      structuralState proposal satisfies .mux muxState muxCorresponds with
-    ⟨_, muxEvaluate, _⟩
-  have muxEquation := (Mux.selectRule_holds_iff element _ muxState _).mp
-    (muxEvaluate.1 Mux.Rule.select)
+  have muxEquation := (Mux.selectRule_holds_iff element _ SignalMap.emptyValues _).mp
+    ((childMatches .mux).1.1 Mux.Rule.select)
 
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
@@ -661,22 +591,22 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
       funext port; cases port; rfl
     have indexLowerInputsEquation : ProposedValues.childInputs
         (succBody element indexWidth) _ inputs proposal.snd .indexLower =
-          indexLowerInputs element indexWidth previous (proposal.snd .indexSplit) := by
+          indexLowerInputs indexWidth (proposal.snd .indexSplit).outputs := by
       funext lowerIndex; rfl
     have lowerInputsEquation : ProposedValues.childInputs
         (succBody element indexWidth) _ inputs proposal.snd .lower =
-          lowerInputs element indexWidth previous (proposal.snd .valuesSplit)
-            (proposal.snd .indexLower) := by
+          lowerInputs element indexWidth (proposal.snd .valuesSplit).outputs
+            (proposal.snd .indexLower).outputs := by
       funext port; cases port <;> rfl
     have upperInputsEquation : ProposedValues.childInputs
         (succBody element indexWidth) _ inputs proposal.snd .upper =
-          upperInputs element indexWidth previous (proposal.snd .valuesSplit)
-            (proposal.snd .indexLower) := by
+          upperInputs element indexWidth (proposal.snd .valuesSplit).outputs
+            (proposal.snd .indexLower).outputs := by
       funext port; cases port <;> rfl
     have muxInputsEquation : ProposedValues.childInputs
         (succBody element indexWidth) _ inputs proposal.snd .mux =
-          muxInputs element indexWidth previous (proposal.snd .indexSplit)
-            (proposal.snd .lower) (proposal.snd .upper) := by
+          muxInputs element indexWidth (proposal.snd .indexSplit).outputs
+            (proposal.snd .lower).outputs (proposal.snd .upper).outputs := by
       funext port; cases port <;> rfl
     rw [valuesInputsEquation] at valuesEquation
     rw [indexLowerInputsEquation] at lowerOutputs
@@ -720,38 +650,38 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
   · change SignalMap.emptyValues = SignalMap.emptyValues
     rfl
 
-private theorem succModuleStructure_eq (element : SignalType) (indexWidth : Nat)
-    (previous : Implementation element indexWidth) :
-    moduleStructure element (indexWidth + 1) =
-      Contracts.Cycle.Certification.moduleStructure (succBody element indexWidth)
-        (succChildren element indexWidth previous) := by
-  change ModuleStructure.composite (succBody element indexWidth) (fun
-    | .valuesSplit => VectorSplit.moduleStructure element
-        (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
-    | .indexSplit => (indexSplitter indexWidth).certified.moduleStructure
-    | .indexLower => (indexLowerCombiner indexWidth).certified.moduleStructure
-    | .lower | .upper => moduleStructure element indexWidth
-    | .mux => Mux.moduleStructure element) = _
-  unfold Contracts.Cycle.Certification.moduleStructure
-  congr
-  funext child
-  cases child <;> rfl
+private noncomputable opaque succCertifiedLayer
+    (element : SignalType) (indexWidth : Nat) :
+    Contracts.Cycle.ModuleCycleCertifiedLayer (succBody element indexWidth)
+      (succChildContracts element indexWidth) (cycleContract element (indexWidth + 1)) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (succSchedules element indexWidth) (succCoversChildren element indexWidth)
+    (fun _ _ _ => True) (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩)
+    (succImplements element indexWidth)
 
-private def succImplementation (element : SignalType) (indexWidth : Nat)
+private noncomputable def succCertifiedChildren (element : SignalType)
+    (indexWidth : Nat) (previous : Implementation element indexWidth) :
+    Contracts.Cycle.Certification.Layer.ChildStructures
+      (succBody element indexWidth) (succChildContracts element indexWidth)
+  | .valuesSplit =>
+      (VectorSplit.certified element (BinaryToOneHot.size indexWidth)
+        (BinaryToOneHot.size indexWidth)).certifiedStructure
+  | .indexSplit => (indexSplitter indexWidth).certified.certifiedStructure
+  | .indexLower => (indexLowerCombiner indexWidth).certified.certifiedStructure
+  | .lower | .upper => previous.certified.certifiedStructure
+  | .mux => (Mux.certified element).certifiedStructure
+
+private noncomputable def succImplementation (element : SignalType) (indexWidth : Nat)
     (previous : Implementation element indexWidth) :
-    Implementation element (indexWidth + 1) where
-  stateCorresponds := fun _ _ => True
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := by
-    rw [succModuleStructure_eq element indexWidth previous]
-    exact succHasStructuralResult element indexWidth previous
-  structuralResultUnique := by
-    rw [succModuleStructure_eq element indexWidth previous]
-    exact (succSchedules element indexWidth previous).hasAtMostOneSolution
-      (succCoversChildren element indexWidth previous)
-  implements := by
-    rw [succModuleStructure_eq element indexWidth previous]
-    exact succImplements element indexWidth previous
+    Implementation element (indexWidth + 1) :=
+  ((succCertifiedLayer element indexWidth).certify
+    (succCertifiedChildren element indexWidth previous)).transportStructure (by
+      unfold Contracts.Cycle.Certification.Layer.moduleStructure
+        succCertifiedChildren Contracts.Cycle.ModuleCycleCertified.certifiedStructure
+      rw [moduleStructure.eq_def]
+      congr
+      funext child
+      cases child <;> rfl)
 
 noncomputable def implementation (element : SignalType) :
     (indexWidth : Nat) → Implementation element indexWidth

@@ -7,6 +7,10 @@ weight `2 ^ i`, so index zero is the least-significant bit. -/
   | 0 => 1
   | width + 1 => cardinality width + cardinality width
 
+/-- The low `width` bits of a natural number, least-significant bit first. -/
+def ofNat (width value : Nat) : Fin width → Bool :=
+  fun index => value.testBit index.val
+
 @[simp] theorem cardinality_eq_pow (width : Nat) : cardinality width = 2 ^ width := by
   induction width with
   | zero => rfl
@@ -70,5 +74,26 @@ theorem toNat_injective (width : Nat) : Function.Injective (toNat width) := by
       refine Fin.lastCases ?_ (fun lower => ?_) index
       · exact highEqual
       · exact congrFun lowerEqual lower
+
+@[simp] theorem toNat_ofNat (width value : Nat) :
+    toNat width (ofNat width value) = value % cardinality width := by
+  rw [cardinality_eq_pow]
+  induction width with
+  | zero => simp [toNat, Nat.mod_one]
+  | succ width induction =>
+      change toNat width (fun index => value.testBit index.val) =
+        value % 2 ^ width at induction
+      rw [Nat.mod_pow_succ]
+      cases bit : value.testBit width with
+      | false =>
+          have quotient : value / 2 ^ width % 2 = 0 := by
+            rw [← Nat.toNat_testBit]
+            simp [bit]
+          simp [toNat, ofNat, induction, bit, quotient]
+      | true =>
+          have quotient : value / 2 ^ width % 2 = 1 := by
+            rw [← Nat.toNat_testBit]
+            simp [bit]
+          simp [toNat, ofNat, induction, bit, quotient, Nat.add_comm]
 
 end Silean.BitVector

@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Examples.Fixtures.DualNot
 import Silean.Examples.Fixtures.HierarchicalDualNot
 
@@ -107,14 +107,20 @@ private theorem hasStructuralResult
             backwardInputs by funext port; cases port; rfl]
         exact backwardSatisfies
 
-open Silean.Contracts.Cycle.Certification
+open Silean.Contracts.Cycle.Certification.Layer
+
+private abbrev childContracts :=
+  Examples.Fixtures.HierarchicalDualNot.childContracts
+
+private abbrev layerChildren :=
+  Examples.Fixtures.HierarchicalDualNot.children
 
 abbrev forwardOccurrence :
-    RuleOccurrence Examples.Fixtures.HierarchicalDualNot.children :=
+    RuleOccurrence Examples.Fixtures.HierarchicalDualNot.body childContracts :=
   ⟨Examples.Fixtures.HierarchicalDualNot.Instance.forwardNot, Primitives.NotRule.apply⟩
 
 abbrev backwardOccurrence :
-    RuleOccurrence Examples.Fixtures.HierarchicalDualNot.children :=
+    RuleOccurrence Examples.Fixtures.HierarchicalDualNot.body childContracts :=
   ⟨Examples.Fixtures.HierarchicalDualNot.Instance.backwardNot, Primitives.NotRule.apply⟩
 
 @[simp] theorem forwardOccurrence_reads : forwardOccurrence.reads = [.input] := rfl
@@ -135,7 +141,7 @@ abbrev backwardOccurrence :
       |>.writesOutputs.labels) = [.backward] := rfl
 
 def forwardSchedule : OutputSchedule Examples.Fixtures.HierarchicalDualNot.body
-    Examples.Fixtures.HierarchicalDualNot.children Examples.Fixtures.DualNot.cycleContract .forward :=
+    childContracts Examples.Fixtures.DualNot.cycleContract .forward :=
   .call forwardOccurrence
     (by
       intro port member
@@ -154,7 +160,7 @@ def forwardSchedule : OutputSchedule Examples.Fixtures.HierarchicalDualNot.body
         simp at member))
 
 def backwardSchedule : OutputSchedule Examples.Fixtures.HierarchicalDualNot.body
-    Examples.Fixtures.HierarchicalDualNot.children Examples.Fixtures.DualNot.cycleContract .backward :=
+    childContracts Examples.Fixtures.DualNot.cycleContract .backward :=
   .call backwardOccurrence
     (by
       intro port member
@@ -173,16 +179,16 @@ def backwardSchedule : OutputSchedule Examples.Fixtures.HierarchicalDualNot.body
         exact ⟨Primitives.NotRule.apply, by simp, by simp⟩))
 
 def stateSchedule : StateSchedule Examples.Fixtures.HierarchicalDualNot.body
-    Examples.Fixtures.HierarchicalDualNot.children :=
+    childContracts :=
   .done (by
     intro child input member
     cases child <;>
-      simp [Examples.Fixtures.HierarchicalDualNot.children, Primitives.notCertified,
+      simp [childContracts, Examples.Fixtures.HierarchicalDualNot.childContracts,
         Primitives.notCycleContract, Contracts.Cycle.CycleStateRule.empty,
         SignalSelection.labels] at member)
 
 def ruleSchedules : RuleSchedules Examples.Fixtures.HierarchicalDualNot.body
-    Examples.Fixtures.HierarchicalDualNot.children Examples.Fixtures.DualNot.cycleContract where
+    childContracts Examples.Fixtures.DualNot.cycleContract where
   output
     | .forward => forwardSchedule
     | .backward => backwardSchedule
@@ -191,18 +197,18 @@ def ruleSchedules : RuleSchedules Examples.Fixtures.HierarchicalDualNot.body
 theorem coversChildren : ruleSchedules.CoversChildren := by
   intro child rule
   cases child <;> cases rule
-  · apply RuleSchedules.Combined.add_preserves
-    apply RuleSchedules.mem_combineOutputs ruleSchedules .forward
+  · right
+    refine ⟨.forward, ?_⟩
     change forwardOccurrence ∈ forwardSchedule.finalAvailability
-    simp [forwardSchedule, Schedule.finalAvailability]
-  · apply RuleSchedules.Combined.add_preserves
-    apply RuleSchedules.mem_combineOutputs ruleSchedules .backward
+    simp [forwardSchedule]
+  · right
+    refine ⟨.backward, ?_⟩
     change backwardOccurrence ∈ backwardSchedule.finalAvailability
-    simp [backwardSchedule, Schedule.finalAvailability]
+    simp [backwardSchedule]
 
 theorem hasAtMostOneSolution :
     Examples.Fixtures.HierarchicalDualNot.moduleStructure.HasAtMostOneSolution :=
-  ruleSchedules.hasAtMostOneSolution coversChildren
+  ruleSchedules.hasAtMostOneSolution coversChildren layerChildren
 
 def dualNotCertified : Contracts.Cycle.ModuleCycleCertified Examples.Fixtures.DualNot.ports where
   moduleStructure := Examples.Fixtures.HierarchicalDualNot.moduleStructure

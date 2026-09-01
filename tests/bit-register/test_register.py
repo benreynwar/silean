@@ -1,11 +1,6 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import FallingEdge, RisingEdge
-
-
-async def next_drive_phase(clock) -> None:
-    await RisingEdge(clock)
-    await FallingEdge(clock)
+from utils import next_drive_phase
 
 
 @cocotb.test()

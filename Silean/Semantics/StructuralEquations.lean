@@ -134,6 +134,15 @@ def SignalSource.value (source : SignalSource ports instancePorts signalType)
   | .moduleInput port => inputs port
   | .instanceOutput name port => childOutputs name port
 
+/-- Derive one child's complete input values from root inputs, sibling output
+values, and the composite wiring. -/
+@[simp] def Wiring.childInputValues (wiring : Wiring ports instancePorts)
+    (inputs : ports.inputs.Values)
+    (childOutputs : (name : instancePorts.Name) →
+      (instancePorts.ports name).outputs.Values)
+    (name : instancePorts.Name) : (instancePorts.ports name).inputs.Values :=
+  fun port => (wiring.instanceInput name port).value inputs childOutputs
+
 namespace ProposedValues
 
 def childInputs (body : ModuleBody)
@@ -144,9 +153,23 @@ def childInputs (body : ModuleBody)
       ProposedValues (childStructure name))
     (name : body.context.instancePorts.Name) :
     (body.context.instancePorts.ports name).inputs.Values :=
-  fun port =>
-    (body.wiring.instanceInput name port).value inputs
-      fun childName => (children childName).outputs
+  body.wiring.childInputValues inputs
+    (fun childName => (children childName).outputs) name
+
+/-- Looking up one induced child input follows exactly that child's wiring
+source.  Keeping this application form available prevents proofs from having to
+unfold the complete wiring table merely to normalize one port. -/
+theorem childInputs_apply (body : ModuleBody)
+    (childStructure : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name))
+    (inputs : body.context.ports.inputs.Values)
+    (children : (name : body.context.instancePorts.Name) →
+      ProposedValues (childStructure name))
+    (name : body.context.instancePorts.Name)
+    (port : (body.context.instancePorts.ports name).inputs.Label) :
+    childInputs body childStructure inputs children name port =
+      (body.wiring.instanceInput name port).value inputs
+        (fun childName => (children childName).outputs) := rfl
 
 def boundaryOutputsSatisfy (body : ModuleBody)
     (childStructure : (name : body.context.instancePorts.Name) →
@@ -159,6 +182,21 @@ def boundaryOutputsSatisfy (body : ModuleBody)
   ∀ port, outputs port =
     (body.wiring.moduleOutput port).value inputs
       fun name => (children name).outputs
+
+/-- Complete a composite proposal from proposals for all immediate children.
+The parent boundary values are not additional proof data: they are read
+directly from the sources selected by the wiring. -/
+def compositeFromChildren (body : ModuleBody)
+    (childStructure : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name))
+    (inputs : body.context.ports.inputs.Values)
+    (children : (name : body.context.instancePorts.Name) →
+      ProposedValues (childStructure name)) :
+    ProposedValues (ModuleStructure.composite body childStructure) :=
+  ProposedValues.composite
+    (fun output => (body.wiring.moduleOutput output).value inputs
+      fun name => (children name).outputs)
+    children
 
 def IsSolution {ports : ModulePorts} (module : ModuleStructure ports)
     (proposal : ProposedValues module)
@@ -188,5 +226,25 @@ def ModuleStructure.IsSolution {ports : ModulePorts} (module : ModuleStructure p
     (inputs : ports.inputs.Values) (currentState : module.State)
     (proposal : ProposedValues module) : Prop :=
   ProposedValues.IsSolution module proposal inputs currentState
+
+/-- Consistent immediate-child solutions assemble into a solution of the
+composite. This is the generic final step of structural-existence proofs. -/
+theorem ProposedValues.compositeFromChildren_isSolution (body : ModuleBody)
+    (childStructure : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name))
+    (inputs : body.context.ports.inputs.Values)
+    (currentState : (ModuleStructure.composite body childStructure).State)
+    (children : (name : body.context.instancePorts.Name) →
+      ProposedValues (childStructure name))
+    (childrenSatisfy : ∀ name,
+      (childStructure name).IsSolution
+        (ProposedValues.childInputs body childStructure inputs children name)
+        (currentState name) (children name)) :
+    (ModuleStructure.composite body childStructure).IsSolution inputs currentState
+      (ProposedValues.compositeFromChildren body childStructure inputs children) := by
+  constructor
+  · intro output
+    rfl
+  · exact childrenSatisfy
 
 end Silean

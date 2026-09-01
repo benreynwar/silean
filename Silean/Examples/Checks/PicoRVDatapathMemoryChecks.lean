@@ -1,10 +1,10 @@
-import Silean.Examples.Checks.PicoRVDatapathFixtures
+import Silean.Examples.Fixtures.PicoRVDatapath
 
 namespace Silean.Examples.Checks.PicoRVDatapathMemoryChecks
 
 open Silean
 open Silean.Examples.PicoRV.Datapath
-open Silean.Examples.Checks.PicoRVDatapathFixtures
+open Silean.Examples.Fixtures.PicoRVDatapath
 
 def startLoadInputs : Inputs :=
   { idleInputs with cpu_state := stateBits cpuStateLdmem, decoded_imm := wordOfNat 12 }

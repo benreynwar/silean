@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.EnabledResetCounter
 import Silean.Interfaces.FifoPorts
 import Silean.Modules.Fifo.FifoPointerControl
@@ -42,7 +42,7 @@ deriving Enumeration
     | .readCounter | .writeCounter =>
         EnabledResetCounter.ports (addressWidth + 1)
     | .control => Fifo.PointerControl.ports addressWidth
-    | .storage => RegisterBank.ports element addressWidth
+    | .storage => RegisterBank.ports element addressWidth 1
 
 @[reducible] private def context (element : SignalType)
     (addressWidth : Nat) : EndpointContext where
@@ -57,7 +57,7 @@ private def wiring (element : SignalType) (addressWidth : Nat) :
   { moduleOutput := fun
     -- Boundary outputs come from the control logic and selected storage entry.
     | .outputValid => c.instanceOutput .control .outputValid
-    | .outputData => c.instanceOutput .storage .readValue
+    | .outputData => c.instanceOutput .storage (.readValue 0)
     | .inputReady => c.instanceOutput .control .inputReady
     instanceInput := fun
     -- The control logic advances and resets the read pointer.
@@ -82,7 +82,7 @@ private def wiring (element : SignalType) (addressWidth : Nat) :
         c.instanceOutput .control .writeAddress
     | .storage, .writeValue => c.moduleInput .inputData
     -- The current read pointer selects the value presented at the output.
-    | .storage, .readAddress =>
+    | .storage, .readAddress 0 =>
         c.instanceOutput .control .readAddress }
 
 @[reducible] private def body (element : SignalType) (addressWidth : Nat) : ModuleBody :=
@@ -95,7 +95,7 @@ private def wiring (element : SignalType) (addressWidth : Nat) :
   | .readCounter | .writeCounter =>
       EnabledResetCounter.moduleStructure (addressWidth + 1) (zeroPointer addressWidth)
   | .control => Fifo.PointerControl.moduleStructure addressWidth
-  | .storage => RegisterBank.moduleStructure element addressWidth
+  | .storage => RegisterBank.moduleStructure element addressWidth 1
 
 /-- The concrete FIFO hierarchy consumed by naming and FIRRTL generation. -/
 def moduleStructure (element : SignalType) (addressWidth : Nat) :
@@ -310,40 +310,32 @@ Everything below this point is proof construction. It connects the structure
 shown at the beginning of the file to the exact cycle contract above; none of
 it is consumed by FIRRTL generation. -/
 
-@[reducible] private noncomputable def children (element : SignalType)
-    (addressWidth : Nat) : Contracts.Cycle.Certification.Children (body element addressWidth)
+@[reducible] private def childContracts (element : SignalType) (addressWidth : Nat) :
+    Contracts.Cycle.ChildCycleContracts (body element addressWidth)
   | .readCounter | .writeCounter =>
-      EnabledResetCounter.certified (addressWidth + 1) (zeroPointer addressWidth)
-  | .control => Fifo.PointerControl.certified addressWidth
-  | .storage => RegisterBank.certified element addressWidth
-
-private theorem moduleStructure_eq (element : SignalType) (addressWidth : Nat) :
-    moduleStructure element addressWidth =
-      Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
-        (children element addressWidth) := by
-  unfold moduleStructure Contracts.Cycle.Certification.moduleStructure
-  congr
-  funext child
-  cases child <;> rfl
-
-@[reducible] private noncomputable def childStructure (element : SignalType)
-    (addressWidth : Nat) := Contracts.Cycle.Certification.childStructure (children element addressWidth)
+      EnabledResetCounter.cycleContract (addressWidth + 1) (zeroPointer addressWidth)
+  | .control => Fifo.PointerControl.cycleContract addressWidth
+  | .storage => RegisterBank.cycleContract element addressWidth 1
 
 private abbrev readCounterRule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body element addressWidth) (childContracts element addressWidth) :=
   ⟨.readCounter, EnabledResetCounter.Rule.observe⟩
 
 private abbrev writeCounterRule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body element addressWidth) (childContracts element addressWidth) :=
   ⟨.writeCounter, EnabledResetCounter.Rule.observe⟩
 
 private abbrev controlRule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body element addressWidth) (childContracts element addressWidth) :=
   ⟨.control, Fifo.PointerControl.Rule.apply⟩
 
 private abbrev storageRule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.RuleOccurrence (children element addressWidth) :=
-  ⟨.storage, RegisterBank.Rule.read⟩
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body element addressWidth) (childContracts element addressWidth) :=
+  ⟨.storage, RegisterBank.Rule.read 0⟩
 
 @[simp] private theorem readCounterRule_reads (element : SignalType)
     (addressWidth : Nat) : (readCounterRule element addressWidth).reads = [] := rfl
@@ -354,7 +346,7 @@ private abbrev storageRule (element : SignalType) (addressWidth : Nat) :
     (controlRule element addressWidth).reads =
       [.readPointer, .writePointer, .inputValid, .outputReady] := rfl
 @[simp] private theorem storageRule_reads (element : SignalType)
-    (addressWidth : Nat) : (storageRule element addressWidth).reads = [.readAddress] := rfl
+    (addressWidth : Nat) : (storageRule element addressWidth).reads = [.readAddress 0] := rfl
 @[simp] private theorem readCounterRule_writes (element : SignalType)
     (addressWidth : Nat) : (readCounterRule element addressWidth).writes = [.value] := rfl
 @[simp] private theorem writeCounterRule_writes (element : SignalType)
@@ -365,16 +357,16 @@ private abbrev storageRule (element : SignalType) (addressWidth : Nat) :
       [.readAddress, .writeAddress, .inputReady, .outputValid,
         .readAdvance, .writeAdvance] := rfl
 @[simp] private theorem storageRule_writes (element : SignalType)
-    (addressWidth : Nat) : (storageRule element addressWidth).writes = [.readValue] := rfl
+    (addressWidth : Nat) : (storageRule element addressWidth).writes = [.readValue 0] := rfl
 
 private def outputSchedule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.OutputSchedule (body element addressWidth)
-      (children element addressWidth) (cycleContract element addressWidth) .observe :=
+    Contracts.Cycle.Certification.Layer.OutputSchedule (body element addressWidth)
+      (childContracts element addressWidth) (cycleContract element addressWidth) .observe :=
   .call (readCounterRule element addressWidth)
-    (by intro input member; rw [readCounterRule_reads] at member; cases member)
+    (by intro input member; change input ∈ [] at member; cases member)
     (by simp)
   (.call (writeCounterRule element addressWidth)
-    (by intro input member; rw [writeCounterRule_reads] at member; cases member)
+    (by intro input member; change input ∈ [] at member; cases member)
     (by simp)
   (.call (controlRule element addressWidth)
     (by
@@ -398,7 +390,7 @@ private def outputSchedule (element : SignalType) (addressWidth : Nat) :
   (.call (storageRule element addressWidth)
     (by
       intro input member
-      rw [storageRule_reads] at member
+      change input ∈ [.readAddress 0] at member
       simp only [List.mem_singleton] at member
       subst input
       exact ⟨Fifo.PointerControl.Rule.apply, by simp,
@@ -410,12 +402,12 @@ private def outputSchedule (element : SignalType) (addressWidth : Nat) :
       | outputValid | inputReady =>
           exact ⟨Fifo.PointerControl.Rule.apply, by simp,
             by simp [controlRule_writes]⟩
-      | outputData => exact ⟨RegisterBank.Rule.read, by simp,
+      | outputData => exact ⟨RegisterBank.Rule.read 0, by simp,
           by simp [storageRule_writes]⟩)))))
 
 private def stateSchedule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.StateSchedule (body element addressWidth)
-      (children element addressWidth) :=
+    Contracts.Cycle.Certification.Layer.StateSchedule (body element addressWidth)
+      (childContracts element addressWidth) :=
   .call (readCounterRule element addressWidth)
     (by intros; trivial) (by simp)
   (.call (writeCounterRule element addressWidth)
@@ -452,15 +444,17 @@ private def stateSchedule (element : SignalType) (addressWidth : Nat) :
             exact ⟨Fifo.PointerControl.Rule.apply, by simp,
               by simp [controlRule_writes]⟩
         | writeValue => trivial
-        | readAddress =>
-            change RegisterBank.Input.readAddress ∈
-              (RegisterBank.stateRule element addressWidth).readsInputs.labels at member
+        | readAddress port =>
+            have equal : port = 0 := by omega
+            subst port
+            change RegisterBank.Input.readAddress 0 ∈
+              (RegisterBank.stateRule element addressWidth 1).readsInputs.labels at member
             simp [RegisterBank.stateRule, SignalMap.select,
               SignalSelection.labels, SignalSelection.prepend] at member))))
 
 private def ruleSchedules (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.RuleSchedules (body element addressWidth)
-      (children element addressWidth) (cycleContract element addressWidth) where
+    Contracts.Cycle.Certification.Layer.RuleSchedules (body element addressWidth)
+      (childContracts element addressWidth) (cycleContract element addressWidth) where
   output | .observe => outputSchedule element addressWidth
   state := stateSchedule element addressWidth
 
@@ -471,180 +465,63 @@ private theorem coversChildren (element : SignalType) (addressWidth : Nat) :
   | readCounter =>
       change EnabledResetCounter.Rule at rule
       cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
+      left
       change readCounterRule element addressWidth ∈
         (stateSchedule element addressWidth).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | writeCounter =>
       change EnabledResetCounter.Rule at rule
       cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
+      left
       change writeCounterRule element addressWidth ∈
         (stateSchedule element addressWidth).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | control =>
       change Fifo.PointerControl.Rule at rule
       cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
+      left
       change controlRule element addressWidth ∈
         (stateSchedule element addressWidth).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | storage =>
-      change RegisterBank.Rule at rule
-      cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-      apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-        (ruleSchedules element addressWidth) .observe
-      change storageRule element addressWidth ∈
-        (outputSchedule element addressWidth).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      change RegisterBank.Rule 1 at rule
+      cases rule with
+      | read port =>
+        have equal : port = 0 := by omega
+        subst port
+        right
+        refine ⟨.observe, ?_⟩
+        change storageRule element addressWidth ∈
+          (outputSchedule element addressWidth).finalAvailability
+        simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
-private theorem hasAtMostOneSolution (element : SignalType) (addressWidth : Nat) :
-    (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
-      (children element addressWidth)).HasAtMostOneSolution :=
-  (ruleSchedules element addressWidth).hasAtMostOneSolution
-    (coversChildren element addressWidth)
+section LayerCertification
 
-private def controlInputs (element : SignalType) (addressWidth : Nat)
-    (inputs : (ports element).inputs.Values)
-    (readPointer writePointer : Pointer addressWidth) :
-    (Fifo.PointerControl.ports addressWidth).inputs.Values
-  | .readPointer => readPointer
-  | .writePointer => writePointer
-  | .inputValid => inputs .inputValid
-  | .outputReady => inputs .outputReady
+variable (element : SignalType) (addressWidth : Nat)
+  (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
+    (body element addressWidth) (childContracts element addressWidth))
 
-private def counterInputs (element : SignalType) (addressWidth : Nat)
-    (inputs : (ports element).inputs.Values) (enable : Bool) :
-    (EnabledResetCounter.ports (addressWidth + 1)).inputs.Values
-  | .enable => enable
-  | .reset => inputs .reset
-
-private noncomputable def storageInputs (element : SignalType) (addressWidth : Nat)
-    (inputs : (ports element).inputs.Values)
-    (control : ProposedValues (children element addressWidth .control).moduleStructure) :
-    (RegisterBank.ports element addressWidth).inputs.Values
-  | .writeEnable => control.outputs .writeAdvance
-  | .writeAddress => control.outputs .writeAddress
-  | .writeValue => inputs .inputData
-  | .readAddress => control.outputs .readAddress
-
-private theorem hasStructuralResult (element : SignalType) (addressWidth : Nat)
-    (inputs : (ports element).inputs.Values)
-    (currentState : (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
-      (children element addressWidth)).State) :
-    ∃ proposal, (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
-      (children element addressWidth)).IsSolution inputs currentState proposal := by
-  rcases (children element addressWidth .readCounter).hasCorrespondingState
-      (currentState .readCounter) with ⟨readState, readCorresponds⟩
-  rcases (children element addressWidth .writeCounter).hasCorrespondingState
-      (currentState .writeCounter) with ⟨writeState, writeCorresponds⟩
-  rcases (children element addressWidth .control).hasStructuralResult
-      (controlInputs element addressWidth inputs
-        (readState .stored) (writeState .stored))
-      (currentState .control) with ⟨control, controlSatisfies⟩
-  rcases (children element addressWidth .readCounter).hasStructuralResult
-      (counterInputs element addressWidth inputs (control.outputs .readAdvance))
-      (currentState .readCounter) with ⟨readCounter, readCounterSatisfies⟩
-  rcases (children element addressWidth .writeCounter).hasStructuralResult
-      (counterInputs element addressWidth inputs (control.outputs .writeAdvance))
-      (currentState .writeCounter) with ⟨writeCounter, writeCounterSatisfies⟩
-  rcases (children element addressWidth .storage).hasStructuralResult
-      (storageInputs element addressWidth inputs control)
-      (currentState .storage) with ⟨storage, storageSatisfies⟩
-  have readOutput : readCounter.outputs .value = readState .stored := by
-    rcases (children element addressWidth .readCounter).implements
-        _ readState _ readCounter readCorresponds readCounterSatisfies with
-      ⟨_, evaluates, _⟩
-    exact (EnabledResetCounter.outputRule_holds_iff (addressWidth + 1) _ _ _).mp
-      (evaluates.1 EnabledResetCounter.Rule.observe)
-  have writeOutput : writeCounter.outputs .value = writeState .stored := by
-    rcases (children element addressWidth .writeCounter).implements
-        _ writeState _ writeCounter writeCorresponds writeCounterSatisfies with
-      ⟨_, evaluates, _⟩
-    exact (EnabledResetCounter.outputRule_holds_iff (addressWidth + 1) _ _ _).mp
-      (evaluates.1 EnabledResetCounter.Rule.observe)
-  let proposals : (name : Instance) →
-      ProposedValues (childStructure element addressWidth name)
-    | .readCounter => readCounter
-    | .writeCounter => writeCounter
-    | .control => control
-    | .storage => storage
-  let outputs : (ports element).outputs.Values := fun
-    | .outputValid => control.outputs .outputValid
-    | .outputData => storage.outputs .readValue
-    | .inputReady => control.outputs .inputReady
-  refine ⟨ProposedValues.composite outputs proposals, ?_⟩
-  constructor
-  · intro output; cases output <;> rfl
-  · intro child
-    cases child with
-    | readCounter =>
-        change (children element addressWidth .readCounter).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body element addressWidth)
-            (childStructure element addressWidth) inputs proposals .readCounter)
-          (currentState .readCounter) readCounter
-        rw [show ProposedValues.childInputs (body element addressWidth)
-          (childStructure element addressWidth) inputs proposals .readCounter =
-            counterInputs element addressWidth inputs (control.outputs .readAdvance) by
-          funext port; cases port <;> rfl]
-        exact readCounterSatisfies
-    | writeCounter =>
-        change (children element addressWidth .writeCounter).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body element addressWidth)
-            (childStructure element addressWidth) inputs proposals .writeCounter)
-          (currentState .writeCounter) writeCounter
-        rw [show ProposedValues.childInputs (body element addressWidth)
-          (childStructure element addressWidth) inputs proposals .writeCounter =
-            counterInputs element addressWidth inputs (control.outputs .writeAdvance) by
-          funext port; cases port <;> rfl]
-        exact writeCounterSatisfies
-    | control =>
-        change (children element addressWidth .control).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body element addressWidth)
-            (childStructure element addressWidth) inputs proposals .control)
-          (currentState .control) control
-        rw [show ProposedValues.childInputs (body element addressWidth)
-          (childStructure element addressWidth) inputs proposals .control =
-            controlInputs element addressWidth inputs
-              (readState .stored) (writeState .stored) by
-          funext port
-          cases port with
-          | readPointer => exact readOutput
-          | writePointer => exact writeOutput
-          | inputValid | outputReady => rfl]
-        exact controlSatisfies
-    | storage =>
-        change (children element addressWidth .storage).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body element addressWidth)
-            (childStructure element addressWidth) inputs proposals .storage)
-          (currentState .storage) storage
-        rw [show ProposedValues.childInputs (body element addressWidth)
-          (childStructure element addressWidth) inputs proposals .storage =
-            storageInputs element addressWidth inputs control by
-          funext port; cases port <;> rfl]
-        exact storageSatisfies
-
-private def stateCorresponds (element : SignalType) (addressWidth : Nat)
+private def stateCorresponds
     (contractState : (stateMap element addressWidth).Values)
-    (structuralState : (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
-      (children element addressWidth)).State) : Prop :=
-  (children element addressWidth .readCounter).stateCorresponds
+    (structuralState : (Contracts.Cycle.Certification.Layer.moduleStructure
+      (body element addressWidth) layerChildren).State) : Prop :=
+  (layerChildren .readCounter).certification.stateCorresponds
       (fun | .stored => contractState .readPointer) (structuralState .readCounter) ∧
-  (children element addressWidth .writeCounter).stateCorresponds
+  (layerChildren .writeCounter).certification.stateCorresponds
       (fun | .stored => contractState .writePointer) (structuralState .writeCounter) ∧
-  (children element addressWidth .storage).stateCorresponds
+  (layerChildren .storage).certification.stateCorresponds
       (fun | .entries => contractState .entries) (structuralState .storage)
 
-private theorem hasCorrespondingState (element : SignalType) (addressWidth : Nat)
-    (structuralState : (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
-      (children element addressWidth)).State) :
-    ∃ contractState, stateCorresponds element addressWidth contractState structuralState := by
-  rcases (children element addressWidth .readCounter).hasCorrespondingState
+private theorem hasCorrespondingState
+    (structuralState : (Contracts.Cycle.Certification.Layer.moduleStructure
+      (body element addressWidth) layerChildren).State) :
+    ∃ contractState,
+      stateCorresponds element addressWidth layerChildren contractState structuralState := by
+  rcases (layerChildren .readCounter).certification.hasCorrespondingState
       (structuralState .readCounter) with ⟨readState, readCorresponds⟩
-  rcases (children element addressWidth .writeCounter).hasCorrespondingState
+  rcases (layerChildren .writeCounter).certification.hasCorrespondingState
       (structuralState .writeCounter) with ⟨writeState, writeCorresponds⟩
-  rcases (children element addressWidth .storage).hasCorrespondingState
+  rcases (layerChildren .storage).certification.hasCorrespondingState
       (structuralState .storage) with ⟨storageState, storageCorresponds⟩
   let contractState : (stateMap element addressWidth).Values := fun
     | .readPointer => readState .stored
@@ -652,29 +529,29 @@ private theorem hasCorrespondingState (element : SignalType) (addressWidth : Nat
     | .entries => storageState .entries
   exact ⟨contractState, readCorresponds, writeCorresponds, storageCorresponds⟩
 
-private theorem implements (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Implements (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
-      (children element addressWidth)) (cycleContract element addressWidth)
-      (stateCorresponds element addressWidth) := by
+private theorem implements :
+    Contracts.Cycle.Implements
+      (Contracts.Cycle.Certification.Layer.moduleStructure
+        (body element addressWidth) layerChildren)
+      (cycleContract element addressWidth)
+      (stateCorresponds element addressWidth layerChildren) := by
   intro inputs contractState structuralState proposal corresponds satisfies
   rcases corresponds with ⟨readCorresponds, writeCorresponds, storageCorresponds⟩
-  have readMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
-    (children element addressWidth) inputs structuralState proposal satisfies
+  have readMatches := Contracts.Cycle.Certification.Layer.childSolutionMatchesContract
+    layerChildren inputs structuralState proposal satisfies
       .readCounter (fun | .stored => contractState .readPointer) readCorresponds
-  have writeMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
-    (children element addressWidth) inputs structuralState proposal satisfies
+  have writeMatches := Contracts.Cycle.Certification.Layer.childSolutionMatchesContract
+    layerChildren inputs structuralState proposal satisfies
       .writeCounter (fun | .stored => contractState .writePointer) writeCorresponds
-  have storageMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
-    (children element addressWidth) inputs structuralState proposal satisfies
+  have storageMatches := Contracts.Cycle.Certification.Layer.childSolutionMatchesContract
+    layerChildren inputs structuralState proposal satisfies
       .storage (fun | .entries => contractState .entries) storageCorresponds
-  rcases (children element addressWidth .control).hasCorrespondingState
-      (structuralState .control) with ⟨controlState, controlCorresponds⟩
-  have controlState_eq : controlState = SignalMap.emptyValues := by
-    funext port; exact nomatch port
-  subst controlState
-  have controlMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
-    (children element addressWidth) inputs structuralState proposal satisfies
-      .control SignalMap.emptyValues controlCorresponds
+  have controlMatches :=
+    letI : Subsingleton (childContracts element addressWidth .control).state.Values := by
+      change Subsingleton emptySignalMap.Values; infer_instance
+    Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
+      layerChildren inputs structuralState proposal satisfies
+      .control SignalMap.emptyValues
   rcases readMatches with ⟨readEvaluates, readNextCorresponds⟩
   rcases writeMatches with ⟨writeEvaluates, writeNextCorresponds⟩
   rcases storageMatches with ⟨storageEvaluates, storageNextCorresponds⟩
@@ -691,16 +568,20 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
     (Fifo.PointerControl.outputRule_holds_iff addressWidth _ _ _).mp
       (controlEvaluates.1 Fifo.PointerControl.Rule.apply)
   have controlInputRead : ProposedValues.childInputs (body element addressWidth)
-      (childStructure element addressWidth) inputs proposal.2 .control .readPointer =
+      (fun child => (layerChildren child).moduleStructure)
+      inputs proposal.2 .control .readPointer =
       (proposal.2 .readCounter).outputs .value := rfl
   have controlInputWrite : ProposedValues.childInputs (body element addressWidth)
-      (childStructure element addressWidth) inputs proposal.2 .control .writePointer =
+      (fun child => (layerChildren child).moduleStructure)
+      inputs proposal.2 .control .writePointer =
       (proposal.2 .writeCounter).outputs .value := rfl
   have controlInputValid : ProposedValues.childInputs (body element addressWidth)
-      (childStructure element addressWidth) inputs proposal.2 .control .inputValid =
+      (fun child => (layerChildren child).moduleStructure)
+      inputs proposal.2 .control .inputValid =
       inputs .inputValid := rfl
   have controlOutputReady : ProposedValues.childInputs (body element addressWidth)
-      (childStructure element addressWidth) inputs proposal.2 .control .outputReady =
+      (fun child => (layerChildren child).moduleStructure)
+      inputs proposal.2 .control .outputReady =
       inputs .outputReady := rfl
   have controlReadAddress : (proposal.2 .control).outputs .readAddress =
       Fifo.PointerControl.pointerAddress (contractState .readPointer) := by
@@ -734,15 +615,16 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
     simp only [writeAdvance]
     rw [controlInputRead, controlInputWrite, controlInputValid,
       readCurrent, writeCurrent]
-  have storageRead : (proposal.2 .storage).outputs .readValue =
+  have storageRead : (proposal.2 .storage).outputs (.readValue 0) =
       outputData addressWidth (contractState .readPointer)
         (contractState .entries) := by
-    have held := (RegisterBank.readRule_holds_iff element addressWidth _ _ _).mp
-      (storageEvaluates.1 RegisterBank.Rule.read)
+    have held := (RegisterBank.readRule_holds_iff element addressWidth 1 0 _ _ _).mp
+      (storageEvaluates.1 (RegisterBank.Rule.read 0))
     rw [held]
     unfold outputData
     rw [show (ProposedValues.childInputs (body element addressWidth)
-      (childStructure element addressWidth) inputs proposal.2 .storage) .readAddress =
+      (fun child => (layerChildren child).moduleStructure)
+      inputs proposal.2 .storage) (.readAddress 0) =
         (proposal.2 .control).outputs .readAddress by rfl,
       controlReadAddress]
   let nextContractState : (stateMap element addressWidth).Values :=
@@ -757,13 +639,14 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
         (satisfies.1 .inputReady).trans controlReady⟩
     · rfl
   · refine ⟨?_, ?_, ?_⟩
-    · change (children element addressWidth .readCounter).stateCorresponds
+    · change (layerChildren .readCounter).certification.stateCorresponds
         (fun | .stored => nextContractState .readPointer)
         (proposal.2 .readCounter).nextState
       rw [show (fun | .stored => nextContractState .readPointer) =
-          (children element addressWidth .readCounter).cycleContract.stateRule.apply
+          (childContracts element addressWidth .readCounter).stateRule.apply
             (ProposedValues.childInputs (body element addressWidth)
-              (childStructure element addressWidth) inputs proposal.2 .readCounter)
+              (fun child => (layerChildren child).moduleStructure)
+              inputs proposal.2 .readCounter)
             (fun | .stored => contractState .readPointer) by
         funext statePort
         cases statePort
@@ -775,13 +658,14 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
         rw [controlReadAdvance]
         rfl]
       exact readNextCorresponds
-    · change (children element addressWidth .writeCounter).stateCorresponds
+    · change (layerChildren .writeCounter).certification.stateCorresponds
         (fun | .stored => nextContractState .writePointer)
         (proposal.2 .writeCounter).nextState
       rw [show (fun | .stored => nextContractState .writePointer) =
-          (children element addressWidth .writeCounter).cycleContract.stateRule.apply
+          (childContracts element addressWidth .writeCounter).stateRule.apply
             (ProposedValues.childInputs (body element addressWidth)
-              (childStructure element addressWidth) inputs proposal.2 .writeCounter)
+              (fun child => (layerChildren child).moduleStructure)
+              inputs proposal.2 .writeCounter)
             (fun | .stored => contractState .writePointer) by
         funext statePort
         cases statePort
@@ -793,13 +677,14 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
         rw [controlWriteAdvance]
         rfl]
       exact writeNextCorresponds
-    · change (children element addressWidth .storage).stateCorresponds
+    · change (layerChildren .storage).certification.stateCorresponds
         (fun | .entries => nextContractState .entries)
         (proposal.2 .storage).nextState
       rw [show (fun | .entries => nextContractState .entries) =
-          (children element addressWidth .storage).cycleContract.stateRule.apply
+          (childContracts element addressWidth .storage).stateRule.apply
             (ProposedValues.childInputs (body element addressWidth)
-              (childStructure element addressWidth) inputs proposal.2 .storage)
+              (fun child => (layerChildren child).moduleStructure)
+              inputs proposal.2 .storage)
             (fun | .entries => contractState .entries) by
         funext statePort
         cases statePort
@@ -814,24 +699,43 @@ private theorem implements (element : SignalType) (addressWidth : Nat) :
         rfl]
       exact storageNextCorresponds
 
-private noncomputable def proofCertification (element : SignalType)
-    (addressWidth : Nat) :
-    Contracts.Cycle.ModuleCycleCertification
-      (Contracts.Cycle.Certification.moduleStructure (body element addressWidth)
-        (children element addressWidth))
-      (cycleContract element addressWidth) where
-  stateCorresponds := stateCorresponds element addressWidth
-  hasCorrespondingState := hasCorrespondingState element addressWidth
-  hasStructuralResult := hasStructuralResult element addressWidth
-  structuralResultUnique := hasAtMostOneSolution element addressWidth
-  implements := implements element addressWidth
+end LayerCertification
+
+/-- The FIFO wiring implements its cycle contract for any counters, control,
+and storage hierarchy satisfying the declared child contracts. -/
+noncomputable opaque certifiedLayer (element : SignalType) (addressWidth : Nat) :
+    Contracts.Cycle.ModuleCycleCertifiedLayer
+      (body element addressWidth) (childContracts element addressWidth)
+      (cycleContract element addressWidth) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (ruleSchedules element addressWidth) (coversChildren element addressWidth)
+    (stateCorresponds element addressWidth)
+    (hasCorrespondingState element addressWidth) (implements element addressWidth)
+
+@[reducible] private noncomputable def certifiedChildren
+    (element : SignalType) (addressWidth : Nat) :
+    Contracts.Cycle.Certification.Layer.ChildStructures
+      (body element addressWidth) (childContracts element addressWidth)
+  | .readCounter | .writeCounter =>
+      (EnabledResetCounter.certified (addressWidth + 1)
+        (zeroPointer addressWidth)).certifiedStructure
+  | .control => (Fifo.PointerControl.certified addressWidth).certifiedStructure
+  | .storage => (RegisterBank.certified element addressWidth 1).certifiedStructure
 
 private noncomputable opaque certification (element : SignalType)
     (addressWidth : Nat) :
     Contracts.Cycle.ModuleCycleCertification (moduleStructure element addressWidth)
       (cycleContract element addressWidth) :=
-  (proofCertification element addressWidth).transportStructure
-    (moduleStructure_eq element addressWidth).symm
+  (certifiedLayer element addressWidth).certifyComposite
+    (structuralChildren element addressWidth)
+    (certifiedChildren element addressWidth) (by
+      intro child
+      cases child with
+      | readCounter | writeCounter =>
+          exact EnabledResetCounter.certified_moduleStructure
+            (addressWidth + 1) (zeroPointer addressWidth)
+      | control => exact Fifo.PointerControl.certified_moduleStructure addressWidth
+      | storage => exact RegisterBank.certified_moduleStructure element addressWidth 1)
 
 noncomputable def certified (element : SignalType) (addressWidth : Nat) :
     Contracts.Cycle.ModuleCycleCertified (ports element) :=
@@ -870,7 +774,7 @@ def namingWith (element : SignalType) (addressWidth : Nat)
           EnabledResetCounter.Naming.naming (addressWidth + 1)
             (Modules.Fifo.zeroPointer addressWidth)
       | .control => Fifo.PointerControl.Naming.naming addressWidth
-      | .storage => RegisterBank.Naming.namingWith element addressWidth elementNaming)
+      | .storage => RegisterBank.Naming.namingWith element addressWidth 1 elementNaming)
 
 def naming (element : SignalType) (addressWidth : Nat) :
     ModuleNaming (Modules.Fifo.moduleStructure element addressWidth) :=

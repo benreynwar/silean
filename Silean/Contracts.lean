@@ -1,8 +1,8 @@
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Contracts.Cycle.CycleImplementation
-import Silean.Contracts.Cycle.CycleComposition
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleBlackbox
 import Silean.Contracts.Reset.ResetContract
 import Silean.Contracts.Reset.ResetImplementation

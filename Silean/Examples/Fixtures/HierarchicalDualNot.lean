@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerSchedule
 import Silean.Examples.Fixtures.DualNot
 import Silean.Primitives.NotPrimitive
 
@@ -31,12 +31,17 @@ def wiring : Wiring context.ports context.instancePorts where
 
 @[reducible] def body : ModuleBody := ⟨context, wiring⟩
 
-@[reducible] def children : Contracts.Cycle.Certification.Children body
-  | .forwardNot | .backwardNot => Primitives.notCertified
+@[reducible] def childContracts : Contracts.Cycle.ChildCycleContracts body
+  | .forwardNot | .backwardNot => Primitives.notCycleContract
 
-@[reducible] def childStructure := Contracts.Cycle.Certification.childStructure children
+@[reducible] def children : Contracts.Cycle.Certification.Layer.ChildStructures
+    body childContracts
+  | .forwardNot | .backwardNot => Primitives.notCertified.certifiedStructure
+
+@[reducible] def childStructure :=
+  fun name => (children name).moduleStructure
 
 def moduleStructure : ModuleStructure ports :=
-  Contracts.Cycle.Certification.moduleStructure body children
+  Contracts.Cycle.Certification.Layer.moduleStructure body children
 
 end Silean.Examples.Fixtures.HierarchicalDualNot

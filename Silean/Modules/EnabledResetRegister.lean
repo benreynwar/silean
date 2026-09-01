@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.Mux
 import Silean.Modules.ResetRegister
 
@@ -67,14 +67,11 @@ def wiring (signalType : SignalType) :
 @[reducible] def body (signalType : SignalType) : ModuleBody :=
   ⟨context signalType, wiring signalType⟩
 
-@[reducible] private noncomputable def children (signalType : SignalType)
-    (resetValue : signalType.Denote) : Contracts.Cycle.Certification.Children (body signalType)
-  | .selection => Mux.certified signalType
-  | .storage => ResetRegister.certified signalType resetValue
-
-@[reducible] private noncomputable def childStructure (signalType : SignalType)
-    (resetValue : signalType.Denote) :=
-  Contracts.Cycle.Certification.childStructure (children signalType resetValue)
+@[reducible] private def childContracts (signalType : SignalType)
+    (resetValue : signalType.Denote) :
+    Contracts.Cycle.ChildCycleContracts (body signalType)
+  | .selection => Mux.cycleContract signalType
+  | .storage => ResetRegister.cycleContract signalType resetValue
 
 @[reducible] private def structuralChildren (signalType : SignalType)
     (resetValue : signalType.Denote) :
@@ -87,15 +84,15 @@ def moduleStructure (signalType : SignalType) (resetValue : signalType.Denote) :
     ModuleStructure (ports signalType) :=
   .composite (body signalType) (structuralChildren signalType resetValue)
 
-private theorem moduleStructure_eq (signalType : SignalType)
+@[reducible] private noncomputable def certifiedChildren (signalType : SignalType)
     (resetValue : signalType.Denote) :
-    moduleStructure signalType resetValue =
-      Contracts.Cycle.Certification.moduleStructure (body signalType)
-        (children signalType resetValue) := by
-  unfold moduleStructure Contracts.Cycle.Certification.moduleStructure
-  congr
-  funext child
-  cases child <;> rfl
+    (name : (instancePorts signalType).Name) →
+      Contracts.Cycle.ModuleCycleCertifiedStructure
+        (childContracts signalType resetValue name)
+  | .selection => Mux.certifiedStructure signalType
+  | .storage =>
+      ⟨(ResetRegister.certified signalType resetValue).moduleStructure,
+        (ResetRegister.certified signalType resetValue).certification⟩
 
 /-! ## Exact cycle behavior and certification -/
 
@@ -172,12 +169,14 @@ theorem next_stored_of_disabled (signalType : SignalType)
 
 private abbrev selectionRule (signalType : SignalType)
     (resetValue : signalType.Denote) :
-    Contracts.Cycle.Certification.RuleOccurrence (children signalType resetValue) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body signalType) (childContracts signalType resetValue) :=
   ⟨.selection, Mux.Rule.select⟩
 
 private abbrev storageRule (signalType : SignalType)
     (resetValue : signalType.Denote) :
-    Contracts.Cycle.Certification.RuleOccurrence (children signalType resetValue) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body signalType) (childContracts signalType resetValue) :=
   ⟨.storage, ResetRegister.Rule.observe⟩
 
 @[simp] private theorem selectionRule_reads (signalType : SignalType)
@@ -199,29 +198,31 @@ private abbrev storageRule (signalType : SignalType)
 
 private def outputSchedule (signalType : SignalType)
     (resetValue : signalType.Denote) :
-    Contracts.Cycle.Certification.OutputSchedule (body signalType) (children signalType resetValue)
+    Contracts.Cycle.Certification.Layer.OutputSchedule
+      (body signalType) (childContracts signalType resetValue)
       (cycleContract signalType resetValue) .observe :=
   .call (storageRule signalType resetValue)
     (by
       intro port member
-      rw [storageRule_reads] at member
-      cases member)
+      simp [storageRule_reads] at member)
     (by simp)
   (.done (by
     intro output member
     cases output
-    change Contracts.Cycle.Certification.outputAvailable ([storageRule signalType resetValue] :
-      Contracts.Cycle.Certification.Availability (children signalType resetValue)) .storage .value
+    change Contracts.Cycle.Certification.Layer.outputAvailable
+      ([storageRule signalType resetValue] :
+        Contracts.Cycle.Certification.Layer.Availability
+          (body signalType) (childContracts signalType resetValue)) .storage .value
     exact ⟨ResetRegister.Rule.observe, by simp, by simp⟩))
 
 private def stateSchedule (signalType : SignalType)
     (resetValue : signalType.Denote) :
-    Contracts.Cycle.Certification.StateSchedule (body signalType) (children signalType resetValue) :=
+    Contracts.Cycle.Certification.Layer.StateSchedule
+      (body signalType) (childContracts signalType resetValue) :=
   .call (storageRule signalType resetValue)
     (by
       intro port member
-      rw [storageRule_reads] at member
-      cases member)
+      simp [storageRule_reads] at member)
     (by simp)
   (.call (selectionRule signalType resetValue)
     (by
@@ -235,8 +236,7 @@ private def stateSchedule (signalType : SignalType)
     intro child input member
     cases child with
     | selection =>
-        rw [Mux.certified_cycleContract] at member
-        simp [Mux.cycleContract, Mux.stateRule, Contracts.Cycle.CycleStateRule.empty,
+        simp [childContracts, Mux.cycleContract, Mux.stateRule, Contracts.Cycle.CycleStateRule.empty,
           SignalSelection.labels] at member
     | storage =>
         cases input with
@@ -245,7 +245,8 @@ private def stateSchedule (signalType : SignalType)
 
 private def ruleSchedules (signalType : SignalType)
     (resetValue : signalType.Denote) :
-    Contracts.Cycle.Certification.RuleSchedules (body signalType) (children signalType resetValue)
+    Contracts.Cycle.Certification.Layer.RuleSchedules
+      (body signalType) (childContracts signalType resetValue)
       (cycleContract signalType resetValue) where
   output | .observe => outputSchedule signalType resetValue
   state := stateSchedule signalType resetValue
@@ -258,133 +259,62 @@ private theorem coversChildren (signalType : SignalType)
   | selection =>
       change Mux.Rule at rule
       cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_includes
+      left
       change selectionRule signalType resetValue ∈
         (stateSchedule signalType resetValue).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | storage =>
       change ResetRegister.Rule at rule
       cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-      apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-        (ruleSchedules signalType resetValue) .observe
+      right
+      refine ⟨.observe, ?_⟩
       change storageRule signalType resetValue ∈
         (outputSchedule signalType resetValue).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
-private theorem hasAtMostOneSolution (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType resetValue)).HasAtMostOneSolution :=
-  (ruleSchedules signalType resetValue).hasAtMostOneSolution
-    (coversChildren signalType resetValue)
+section LayerCertification
 
-private def selectionInputs (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values) (stored : signalType.Denote) :
-    (Mux.ports signalType).inputs.Values
-  | .select => inputs .enable
-  | .whenFalse => stored
-  | .whenTrue => inputs .value
+variable (signalType : SignalType) (resetValue : signalType.Denote)
+  (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
+    (body signalType) (childContracts signalType resetValue))
 
-private noncomputable def storageInputs (signalType : SignalType)
-    (resetValue : signalType.Denote)
-    (inputs : (ports signalType).inputs.Values)
-    (selection : ProposedValues
-      (children signalType resetValue .selection).moduleStructure) :
-    (ResetRegister.ports signalType).inputs.Values
-  | .value => selection.outputs .result
-  | .reset => inputs .reset
-
-private theorem hasStructuralResult (signalType : SignalType)
-    (resetValue : signalType.Denote)
-    (inputs : (ports signalType).inputs.Values)
-    (currentState : (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType resetValue)).State) :
-    ∃ proposal, (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType resetValue)).IsSolution inputs currentState proposal := by
-  rcases (children signalType resetValue .storage).hasCorrespondingState
-      (currentState .storage) with ⟨storageState, storageCorresponds⟩
-  rcases (children signalType resetValue .selection).hasStructuralResult
-      (selectionInputs signalType inputs (storageState .stored))
-      (currentState .selection) with ⟨selection, selectionSatisfies⟩
-  rcases (children signalType resetValue .storage).hasStructuralResult
-      (storageInputs signalType resetValue inputs selection)
-      (currentState .storage) with ⟨storage, storageSatisfies⟩
-  have storageOutput : storage.outputs .value = storageState .stored := by
-    rcases (children signalType resetValue .storage).implements
-        (storageInputs signalType resetValue inputs selection) storageState
-        (currentState .storage) storage storageCorresponds storageSatisfies with
-      ⟨nextState, evaluates, nextCorresponds⟩
-    exact (ResetRegister.outputRule_holds_iff signalType _ _ _).mp
-      (evaluates.1 ResetRegister.Rule.observe)
-  let childProposals : (name : Instance) →
-      ProposedValues (childStructure signalType resetValue name)
-    | .selection => selection
-    | .storage => storage
-  let outputs : (ports signalType).outputs.Values := fun
-    | .value => storage.outputs .value
-  refine ⟨ProposedValues.composite outputs childProposals, ?_⟩
-  constructor
-  · intro output; cases output; rfl
-  · intro child
-    cases child with
-    | selection =>
-        change (children signalType resetValue .selection).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body signalType)
-            (childStructure signalType resetValue) inputs childProposals .selection)
-          (currentState .selection) selection
-        rw [show ProposedValues.childInputs (body signalType)
-          (childStructure signalType resetValue) inputs childProposals .selection =
-            selectionInputs signalType inputs (storageState .stored) by
-          funext port
-          cases port with
-          | select | whenTrue => rfl
-          | whenFalse => exact storageOutput]
-        exact selectionSatisfies
-    | storage =>
-        change (children signalType resetValue .storage).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body signalType)
-            (childStructure signalType resetValue) inputs childProposals .storage)
-          (currentState .storage) storage
-        rw [show ProposedValues.childInputs (body signalType)
-          (childStructure signalType resetValue) inputs childProposals .storage =
-            storageInputs signalType resetValue inputs selection by
-          funext port; cases port <;> rfl]
-        exact storageSatisfies
-
-private def stateCorresponds (signalType : SignalType)
-    (resetValue : signalType.Denote)
+private def stateCorresponds
     (contractState : (cycleContract signalType resetValue).state.Values)
-    (structuralState : (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType resetValue)).State) : Prop :=
-  (children signalType resetValue .storage).stateCorresponds contractState
-    (structuralState .storage)
+    (structuralState :
+      (Contracts.Cycle.Certification.Layer.moduleStructure
+        (body signalType) layerChildren).State) : Prop :=
+  (layerChildren .storage).certification.stateCorresponds
+    contractState (structuralState .storage)
 
-private theorem implements (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    Contracts.Cycle.Implements (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType resetValue)) (cycleContract signalType resetValue)
-      (stateCorresponds signalType resetValue) := by
+private theorem implements :
+    Contracts.Cycle.Implements
+      (Contracts.Cycle.Certification.Layer.moduleStructure
+        (body signalType) layerChildren)
+      (cycleContract signalType resetValue)
+      (stateCorresponds signalType resetValue layerChildren) := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have storageMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
-    (children signalType resetValue) inputs structuralState proposal satisfies
+  have storageMatches := Contracts.Cycle.Certification.Layer.childSolutionMatchesContract
+    layerChildren
+      inputs structuralState proposal satisfies
       .storage contractState corresponds
-  rcases (children signalType resetValue .selection).hasCorrespondingState
-      (structuralState .selection) with ⟨selectionState, selectionCorresponds⟩
-  have selectionState_eq : selectionState = SignalMap.emptyValues := by
-    funext statePort
-    exact nomatch statePort
-  subst selectionState
-  have selectionMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
-    (children signalType resetValue) inputs structuralState proposal satisfies
-      .selection SignalMap.emptyValues selectionCorresponds
+  have selectionStateSubsingleton :
+      Subsingleton (childContracts signalType resetValue .selection).state.Values := by
+    change Subsingleton emptySignalMap.Values
+    infer_instance
+  have selectionMatches :=
+    letI := selectionStateSubsingleton
+    Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
+      layerChildren
+      inputs structuralState proposal satisfies
+      .selection SignalMap.emptyValues
   rcases proposal with ⟨outputs, childProposals⟩
   rcases storageMatches with ⟨storageEvaluates, storageNextCorresponds⟩
   rcases selectionMatches with ⟨selectionEvaluates, _⟩
   let storageNextState :=
-    (children signalType resetValue .storage).cycleContract.stateRule.apply
+    (childContracts signalType resetValue .storage).stateRule.apply
       (ProposedValues.childInputs (body signalType)
-        (childStructure signalType resetValue) inputs childProposals .storage)
+        (fun child => (layerChildren child).moduleStructure)
+        inputs childProposals .storage)
       contractState
   refine ⟨storageNextState, ?_, storageNextCorresponds⟩
   constructor
@@ -415,25 +345,35 @@ private theorem implements (signalType : SignalType)
       else bif inputs .enable then inputs .value else contractState .stored
     rw [selected, storageCurrent]
 
-private noncomputable def proofCertification (signalType : SignalType)
+end LayerCertification
+
+/-- The enabled-reset-register wiring implements its contract for any mux and
+reset-register implementations satisfying their public contracts. -/
+noncomputable opaque certifiedLayer (signalType : SignalType)
     (resetValue : signalType.Denote) :
-    Contracts.Cycle.ModuleCycleCertification
-      (Contracts.Cycle.Certification.moduleStructure (body signalType) (children signalType resetValue))
-      (cycleContract signalType resetValue) where
-  stateCorresponds := stateCorresponds signalType resetValue
-  hasCorrespondingState := fun structuralState =>
-    (children signalType resetValue .storage).hasCorrespondingState
-      (structuralState .storage)
-  hasStructuralResult := hasStructuralResult signalType resetValue
-  structuralResultUnique := hasAtMostOneSolution signalType resetValue
-  implements := implements signalType resetValue
+    Contracts.Cycle.ModuleCycleCertifiedLayer (body signalType)
+      (childContracts signalType resetValue)
+      (cycleContract signalType resetValue) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (ruleSchedules signalType resetValue) (coversChildren signalType resetValue)
+    (stateCorresponds signalType resetValue)
+    (fun children structuralState =>
+      (children .storage).certification.hasCorrespondingState
+        (structuralState .storage))
+    (implements signalType resetValue)
 
 private noncomputable opaque certification (signalType : SignalType)
     (resetValue : signalType.Denote) :
     Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType resetValue)
       (cycleContract signalType resetValue) :=
-  (proofCertification signalType resetValue).transportStructure
-    (moduleStructure_eq signalType resetValue).symm
+  (certifiedLayer signalType resetValue).certifyComposite
+    (structuralChildren signalType resetValue)
+    (certifiedChildren signalType resetValue)
+    (by
+      intro child
+      cases child with
+      | selection => exact Mux.certifiedStructure_moduleStructure signalType
+      | storage => exact ResetRegister.certified_moduleStructure signalType resetValue)
 
 noncomputable def certified (signalType : SignalType)
     (resetValue : signalType.Denote) : Contracts.Cycle.ModuleCycleCertified (ports signalType) :=

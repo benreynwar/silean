@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Naming.ModuleNaming
 import Silean.Naming.PrimitiveNaming
@@ -339,18 +339,6 @@ private def wiring (addressWidth : Nat) :
 @[reducible] private def body (addressWidth : Nat) : ModuleBody :=
   ⟨context addressWidth, wiring addressWidth⟩
 
-@[reducible] private noncomputable def children (addressWidth : Nat) :
-    Contracts.Cycle.Certification.Children (body addressWidth)
-  | .readSplit | .writeSplit => (pointerSplitter addressWidth).certified
-  | .readAddress | .writeAddress => (addressCombiner addressWidth).certified
-  | .addressEquality => Equality.certified (addressType addressWidth)
-  | .wrapEquality => Primitives.eqCertified
-  | .wrapDifference | .readyInverter | .validInverter => Primitives.notCertified
-  | .emptyGate | .fullGate | .readGate | .writeGate => Primitives.andCertified
-
-@[reducible] private noncomputable def childStructure (addressWidth : Nat) :=
-  Contracts.Cycle.Certification.childStructure (children addressWidth)
-
 @[reducible] private def structuralChildren (addressWidth : Nat) :
     (name : (instancePorts addressWidth).Name) →
       ModuleStructure ((instancePorts addressWidth).ports name)
@@ -364,17 +352,19 @@ private def wiring (addressWidth : Nat) :
 def moduleStructure (addressWidth : Nat) : ModuleStructure (ports addressWidth) :=
   .composite (body addressWidth) (structuralChildren addressWidth)
 
-private theorem moduleStructure_eq (addressWidth : Nat) :
-    moduleStructure addressWidth =
-      Contracts.Cycle.Certification.moduleStructure (body addressWidth) (children addressWidth) := by
-  unfold moduleStructure Contracts.Cycle.Certification.moduleStructure
-  congr
-  funext child
-  cases child <;> rfl
+@[reducible] private def childContracts (addressWidth : Nat) :
+    Contracts.Cycle.ChildCycleContracts (body addressWidth)
+  | .readSplit | .writeSplit => (pointerSplitter addressWidth).cycleContract
+  | .readAddress | .writeAddress => (addressCombiner addressWidth).cycleContract
+  | .addressEquality => Equality.cycleContract (addressType addressWidth)
+  | .wrapEquality => Primitives.eqCycleContract
+  | .wrapDifference | .readyInverter | .validInverter => Primitives.notCycleContract
+  | .emptyGate | .fullGate | .readGate | .writeGate => Primitives.andCycleContract
 
 private abbrev occurrence (addressWidth : Nat) (child : Instance)
-    (rule : (children addressWidth child).cycleContract.RuleName) :
-    Contracts.Cycle.Certification.RuleOccurrence (children addressWidth) := ⟨child, rule⟩
+    (rule : (childContracts addressWidth child).RuleName) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body addressWidth) (childContracts addressWidth) := ⟨child, rule⟩
 
 private abbrev readSplitRule (addressWidth : Nat) :=
   occurrence addressWidth .readSplit Composition.SignalComponentRule.apply
@@ -445,18 +435,19 @@ private theorem writeSplitWrites (addressWidth : Nat)
     (writeRule addressWidth).writes = [.output] := rfl
 
 private def outputSchedule (addressWidth : Nat) :
-    Contracts.Cycle.Certification.OutputSchedule (body addressWidth) (children addressWidth)
+    Contracts.Cycle.Certification.Layer.OutputSchedule
+      (body addressWidth) (childContracts addressWidth)
       (cycleContract addressWidth) .apply :=
   .call (readSplitRule addressWidth)
     (by intro input _; cases input; simp [cycleContract, outputRule,
       SignalSelection.prepend, SignalMap.select, SignalSelection.labels,
-      Contracts.Cycle.Certification.sourceAvailable, body, wiring, context,
+      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
       EndpointContext.moduleInput])
     (by simp)
   (.call (writeSplitRule addressWidth)
     (by intro input _; cases input; simp [cycleContract, outputRule,
       SignalSelection.prepend, SignalMap.select, SignalSelection.labels,
-      Contracts.Cycle.Certification.sourceAvailable, body, wiring, context,
+      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
       EndpointContext.moduleInput])
     (by simp)
   (.call (readAddressRule addressWidth)
@@ -515,7 +506,7 @@ private def outputSchedule (addressWidth : Nat) :
       cases input with
       | left => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩
       | right => simp [cycleContract, outputRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
+          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
           body, wiring, context, EndpointContext.moduleInput])
     (by simp)
   (.call (writeRule addressWidth)
@@ -523,7 +514,7 @@ private def outputSchedule (addressWidth : Nat) :
       intro input _
       cases input with
       | left => simp [cycleContract, outputRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
+          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
           body, wiring, context, EndpointContext.moduleInput]
       | right => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩)
     (by simp)
@@ -538,7 +529,8 @@ private def outputSchedule (addressWidth : Nat) :
     | writeAdvance => exact ⟨Primitives.AndRule.apply, by simp, by simp⟩))))))))))))))
 
 private def stateSchedule (addressWidth : Nat) :
-    Contracts.Cycle.Certification.StateSchedule (body addressWidth) (children addressWidth) :=
+    Contracts.Cycle.Certification.Layer.StateSchedule
+      (body addressWidth) (childContracts addressWidth) :=
   .done (by
     intro child input member
     cases child with
@@ -546,16 +538,15 @@ private def stateSchedule (addressWidth : Nat) :
         change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
         exact nomatch member
     | addressEquality =>
-        rw [Equality.certified_cycleContract] at member
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
+        simp [childContracts] at member
     | wrapEquality | wrapDifference | emptyGate | fullGate |
         readyInverter | validInverter | readGate | writeGate =>
         change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
         exact nomatch member)
 
 private def ruleSchedules (addressWidth : Nat) :
-    Contracts.Cycle.Certification.RuleSchedules (body addressWidth) (children addressWidth)
+    Contracts.Cycle.Certification.Layer.RuleSchedules
+      (body addressWidth) (childContracts addressWidth)
       (cycleContract addressWidth) where
   output | .apply => outputSchedule addressWidth
   state := stateSchedule addressWidth
@@ -563,287 +554,49 @@ private def ruleSchedules (addressWidth : Nat) :
 private theorem coversChildren (addressWidth : Nat) :
     (ruleSchedules addressWidth).CoversChildren := by
   intro child rule
-  apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-  apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-    (ruleSchedules addressWidth) .apply
+  right
+  refine ⟨.apply, ?_⟩
   cases child <;> cases rule <;>
-    simp [ruleSchedules, outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+    simp [ruleSchedules, outputSchedule,
+      Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
-private theorem hasAtMostOneSolution (addressWidth : Nat) :
-    (Contracts.Cycle.Certification.moduleStructure (body addressWidth)
-      (children addressWidth)).HasAtMostOneSolution :=
-  (ruleSchedules addressWidth).hasAtMostOneSolution
-    (coversChildren addressWidth)
+section LayerCertification
 
-private def splitInputs (addressWidth : Nat) (pointer : Pointer addressWidth) :
-    (pointerSplitter addressWidth).ports.inputs.Values
-  | .value => pointer
-
-private noncomputable def addressInputs (addressWidth : Nat)
-    (split : ProposedValues
-      (children addressWidth .readSplit).moduleStructure) :
-    (addressCombiner addressWidth).ports.inputs.Values :=
-  fun index => split.outputs index.castSucc
-
-private noncomputable def equalityInputs (addressWidth : Nat)
-    (readAddress : ProposedValues
-      (children addressWidth .readAddress).moduleStructure)
-    (writeAddress : ProposedValues
-      (children addressWidth .writeAddress).moduleStructure) :
-    (Equality.ports (addressType addressWidth)).inputs.Values
-  | .left => readAddress.outputs .value
-  | .right => writeAddress.outputs .value
-
-private noncomputable def wrapInputs (addressWidth : Nat)
-    (readSplit : ProposedValues
-      (children addressWidth .readSplit).moduleStructure)
-    (writeSplit : ProposedValues
-      (children addressWidth .writeSplit).moduleStructure) :
-    Primitives.eq.ports.inputs.Values
-  | .left => readSplit.outputs (Fin.last addressWidth)
-  | .right => writeSplit.outputs (Fin.last addressWidth)
-
-private def unaryInputs (value : Bool) : Primitives.not.ports.inputs.Values
-  | .input => value
-
-private def binaryInputs (left right : Bool) : Primitives.and.ports.inputs.Values
-  | .left => left
-  | .right => right
-
-private theorem hasStructuralResult (addressWidth : Nat)
-    (inputs : (ports addressWidth).inputs.Values)
-    (currentState : (Contracts.Cycle.Certification.moduleStructure (body addressWidth)
-      (children addressWidth)).State) :
-    ∃ proposal, (Contracts.Cycle.Certification.moduleStructure (body addressWidth)
-      (children addressWidth)).IsSolution inputs currentState proposal := by
-  rcases (children addressWidth .readSplit).hasStructuralResult
-      (splitInputs addressWidth (inputs .readPointer))
-      (currentState .readSplit) with ⟨readSplit, readSplitSatisfies⟩
-  rcases (children addressWidth .writeSplit).hasStructuralResult
-      (splitInputs addressWidth (inputs .writePointer))
-      (currentState .writeSplit) with ⟨writeSplit, writeSplitSatisfies⟩
-  rcases (children addressWidth .readAddress).hasStructuralResult
-      (addressInputs addressWidth readSplit) (currentState .readAddress) with
-    ⟨readAddress, readAddressSatisfies⟩
-  rcases (children addressWidth .writeAddress).hasStructuralResult
-      (addressInputs addressWidth writeSplit) (currentState .writeAddress) with
-    ⟨writeAddress, writeAddressSatisfies⟩
-  rcases (children addressWidth .addressEquality).hasStructuralResult
-      (equalityInputs addressWidth readAddress writeAddress)
-      (currentState .addressEquality) with
-    ⟨addressEquality, addressEqualitySatisfies⟩
-  rcases (children addressWidth .wrapEquality).hasStructuralResult
-      (wrapInputs addressWidth readSplit writeSplit)
-      (currentState .wrapEquality) with ⟨wrapEquality, wrapEqualitySatisfies⟩
-  rcases (children addressWidth .wrapDifference).hasStructuralResult
-      (unaryInputs (wrapEquality.outputs .output))
-      (currentState .wrapDifference) with
-    ⟨wrapDifference, wrapDifferenceSatisfies⟩
-  rcases (children addressWidth .emptyGate).hasStructuralResult
-      (binaryInputs (addressEquality.outputs .result)
-        (wrapEquality.outputs .output)) (currentState .emptyGate) with
-    ⟨emptyGate, emptyGateSatisfies⟩
-  rcases (children addressWidth .fullGate).hasStructuralResult
-      (binaryInputs (addressEquality.outputs .result)
-        (wrapDifference.outputs .output)) (currentState .fullGate) with
-    ⟨fullGate, fullGateSatisfies⟩
-  rcases (children addressWidth .readyInverter).hasStructuralResult
-      (unaryInputs (fullGate.outputs .output))
-      (currentState .readyInverter) with ⟨ready, readySatisfies⟩
-  rcases (children addressWidth .validInverter).hasStructuralResult
-      (unaryInputs (emptyGate.outputs .output))
-      (currentState .validInverter) with ⟨valid, validSatisfies⟩
-  rcases (children addressWidth .readGate).hasStructuralResult
-      (binaryInputs (valid.outputs .output) (inputs .outputReady))
-      (currentState .readGate) with ⟨readGate, readGateSatisfies⟩
-  rcases (children addressWidth .writeGate).hasStructuralResult
-      (binaryInputs (inputs .inputValid) (ready.outputs .output))
-      (currentState .writeGate) with ⟨writeGate, writeGateSatisfies⟩
-  let proposals : (child : Instance) →
-      ProposedValues (childStructure addressWidth child)
-    | .readSplit => readSplit
-    | .writeSplit => writeSplit
-    | .readAddress => readAddress
-    | .writeAddress => writeAddress
-    | .addressEquality => addressEquality
-    | .wrapEquality => wrapEquality
-    | .wrapDifference => wrapDifference
-    | .emptyGate => emptyGate
-    | .fullGate => fullGate
-    | .readyInverter => ready
-    | .validInverter => valid
-    | .readGate => readGate
-    | .writeGate => writeGate
-  let outputs : (ports addressWidth).outputs.Values := fun
-    | .readAddress => readAddress.outputs .value
-    | .writeAddress => writeAddress.outputs .value
-    | .inputReady => ready.outputs .output
-    | .outputValid => valid.outputs .output
-    | .readAdvance => readGate.outputs .output
-    | .writeAdvance => writeGate.outputs .output
-  refine ⟨ProposedValues.composite outputs proposals, ?_⟩
-  constructor
-  · intro output; cases output <;> rfl
-  · intro child
-    cases child with
-    | readSplit =>
-        change (children addressWidth .readSplit).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .readSplit)
-          (currentState .readSplit) readSplit
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .readSplit =
-            splitInputs addressWidth (inputs .readPointer) by
-          funext port; cases port; rfl]
-        exact readSplitSatisfies
-    | writeSplit =>
-        change (children addressWidth .writeSplit).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .writeSplit)
-          (currentState .writeSplit) writeSplit
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .writeSplit =
-            splitInputs addressWidth (inputs .writePointer) by
-          funext port; cases port; rfl]
-        exact writeSplitSatisfies
-    | readAddress =>
-        change (children addressWidth .readAddress).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .readAddress)
-          (currentState .readAddress) readAddress
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .readAddress =
-            addressInputs addressWidth readSplit by funext index; rfl]
-        exact readAddressSatisfies
-    | writeAddress =>
-        change (children addressWidth .writeAddress).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .writeAddress)
-          (currentState .writeAddress) writeAddress
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .writeAddress =
-            addressInputs addressWidth writeSplit by funext index; rfl]
-        exact writeAddressSatisfies
-    | addressEquality =>
-        change (children addressWidth .addressEquality).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .addressEquality)
-          (currentState .addressEquality) addressEquality
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .addressEquality =
-            equalityInputs addressWidth readAddress writeAddress by
-          funext port; cases port <;> rfl]
-        exact addressEqualitySatisfies
-    | wrapEquality =>
-        change (children addressWidth .wrapEquality).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .wrapEquality)
-          (currentState .wrapEquality) wrapEquality
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .wrapEquality =
-            wrapInputs addressWidth readSplit writeSplit by
-          funext port; cases port <;> rfl]
-        exact wrapEqualitySatisfies
-    | wrapDifference =>
-        change (children addressWidth .wrapDifference).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .wrapDifference)
-          (currentState .wrapDifference) wrapDifference
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .wrapDifference =
-            unaryInputs (wrapEquality.outputs .output) by
-          funext port; cases port; rfl]
-        exact wrapDifferenceSatisfies
-    | emptyGate =>
-        change (children addressWidth .emptyGate).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .emptyGate)
-          (currentState .emptyGate) emptyGate
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .emptyGate =
-            binaryInputs (addressEquality.outputs .result)
-              (wrapEquality.outputs .output) by funext port; cases port <;> rfl]
-        exact emptyGateSatisfies
-    | fullGate =>
-        change (children addressWidth .fullGate).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .fullGate)
-          (currentState .fullGate) fullGate
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .fullGate =
-            binaryInputs (addressEquality.outputs .result)
-              (wrapDifference.outputs .output) by funext port; cases port <;> rfl]
-        exact fullGateSatisfies
-    | readyInverter =>
-        change (children addressWidth .readyInverter).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .readyInverter)
-          (currentState .readyInverter) ready
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .readyInverter =
-            unaryInputs (fullGate.outputs .output) by funext port; cases port; rfl]
-        exact readySatisfies
-    | validInverter =>
-        change (children addressWidth .validInverter).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .validInverter)
-          (currentState .validInverter) valid
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .validInverter =
-            unaryInputs (emptyGate.outputs .output) by funext port; cases port; rfl]
-        exact validSatisfies
-    | readGate =>
-        change (children addressWidth .readGate).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .readGate)
-          (currentState .readGate) readGate
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .readGate =
-            binaryInputs (valid.outputs .output) (inputs .outputReady) by
-          funext port; cases port <;> rfl]
-        exact readGateSatisfies
-    | writeGate =>
-        change (children addressWidth .writeGate).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body addressWidth)
-            (childStructure addressWidth) inputs proposals .writeGate)
-          (currentState .writeGate) writeGate
-        rw [show ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .writeGate =
-            binaryInputs (inputs .inputValid) (ready.outputs .output) by
-          funext port; cases port <;> rfl]
-        exact writeGateSatisfies
+variable (addressWidth : Nat)
+  (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
+    (body addressWidth) (childContracts addressWidth))
 
 private def stateCorresponds (_ : (cycleContract addressWidth).state.Values)
-    (_ : (Contracts.Cycle.Certification.moduleStructure (body addressWidth)
-      (children addressWidth)).State) : Prop := True
+    (_ : (Contracts.Cycle.Certification.Layer.moduleStructure
+      (body addressWidth) layerChildren).State) : Prop := True
 
-private theorem implements (addressWidth : Nat) :
-    Contracts.Cycle.Implements (Contracts.Cycle.Certification.moduleStructure (body addressWidth)
-      (children addressWidth)) (cycleContract addressWidth)
-      (stateCorresponds (addressWidth := addressWidth)) := by
+private theorem implements :
+    Contracts.Cycle.Implements
+      (Contracts.Cycle.Certification.Layer.moduleStructure
+        (body addressWidth) layerChildren)
+      (cycleContract addressWidth)
+      (stateCorresponds addressWidth layerChildren) := by
   intro inputs contractState structuralState proposal corresponds satisfies
+  have childMatches :=
+    Contracts.Cycle.Certification.Layer.childSolutionsMatchContracts_of_subsingletonState
+      layerChildren inputs structuralState proposal satisfies
+      (fun child => by cases child <;> exact SignalMap.emptyValues)
+      (by intro child; cases child <;>
+        change Subsingleton emptySignalMap.Values <;> infer_instance)
   rcases proposal with ⟨outputs, proposals⟩
-  rcases satisfies with ⟨boundary, childSatisfies⟩
-  have readSplitOutputs : (proposals .readSplit).outputs =
-      (pointerSplitter addressWidth).outputValues
-        (ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .readSplit) :=
-    childSatisfies .readSplit
-  have writeSplitOutputs : (proposals .writeSplit).outputs =
-      (pointerSplitter addressWidth).outputValues
-        (ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .writeSplit) :=
-    childSatisfies .writeSplit
-  have readAddressOutputs : (proposals .readAddress).outputs =
-      (addressCombiner addressWidth).outputValues
-        (ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .readAddress) :=
-    childSatisfies .readAddress
-  have writeAddressOutputs : (proposals .writeAddress).outputs =
-      (addressCombiner addressWidth).outputValues
-        (ProposedValues.childInputs (body addressWidth)
-          (childStructure addressWidth) inputs proposals .writeAddress) :=
-    childSatisfies .writeAddress
+  have boundary := satisfies.1
+  have readSplitOutputs := (Composition.SignalSplitter.outputRule_holds_iff
+    (pointerSplitter addressWidth) _ _ _).mp
+      ((childMatches .readSplit).1.1 Composition.SignalComponentRule.apply)
+  have writeSplitOutputs := (Composition.SignalSplitter.outputRule_holds_iff
+    (pointerSplitter addressWidth) _ _ _).mp
+      ((childMatches .writeSplit).1.1 Composition.SignalComponentRule.apply)
+  have readAddressOutputs := (Composition.SignalCombiner.outputRule_holds_iff
+    (addressCombiner addressWidth) _ _ _).mp
+      ((childMatches .readAddress).1.1 Composition.SignalComponentRule.apply)
+  have writeAddressOutputs := (Composition.SignalCombiner.outputRule_holds_iff
+    (addressCombiner addressWidth) _ _ _).mp
+      ((childMatches .writeAddress).1.1 Composition.SignalComponentRule.apply)
   have readAddressValue : (proposals .readAddress).outputs .value =
       pointerAddress (inputs .readPointer) := by
     rw [congrFun readAddressOutputs .value]
@@ -860,21 +613,9 @@ private theorem implements (addressWidth : Nat) :
       inputs .writePointer index.castSucc
     rw [congrFun writeSplitOutputs index.castSucc]
     rfl
-  rcases (children addressWidth .addressEquality).hasCorrespondingState
-      (structuralState .addressEquality) with
-    ⟨addressEqualityState, addressEqualityCorresponds⟩
-  have addressEqualityState_eq : addressEqualityState = SignalMap.emptyValues := by
-    funext statePort
-    exact nomatch statePort
-  subst addressEqualityState
-  have addressEqualityMatches := Contracts.Cycle.Certification.childSolutionMatchesContract
-    (children addressWidth) inputs structuralState (outputs, proposals)
-      ⟨boundary, childSatisfies⟩ .addressEquality SignalMap.emptyValues
-      addressEqualityCorresponds
-  rcases addressEqualityMatches with ⟨addressEqualityEvaluates, _⟩
   have addressEqualityOutput :=
     (Equality.outputRule_holds_iff (addressType addressWidth) _ _ _).mp
-      (addressEqualityEvaluates.1 Equality.Rule.apply)
+      ((childMatches .addressEquality).1.1 Equality.Rule.apply)
   change (proposals .addressEquality).outputs .result =
     (addressType addressWidth).equal
       ((proposals .readAddress).outputs .value)
@@ -883,9 +624,8 @@ private theorem implements (addressWidth : Nat) :
       addressesEqual (inputs .readPointer) (inputs .writePointer) := by
     rw [addressEqualityOutput, readAddressValue, writeAddressValue]
     rfl
-  have wrapEqualitySolution := childSatisfies .wrapEquality
-  change Primitives.eq.IsSolution _ _ _ _ at wrapEqualitySolution
-  have wrapEqualityOutput := congrFun wrapEqualitySolution.1 .output
+  have wrapEqualityOutput := (Primitives.eqOutputRule_holds_iff _ _ _).mp
+    ((childMatches .wrapEquality).1.1 Primitives.EqRule.apply)
   change (proposals .wrapEquality).outputs .output =
     SignalType.bit.equal
       ((proposals .readSplit).outputs (Fin.last addressWidth))
@@ -896,18 +636,16 @@ private theorem implements (addressWidth : Nat) :
       congrFun readSplitOutputs (Fin.last addressWidth),
       congrFun writeSplitOutputs (Fin.last addressWidth)]
     rfl
-  have wrapDifferenceSolution := childSatisfies .wrapDifference
-  change Primitives.not.IsSolution _ _ _ _ at wrapDifferenceSolution
-  have wrapDifferenceOutput := congrFun wrapDifferenceSolution.1 .output
+  have wrapDifferenceOutput := (Primitives.notOutputRule_holds_iff _ _ _).mp
+    ((childMatches .wrapDifference).1.1 Primitives.NotRule.apply)
   change (proposals .wrapDifference).outputs .output =
     !(proposals .wrapEquality).outputs .output at wrapDifferenceOutput
   have wrapDifferenceValue : (proposals .wrapDifference).outputs .output =
       wrapsDiffer (inputs .readPointer) (inputs .writePointer) := by
     rw [wrapDifferenceOutput, wrapEqualityValue]
     rfl
-  have emptySolution := childSatisfies .emptyGate
-  change Primitives.and.IsSolution _ _ _ _ at emptySolution
-  have emptyOutput := congrFun emptySolution.1 .output
+  have emptyOutput := (Primitives.andOutputRule_holds_iff _ _ _).mp
+    ((childMatches .emptyGate).1.1 Primitives.AndRule.apply)
   change (proposals .emptyGate).outputs .output =
     ((proposals .addressEquality).outputs .result &&
       (proposals .wrapEquality).outputs .output) at emptyOutput
@@ -915,9 +653,8 @@ private theorem implements (addressWidth : Nat) :
       empty (inputs .readPointer) (inputs .writePointer) := by
     rw [emptyOutput, addressEqualityValue, wrapEqualityValue]
     rfl
-  have fullSolution := childSatisfies .fullGate
-  change Primitives.and.IsSolution _ _ _ _ at fullSolution
-  have fullOutput := congrFun fullSolution.1 .output
+  have fullOutput := (Primitives.andOutputRule_holds_iff _ _ _).mp
+    ((childMatches .fullGate).1.1 Primitives.AndRule.apply)
   change (proposals .fullGate).outputs .output =
     ((proposals .addressEquality).outputs .result &&
       (proposals .wrapDifference).outputs .output) at fullOutput
@@ -925,27 +662,24 @@ private theorem implements (addressWidth : Nat) :
       full (inputs .readPointer) (inputs .writePointer) := by
     rw [fullOutput, addressEqualityValue, wrapDifferenceValue]
     rfl
-  have readySolution := childSatisfies .readyInverter
-  change Primitives.not.IsSolution _ _ _ _ at readySolution
-  have readyOutput := congrFun readySolution.1 .output
+  have readyOutput := (Primitives.notOutputRule_holds_iff _ _ _).mp
+    ((childMatches .readyInverter).1.1 Primitives.NotRule.apply)
   change (proposals .readyInverter).outputs .output =
     !(proposals .fullGate).outputs .output at readyOutput
   have readyValue : (proposals .readyInverter).outputs .output =
       inputReady (inputs .readPointer) (inputs .writePointer) := by
     rw [readyOutput, fullValue]
     rfl
-  have validSolution := childSatisfies .validInverter
-  change Primitives.not.IsSolution _ _ _ _ at validSolution
-  have validOutput := congrFun validSolution.1 .output
+  have validOutput := (Primitives.notOutputRule_holds_iff _ _ _).mp
+    ((childMatches .validInverter).1.1 Primitives.NotRule.apply)
   change (proposals .validInverter).outputs .output =
     !(proposals .emptyGate).outputs .output at validOutput
   have validValue : (proposals .validInverter).outputs .output =
       outputValid (inputs .readPointer) (inputs .writePointer) := by
     rw [validOutput, emptyValue]
     rfl
-  have readSolution := childSatisfies .readGate
-  change Primitives.and.IsSolution _ _ _ _ at readSolution
-  have readOutput := congrFun readSolution.1 .output
+  have readOutput := (Primitives.andOutputRule_holds_iff _ _ _).mp
+    ((childMatches .readGate).1.1 Primitives.AndRule.apply)
   change (proposals .readGate).outputs .output =
     ((proposals .validInverter).outputs .output && inputs .outputReady) at readOutput
   have readValue : (proposals .readGate).outputs .output =
@@ -953,9 +687,8 @@ private theorem implements (addressWidth : Nat) :
         (inputs .outputReady) := by
     rw [readOutput, validValue]
     rfl
-  have writeSolution := childSatisfies .writeGate
-  change Primitives.and.IsSolution _ _ _ _ at writeSolution
-  have writeOutput := congrFun writeSolution.1 .output
+  have writeOutput := (Primitives.andOutputRule_holds_iff _ _ _).mp
+    ((childMatches .writeGate).1.1 Primitives.AndRule.apply)
   change (proposals .writeGate).outputs .output =
     (inputs .inputValid && (proposals .readyInverter).outputs .output) at writeOutput
   have writeValue : (proposals .writeGate).outputs .output =
@@ -977,21 +710,42 @@ private theorem implements (addressWidth : Nat) :
       (boundary .writeAdvance).trans writeValue⟩
   · rfl
 
-private noncomputable def proofCertification (addressWidth : Nat) :
-    Contracts.Cycle.ModuleCycleCertification
-      (Contracts.Cycle.Certification.moduleStructure (body addressWidth) (children addressWidth))
-      (cycleContract addressWidth) where
-  stateCorresponds := stateCorresponds (addressWidth := addressWidth)
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := hasStructuralResult addressWidth
-  structuralResultUnique := hasAtMostOneSolution addressWidth
-  implements := implements addressWidth
+end LayerCertification
+
+/-- The pointer-control wiring implements its combinational contract for any
+children satisfying the declared adapter, equality, and bit-logic contracts. -/
+noncomputable opaque certifiedLayer (addressWidth : Nat) :
+    Contracts.Cycle.ModuleCycleCertifiedLayer
+      (body addressWidth) (childContracts addressWidth)
+      (cycleContract addressWidth) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (ruleSchedules addressWidth) (coversChildren addressWidth)
+    (stateCorresponds addressWidth) (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩)
+    (implements addressWidth)
+
+@[reducible] private noncomputable def certifiedChildren (addressWidth : Nat) :
+    Contracts.Cycle.Certification.Layer.ChildStructures
+      (body addressWidth) (childContracts addressWidth)
+  | .readSplit | .writeSplit => (pointerSplitter addressWidth).certified.certifiedStructure
+  | .readAddress | .writeAddress => (addressCombiner addressWidth).certified.certifiedStructure
+  | .addressEquality => (Equality.certified (addressType addressWidth)).certifiedStructure
+  | .wrapEquality => Primitives.eqCertified.certifiedStructure
+  | .wrapDifference | .readyInverter | .validInverter =>
+      Primitives.notCertified.certifiedStructure
+  | .emptyGate | .fullGate | .readGate | .writeGate =>
+      Primitives.andCertified.certifiedStructure
 
 private noncomputable opaque certification (addressWidth : Nat) :
     Contracts.Cycle.ModuleCycleCertification (moduleStructure addressWidth)
       (cycleContract addressWidth) :=
-  (proofCertification addressWidth).transportStructure
-    (moduleStructure_eq addressWidth).symm
+  (certifiedLayer addressWidth).certifyComposite
+    (structuralChildren addressWidth) (certifiedChildren addressWidth) (by
+      intro child
+      cases child with
+      | addressEquality => exact Equality.certified_moduleStructure (addressType addressWidth)
+      | readSplit | writeSplit | readAddress | writeAddress |
+          wrapEquality | wrapDifference | emptyGate | fullGate |
+          readyInverter | validInverter | readGate | writeGate => rfl)
 
 noncomputable def certified (addressWidth : Nat) :
     Contracts.Cycle.ModuleCycleCertified (ports addressWidth) :=

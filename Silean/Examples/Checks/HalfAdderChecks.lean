@@ -8,6 +8,25 @@ open Silean Silean.FIRRTL
 noncomputable example : Contracts.Cycle.ModuleCycleCertified Modules.HalfAdder.ports :=
   Modules.HalfAdder.certified
 
+/-- The public proof is a reusable layer certificate, not merely a proof about
+the concrete XOR/AND hierarchy selected by `moduleStructure`. -/
+noncomputable example := Modules.HalfAdder.certifiedLayer.certify
+
+example : ModuleStructure.NoBlackboxesCertified Modules.HalfAdder.moduleStructure :=
+  Modules.HalfAdder.noBlackboxesCertified
+
+/-- The exported proof is intentionally opaque: clients obtain state
+correspondence from its public coverage theorem, not by reducing the private
+relation to `True`. -/
+example (structuralState : Modules.HalfAdder.moduleStructure.State) :
+    Modules.HalfAdder.certified.certification.stateCorresponds
+      SignalMap.emptyValues structuralState := by
+  fail_if_success exact trivial
+  rcases Modules.HalfAdder.certified.certification.hasCorrespondingState
+      structuralState with ⟨contractState, corresponds⟩
+  rw [Subsingleton.elim SignalMap.emptyValues contractState]
+  exact corresponds
+
 def inputs (left right : Bool) : Modules.HalfAdder.ports.inputs.Values
   | .left => left
   | .right => right

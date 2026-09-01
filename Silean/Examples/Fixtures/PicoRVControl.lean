@@ -1,10 +1,11 @@
 import Silean.Examples.PicoRV.Control
 
-namespace Silean.Examples.Checks.PicoRVControlFixtures
+namespace Silean.Examples.Fixtures.PicoRVControl
 
 open Silean
 open Silean.Examples.PicoRV.Control
 
+/-- Neutral control inputs used as a readable base for focused transition checks. -/
 def idleInputs : Inputs where
   resetn := true
   instr_jal := false
@@ -46,4 +47,4 @@ def commandState (cpuPhase : Nat) (prefetch rinst rdata wdata : Bool) :
   let state := stateMap.set state .mem_do_rdata rdata
   stateMap.set state .mem_do_wdata wdata
 
-end Silean.Examples.Checks.PicoRVControlFixtures
+end Silean.Examples.Fixtures.PicoRVControl

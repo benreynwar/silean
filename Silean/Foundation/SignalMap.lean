@@ -63,4 +63,9 @@ def emptySignalMap : SignalMap :=
 def SignalMap.emptyValues : emptySignalMap.Values :=
   fun signal => nomatch signal
 
+instance : Subsingleton emptySignalMap.Values where
+  allEq left right := by
+    funext signal
+    exact nomatch signal
+
 end Silean

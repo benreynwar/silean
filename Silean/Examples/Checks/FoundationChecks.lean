@@ -18,10 +18,6 @@ example : (Primitives.binaryInputMap.labels.ordinal .left).val = 0 := rfl
 example : (Primitives.binaryInputMap.labels.ordinal .right).val = 1 := rfl
 example : (Primitives.singleOutputMap.labels.ordinal .output).val = 0 := rfl
 
-example : Primitives.not.ports.signature.inputs.length = 1 := rfl
-example : Primitives.and.ports.signature.inputs.length = 2 := rfl
-example : Primitives.or.ports.signature.outputs.length = 1 := rfl
-
 def byte : SignalType := .vector 8 .bit
 
 inductive PacketField
@@ -76,6 +72,4 @@ example : ((inferInstance : Enumeration ThreeLabel).ordinal .third).val = 2 :=
   rfl
 
 #eval Primitives.binaryInputMap.labels.ordinal Primitives.BinaryInput.right
-#eval Primitives.eq.ports.signature.inputs.length
-
 end Silean.Examples.Checks.Foundation

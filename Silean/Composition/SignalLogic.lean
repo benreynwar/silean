@@ -1,4 +1,5 @@
 import Silean.Composition.SignalAdapterImplementation
+import Silean.Primitives.Xor
 
 namespace Silean
 
@@ -107,6 +108,36 @@ mutual
         (head.bitwiseOr leftHead rightHead, tail.bitwiseOr leftTail rightTail)
 end
 
+mutual
+  def SignalType.bitwiseAnd : (signalType : SignalType) →
+      signalType.Denote → signalType.Denote → signalType.Denote
+    | .bit, left, right => left && right
+    | .vector _ element, left, right =>
+        fun index => element.bitwiseAnd (left index) (right index)
+    | .tuple fields, left, right => fields.bitwiseAnd left right
+
+  def SignalTypes.bitwiseAnd : (fields : SignalTypes) →
+      fields.Denote → fields.Denote → fields.Denote
+    | .nil, (), () => ()
+    | .cons head tail, (leftHead, leftTail), (rightHead, rightTail) =>
+        (head.bitwiseAnd leftHead rightHead, tail.bitwiseAnd leftTail rightTail)
+end
+
+mutual
+  def SignalType.bitwiseXor : (signalType : SignalType) →
+      signalType.Denote → signalType.Denote → signalType.Denote
+    | .bit, left, right => Primitives.xorValue left right
+    | .vector _ element, left, right =>
+        fun index => element.bitwiseXor (left index) (right index)
+    | .tuple fields, left, right => fields.bitwiseXor left right
+
+  def SignalTypes.bitwiseXor : (fields : SignalTypes) →
+      fields.Denote → fields.Denote → fields.Denote
+    | .nil, (), () => ()
+    | .cons head tail, (leftHead, leftTail), (rightHead, rightTail) =>
+        (head.bitwiseXor leftHead rightHead, tail.bitwiseXor leftTail rightTail)
+end
+
 namespace SignalTypes
 
 theorem get_mask : ∀ (fields : SignalTypes) (value : fields.Denote)
@@ -125,6 +156,24 @@ theorem get_bitwiseOr : ∀ (fields : SignalTypes)
   | .cons _ _, (_, _), (_, _), .head => rfl
   | .cons _ tail, (_, leftTail), (_, rightTail), .tail position =>
       get_bitwiseOr tail leftTail rightTail position
+
+theorem get_bitwiseAnd : ∀ (fields : SignalTypes)
+    (left right : fields.Denote) (position : Position fields),
+    get fields (fields.bitwiseAnd left right) position =
+      (typeAt fields position).bitwiseAnd
+        (get fields left position) (get fields right position)
+  | .cons _ _, (_, _), (_, _), .head => rfl
+  | .cons _ tail, (_, leftTail), (_, rightTail), .tail position =>
+      get_bitwiseAnd tail leftTail rightTail position
+
+theorem get_bitwiseXor : ∀ (fields : SignalTypes)
+    (left right : fields.Denote) (position : Position fields),
+    get fields (fields.bitwiseXor left right) position =
+      (typeAt fields position).bitwiseXor
+        (get fields left position) (get fields right position)
+  | .cons _ _, (_, _), (_, _), .head => rfl
+  | .cons _ tail, (_, leftTail), (_, rightTail), .tail position =>
+      get_bitwiseXor tail leftTail rightTail position
 
 end SignalTypes
 
@@ -156,6 +205,34 @@ theorem split_bitwiseOr (splitter : SignalSplitter)
   | tuple fields =>
       funext component
       exact fields.get_bitwiseOr left right component
+
+theorem split_bitwiseAnd (splitter : SignalSplitter)
+    (left right : splitter.aggregateType.Denote) :
+    splitter.outputValues
+        (splitter.inputValues (splitter.aggregateType.bitwiseAnd left right)) =
+      fun component =>
+        (splitter.ports.outputs.signalType component).bitwiseAnd
+          (splitter.outputValues (splitter.inputValues left) component)
+          (splitter.outputValues (splitter.inputValues right) component) := by
+  cases splitter with
+  | vector => rfl
+  | tuple fields =>
+      funext component
+      exact fields.get_bitwiseAnd left right component
+
+theorem split_bitwiseXor (splitter : SignalSplitter)
+    (left right : splitter.aggregateType.Denote) :
+    splitter.outputValues
+        (splitter.inputValues (splitter.aggregateType.bitwiseXor left right)) =
+      fun component =>
+        (splitter.ports.outputs.signalType component).bitwiseXor
+          (splitter.outputValues (splitter.inputValues left) component)
+          (splitter.outputValues (splitter.inputValues right) component) := by
+  cases splitter with
+  | vector => rfl
+  | tuple fields =>
+      funext component
+      exact fields.get_bitwiseXor left right component
 
 end SignalSplitter
 

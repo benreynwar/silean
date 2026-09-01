@@ -1,12 +1,15 @@
-import Silean.Examples.Checks.PicoRVDatapathFixtures
+import Silean.Examples.Fixtures.PicoRVDatapath
 
 namespace Silean.Examples.Checks.PicoRVDatapathFlowChecks
 
 open Silean
 open Silean.Examples.PicoRV.Datapath
-open Silean.Examples.Checks.PicoRVDatapathFixtures
+open Silean.Examples.Fixtures.PicoRVDatapath
 
-def resetState := nextState { idleInputs with resetn := false }
+def resetState := nextState
+  { idleInputs with
+    resetn := false
+    is_lui_auipc_jal_jalr_addi_add_sub := true }
   (stateWith 0x1000 0x2000 3 4 5 6 7)
 
 example : BitVector.toNat 32 (resetState .reg_pc) = 0 := by decide

@@ -24,7 +24,9 @@ theorem matches_project (selection : SignalSelection signals types)
   | nil => trivial
   | cons label tail induction => exact ⟨rfl, induction⟩
 
-private def write (selection : SignalSelection signals types)
+/-- Replace the values selected by `selection`, preserving every unselected
+signal. -/
+def write (selection : SignalSelection signals types)
     (original : signals.Values) (selected : types.Denote) :
     signals.Values :=
   match selection with
@@ -46,7 +48,7 @@ private theorem write_eq_of_not_mem
       exact induction selected.2 fun member =>
         notMember (List.Mem.tail head member)
 
-private theorem Matches.of_eq_on
+theorem Matches.of_eq_on
     (selection : SignalSelection signals types)
     {left right : signals.Values} {selected : types.Denote}
     (holds : selection.Matches left selected)
@@ -104,7 +106,7 @@ theorem project_eq_of_eq_on
       rw [equal head (List.Mem.head _)]
       rw [induction fun label member => equal label (List.Mem.tail head member)]
 
-private theorem write_matches (selection : SignalSelection signals types)
+theorem write_matches (selection : SignalSelection signals types)
     (original : signals.Values) (selected : types.Denote)
     (nodup : selection.labels.Nodup) :
     selection.Matches (selection.write original selected) selected := by

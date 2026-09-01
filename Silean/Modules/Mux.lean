@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Naming.PrimitiveNaming
 import Silean.Modules.Mask
 import Silean.Modules.BitwiseOr
@@ -89,14 +89,22 @@ namespace Silean.Modules.Mux
 
 open Silean
 
-@[reducible] noncomputable def children (signalType : SignalType) :
-    Contracts.Cycle.Certification.Children (body signalType)
-  | .invertSelect => Primitives.notCertified
-  | .chooseFalse | .chooseTrue => Mask.certified signalType
-  | .combine => BitwiseOr.certified signalType
+@[reducible] def childContracts (signalType : SignalType) :
+    Contracts.Cycle.ChildCycleContracts (body signalType)
+  | .invertSelect => Primitives.notCycleContract
+  | .chooseFalse | .chooseTrue => Mask.cycleContract signalType
+  | .combine => BitwiseOr.cycleContract signalType
 
-@[reducible] noncomputable def childStructure (signalType : SignalType) :=
-  Contracts.Cycle.Certification.childStructure (children signalType)
+@[reducible] noncomputable def certifiedChildren (signalType : SignalType) :
+    (child : (instancePorts signalType).Name) →
+      Contracts.Cycle.ModuleCycleCertifiedStructure (childContracts signalType child)
+  | .invertSelect =>
+      ⟨.primitive Primitives.not, Primitives.notCertified.certification⟩
+  | .chooseFalse | .chooseTrue =>
+      ⟨Mask.moduleStructure signalType, (Mask.certified signalType).certification⟩
+  | .combine =>
+      ⟨BitwiseOr.moduleStructure signalType,
+        (BitwiseOr.certified signalType).certification⟩
 
 @[reducible] def structuralChildren (signalType : SignalType) :
     (name : (instancePorts signalType).Name) →
@@ -108,14 +116,6 @@ open Silean
 def moduleStructure (signalType : SignalType) :
     ModuleStructure (Modules.Mux.ports signalType) :=
   .composite (body signalType) (structuralChildren signalType)
-
-theorem moduleStructure_eq (signalType : SignalType) :
-    moduleStructure signalType =
-      Contracts.Cycle.Certification.moduleStructure (body signalType) (children signalType) := by
-  unfold moduleStructure Contracts.Cycle.Certification.moduleStructure
-  congr
-  funext child
-  cases child <;> rfl
 
 end Silean.Modules.Mux
 
@@ -195,19 +195,19 @@ def cycleContract (signalType : SignalType) :
   outputCoverage := by rfl
 
 abbrev invertRule (signalType : SignalType) :
-    Contracts.Cycle.Certification.RuleOccurrence (children signalType) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence (body signalType) (childContracts signalType) :=
   ⟨.invertSelect, Primitives.NotRule.apply⟩
 
 abbrev falseRule (signalType : SignalType) :
-    Contracts.Cycle.Certification.RuleOccurrence (children signalType) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence (body signalType) (childContracts signalType) :=
   ⟨.chooseFalse, Mask.Rule.apply⟩
 
 abbrev trueRule (signalType : SignalType) :
-    Contracts.Cycle.Certification.RuleOccurrence (children signalType) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence (body signalType) (childContracts signalType) :=
   ⟨.chooseTrue, Mask.Rule.apply⟩
 
 abbrev combineRule (signalType : SignalType) :
-    Contracts.Cycle.Certification.RuleOccurrence (children signalType) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence (body signalType) (childContracts signalType) :=
   ⟨.combine, BitwiseOr.Rule.apply⟩
 
 @[simp] theorem invertRule_reads (signalType) :
@@ -228,26 +228,26 @@ abbrev combineRule (signalType : SignalType) :
     (combineRule signalType).writes = [.result] := rfl
 
 def outputSchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.OutputSchedule (body signalType) (children signalType)
+    Contracts.Cycle.Certification.Layer.OutputSchedule (body signalType) (childContracts signalType)
       (cycleContract signalType) .select :=
   .call (invertRule signalType)
     (by intro port member; cases port
         simp [cycleContract, selectRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
+          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
           body, wiring, context, EndpointContext.moduleInput])
     (by simp)
   (.call (falseRule signalType)
     (by intro input member
         cases input with
         | value => simp [cycleContract, selectRule, SignalSelection.prepend,
-            SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
+            SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
             body, wiring, context, EndpointContext.moduleInput]
         | mask => exact ⟨.apply, by simp, by simp⟩)
     (by simp)
   (.call (trueRule signalType)
     (by intro input member; cases input <;>
       simp [cycleContract, selectRule, SignalSelection.prepend,
-        SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable,
+        SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
         body, wiring, context, EndpointContext.moduleInput])
     (by simp)
   (.call (combineRule signalType)
@@ -259,26 +259,24 @@ def outputSchedule (signalType : SignalType) :
   (.done (by
     intro output member
     cases output
-    change Contracts.Cycle.Certification.outputAvailable
+    change Contracts.Cycle.Certification.Layer.outputAvailable
       ([combineRule signalType, trueRule signalType, falseRule signalType,
-        invertRule signalType] : Contracts.Cycle.Certification.Availability (children signalType))
+        invertRule signalType] : Contracts.Cycle.Certification.Layer.Availability (body signalType) (childContracts signalType))
         Instance.combine .result
     exact ⟨BitwiseOr.Rule.apply, by simp, by simp⟩)))))
 
 def stateSchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.StateSchedule (body signalType) (children signalType) :=
+    Contracts.Cycle.Certification.Layer.StateSchedule (body signalType) (childContracts signalType) :=
   .done (by
     intro child input member
     cases child <;>
-      simp [children, Primitives.notCertified, Primitives.notCycleContract,
-        Mask.certified, Mask.Implementation.certified, Mask.cycleContract,
-        BitwiseOr.certified, BitwiseOr.Implementation.certified,
-        Contracts.Cycle.ModuleCycleCertification.bundle, BitwiseOr.cycleContract,
+      simp [childContracts, Primitives.notCycleContract, Mask.cycleContract,
+        BitwiseOr.cycleContract,
         Contracts.Cycle.CycleStateRule.empty,
         SignalSelection.labels] at member)
 
 def ruleSchedules (signalType : SignalType) :
-    Contracts.Cycle.Certification.RuleSchedules (body signalType) (children signalType)
+    Contracts.Cycle.Certification.Layer.RuleSchedules (body signalType) (childContracts signalType)
       (cycleContract signalType) where
   output | .select => outputSchedule signalType
   state := stateSchedule signalType
@@ -286,135 +284,32 @@ def ruleSchedules (signalType : SignalType) :
 theorem coversChildren (signalType : SignalType) :
     (ruleSchedules signalType).CoversChildren := by
   intro child rule
+  right
   cases child with
   | invertSelect =>
     change Primitives.NotRule at rule
     cases rule
-    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs (ruleSchedules signalType) .select
+    refine ⟨.select, ?_⟩
     change invertRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | chooseFalse =>
     change Mask.Rule at rule
     cases rule
-    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs (ruleSchedules signalType) .select
+    refine ⟨.select, ?_⟩
     change falseRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | chooseTrue =>
     change Mask.Rule at rule
     cases rule
-    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs (ruleSchedules signalType) .select
+    refine ⟨.select, ?_⟩
     change trueRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | combine =>
     change BitwiseOr.Rule at rule
     cases rule
-    apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-    apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs (ruleSchedules signalType) .select
+    refine ⟨.select, ?_⟩
     change combineRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
-
-theorem hasAtMostOneSolution (signalType : SignalType) :
-    (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType)).HasAtMostOneSolution :=
-  (ruleSchedules signalType).hasAtMostOneSolution (coversChildren signalType)
-
-def invertInputs (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values) : Primitives.not.ports.inputs.Values
-  | .input => inputs .select
-
-noncomputable def falseInputs (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (invert : ProposedValues (children signalType .invertSelect).moduleStructure) :
-    (Mask.ports signalType).inputs.Values
-  | .value => inputs .whenFalse
-  | .mask => invert.outputs .output
-
-def trueInputs (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values) :
-    (Mask.ports signalType).inputs.Values
-  | .value => inputs .whenTrue
-  | .mask => inputs .select
-
-noncomputable def combineInputs (signalType : SignalType)
-    (chooseFalse : ProposedValues (children signalType .chooseFalse).moduleStructure)
-    (chooseTrue : ProposedValues (children signalType .chooseTrue).moduleStructure) :
-    (BitwiseOr.ports signalType).inputs.Values
-  | .left => chooseFalse.outputs .result
-  | .right => chooseTrue.outputs .result
-
-theorem hasStructuralResult (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (currentState : (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType)).State) :
-    ∃ proposal, (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType)).IsSolution inputs currentState proposal := by
-  rcases (children signalType .invertSelect).hasStructuralResult
-      (invertInputs signalType inputs) (currentState .invertSelect) with
-    ⟨invert, invertSatisfies⟩
-  rcases (children signalType .chooseFalse).hasStructuralResult
-      (falseInputs signalType inputs invert) (currentState .chooseFalse) with
-    ⟨chooseFalse, falseSatisfies⟩
-  rcases (children signalType .chooseTrue).hasStructuralResult
-      (trueInputs signalType inputs) (currentState .chooseTrue) with
-    ⟨chooseTrue, trueSatisfies⟩
-  rcases (children signalType .combine).hasStructuralResult
-      (combineInputs signalType chooseFalse chooseTrue) (currentState .combine) with
-    ⟨combine, combineSatisfies⟩
-  let childProposals : (name : Instance) →
-      ProposedValues (childStructure signalType name)
-    | .invertSelect => invert
-    | .chooseFalse => chooseFalse
-    | .chooseTrue => chooseTrue
-    | .combine => combine
-  let outputs : (ports signalType).outputs.Values := fun
-    | .result => combine.outputs .result
-  refine ⟨ProposedValues.composite outputs childProposals, ?_⟩
-  constructor
-  · intro output
-    cases output
-    rfl
-  · intro child
-    cases child with
-    | invertSelect =>
-        change (children signalType .invertSelect).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body signalType) (childStructure signalType) inputs childProposals
-            .invertSelect) (currentState .invertSelect) invert
-        rw [show ProposedValues.childInputs (body signalType) (childStructure signalType) inputs
-          childProposals .invertSelect = invertInputs signalType inputs by
-            funext port; cases port; rfl]
-        exact invertSatisfies
-    | chooseFalse =>
-        change (children signalType .chooseFalse).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body signalType) (childStructure signalType) inputs childProposals
-            .chooseFalse) (currentState .chooseFalse) chooseFalse
-        rw [show ProposedValues.childInputs (body signalType) (childStructure signalType) inputs
-          childProposals .chooseFalse = falseInputs signalType inputs invert by
-            funext port; cases port <;> rfl]
-        exact falseSatisfies
-    | chooseTrue =>
-        change (children signalType .chooseTrue).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body signalType) (childStructure signalType) inputs childProposals
-            .chooseTrue) (currentState .chooseTrue) chooseTrue
-        rw [show ProposedValues.childInputs (body signalType) (childStructure signalType) inputs
-          childProposals .chooseTrue = trueInputs signalType inputs by
-            funext port; cases port <;> rfl]
-        exact trueSatisfies
-    | combine =>
-        change (children signalType .combine).moduleStructure.IsSolution
-          (ProposedValues.childInputs (body signalType) (childStructure signalType) inputs childProposals
-            .combine) (currentState .combine) combine
-        rw [show ProposedValues.childInputs (body signalType) (childStructure signalType) inputs
-          childProposals .combine = combineInputs signalType chooseFalse chooseTrue by
-            funext port; cases port <;> rfl]
-        exact combineSatisfies
-
-private def stateCorresponds (signalType : SignalType)
-    (_ : (cycleContract signalType).state.Values)
-    (_ : (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType)).State) : Prop := True
+    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
 theorem selectRule_holds_iff (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
@@ -459,29 +354,37 @@ mutual
         · exact muxFieldsIdentity tail falseTail trueTail true
 end
 
-private theorem implements (signalType : SignalType) :
-    Contracts.Cycle.Implements (Contracts.Cycle.Certification.moduleStructure (body signalType)
-      (children signalType)) (cycleContract signalType)
-      (stateCorresponds signalType) := by
+section LayerCertification
+
+variable (signalType : SignalType)
+  (layerChildren : (child : (instancePorts signalType).Name) →
+    Contracts.Cycle.ModuleCycleCertifiedStructure
+      (childContracts signalType child))
+
+private abbrev certificationStructure :=
+  Contracts.Cycle.Certification.Layer.moduleStructure (body signalType) layerChildren
+
+private def stateCorresponds
+    (_ : (cycleContract signalType).state.Values)
+    (_ : (certificationStructure signalType layerChildren).State) : Prop := True
+
+private theorem implements :
+    Contracts.Cycle.Implements (certificationStructure signalType layerChildren)
+      (cycleContract signalType) (stateCorresponds signalType layerChildren) := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have invertImplements := Contracts.Cycle.Certification.childImplements (children signalType)
-    inputs structuralState proposal satisfies .invertSelect SignalMap.emptyValues
-      (by trivial)
-  have falseImplements := Contracts.Cycle.Certification.childImplements (children signalType)
-    inputs structuralState proposal satisfies .chooseFalse SignalMap.emptyValues
-      (by trivial)
-  have trueImplements := Contracts.Cycle.Certification.childImplements (children signalType)
-    inputs structuralState proposal satisfies .chooseTrue SignalMap.emptyValues
-      (by trivial)
-  rcases (children signalType .combine).hasCorrespondingState
-      (structuralState .combine) with ⟨combineState, combineCorresponds⟩
-  have combineState_eq : combineState = SignalMap.emptyValues := by
-    funext statePort
-    exact nomatch statePort
-  subst combineState
-  have combineImplements := Contracts.Cycle.Certification.childImplements (children signalType)
-    inputs structuralState proposal satisfies .combine SignalMap.emptyValues
-      combineCorresponds
+  have childStateSubsingleton (child : Instance) :
+      Subsingleton
+        ((childContracts signalType child).state.Values) := by
+    cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
+  have childMatch (child : Instance) := by
+    letI := childStateSubsingleton child
+    exact Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
+      layerChildren inputs structuralState
+        proposal satisfies child (by cases child <;> exact SignalMap.emptyValues)
+  have invertEvaluates := (childMatch .invertSelect).1
+  have falseEvaluates := (childMatch .chooseFalse).1
+  have trueEvaluates := (childMatch .chooseTrue).1
+  have combineEvaluates := (childMatch .combine).1
   have boundary := satisfies.1
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
@@ -489,19 +392,12 @@ private theorem implements (signalType : SignalType) :
     cases name
     change (selectRule signalType).Holds inputs contractState _
     rcases proposal with ⟨outputs, childProposals⟩
-    rcases invertImplements with ⟨_, invertEvaluates, _⟩
-    rcases falseImplements with
-      ⟨_, falseEvaluates, _⟩
     have invertBit := (Primitives.notOutputRule_holds_iff _ _ _).mp
       (invertEvaluates.1 Primitives.NotRule.apply)
     have falseOutput := (Mask.outputRule_holds_iff signalType _ _ _).mp
       (falseEvaluates.1 Mask.Rule.apply)
-    rcases trueImplements with
-      ⟨_, trueEvaluates, _⟩
     have trueOutput := (Mask.outputRule_holds_iff signalType _ _ _).mp
       (trueEvaluates.1 Mask.Rule.apply)
-    rcases combineImplements with
-      ⟨_, combineEvaluates, _⟩
     have combineOutput := (BitwiseOr.outputRule_holds_iff signalType _ _ _).mp
       (combineEvaluates.1 BitwiseOr.Rule.apply)
     have boundaryResult := boundary .result
@@ -522,21 +418,36 @@ private theorem implements (signalType : SignalType) :
   · simp [cycleContract, stateRule, Contracts.Cycle.CycleStateRule.empty,
       Contracts.Cycle.CycleStateRule.apply, SignalSelection.project]
 
-noncomputable def proofCertification (signalType : SignalType) :
-    Contracts.Cycle.ModuleCycleCertification
-      (Contracts.Cycle.Certification.moduleStructure (body signalType) (children signalType))
-      (cycleContract signalType) where
-  stateCorresponds := stateCorresponds signalType
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := hasStructuralResult signalType
-  structuralResultUnique := hasAtMostOneSolution signalType
-  implements := implements signalType
+end LayerCertification
+
+noncomputable opaque certifiedLayer (signalType : SignalType) :
+    Contracts.Cycle.ModuleCycleCertifiedLayer (body signalType)
+      (childContracts signalType) (cycleContract signalType) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (ruleSchedules signalType) (coversChildren signalType)
+    (stateCorresponds signalType) (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩)
+    (implements signalType)
+
+noncomputable def certifiedStructure (signalType : SignalType) :
+    Contracts.Cycle.ModuleCycleCertifiedStructure (cycleContract signalType) :=
+  (certifiedLayer signalType).instantiate (certifiedChildren signalType)
+
+@[simp] theorem certifiedStructure_moduleStructure (signalType : SignalType) :
+    (certifiedStructure signalType).moduleStructure = moduleStructure signalType := by
+  unfold certifiedStructure Contracts.Cycle.ModuleCycleCertifiedLayer.instantiate
+    moduleStructure
+  change ModuleStructure.composite (body signalType) (fun child =>
+    (certifiedChildren signalType child).moduleStructure) =
+      ModuleStructure.composite (body signalType) (structuralChildren signalType)
+  congr
+  funext child
+  cases child <;> rfl
 
 noncomputable opaque certification (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType)
       (cycleContract signalType) :=
-  (proofCertification signalType).transportStructure
-    (moduleStructure_eq signalType).symm
+  (certifiedStructure signalType).certification.transportStructure
+    (certifiedStructure_moduleStructure signalType)
 
 noncomputable def certified (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleCertified (ports signalType) :=
@@ -544,6 +455,18 @@ noncomputable def certified (signalType : SignalType) :
 
 @[simp] theorem certified_cycleContract (signalType : SignalType) :
     (certified signalType).cycleContract = cycleContract signalType := rfl
+
+/-- Contract-facing selection law for the generic mux. -/
+theorem result_of_evaluatesTo (signalType : SignalType)
+    (inputs : (ports signalType).inputs.Values) (state : emptySignalMap.Values)
+    (outputs : (ports signalType).outputs.Values) (nextState : emptySignalMap.Values)
+    (evaluates : (cycleContract signalType).EvaluatesTo inputs state outputs nextState) :
+    outputs .result = bif inputs .select then inputs .whenTrue else inputs .whenFalse := by
+  have holds := evaluates.1 Rule.select
+  change (selectRule signalType).Holds inputs state outputs at holds
+  simpa [selectRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalSelection.Matches, SignalSelection.project, SignalSelection.prepend,
+    SignalMap.select] using holds
 
 theorem hasExactlyOneSolution (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)

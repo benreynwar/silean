@@ -2,12 +2,14 @@ import Silean.Foundation.ModulePorts
 
 namespace Silean
 
-/-! # One level of composite structure
+/-! # One uninstantiated structural layer
 
 `ModuleBody` describes the parent boundary, named instance interfaces, and
 complete typed wiring at one hierarchy level. It says how instances are
 connected but not what implements them; `ModuleStructure.composite` separately
-assigns a child structure to every instance name. -/
+assigns a child structure to every instance name. Thus a body is a reusable
+structural layer, while a module structure is a fully instantiated recursive
+hierarchy. -/
 
 /-- A canonically ordered collection of named child interfaces. -/
 abbrev InstancePorts := EnumeratedMap ModulePorts
@@ -98,8 +100,5 @@ structure ModuleBody where
   context : EndpointContext
   /-- Driver chosen for every parent output and child input. -/
   wiring : Wiring context.ports context.instancePorts
-
-def ModuleBody.signature (body : ModuleBody) : ModuleSignature :=
-  body.context.ports.signature
 
 end Silean

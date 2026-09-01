@@ -1,10 +1,10 @@
-import Silean.Examples.Checks.PicoRVControlFixtures
+import Silean.Examples.Fixtures.PicoRVControl
 
 namespace Silean.Examples.Checks.PicoRVControlFetchChecks
 
 open Silean
 open Silean.Examples.PicoRV.Control
-open Silean.Examples.Checks.PicoRVControlFixtures
+open Silean.Examples.Fixtures.PicoRVControl
 
 def resetSource := commandState cpuStateExec true true false false
 def resetState := nextState { idleInputs with resetn := false } resetSource

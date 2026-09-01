@@ -9,22 +9,27 @@ These exercise the real `ModuleStructure` and its schedules; the older
 boundary audit checks the source inventory independently. -/
 
 example (output : Silean.Examples.PicoRV.PicoRV.Output) :
-    sourceAvailable (fun _ : Silean.Examples.PicoRV.PicoRV.Input => True)
+    Layer.sourceAvailable (fun _ : Silean.Examples.PicoRV.PicoRV.Input => True)
       (Silean.Examples.PicoRV.PicoRV.outputSchedule output).finalAvailability
       (Silean.Examples.PicoRV.PicoRV.body.wiring.moduleOutput output) :=
   (Silean.Examples.PicoRV.PicoRV.outputSchedule output).finished
 
-example : ChildrenStateInputsReady Silean.Examples.PicoRV.PicoRV.body
-    Silean.Examples.PicoRV.PicoRV.children
+example : Layer.ChildrenStateInputsReady Silean.Examples.PicoRV.PicoRV.body
+    Silean.Examples.PicoRV.PicoRV.childContracts
     Silean.Examples.PicoRV.PicoRV.stateSchedule.finalAvailability :=
   Silean.Examples.PicoRV.PicoRV.stateSchedule.finished
 
-example : CoversAllRules Silean.Examples.PicoRV.PicoRV.children
+example : Layer.CoversAllRules Silean.Examples.PicoRV.PicoRV.body
+    Silean.Examples.PicoRV.PicoRV.childContracts
     Silean.Examples.PicoRV.PicoRV.allRulesSchedule.finalAvailability :=
   Silean.Examples.PicoRV.PicoRV.allRulesSchedule.finished
 
 example : Silean.Examples.PicoRV.PicoRV.moduleStructure.HasAtMostOneSolution :=
   Silean.Examples.PicoRV.PicoRV.hasAtMostOneSolution
+
+example : ¬Silean.Examples.PicoRV.PicoRV.moduleStructure.HasNoBlackboxes := by
+  intro closed
+  exact ModuleStructure.not_hasNoBlackboxes_blackbox _ (closed.child .control)
 
 example : (Silean.Examples.PicoRV.PicoRV.children .control).moduleStructure =
     Silean.Examples.PicoRV.Control.cycleContract.blackboxStructure := rfl

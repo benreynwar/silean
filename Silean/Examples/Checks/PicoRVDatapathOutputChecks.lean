@@ -1,10 +1,10 @@
-import Silean.Examples.Checks.PicoRVDatapathFixtures
+import Silean.Examples.Fixtures.PicoRVDatapath
 
 namespace Silean.Examples.Checks.PicoRVDatapathOutputChecks
 
 open Silean
 open Silean.Examples.PicoRV.Datapath
-open Silean.Examples.Checks.PicoRVDatapathFixtures
+open Silean.Examples.Fixtures.PicoRVDatapath
 
 def branchInputs : Inputs :=
   { idleInputs with
@@ -22,7 +22,7 @@ example : BitVector.toNat 32 (evaluatedBranch.1 .next_pc) = 0x3002 := by decide
 example : BitVector.toNat 32 (evaluatedBranch.1 .cpuregs_wrdata) = 0x1004 := by decide
 
 def equalInputs : Inputs :=
-  { idleInputs with instr_beq := true }
+  { idleInputs with instr_beq := true, is_compare := true }
 
 def evaluatedEqual := cycleContract.evaluate (inputValues equalInputs)
   (stateWith 0 0 23 23 0 0 0)

@@ -1,5 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
-import Silean.Modules.Constant
+import Silean.Contracts.Cycle.CycleLayerConstruction
 
 namespace Silean.Composition.Reduction
 
@@ -232,10 +231,9 @@ def binaryOutputRule (signalType : SignalType)
   simp [binaryOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalSelection.project, SignalSelection.prepend, SignalMap.select]
 
-structure BinaryImplementation (signalType : SignalType)
-    (operation : signalType.Denote → signalType.Denote → signalType.Denote) where
-  moduleStructure : ModuleStructure (binaryPorts signalType)
-  certification : Contracts.Cycle.ModuleCycleCertification moduleStructure
+abbrev BinaryImplementation (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote) :=
+  Contracts.Cycle.ModuleCycleCertifiedStructure
     (binaryCycleContract signalType operation)
 
 def BinaryImplementation.certified
@@ -271,10 +269,9 @@ def identityOutputRule (signalType : SignalType) (identity : signalType.Denote) 
   simp [identityOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
     SignalSelection.project, SignalMap.select]
 
-structure IdentityImplementation (signalType : SignalType)
-    (identity : signalType.Denote) where
-  moduleStructure : ModuleStructure (identityPorts signalType)
-  certification : Contracts.Cycle.ModuleCycleCertification moduleStructure
+abbrev IdentityImplementation (signalType : SignalType)
+    (identity : signalType.Denote) :=
+  Contracts.Cycle.ModuleCycleCertifiedStructure
     (identityCycleContract signalType identity)
 
 def IdentityImplementation.certified
@@ -282,7 +279,7 @@ def IdentityImplementation.certified
     Contracts.Cycle.ModuleCycleCertified (identityPorts signalType) :=
   implementation.certification.bundle
 
-private inductive EmptyInstance | identity
+inductive EmptyInstance | identity
 deriving Enumeration
 
 private def emptyInstances (signalType : SignalType) : InstancePorts :=
@@ -303,12 +300,25 @@ private def emptyWiring (signalType : SignalType) :
 private def emptyBody (signalType : SignalType) : ModuleBody :=
   ⟨emptyContext signalType, emptyWiring signalType⟩
 
-private def emptyChildren
-    (implementation : IdentityImplementation signalType identity) :
-    Contracts.Cycle.Certification.Children (emptyBody signalType)
-  | .identity => implementation.certified
+private def emptyChildContracts (signalType : SignalType)
+    (identity : signalType.Denote) :
+    Contracts.Cycle.ChildCycleContracts (emptyBody signalType)
+  | .identity => identityCycleContract signalType identity
 
-private inductive LeafInstance
+private def emptyStructuralChildren
+    (implementation : IdentityImplementation signalType identity) :
+    (child : EmptyInstance) →
+      ModuleStructure ((emptyInstances signalType).ports child)
+  | .identity => implementation.moduleStructure
+
+private def emptyCertifiedChildren
+    (implementation : IdentityImplementation signalType identity) :
+    (child : EmptyInstance) →
+      Contracts.Cycle.ModuleCycleCertifiedStructure
+        (emptyChildContracts signalType identity child)
+  | .identity => implementation
+
+inductive LeafInstance
 
 private instance : Enumeration LeafInstance :=
   Enumeration.empty fun impossible => nomatch impossible
@@ -330,12 +340,9 @@ private instance : Enumeration LeafInstance :=
 @[reducible] private def leafBody (signalType : SignalType) : ModuleBody :=
   ⟨leafContext signalType, leafWiring signalType⟩
 
-private def leafChildren : Contracts.Cycle.Certification.Children (leafBody signalType) :=
-  fun impossible => nomatch impossible
-
 /-! ## Hardware structure -/
 
-private inductive NodeInstance
+inductive NodeInstance
   /-- Reduces the left group of leaves. -/
   | left
   /-- Reduces the right group of leaves. -/
@@ -393,6 +400,8 @@ def moduleStructure (binary : BinaryImplementation signalType operation)
         | .right => moduleStructure binary identityModule right
         | .combine => binary.moduleStructure
 
+/-- A reduction tree contains no blackboxes when its binary operation and
+empty-tree identity modules contain no blackboxes. -/
 private abbrev Implementation (binary : BinaryImplementation signalType operation)
     (identityModule : IdentityImplementation signalType identity)
     (tree : Tree) := Contracts.Cycle.ModuleCycleCertification
@@ -400,15 +409,19 @@ private abbrev Implementation (binary : BinaryImplementation signalType operatio
       (cycleContract signalType operation identity tree)
 
 private abbrev emptyOccurrence
-    (identityModule : IdentityImplementation signalType identity) :
-    Contracts.Cycle.Certification.RuleOccurrence (emptyChildren identityModule) :=
+    (signalType : SignalType) (identity : signalType.Denote) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (emptyBody signalType) (emptyChildContracts (signalType := signalType)
+        (identity := identity)) :=
   ⟨EmptyInstance.identity, Rule.apply⟩
 
 private def emptyOutputSchedule
-    (identityModule : IdentityImplementation signalType identity) :
-    Contracts.Cycle.Certification.OutputSchedule (emptyBody signalType) (emptyChildren identityModule)
+    (signalType : SignalType) (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) :
+    Contracts.Cycle.Certification.Layer.OutputSchedule (emptyBody signalType)
+      (emptyChildContracts (signalType := signalType) (identity := identity))
       (cycleContract signalType operation identity .empty) .apply :=
-  .call (emptyOccurrence identityModule)
+  .call (emptyOccurrence signalType identity)
     (by intro input member; exact nomatch input)
     (by simp)
     (.done (by
@@ -421,8 +434,9 @@ private def emptyOutputSchedule
           simp [identityOutputRule, SignalMap.select, SignalSelection.labels]⟩))
 
 private def emptyStateSchedule
-    (identityModule : IdentityImplementation signalType identity) :
-    Contracts.Cycle.Certification.StateSchedule (emptyBody signalType) (emptyChildren identityModule) :=
+    (signalType : SignalType) (identity : signalType.Denote) :
+    Contracts.Cycle.Certification.Layer.StateSchedule (emptyBody signalType)
+      (emptyChildContracts (signalType := signalType) (identity := identity)) :=
   .done (by
     intro child input member
     cases child
@@ -431,126 +445,100 @@ private def emptyStateSchedule
     exact nomatch member)
 
 private def emptyRuleSchedules
-    (identityModule : IdentityImplementation signalType identity) :
-    Contracts.Cycle.Certification.RuleSchedules (emptyBody signalType) (emptyChildren identityModule)
+    (signalType : SignalType) (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) :
+    Contracts.Cycle.Certification.Layer.RuleSchedules (emptyBody signalType)
+      (emptyChildContracts (signalType := signalType) (identity := identity))
       (cycleContract signalType operation identity .empty) where
-  output | .apply => emptyOutputSchedule identityModule
-  state := emptyStateSchedule identityModule
+  output | .apply => emptyOutputSchedule signalType operation identity
+  state := emptyStateSchedule signalType identity
 
 private theorem emptyCoversChildren
-    (identityModule : IdentityImplementation signalType identity) :
-    (emptyRuleSchedules (operation := operation) identityModule).CoversChildren := by
+    (signalType : SignalType) (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) :
+    (emptyRuleSchedules signalType operation identity).CoversChildren := by
   intro child rule
   cases child
   change Rule at rule
   cases rule
-  apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-  apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-    (emptyRuleSchedules (operation := operation) identityModule) .apply
+  right
+  refine ⟨.apply, ?_⟩
   simp [emptyRuleSchedules, emptyOutputSchedule,
-    Contracts.Cycle.Certification.Schedule.finalAvailability]
+    Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
-private theorem emptyUnique
+section EmptyLayerCertification
+
+variable (signalType : SignalType)
+  (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+  (identity : signalType.Denote)
+  (layerChildren : (child : EmptyInstance) →
+    Contracts.Cycle.ModuleCycleCertifiedStructure
+      (emptyChildContracts (signalType := signalType) (identity := identity) child))
+
+private abbrev emptyCertificationStructure :=
+  Contracts.Cycle.Certification.Layer.moduleStructure (emptyBody signalType) layerChildren
+
+private def emptyStateCorresponds
+    (_ : emptySignalMap.Values)
+    (_ : (emptyCertificationStructure signalType identity layerChildren).State) : Prop := True
+
+private theorem emptyImplements
+    : Contracts.Cycle.Implements
+      (emptyCertificationStructure signalType identity layerChildren)
+      (cycleContract signalType operation identity .empty)
+      (emptyStateCorresponds signalType identity layerChildren) := by
+  intro inputs contractState structuralState proposal corresponds satisfies
+  rcases proposal with ⟨outputs, children⟩
+  have boundary := satisfies.1
+  letI : Subsingleton
+      ((emptyChildContracts (signalType := signalType) (identity := identity) .identity).state.Values) := by
+    change Subsingleton emptySignalMap.Values
+    infer_instance
+  have evaluates :=
+    (Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
+      layerChildren inputs
+        structuralState (ProposedValues.composite outputs children) satisfies
+        .identity SignalMap.emptyValues).1
+  refine ⟨SignalMap.emptyValues, ?_, trivial⟩
+  constructor
+  · intro rule
+    cases rule
+    change (outputRule signalType operation identity .empty).Holds
+      inputs contractState outputs
+    rw [outputRule_holds_iff]
+    have identityEquation := evaluates.1 Rule.apply
+    change (identityOutputRule signalType identity).Holds _ _ _ at identityEquation
+    rw [identityOutputRule_holds_iff] at identityEquation
+    exact (boundary .output).trans identityEquation
+  · rfl
+
+end EmptyLayerCertification
+
+private noncomputable opaque emptyCertifiedLayer
+    (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) :
+    Contracts.Cycle.ModuleCycleCertifiedLayer (emptyBody signalType)
+      (emptyChildContracts (signalType := signalType) (identity := identity))
+      (cycleContract signalType operation identity .empty) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (emptyRuleSchedules signalType operation identity)
+    (emptyCoversChildren signalType operation identity)
+    (emptyStateCorresponds signalType identity)
+    (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩)
+    (emptyImplements signalType operation identity)
+
+private noncomputable def emptyImplementation
     {signalType : SignalType}
     {operation : signalType.Denote → signalType.Denote → signalType.Denote}
     {identity : signalType.Denote}
     {binary : BinaryImplementation signalType operation}
     (identityModule : IdentityImplementation signalType identity) :
-    (moduleStructure binary identityModule .empty).HasAtMostOneSolution := by
-  have structure_eq : moduleStructure binary identityModule .empty =
-      Contracts.Cycle.Certification.moduleStructure (emptyBody signalType) (emptyChildren identityModule) := by
-    apply congrArg (ModuleStructure.composite (emptyBody signalType))
-    funext child
-    cases child
-    rfl
-  rw [structure_eq]
-  exact (emptyRuleSchedules (operation := operation) identityModule).hasAtMostOneSolution
-    (emptyCoversChildren (operation := operation) identityModule)
-
-private theorem emptyHasStructuralResult
-    (identityModule : IdentityImplementation signalType identity)
-    (inputs : (ports signalType .empty).inputs.Values)
-    (state : (moduleStructure binary identityModule .empty).State) :
-    ∃ proposal, (moduleStructure binary identityModule .empty).IsSolution
-      inputs state proposal := by
-  rcases identityModule.certification.hasStructuralResult
-      (fun impossible => nomatch impossible) (state .identity) with
-    ⟨identityProposal, identitySatisfies⟩
-  let outputs : (ports signalType .empty).outputs.Values := fun
-    | .output => identityProposal.outputs .output
-  let proposal : ProposedValues (moduleStructure binary identityModule .empty) :=
-    ProposedValues.composite outputs fun | .identity => identityProposal
-  refine ⟨proposal, ?_⟩
-  constructor
-  · intro outputName
-    cases outputName
-    rfl
-  · intro child
-    cases child
-    change identityModule.moduleStructure.IsSolution
-      (ProposedValues.childInputs (emptyBody signalType) _ inputs proposal.2 .identity)
-      (state .identity) identityProposal
-    rw [show ProposedValues.childInputs (emptyBody signalType) _ inputs
-        proposal.2 .identity = (fun impossible => nomatch impossible) by
-      funext impossible
-      exact nomatch impossible]
-    exact identitySatisfies
-
-private def emptyStateCorresponds
-    (identityModule : IdentityImplementation signalType identity)
-    (_ : emptySignalMap.Values)
-    (state : (moduleStructure binary identityModule .empty).State) : Prop :=
-  identityModule.certification.stateCorresponds SignalMap.emptyValues
-    (state .identity)
-
-private theorem emptyImplements
-    (identityModule : IdentityImplementation signalType identity) :
-    Contracts.Cycle.Implements (moduleStructure binary identityModule .empty)
-      (cycleContract signalType operation identity .empty)
-      (emptyStateCorresponds (binary := binary) identityModule) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
-  rcases proposal with ⟨outputs, children⟩
-  rcases satisfies with ⟨boundary, childSatisfies⟩
-  have childInputs_eq : ProposedValues.childInputs (emptyBody signalType) _ inputs
-      children .identity = (fun impossible => nomatch impossible) := by
-    funext impossible
-    exact nomatch impossible
-  have identitySatisfies := childSatisfies .identity
-  rw [childInputs_eq] at identitySatisfies
-  rcases identityModule.certification.implements
-      (fun impossible => nomatch impossible) SignalMap.emptyValues
-      (structuralState .identity) (children .identity) corresponds identitySatisfies with
-    ⟨nextState, evaluates, nextCorresponds⟩
-  have nextState_eq : nextState = SignalMap.emptyValues := by
-    funext impossible
-    exact nomatch impossible
-  subst nextState
-  refine ⟨SignalMap.emptyValues, ?_, nextCorresponds⟩
-  constructor
-  · intro rule
-    cases rule
-    rw [outputRule_holds_iff]
-    have identityEquation := evaluates.1 Rule.apply
-    rw [identityOutputRule_holds_iff] at identityEquation
-    exact (boundary .output).trans identityEquation
-  · rfl
-
-private def emptyImplementation
-    (identityModule : IdentityImplementation signalType identity) :
-    Implementation binary identityModule .empty where
-  stateCorresponds := emptyStateCorresponds (binary := binary) identityModule
-  hasCorrespondingState := by
-    intro state
-    rcases identityModule.certification.hasCorrespondingState (state .identity) with
-      ⟨contractState, corresponds⟩
-    have contractState_eq : contractState = SignalMap.emptyValues := by
-      funext impossible
-      exact nomatch impossible
-    subst contractState
-    exact ⟨SignalMap.emptyValues, corresponds⟩
-  hasStructuralResult := emptyHasStructuralResult identityModule
-  structuralResultUnique := emptyUnique identityModule
-  implements := emptyImplements identityModule
+    Implementation binary identityModule .empty :=
+  (emptyCertifiedLayer signalType operation identity).certifyComposite
+    (emptyStructuralChildren identityModule)
+    (emptyCertifiedChildren identityModule)
+    (by intro child; cases child; rfl)
 
 private def leafProposal (inputs : (ports signalType .leaf).inputs.Values) :
     ProposedValues (moduleStructure (signalType := signalType)
@@ -613,67 +601,77 @@ private def leafImplementation : Implementation binary identityModule .leaf wher
   structuralResultUnique := leafUnique
   implements := leafImplements
 
-private def nodeChildren
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
+private def nodeChildContracts
+    (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) (left right : Tree) :
+    Contracts.Cycle.ChildCycleContracts (nodeBody signalType left right)
+  | .left => cycleContract signalType operation identity left
+  | .right => cycleContract signalType operation identity right
+  | .combine => binaryCycleContract signalType operation
+
+private def nodeStructuralChildren
+    {signalType : SignalType} {operation} {identity}
+    {binary : BinaryImplementation signalType operation}
+    {identityModule : IdentityImplementation signalType identity}
+    (_leftImplementation : Implementation binary identityModule left)
+    (_rightImplementation : Implementation binary identityModule right) :
+    (child : NodeInstance) →
+      ModuleStructure ((nodeInstances signalType left right).ports child)
+  | .left => moduleStructure binary identityModule left
+  | .right => moduleStructure binary identityModule right
+  | .combine => binary.moduleStructure
+
+private def nodeCertifiedChildren
+    {signalType : SignalType} {operation} {identity}
     {binary : BinaryImplementation signalType operation}
     {identityModule : IdentityImplementation signalType identity}
     (leftImplementation : Implementation binary identityModule left)
     (rightImplementation : Implementation binary identityModule right) :
-    Contracts.Cycle.Certification.Children (nodeBody signalType left right)
-  | .left => leftImplementation.bundle
-  | .right => rightImplementation.bundle
-  | .combine => binary.certified
+    (child : NodeInstance) → Contracts.Cycle.ModuleCycleCertifiedStructure
+      (nodeChildContracts signalType operation identity left right child)
+  | .left => ⟨moduleStructure binary identityModule left, leftImplementation⟩
+  | .right => ⟨moduleStructure binary identityModule right, rightImplementation⟩
+  | .combine => binary
 
 private abbrev leftOccurrence
     {signalType : SignalType}
     {operation : signalType.Denote → signalType.Denote → signalType.Denote}
     {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    Contracts.Cycle.Certification.RuleOccurrence
-      (nodeChildren leftImplementation rightImplementation) :=
+    (left right : Tree) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (nodeBody signalType left right)
+      (nodeChildContracts signalType operation identity left right) :=
   ⟨NodeInstance.left, Rule.apply⟩
 
 private abbrev rightOccurrence
     {signalType : SignalType}
     {operation : signalType.Denote → signalType.Denote → signalType.Denote}
     {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    Contracts.Cycle.Certification.RuleOccurrence
-      (nodeChildren leftImplementation rightImplementation) :=
+    (left right : Tree) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (nodeBody signalType left right)
+      (nodeChildContracts signalType operation identity left right) :=
   ⟨NodeInstance.right, Rule.apply⟩
 
 private abbrev combineOccurrence
     {signalType : SignalType}
     {operation : signalType.Denote → signalType.Denote → signalType.Denote}
     {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    Contracts.Cycle.Certification.RuleOccurrence
-      (nodeChildren leftImplementation rightImplementation) :=
+    (left right : Tree) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (nodeBody signalType left right)
+      (nodeChildContracts signalType operation identity left right) :=
   ⟨NodeInstance.combine, Rule.apply⟩
 
 private def nodeOutputSchedule
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    Contracts.Cycle.Certification.OutputSchedule (nodeBody signalType left right)
-      (nodeChildren leftImplementation rightImplementation)
+    (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) (left right : Tree) :
+    Contracts.Cycle.Certification.Layer.OutputSchedule (nodeBody signalType left right)
+      (nodeChildContracts signalType operation identity left right)
       (cycleContract signalType operation identity (.node left right)) .apply :=
-  .call (leftOccurrence leftImplementation rightImplementation)
+  .call (leftOccurrence (operation := operation) (identity := identity) left right)
     (by
       intro input _
       cases input with
@@ -686,7 +684,7 @@ private def nodeOutputSchedule
             ((inputMap signalType (.node left right)).labels.locate
               (Input.leaf (Fin.castAdd right.leafCount index))) ▸ List.get_mem _ _)
     (by simp)
-    (.call (rightOccurrence leftImplementation rightImplementation)
+    (.call (rightOccurrence (operation := operation) (identity := identity) left right)
       (by
         intro input _
         cases input with
@@ -701,9 +699,9 @@ private def nodeOutputSchedule
       (by
         intro member
         have equal := List.mem_singleton.mp member
-        have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
+        have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
         cases childEqual)
-      (.call (combineOccurrence leftImplementation rightImplementation)
+      (.call (combineOccurrence (operation := operation) (identity := identity) left right)
         (by
           intro input _
           cases input with
@@ -720,10 +718,10 @@ private def nodeOutputSchedule
         (by
           intro member
           rcases List.mem_cons.mp member with equal | member
-          · have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
+          · have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
             cases childEqual
           · have equal := List.mem_singleton.mp member
-            have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
+            have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
             cases childEqual)
         (.done (by
           intro outputName _
@@ -734,15 +732,11 @@ private def nodeOutputSchedule
           simp [binaryOutputRule, SignalMap.select, SignalSelection.labels]))))
 
 private def nodeStateSchedule
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    Contracts.Cycle.Certification.StateSchedule (nodeBody signalType left right)
-      (nodeChildren leftImplementation rightImplementation) :=
+    (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) (left right : Tree) :
+    Contracts.Cycle.Certification.Layer.StateSchedule (nodeBody signalType left right)
+      (nodeChildContracts signalType operation identity left right) :=
   .done (by
     intro child input member
     cases child with
@@ -760,73 +754,39 @@ private def nodeStateSchedule
         exact nomatch member)
 
 private def nodeRuleSchedules
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    Contracts.Cycle.Certification.RuleSchedules (nodeBody signalType left right)
-      (nodeChildren leftImplementation rightImplementation)
+    (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) (left right : Tree) :
+    Contracts.Cycle.Certification.Layer.RuleSchedules (nodeBody signalType left right)
+      (nodeChildContracts signalType operation identity left right)
       (cycleContract signalType operation identity (.node left right)) where
-  output | .apply => nodeOutputSchedule leftImplementation rightImplementation
-  state := nodeStateSchedule leftImplementation rightImplementation
+  output | .apply => nodeOutputSchedule signalType operation identity left right
+  state := nodeStateSchedule signalType operation identity left right
 
 private theorem nodeCoversChildren
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    (nodeRuleSchedules leftImplementation rightImplementation).CoversChildren := by
+    (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) (left right : Tree) :
+    (nodeRuleSchedules signalType operation identity left right).CoversChildren := by
   intro child rule
+  right
+  refine ⟨.apply, ?_⟩
   cases child with
   | left =>
       change Rule at rule
       cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-      apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-        (nodeRuleSchedules leftImplementation rightImplementation) .apply
       simp [nodeRuleSchedules, nodeOutputSchedule,
-        Contracts.Cycle.Certification.Schedule.finalAvailability]
+        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | right =>
       change Rule at rule
       cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-      apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-        (nodeRuleSchedules leftImplementation rightImplementation) .apply
       simp [nodeRuleSchedules, nodeOutputSchedule,
-        Contracts.Cycle.Certification.Schedule.finalAvailability]
+        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | combine =>
       change Rule at rule
       cases rule
-      apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-      apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-        (nodeRuleSchedules leftImplementation rightImplementation) .apply
       simp [nodeRuleSchedules, nodeOutputSchedule,
-        Contracts.Cycle.Certification.Schedule.finalAvailability]
-
-private theorem nodeUnique
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    (moduleStructure binary identityModule (.node left right)).HasAtMostOneSolution := by
-  have structure_eq : moduleStructure binary identityModule (.node left right) =
-      Contracts.Cycle.Certification.moduleStructure (nodeBody signalType left right)
-        (nodeChildren leftImplementation rightImplementation) := by
-    apply congrArg (ModuleStructure.composite (nodeBody signalType left right))
-    funext child
-    cases child <;> rfl
-  rw [structure_eq]
-  exact (nodeRuleSchedules leftImplementation rightImplementation).hasAtMostOneSolution
-    (nodeCoversChildren leftImplementation rightImplementation)
+        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
 private def leftInputs (inputs : (ports signalType (.node left right)).inputs.Values) :
     (ports signalType left).inputs.Values
@@ -838,109 +798,43 @@ private def rightInputs (inputs : (ports signalType (.node left right)).inputs.V
 
 private def combineInputs
     {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftProposal : ProposedValues (moduleStructure binary identityModule left))
-    (rightProposal : ProposedValues (moduleStructure binary identityModule right)) :
+    (leftOutputs rightOutputs : (outputMap signalType).Values) :
     (binaryPorts signalType).inputs.Values
-  | .left => leftProposal.outputs .output
-  | .right => rightProposal.outputs .output
+  | .left => leftOutputs .output
+  | .right => rightOutputs .output
 
-private theorem nodeHasStructuralResult
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right)
-    (inputs : (ports signalType (.node left right)).inputs.Values)
-    (state : (moduleStructure binary identityModule (.node left right)).State) :
-    ∃ proposal,
-      (moduleStructure binary identityModule (.node left right)).IsSolution
-        inputs state proposal := by
-  rcases leftImplementation.hasStructuralResult (leftInputs inputs) (state .left) with
-    ⟨leftProposal, leftSatisfies⟩
-  rcases rightImplementation.hasStructuralResult (rightInputs inputs) (state .right) with
-    ⟨rightProposal, rightSatisfies⟩
-  rcases binary.certification.hasStructuralResult
-      (combineInputs leftProposal rightProposal) (state .combine) with
-    ⟨combineProposal, combineSatisfies⟩
-  let outputs : (ports signalType (.node left right)).outputs.Values := fun
-    | .output => combineProposal.outputs .output
-  let proposal : ProposedValues
-      (moduleStructure binary identityModule (.node left right)) :=
-    ProposedValues.composite outputs fun
-      | .left => leftProposal
-      | .right => rightProposal
-      | .combine => combineProposal
-  refine ⟨proposal, ?_⟩
-  constructor
-  · intro outputName
-    cases outputName
-    rfl
-  · intro child
-    cases child with
-    | left =>
-        change (moduleStructure binary identityModule left).IsSolution
-          (ProposedValues.childInputs (nodeBody signalType left right) _ inputs
-            proposal.2 .left) (state .left) leftProposal
-        rw [show ProposedValues.childInputs (nodeBody signalType left right) _ inputs
-            proposal.2 .left = leftInputs inputs by
-          funext input
-          cases input
-          rfl]
-        exact leftSatisfies
-    | right =>
-        change (moduleStructure binary identityModule right).IsSolution
-          (ProposedValues.childInputs (nodeBody signalType left right) _ inputs
-            proposal.2 .right) (state .right) rightProposal
-        rw [show ProposedValues.childInputs (nodeBody signalType left right) _ inputs
-            proposal.2 .right = rightInputs inputs by
-          funext input
-          cases input
-          rfl]
-        exact rightSatisfies
-    | combine =>
-        change binary.moduleStructure.IsSolution
-          (ProposedValues.childInputs (nodeBody signalType left right) _ inputs
-            proposal.2 .combine) (state .combine) combineProposal
-        rw [show ProposedValues.childInputs (nodeBody signalType left right) _ inputs
-            proposal.2 .combine = combineInputs leftProposal rightProposal by
-          funext input
-          cases input <;> rfl]
-        exact combineSatisfies
+section NodeLayerCertification
 
-private def nodeStateCorresponds
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right)
-    (_ : emptySignalMap.Values)
-    (state : (moduleStructure binary identityModule (.node left right)).State) : Prop :=
-  leftImplementation.stateCorresponds SignalMap.emptyValues (state .left) ∧
-    rightImplementation.stateCorresponds SignalMap.emptyValues (state .right) ∧
-    binary.certification.stateCorresponds SignalMap.emptyValues (state .combine)
+variable (signalType : SignalType)
+  (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+  (identity : signalType.Denote) (left right : Tree)
+  (layerChildren : (child : NodeInstance) →
+    Contracts.Cycle.ModuleCycleCertifiedStructure
+      (nodeChildContracts signalType operation identity left right child))
 
-private theorem nodeImplements
-    {signalType : SignalType}
-    {operation : signalType.Denote → signalType.Denote → signalType.Denote}
-    {identity : signalType.Denote}
-    {binary : BinaryImplementation signalType operation}
-    {identityModule : IdentityImplementation signalType identity}
-    (leftImplementation : Implementation binary identityModule left)
-    (rightImplementation : Implementation binary identityModule right) :
-    Contracts.Cycle.Implements (moduleStructure binary identityModule (.node left right))
+private abbrev nodeCertificationStructure :=
+  Contracts.Cycle.Certification.Layer.moduleStructure (nodeBody signalType left right) layerChildren
+
+private def nodeStateCorresponds (_ : emptySignalMap.Values)
+    (_ : (nodeCertificationStructure signalType operation identity left right
+      layerChildren).State) : Prop := True
+
+private theorem nodeImplements :
+    Contracts.Cycle.Implements
+      (nodeCertificationStructure signalType operation identity left right layerChildren)
       (cycleContract signalType operation identity (.node left right))
-      (nodeStateCorresponds leftImplementation rightImplementation) := by
+      (nodeStateCorresponds signalType operation identity left right layerChildren) := by
   intro inputs contractState structuralState proposal corresponds satisfies
   rcases proposal with ⟨outputs, children⟩
-  rcases satisfies with ⟨boundary, childSatisfies⟩
+  have boundary := satisfies.1
+  have childMatch (child : NodeInstance) := by
+    letI : Subsingleton
+        ((nodeChildContracts signalType operation identity left right child).state.Values) := by
+      cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
+    exact Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
+      layerChildren
+        inputs structuralState (ProposedValues.composite outputs children) satisfies child
+        (by cases child <;> exact SignalMap.emptyValues)
   have leftInputs_eq : ProposedValues.childInputs
       (nodeBody signalType left right) _ inputs children .left = leftInputs inputs := by
     funext input
@@ -953,49 +847,46 @@ private theorem nodeImplements
     rfl
   have combineInputs_eq : ProposedValues.childInputs
       (nodeBody signalType left right) _ inputs children .combine =
-        combineInputs (children .left) (children .right) := by
+        combineInputs (children .left).outputs (children .right).outputs := by
     funext input
     cases input <;> rfl
-  have leftSatisfies := childSatisfies .left
-  rw [leftInputs_eq] at leftSatisfies
-  have rightSatisfies := childSatisfies .right
-  rw [rightInputs_eq] at rightSatisfies
-  have combineSatisfies := childSatisfies .combine
-  rw [combineInputs_eq] at combineSatisfies
-  rcases leftImplementation.implements (leftInputs inputs) SignalMap.emptyValues
-      (structuralState .left) (children .left) corresponds.1 leftSatisfies with
-    ⟨leftNext, leftEvaluates, leftNextCorresponds⟩
-  rcases rightImplementation.implements (rightInputs inputs) SignalMap.emptyValues
-      (structuralState .right) (children .right) corresponds.2.1 rightSatisfies with
-    ⟨rightNext, rightEvaluates, rightNextCorresponds⟩
-  rcases binary.certification.implements
-      (combineInputs (children .left) (children .right)) SignalMap.emptyValues
-      (structuralState .combine) (children .combine) corresponds.2.2
-      combineSatisfies with
-    ⟨combineNext, combineEvaluates, combineNextCorresponds⟩
-  have leftNext_eq : leftNext = SignalMap.emptyValues := by
-    funext impossible
-    exact nomatch impossible
-  have rightNext_eq : rightNext = SignalMap.emptyValues := by
-    funext impossible
-    exact nomatch impossible
-  have combineNext_eq : combineNext = SignalMap.emptyValues := by
-    funext impossible
-    exact nomatch impossible
-  subst leftNext
-  subst rightNext
-  subst combineNext
-  refine ⟨SignalMap.emptyValues, ?_, ?_⟩
+  have leftEvaluates := (childMatch .left).1
+  have rightEvaluates := (childMatch .right).1
+  have combineEvaluates := (childMatch .combine).1
+  refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   · constructor
     · intro rule
       cases rule
       rw [outputRule_holds_iff]
       have leftEquation := leftEvaluates.1 Rule.apply
+      change (outputRule signalType operation identity left).Holds _ _ _ at leftEquation
       rw [outputRule_holds_iff] at leftEquation
+      change (children .left).outputs .output =
+        fold operation identity left fun index =>
+          ProposedValues.childInputs (nodeBody signalType left right)
+            ((fun name => (layerChildren name).moduleStructure))
+            inputs children .left (.leaf index) at leftEquation
       have rightEquation := rightEvaluates.1 Rule.apply
+      change (outputRule signalType operation identity right).Holds _ _ _ at rightEquation
       rw [outputRule_holds_iff] at rightEquation
+      change (children .right).outputs .output =
+        fold operation identity right fun index =>
+          ProposedValues.childInputs (nodeBody signalType left right)
+            ((fun name => (layerChildren name).moduleStructure))
+            inputs children .right (.leaf index) at rightEquation
       have combineEquation := combineEvaluates.1 Rule.apply
+      change (binaryOutputRule signalType operation).Holds _ _ _ at combineEquation
       rw [binaryOutputRule_holds_iff] at combineEquation
+      change (children .combine).outputs .output = operation
+        (ProposedValues.childInputs (nodeBody signalType left right)
+          ((fun name => (layerChildren name).moduleStructure))
+          inputs children .combine .left)
+        (ProposedValues.childInputs (nodeBody signalType left right)
+          ((fun name => (layerChildren name).moduleStructure))
+          inputs children .combine .right) at combineEquation
+      rw [leftInputs_eq] at leftEquation
+      rw [rightInputs_eq] at rightEquation
+      rw [combineInputs_eq] at combineEquation
       simp only [combineInputs] at combineEquation
       have outputBoundary := boundary Primitives.SingleOutput.output
       change outputs Primitives.SingleOutput.output = (children .combine).outputs Primitives.SingleOutput.output at outputBoundary
@@ -1003,9 +894,24 @@ private theorem nodeImplements
       rw [outputBoundary, combineEquation, leftEquation, rightEquation]
       rfl
     · rfl
-  · exact ⟨leftNextCorresponds, rightNextCorresponds, combineNextCorresponds⟩
 
-private def nodeImplementation
+end NodeLayerCertification
+
+private noncomputable opaque nodeCertifiedLayer
+    (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) (left right : Tree) :
+    Contracts.Cycle.ModuleCycleCertifiedLayer (nodeBody signalType left right)
+      (nodeChildContracts signalType operation identity left right)
+      (cycleContract signalType operation identity (.node left right)) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (nodeRuleSchedules signalType operation identity left right)
+    (nodeCoversChildren signalType operation identity left right)
+    (nodeStateCorresponds signalType operation identity left right)
+    (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩)
+    (nodeImplements signalType operation identity left right)
+
+private noncomputable def nodeImplementation
     {signalType : SignalType}
     {operation : signalType.Denote → signalType.Denote → signalType.Denote}
     {identity : signalType.Denote}
@@ -1013,36 +919,23 @@ private def nodeImplementation
     {identityModule : IdentityImplementation signalType identity}
     (leftImplementation : Implementation binary identityModule left)
     (rightImplementation : Implementation binary identityModule right) :
-    Implementation binary identityModule (.node left right) where
-  stateCorresponds := nodeStateCorresponds leftImplementation rightImplementation
-  hasCorrespondingState := by
-    intro state
-    rcases leftImplementation.hasCorrespondingState (state .left) with
-      ⟨leftState, leftCorresponds⟩
-    rcases rightImplementation.hasCorrespondingState (state .right) with
-      ⟨rightState, rightCorresponds⟩
-    rcases binary.certification.hasCorrespondingState (state .combine) with
-      ⟨combineState, combineCorresponds⟩
-    have leftState_eq : leftState = SignalMap.emptyValues := by
-      funext impossible
-      exact nomatch impossible
-    have rightState_eq : rightState = SignalMap.emptyValues := by
-      funext impossible
-      exact nomatch impossible
-    have combineState_eq : combineState = SignalMap.emptyValues := by
-      funext impossible
-      exact nomatch impossible
-    subst leftState
-    subst rightState
-    subst combineState
-    exact ⟨SignalMap.emptyValues,
-      leftCorresponds, rightCorresponds, combineCorresponds⟩
-  hasStructuralResult :=
-    nodeHasStructuralResult leftImplementation rightImplementation
-  structuralResultUnique := nodeUnique leftImplementation rightImplementation
-  implements := nodeImplements leftImplementation rightImplementation
+    Implementation binary identityModule (.node left right) := by
+  let certification :=
+    (nodeCertifiedLayer signalType operation identity left right).certifyComposite
+      (nodeStructuralChildren leftImplementation rightImplementation)
+      (nodeCertifiedChildren leftImplementation rightImplementation)
+      (by intro child; cases child <;> rfl)
+  have structureEqual :
+      ModuleStructure.composite (nodeBody signalType left right)
+        (nodeStructuralChildren leftImplementation rightImplementation) =
+      moduleStructure binary identityModule (.node left right) := by
+    rw [moduleStructure]
+    congr
+    funext child
+    cases child <;> rfl
+  exact certification.transportStructure structureEqual
 
-private def implementation (binary : BinaryImplementation signalType operation)
+private noncomputable def implementation (binary : BinaryImplementation signalType operation)
     (identityModule : IdentityImplementation signalType identity) :
     (tree : Tree) → Implementation binary identityModule tree
   | .empty => emptyImplementation identityModule
@@ -1051,13 +944,13 @@ private def implementation (binary : BinaryImplementation signalType operation)
       nodeImplementation (implementation binary identityModule left)
         (implementation binary identityModule right)
 
-def certification (binary : BinaryImplementation signalType operation)
+noncomputable def certification (binary : BinaryImplementation signalType operation)
     (identityModule : IdentityImplementation signalType identity) (tree : Tree) :
     Contracts.Cycle.ModuleCycleCertification (moduleStructure binary identityModule tree)
       (cycleContract signalType operation identity tree) :=
   implementation binary identityModule tree
 
-def certified (binary : BinaryImplementation signalType operation)
+noncomputable def certified (binary : BinaryImplementation signalType operation)
     (identityModule : IdentityImplementation signalType identity)
     (tree : Tree) : Contracts.Cycle.ModuleCycleCertified (ports signalType tree) :=
   (certification binary identityModule tree).bundle
@@ -1075,49 +968,3 @@ def certified (binary : BinaryImplementation signalType operation)
       cycleContract signalType operation identity tree := rfl
 
 end Silean.Composition.Reduction
-
-namespace Silean.Composition.Reduction.Naming
-
-open Silean Silean.Naming
-
-def ports (signalType : SignalType) (tree : Tree) :
-    ModulePortsNaming (Reduction.ports signalType tree) where
-  inputs := SignalMapNaming.indexed _ "input"
-  outputs := ⟨fun | .output => "result"⟩
-
-private def treeParameters : Tree → List ModuleParameter
-  | .empty => [.natural 0]
-  | .leaf => [.natural 1]
-  | .node left right =>
-      .natural 2 :: treeParameters left ++ treeParameters right
-
-def naming (family : String)
-    (binary : BinaryImplementation signalType operation)
-    (identityModule : IdentityImplementation signalType identity)
-    (binaryNaming : ModuleNaming binary.moduleStructure)
-    (identityNaming : ModuleNaming identityModule.moduleStructure) :
-    (tree : Tree) → ModuleNaming
-      (Reduction.moduleStructure binary identityModule tree)
-  | .empty => .composite
-      ⟨family, "empty", .shape signalType :: treeParameters .empty⟩
-      (ports signalType .empty)
-      (fun | .identity => "identity")
-      (fun | .identity => identityNaming)
-  | .leaf => .composite
-      ⟨family, "leaf", .shape signalType :: treeParameters .leaf⟩
-      (ports signalType .leaf)
-      (fun impossible => nomatch impossible)
-      (fun impossible => nomatch impossible)
-  | .node left right => .composite
-      ⟨family, "node", .shape signalType :: treeParameters (.node left right)⟩
-      (ports signalType (.node left right))
-      (fun
-        | .left => "left"
-        | .right => "right"
-        | .combine => "combine")
-      (fun
-        | .left => naming family binary identityModule binaryNaming identityNaming left
-        | .right => naming family binary identityModule binaryNaming identityNaming right
-        | .combine => binaryNaming)
-
-end Silean.Composition.Reduction.Naming

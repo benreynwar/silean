@@ -455,7 +455,7 @@ def comparisonRule : Contracts.Cycle.CycleOutputRule ports stateMap
       instr_andi := false
       instr_and := false
     }
-    ((Alu.evaluate aluInputs).alu_out_0, ())
+    (Alu.comparisonOutput aluInputs, ())
 
 def writebackRule : Contracts.Cycle.CycleOutputRule ports stateMap
     { inputTypes := .cons (.vector 8 .bit) (.cons .bit (.cons .bit (.cons .bit .nil))),

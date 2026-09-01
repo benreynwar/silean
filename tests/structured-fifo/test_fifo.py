@@ -1,7 +1,15 @@
+import random
+from collections import deque
+
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import FallingEdge, RisingEdge
+from cocotb.triggers import ReadOnly
+from utils import drive_payload, next_drive_phase, random_payload, read_payload
 
+
+SEED = 0x51EA1
+RANDOM_CYCLES = 256
+CAPACITY = 1
 
 INPUT_FIELDS = (
     "input_data_a_0",
@@ -17,65 +25,74 @@ INPUT_FIELDS = (
 OUTPUT_FIELDS = tuple(name.replace("input_", "output_", 1) for name in INPUT_FIELDS)
 
 
-async def next_drive_phase(clock) -> None:
-    await RisingEdge(clock)
-    await FallingEdge(clock)
-
-
-def drive_payload(dut, values: tuple[int, ...]) -> None:
-    assert len(values) == len(INPUT_FIELDS)
-    for name, value in zip(INPUT_FIELDS, values, strict=True):
-        getattr(dut, name).value = value
-
-
-def read_payload(dut) -> tuple[int, ...]:
-    return tuple(int(getattr(dut, name).value) for name in OUTPUT_FIELDS)
-
-
 @cocotb.test()
-async def stores_structured_payload_with_backpressure(dut) -> None:
-    empty = (0, 0, 0, 0, 0, 0, 0, 0)
-    first = (1, 0, 1, 1, 0, 1, 1, 0)
-    ignored = (0, 1, 0, 0, 1, 0, 0, 1)
-    replacement = (1, 1, 0, 1, 1, 1, 0, 0)
+async def random_stream_preserves_order_and_flushes(dut) -> None:
+    rng = random.Random(SEED)
+    expected = deque()
+    accepted_payloads = []
+    produced_payloads = []
+    saw_input_backpressure = False
+    saw_output_backpressure = False
 
     dut.input_valid.value = 0
-    dut.output_ready.value = 1
-    drive_payload(dut, empty)
+    dut.output_ready.value = 0
+    dut.reset.value = 1
+    drive_payload(dut, INPUT_FIELDS, (0,) * len(INPUT_FIELDS))
     cocotb.start_soon(Clock(dut.clock, 10, unit="ns").start())
 
-    # Force the FIFO empty without assuming anything about register power-up.
+    # Synchronous reset establishes the empty state at this rising edge.
     await next_drive_phase(dut.clock)
-    assert dut.output_valid.value == 0
-    assert dut.input_ready.value == 1
+    dut.reset.value = 0
+    assert int(dut.output_valid.value) == 0
+    assert int(dut.input_ready.value) == 1
 
-    # Capture a complete structured payload while the consumer is blocked.
-    dut.input_valid.value = 1
-    dut.output_ready.value = 0
-    drive_payload(dut, first)
-    await next_drive_phase(dut.clock)
-    assert dut.output_valid.value == 1
-    assert dut.input_ready.value == 0
-    assert read_payload(dut) == first
+    for _ in range(RANDOM_CYCLES):
+        input_valid = rng.randrange(2)
+        output_ready = rng.randrange(2)
+        payload = random_payload(rng, INPUT_FIELDS)
 
-    # Backpressure holds every payload field and ignores the input bus.
+        dut.input_valid.value = input_valid
+        dut.output_ready.value = output_ready
+        drive_payload(dut, INPUT_FIELDS, payload)
+        await ReadOnly()
+
+        input_ready = int(dut.input_ready.value)
+        output_valid = int(dut.output_valid.value)
+        saw_input_backpressure |= bool(input_valid and not input_ready)
+        saw_output_backpressure |= bool(output_valid and not output_ready)
+
+        # This FIFO is combinationally fall-through. When it is empty, a newly
+        # accepted input may also be produced in this same cycle, so enqueue it
+        # in the reference model before checking the output transfer.
+        if input_valid and input_ready:
+            expected.append(payload)
+            accepted_payloads.append(payload)
+
+        if output_valid and output_ready:
+            assert expected, "FIFO produced an item that was never accepted"
+            produced = read_payload(dut, OUTPUT_FIELDS)
+            assert produced == expected.popleft()
+            produced_payloads.append(produced)
+
+        assert len(expected) <= CAPACITY
+        await next_drive_phase(dut.clock)
+
+    # Stop producing and hold ready high for the FIFO capacity. Every queued
+    # payload must be transferred during this drain interval.
     dut.input_valid.value = 0
-    drive_payload(dut, ignored)
-    await next_drive_phase(dut.clock)
-    assert dut.output_valid.value == 1
-    assert read_payload(dut) == first
-
-    # A simultaneous dequeue/enqueue replaces the stored payload atomically.
-    dut.input_valid.value = 1
     dut.output_ready.value = 1
-    drive_payload(dut, replacement)
-    await next_drive_phase(dut.clock)
-    assert dut.output_valid.value == 1
-    assert dut.input_ready.value == 1
-    assert read_payload(dut) == replacement
+    for _ in range(CAPACITY):
+        await ReadOnly()
+        if int(dut.output_valid.value):
+            assert expected, "FIFO produced an item that was never accepted"
+            produced = read_payload(dut, OUTPUT_FIELDS)
+            assert produced == expected.popleft()
+            produced_payloads.append(produced)
+        await next_drive_phase(dut.clock)
 
-    # Dequeue without replacement leaves the FIFO empty.
-    dut.input_valid.value = 0
-    await next_drive_phase(dut.clock)
-    assert dut.output_valid.value == 0
-    assert dut.input_ready.value == 1
+    await ReadOnly()
+    assert not expected, "not all accepted inputs were flushed"
+    assert produced_payloads == accepted_payloads
+    assert int(dut.output_valid.value) == 0
+    assert saw_input_backpressure
+    assert saw_output_backpressure

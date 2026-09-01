@@ -1,5 +1,5 @@
 import Silean.Modules.OneEntryFifo.OneEntryFifoCycleBehavior
-import Silean.Composition.FifoSerialComposition
+import Silean.Naming.FifoSerialNaming
 
 namespace Silean.Modules.SerialDepthFifo
 

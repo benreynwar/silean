@@ -1,10 +1,10 @@
-import Silean.Examples.Checks.PicoRVControlFixtures
+import Silean.Examples.Fixtures.PicoRVControl
 
 namespace Silean.Examples.Checks.PicoRVControlMemoryChecks
 
 open Silean
 open Silean.Examples.PicoRV.Control
-open Silean.Examples.Checks.PicoRVControlFixtures
+open Silean.Examples.Fixtures.PicoRVControl
 
 def byteLoadStart := nextState
   { idleInputs with instr_lb := true, is_lbu_lhu_lw := false }

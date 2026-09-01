@@ -2,6 +2,11 @@ import Silean.Modules.BitMux
 import Silean.Modules.Constant
 import Silean.Modules.All
 import Silean.Modules.HalfAdder
+import Silean.Modules.FullAdder
+import Silean.Modules.Add
+import Silean.Modules.BitwiseXor
+import Silean.Modules.BitwiseAnd
+import Silean.Modules.AddSub
 import Silean.Modules.Increment
 import Silean.Modules.Register
 import Silean.Modules.ResetRegister

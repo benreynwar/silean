@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Naming.SignalAdapterNaming
 import Silean.Composition.SignalAdapterImplementation
 
@@ -155,39 +155,59 @@ def wiring (element : SignalType) (leftWidth rightWidth : Nat) :
     ModuleBody := ⟨context element leftWidth rightWidth,
       wiring element leftWidth rightWidth⟩
 
-@[reducible] def children (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.Children (body element leftWidth rightWidth)
-  | .leftSplit => (leftSplitter element leftWidth).certified
-  | .rightSplit => (rightSplitter element rightWidth).certified
-  | .combine => (combiner element leftWidth rightWidth).certified
+@[reducible] def childContracts (element : SignalType) (leftWidth rightWidth : Nat) :
+    Contracts.Cycle.ChildCycleContracts (body element leftWidth rightWidth)
+  | .leftSplit => (leftSplitter element leftWidth).cycleContract
+  | .rightSplit => (rightSplitter element rightWidth).cycleContract
+  | .combine => (combiner element leftWidth rightWidth).cycleContract
+
+@[reducible] def structuralChildren (element : SignalType) (leftWidth rightWidth : Nat) :
+    (child : Instance) → ModuleStructure ((instancePorts element leftWidth rightWidth).ports child)
+  | .leftSplit => .splitter (leftSplitter element leftWidth)
+  | .rightSplit => .splitter (rightSplitter element rightWidth)
+  | .combine => .combiner (combiner element leftWidth rightWidth)
+
+@[reducible] noncomputable def certifiedChildren
+    (element : SignalType) (leftWidth rightWidth : Nat) :
+    (child : Instance) → Contracts.Cycle.ModuleCycleCertifiedStructure
+      (childContracts element leftWidth rightWidth child)
+  | .leftSplit => ⟨.splitter (leftSplitter element leftWidth),
+      (leftSplitter element leftWidth).certified.certification⟩
+  | .rightSplit => ⟨.splitter (rightSplitter element rightWidth),
+      (rightSplitter element rightWidth).certified.certification⟩
+  | .combine => ⟨.combiner (combiner element leftWidth rightWidth),
+      (combiner element leftWidth rightWidth).certified.certification⟩
 
 def moduleStructure (element : SignalType) (leftWidth rightWidth : Nat) :
     ModuleStructure (ports element leftWidth rightWidth) :=
-  Contracts.Cycle.Certification.moduleStructure (body element leftWidth rightWidth)
-    (children element leftWidth rightWidth)
+  .composite (body element leftWidth rightWidth)
+    (structuralChildren element leftWidth rightWidth)
 
 abbrev leftOccurrence (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.RuleOccurrence (children element leftWidth rightWidth) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body element leftWidth rightWidth) (childContracts element leftWidth rightWidth) :=
   ⟨.leftSplit, Composition.SignalComponentRule.apply⟩
 
 abbrev rightOccurrence (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.RuleOccurrence (children element leftWidth rightWidth) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body element leftWidth rightWidth) (childContracts element leftWidth rightWidth) :=
   ⟨.rightSplit, Composition.SignalComponentRule.apply⟩
 
 abbrev combineOccurrence (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.RuleOccurrence (children element leftWidth rightWidth) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (body element leftWidth rightWidth) (childContracts element leftWidth rightWidth) :=
   ⟨.combine, Composition.SignalComponentRule.apply⟩
 
 def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.OutputSchedule (body element leftWidth rightWidth)
-      (children element leftWidth rightWidth)
+    Contracts.Cycle.Certification.Layer.OutputSchedule (body element leftWidth rightWidth)
+      (childContracts element leftWidth rightWidth)
       (cycleContract element leftWidth rightWidth) .apply :=
   .call (leftOccurrence element leftWidth rightWidth)
     (by
       intro input _
       cases input
       simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable, body, wiring, context,
+        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
         EndpointContext.moduleInput])
     (by simp)
     (.call (rightOccurrence element leftWidth rightWidth)
@@ -195,12 +215,12 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
         intro input _
         cases input
         simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-          SignalSelection.labels, Contracts.Cycle.Certification.sourceAvailable, body, wiring, context,
+          SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
           EndpointContext.moduleInput])
       (by
         intro member
         have equal := List.mem_singleton.mp member
-        have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
+        have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
         cases childEqual)
       (.call (combineOccurrence element leftWidth rightWidth)
         (by
@@ -212,7 +232,7 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
               (context element leftWidth rightWidth).instanceOutput
                 .leftSplit leftIndex by
               simp [body, wiring]]
-            change Contracts.Cycle.Certification.outputAvailable
+            change Contracts.Cycle.Certification.Layer.outputAvailable
               [rightOccurrence element leftWidth rightWidth,
                 leftOccurrence element leftWidth rightWidth]
               .leftSplit leftIndex
@@ -232,7 +252,7 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
               (context element leftWidth rightWidth).instanceOutput
                 .rightSplit rightIndex by
               simp [body, wiring]]
-            change Contracts.Cycle.Certification.outputAvailable
+            change Contracts.Cycle.Certification.Layer.outputAvailable
               [rightOccurrence element leftWidth rightWidth,
                 leftOccurrence element leftWidth rightWidth]
               .rightSplit rightIndex
@@ -249,10 +269,10 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
         (by
           intro member
           rcases List.mem_cons.mp member with equal | member
-          · have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
+          · have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
             cases childEqual
           · have equal := List.mem_singleton.mp member
-            have childEqual := congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
+            have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
             cases childEqual)
         (.done (by
           intro output _
@@ -261,8 +281,8 @@ def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
             by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩))))
 
 def stateSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.StateSchedule (body element leftWidth rightWidth)
-      (children element leftWidth rightWidth) :=
+    Contracts.Cycle.Certification.Layer.StateSchedule (body element leftWidth rightWidth)
+      (childContracts element leftWidth rightWidth) :=
   .done (by
     intro child input member
     cases child with
@@ -280,8 +300,8 @@ def stateSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
         exact nomatch member)
 
 def ruleSchedules (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.RuleSchedules (body element leftWidth rightWidth)
-      (children element leftWidth rightWidth)
+    Contracts.Cycle.Certification.Layer.RuleSchedules (body element leftWidth rightWidth)
+      (childContracts element leftWidth rightWidth)
       (cycleContract element leftWidth rightWidth) where
   output | .apply => outputSchedule element leftWidth rightWidth
   state := stateSchedule element leftWidth rightWidth
@@ -289,27 +309,24 @@ def ruleSchedules (element : SignalType) (leftWidth rightWidth : Nat) :
 theorem coversChildren (element : SignalType) (leftWidth rightWidth : Nat) :
     (ruleSchedules element leftWidth rightWidth).CoversChildren := by
   intro child rule
-  apply Contracts.Cycle.Certification.RuleSchedules.Combined.add_preserves
-  apply Contracts.Cycle.Certification.RuleSchedules.mem_combineOutputs
-    (ruleSchedules element leftWidth rightWidth) .apply
+  right
+  refine ⟨.apply, ?_⟩
   cases child with
   | leftSplit =>
       change Composition.SignalComponentRule at rule
       cases rule
-      simp [ruleSchedules, outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      simp [ruleSchedules, outputSchedule,
+        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | rightSplit =>
       change Composition.SignalComponentRule at rule
       cases rule
-      simp [ruleSchedules, outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
+      simp [ruleSchedules, outputSchedule,
+        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
   | combine =>
       change Composition.SignalComponentRule at rule
       cases rule
-      simp [ruleSchedules, outputSchedule, Contracts.Cycle.Certification.Schedule.finalAvailability]
-
-theorem structuralResultUnique (element : SignalType) (leftWidth rightWidth : Nat) :
-    (moduleStructure element leftWidth rightWidth).HasAtMostOneSolution :=
-  (ruleSchedules element leftWidth rightWidth).hasAtMostOneSolution
-    (coversChildren element leftWidth rightWidth)
+      simp [ruleSchedules, outputSchedule,
+        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
 
 def leftInputs (inputs : (ports element leftWidth rightWidth).inputs.Values) :
     (leftSplitter element leftWidth).ports.inputs.Values
@@ -320,85 +337,77 @@ def rightInputs (inputs : (ports element leftWidth rightWidth).inputs.Values) :
   | .value => inputs .right
 
 def combineInputs
-    (left : ProposedValues (leftSplitter element leftWidth).certified.moduleStructure)
-    (right : ProposedValues (rightSplitter element rightWidth).certified.moduleStructure) :
+    (left : (leftSplitter element leftWidth).ports.outputs.Values)
+    (right : (rightSplitter element rightWidth).ports.outputs.Values) :
     (combiner element leftWidth rightWidth).ports.inputs.Values := fun index =>
-  Fin.addCases (fun leftIndex => left.outputs leftIndex)
-    (fun rightIndex => right.outputs rightIndex) index
+  Fin.addCases (fun leftIndex => left leftIndex)
+    (fun rightIndex => right rightIndex) index
 
-theorem hasStructuralResult (element : SignalType) (leftWidth rightWidth : Nat)
-    (inputs : (ports element leftWidth rightWidth).inputs.Values)
-    (state : (moduleStructure element leftWidth rightWidth).State) :
-    ∃ proposal, (moduleStructure element leftWidth rightWidth).IsSolution
-      inputs state proposal := by
-  rcases (leftSplitter element leftWidth).certified.hasStructuralResult
-      (leftInputs inputs) (state .leftSplit) with ⟨left, leftSatisfies⟩
-  rcases (rightSplitter element rightWidth).certified.hasStructuralResult
-      (rightInputs inputs) (state .rightSplit) with ⟨right, rightSatisfies⟩
-  rcases (combiner element leftWidth rightWidth).certified.hasStructuralResult
-      (combineInputs left right) (state .combine) with ⟨combined, combineSatisfies⟩
-  let proposals : (child : Instance) →
-      ProposedValues (Contracts.Cycle.Certification.childStructure
-        (children element leftWidth rightWidth) child)
-    | .leftSplit => left
-    | .rightSplit => right
-    | .combine => combined
-  let outputs : (ports element leftWidth rightWidth).outputs.Values := fun
-    | .result => combined.outputs .value
-  refine ⟨ProposedValues.composite outputs proposals, ?_⟩
-  constructor
-  · intro output; cases output; rfl
-  · intro child
-    cases child with
-    | leftSplit =>
-        change (leftSplitter element leftWidth).certified.moduleStructure.IsSolution
-          (ProposedValues.childInputs (body element leftWidth rightWidth) _ inputs
-            proposals .leftSplit) (state .leftSplit) left
-        rw [show ProposedValues.childInputs (body element leftWidth rightWidth) _
-            inputs proposals .leftSplit = leftInputs inputs by
-          funext input; cases input; rfl]
-        exact leftSatisfies
-    | rightSplit =>
-        change (rightSplitter element rightWidth).certified.moduleStructure.IsSolution
-          (ProposedValues.childInputs (body element leftWidth rightWidth) _ inputs
-            proposals .rightSplit) (state .rightSplit) right
-        rw [show ProposedValues.childInputs (body element leftWidth rightWidth) _
-            inputs proposals .rightSplit = rightInputs inputs by
-          funext input; cases input; rfl]
-        exact rightSatisfies
-    | combine =>
-        change (combiner element leftWidth rightWidth).certified.moduleStructure.IsSolution
-          (ProposedValues.childInputs (body element leftWidth rightWidth) _ inputs
-            proposals .combine) (state .combine) combined
-        rw [show ProposedValues.childInputs (body element leftWidth rightWidth) _
-            inputs proposals .combine = combineInputs left right by
-          funext index
-          refine Fin.addCases ?_ ?_ index
-          · intro leftIndex
-            simp [ProposedValues.childInputs, body, wiring, combineInputs,
-              EndpointContext.instanceOutput, SignalSource.value, proposals]
-          · intro rightIndex
-            simp [ProposedValues.childInputs, body, wiring, combineInputs,
-              EndpointContext.instanceOutput, SignalSource.value, proposals]]
-        exact combineSatisfies
+section LayerCertification
 
-private theorem implements (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Implements (moduleStructure element leftWidth rightWidth)
-      (cycleContract element leftWidth rightWidth) (fun _ _ => True) := by
+variable (element : SignalType) (leftWidth rightWidth : Nat)
+  (layerChildren : (child : Instance) →
+    Contracts.Cycle.ModuleCycleCertifiedStructure
+      (childContracts element leftWidth rightWidth child))
+
+private abbrev certificationStructure :=
+  Contracts.Cycle.Certification.Layer.moduleStructure (body element leftWidth rightWidth) layerChildren
+
+private def stateCorresponds (_ : emptySignalMap.Values)
+    (_ : (certificationStructure element leftWidth rightWidth layerChildren).State) : Prop := True
+
+private theorem implements :
+    Contracts.Cycle.Implements
+      (certificationStructure element leftWidth rightWidth layerChildren)
+      (cycleContract element leftWidth rightWidth)
+      (stateCorresponds element leftWidth rightWidth layerChildren) := by
   intro inputs contractState structuralState proposal corresponds satisfies
   rcases proposal with ⟨outputs, proposals⟩
-  rcases satisfies with ⟨boundary, childSatisfies⟩
+  have boundary := satisfies.1
+  have childMatch (child : Instance) := by
+    letI : Subsingleton
+        ((childContracts element leftWidth rightWidth child).state.Values) := by
+      cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
+    exact Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
+      layerChildren inputs
+        structuralState (ProposedValues.composite outputs proposals) satisfies child
+        (by cases child <;> exact SignalMap.emptyValues)
   have leftOutputs : (proposals .leftSplit).outputs =
       (leftSplitter element leftWidth).outputValues (leftInputs inputs) := by
-    exact childSatisfies .leftSplit
+    have holds := (Composition.SignalSplitter.outputRule_holds_iff
+      (leftSplitter element leftWidth) _ _ _).mp
+      ((childMatch .leftSplit).1.1 Composition.SignalComponentRule.apply)
+    have inputsEqual : ProposedValues.childInputs (body element leftWidth rightWidth)
+        ((fun name => (layerChildren name).moduleStructure)) inputs proposals
+          .leftSplit = leftInputs inputs := by funext input; cases input; rfl
+    change (proposals .leftSplit).outputs =
+      (leftSplitter element leftWidth).outputValues
+        (ProposedValues.childInputs (body element leftWidth rightWidth)
+          ((fun name => (layerChildren name).moduleStructure)) inputs proposals
+          .leftSplit) at holds
+    rw [inputsEqual] at holds
+    exact holds
   have rightOutputs : (proposals .rightSplit).outputs =
       (rightSplitter element rightWidth).outputValues (rightInputs inputs) := by
-    exact childSatisfies .rightSplit
+    have holds := (Composition.SignalSplitter.outputRule_holds_iff
+      (rightSplitter element rightWidth) _ _ _).mp
+      ((childMatch .rightSplit).1.1 Composition.SignalComponentRule.apply)
+    have inputsEqual : ProposedValues.childInputs (body element leftWidth rightWidth)
+        ((fun name => (layerChildren name).moduleStructure)) inputs proposals
+          .rightSplit = rightInputs inputs := by funext input; cases input; rfl
+    change (proposals .rightSplit).outputs =
+      (rightSplitter element rightWidth).outputValues
+        (ProposedValues.childInputs (body element leftWidth rightWidth)
+          ((fun name => (layerChildren name).moduleStructure)) inputs proposals
+          .rightSplit) at holds
+    rw [inputsEqual] at holds
+    exact holds
   have combineOutputs : (proposals .combine).outputs =
       (combiner element leftWidth rightWidth).outputValues
         (ProposedValues.childInputs (body element leftWidth rightWidth) _
           inputs proposals .combine) := by
-    exact childSatisfies .combine
+    exact (Composition.SignalCombiner.outputRule_holds_iff _ _ _ _).mp
+      ((childMatch .combine).1.1 Composition.SignalComponentRule.apply)
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
@@ -410,7 +419,8 @@ private theorem implements (element : SignalType) (leftWidth rightWidth : Nat) :
     rw [congrFun combineOutputs .value]
     rw [show ProposedValues.childInputs (body element leftWidth rightWidth) _
         inputs proposals .combine =
-          combineInputs (proposals .leftSplit) (proposals .rightSplit) by
+          combineInputs (proposals .leftSplit).outputs
+            (proposals .rightSplit).outputs by
       funext index
       refine Fin.addCases ?_ ?_ index
       · intro leftIndex
@@ -431,16 +441,29 @@ private theorem implements (element : SignalType) (leftWidth rightWidth : Nat) :
       rfl
   · rfl
 
-def certification (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.ModuleCycleCertification (moduleStructure element leftWidth rightWidth)
-      (cycleContract element leftWidth rightWidth) where
-  stateCorresponds := fun _ _ => True
-  hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := hasStructuralResult element leftWidth rightWidth
-  structuralResultUnique := structuralResultUnique element leftWidth rightWidth
-  implements := implements element leftWidth rightWidth
+end LayerCertification
 
-def certified (element : SignalType) (leftWidth rightWidth : Nat) :
+noncomputable opaque certifiedLayer (element : SignalType) (leftWidth rightWidth : Nat) :
+    Contracts.Cycle.ModuleCycleCertifiedLayer (body element leftWidth rightWidth)
+      (childContracts element leftWidth rightWidth)
+      (cycleContract element leftWidth rightWidth) :=
+  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
+    (ruleSchedules element leftWidth rightWidth)
+    (coversChildren element leftWidth rightWidth)
+    (stateCorresponds element leftWidth rightWidth)
+    (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩)
+    (implements element leftWidth rightWidth)
+
+noncomputable def certification (element : SignalType) (leftWidth rightWidth : Nat) :
+    Contracts.Cycle.ModuleCycleCertification
+      (moduleStructure element leftWidth rightWidth)
+      (cycleContract element leftWidth rightWidth) :=
+  (certifiedLayer element leftWidth rightWidth).certifyComposite
+    (structuralChildren element leftWidth rightWidth)
+    (certifiedChildren element leftWidth rightWidth)
+    (by intro child; cases child <;> rfl)
+
+noncomputable def certified (element : SignalType) (leftWidth rightWidth : Nat) :
     Contracts.Cycle.ModuleCycleCertified (ports element leftWidth rightWidth) :=
   (certification element leftWidth rightWidth).bundle
 

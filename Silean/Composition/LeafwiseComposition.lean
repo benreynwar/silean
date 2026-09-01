@@ -1,4 +1,4 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerSchedule
 import Silean.Composition.SignalAdapterImplementation
 
 namespace Silean.Composition
@@ -276,259 +276,112 @@ def aggregateWiring (interface : LeafwiseInterface)
   context := interface.aggregateContext splitter
   wiring := interface.aggregateWiring splitter
 
-/-! Certification-facing views of the same hierarchy.  Components may carry
-different contracts; only their public ports and certification are needed to
-construct and prove a structural proposal. -/
+/-! ## Contract boundary for an aggregate layer
 
-@[reducible] def aggregateChildren (interface : LeafwiseInterface)
+The scheduling interface names only the contracts required from recursive
+components. Concrete component structures and certifications are supplied
+later when the layer is instantiated. -/
+
+@[reducible] def aggregateChildContracts (interface : LeafwiseInterface)
     (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
+    (componentContracts : (component : splitter.ports.outputs.Label) →
+      Contracts.Cycle.ModuleCycleContract
         (interface.ports (splitter.ports.outputs.signalType component))) :
-    Contracts.Cycle.Certification.Children (interface.aggregateBody splitter)
-  | .splitter _ => splitter.certified
-  | .component component => components component
-  | .combiner _ => splitter.combiner.certified
-
-@[reducible] def aggregateChildStructure (interface : LeafwiseInterface)
-    (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
-        (interface.ports (splitter.ports.outputs.signalType component))) :=
-  Contracts.Cycle.Certification.childStructure (interface.aggregateChildren splitter components)
+    Contracts.Cycle.ChildCycleContracts (interface.aggregateBody splitter)
+  | .splitter _ => splitter.cycleContract
+  | .component component => componentContracts component
+  | .combiner _ => splitter.combiner.cycleContract
 
 abbrev splitterOccurrence (interface : LeafwiseInterface)
     (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
+    (componentContracts : (component : splitter.ports.outputs.Label) →
+      Contracts.Cycle.ModuleCycleContract
         (interface.ports (splitter.ports.outputs.signalType component)))
     (recursiveInput : interface.RecursiveInput) :
-    Contracts.Cycle.Certification.RuleOccurrence
-      (interface.aggregateChildren splitter components) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (interface.aggregateBody splitter)
+      (interface.aggregateChildContracts splitter componentContracts) :=
   ⟨.splitter recursiveInput, Composition.SignalComponentRule.apply⟩
 
 abbrev componentOccurrence (interface : LeafwiseInterface)
     (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
+    (componentContracts : (component : splitter.ports.outputs.Label) →
+      Contracts.Cycle.ModuleCycleContract
         (interface.ports (splitter.ports.outputs.signalType component)))
     (component : splitter.ports.outputs.Label)
-    (rule : (components component).cycleContract.RuleName) :
-    Contracts.Cycle.Certification.RuleOccurrence
-      (interface.aggregateChildren splitter components) :=
+    (rule : (componentContracts component).RuleName) :
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (interface.aggregateBody splitter)
+      (interface.aggregateChildContracts splitter componentContracts) :=
   ⟨.component component, rule⟩
 
 abbrev combinerOccurrence (interface : LeafwiseInterface)
     (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
+    (componentContracts : (component : splitter.ports.outputs.Label) →
+      Contracts.Cycle.ModuleCycleContract
         (interface.ports (splitter.ports.outputs.signalType component)))
     (output : interface.Output) :
-    Contracts.Cycle.Certification.RuleOccurrence
-      (interface.aggregateChildren splitter components) :=
+    Contracts.Cycle.Certification.Layer.RuleOccurrence
+      (interface.aggregateBody splitter)
+      (interface.aggregateChildContracts splitter componentContracts) :=
   ⟨.combiner output, Composition.SignalComponentRule.apply⟩
 
 theorem componentOccurrence_injective (interface : LeafwiseInterface)
     (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
+    (componentContracts : (component : splitter.ports.outputs.Label) →
+      Contracts.Cycle.ModuleCycleContract
         (interface.ports (splitter.ports.outputs.signalType component)))
     (rule : (component : splitter.ports.outputs.Label) →
-      (components component).cycleContract.RuleName) :
+      (componentContracts component).RuleName) :
     Function.Injective (fun component =>
-      interface.componentOccurrence splitter components component
+      interface.componentOccurrence splitter componentContracts component
         (rule component)) := by
   intro left right equal
   have childEqual : AggregateInstance.component left =
       AggregateInstance.component right :=
-    congrArg Contracts.Cycle.Certification.RuleOccurrence.child equal
+    congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
   exact AggregateInstance.component.inj childEqual
 
 noncomputable def callComponentsAfter (interface : LeafwiseInterface)
     (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
+    (componentContracts : (component : splitter.ports.outputs.Label) →
+      Contracts.Cycle.ModuleCycleContract
         (interface.ports (splitter.ports.outputs.signalType component)))
-    {inputAvailable : (interface.aggregateBody splitter).context.ports.inputs.Label → Prop}
-    (initial : Contracts.Cycle.Certification.Availability
-      (interface.aggregateChildren splitter components))
+    {inputAvailable :
+      (interface.aggregateBody splitter).context.ports.inputs.Label → Prop}
+    (initial : Contracts.Cycle.Certification.Layer.Availability
+      (interface.aggregateBody splitter)
+      (interface.aggregateChildContracts splitter componentContracts))
     (rule : (component : splitter.ports.outputs.Label) →
-      (components component).cycleContract.RuleName)
+      (componentContracts component).RuleName)
     (fresh : ∀ component,
-      interface.componentOccurrence splitter components component
+      interface.componentOccurrence splitter componentContracts component
         (rule component) ∉ initial)
     (readsAvailable : ∀ component input,
-      input ∈ (interface.componentOccurrence splitter components component
+      input ∈ (interface.componentOccurrence splitter componentContracts component
         (rule component)).reads →
-      Contracts.Cycle.Certification.sourceAvailable inputAvailable initial
+      Contracts.Cycle.Certification.Layer.sourceAvailable inputAvailable initial
         ((interface.aggregateBody splitter).wiring.instanceInput
           (.component component) input)) :
-    Contracts.Cycle.Certification.Schedule (interface.aggregateBody splitter)
-      (interface.aggregateChildren splitter components) inputAvailable
+    Contracts.Cycle.Certification.Layer.Schedule
+      (interface.aggregateBody splitter)
+      (interface.aggregateChildContracts splitter componentContracts)
+      inputAvailable
       (fun final =>
         (∀ called, called ∈ initial → called ∈ final) ∧
-        (∀ component, interface.componentOccurrence splitter components component
-          (rule component) ∈ final) ∧
+        (∀ component,
+          interface.componentOccurrence splitter componentContracts component
+            (rule component) ∈ final) ∧
         ∀ called, called ∈ final → called ∈ initial ∨
-          ∃ component, called = interface.componentOccurrence splitter components
-            component (rule component)) initial :=
-  Contracts.Cycle.Certification.Schedule.callFamilyAfter initial splitter.ports.outputs.labels
-    (fun component => interface.componentOccurrence splitter components component
-      (rule component))
-    (interface.componentOccurrence_injective splitter components rule)
+          ∃ component, called =
+            interface.componentOccurrence splitter componentContracts component
+              (rule component)) initial :=
+  Contracts.Cycle.Certification.Layer.Schedule.callFamilyAfter initial
+    splitter.ports.outputs.labels
+    (fun component => interface.componentOccurrence splitter componentContracts
+      component (rule component))
+    (interface.componentOccurrence_injective splitter componentContracts rule)
     fresh readsAvailable
-
-def aggregateChildProposals (interface : LeafwiseInterface)
-    (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
-        (interface.ports (splitter.ports.outputs.signalType component)))
-    (splitProposals : (recursiveInput : interface.RecursiveInput) →
-      ProposedValues splitter.certified.moduleStructure)
-    (componentProposals : (component : splitter.ports.outputs.Label) →
-      ProposedValues (components component).moduleStructure)
-    (combinerProposals : (output : interface.Output) →
-      ProposedValues splitter.combiner.certified.moduleStructure) :
-    (child : interface.AggregateInstance splitter) →
-      ProposedValues (interface.aggregateChildStructure splitter components child)
-  | .splitter recursiveInput => splitProposals recursiveInput
-  | .component component => componentProposals component
-  | .combiner output => combinerProposals output
-
-/-! A private proof witness for constructing an aggregate proposal.  It records
-only the four semantic views of readable wiring used by the construction.
-Unlike a certified module, this witness is not retained after the theorem. -/
-
-structure AggregateProposalConstruction (interface : LeafwiseInterface)
-    (splitter : Composition.SignalSplitter)
-    (components : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleCertified
-        (interface.ports (splitter.ports.outputs.signalType component))) where
-  splitterInputs :
-    (interface.ports splitter.aggregateType).inputs.Values →
-      interface.RecursiveInput → splitter.ports.inputs.Values
-  componentInputs :
-    (interface.ports splitter.aggregateType).inputs.Values →
-      ((recursiveInput : interface.RecursiveInput) →
-        ProposedValues splitter.certified.moduleStructure) →
-      (component : splitter.ports.outputs.Label) →
-        (interface.ports
-          (splitter.ports.outputs.signalType component)).inputs.Values
-  combinerInputs :
-    ((component : splitter.ports.outputs.Label) →
-      ProposedValues (components component).moduleStructure) →
-      interface.Output → splitter.combiner.ports.inputs.Values
-  outputs :
-    ((output : interface.Output) →
-      ProposedValues splitter.combiner.certified.moduleStructure) →
-      (interface.ports splitter.aggregateType).outputs.Values
-  boundary_eq : ∀ inputs splitProposals componentProposals
-      combinerProposals output,
-    outputs combinerProposals output =
-      ((interface.aggregateBody splitter).wiring.moduleOutput output).value
-        inputs fun child =>
-          (interface.aggregateChildProposals splitter components splitProposals
-            componentProposals combinerProposals child).outputs
-  splitterInputs_eq : ∀ inputs splitProposals componentProposals
-      combinerProposals recursiveInput,
-    ProposedValues.childInputs (interface.aggregateBody splitter)
-      (interface.aggregateChildStructure splitter components) inputs
-      (interface.aggregateChildProposals splitter components splitProposals
-        componentProposals combinerProposals) (.splitter recursiveInput) =
-        splitterInputs inputs recursiveInput
-  componentInputs_eq : ∀ inputs splitProposals componentProposals
-      combinerProposals component,
-    ProposedValues.childInputs (interface.aggregateBody splitter)
-      (interface.aggregateChildStructure splitter components) inputs
-      (interface.aggregateChildProposals splitter components splitProposals
-        componentProposals combinerProposals) (.component component) =
-        componentInputs inputs splitProposals component
-  combinerInputs_eq : ∀ inputs splitProposals componentProposals
-      combinerProposals output,
-    ProposedValues.childInputs (interface.aggregateBody splitter)
-      (interface.aggregateChildStructure splitter components) inputs
-      (interface.aggregateChildProposals splitter components splitProposals
-        componentProposals combinerProposals) (.combiner output) =
-        combinerInputs componentProposals output
-
-theorem AggregateProposalConstruction.hasStructuralResult
-    (construction : AggregateProposalConstruction interface splitter components)
-    (inputs : (interface.ports splitter.aggregateType).inputs.Values)
-    (state : (Contracts.Cycle.Certification.moduleStructure (interface.aggregateBody splitter)
-      (interface.aggregateChildren splitter components)).State) :
-    ∃ proposal,
-      (Contracts.Cycle.Certification.moduleStructure (interface.aggregateBody splitter)
-        (interface.aggregateChildren splitter components)).IsSolution
-          inputs state proposal := by
-  let SplitProperty := fun recursiveInput proposal =>
-    splitter.certified.moduleStructure.IsSolution
-      (construction.splitterInputs inputs recursiveInput)
-      (state (.splitter recursiveInput)) proposal
-  have splitAvailable : ∀ recursiveInput, ∃ proposal,
-      SplitProperty recursiveInput proposal := fun recursiveInput =>
-    splitter.certified.hasStructuralResult
-      (construction.splitterInputs inputs recursiveInput)
-      (state (.splitter recursiveInput))
-  rcases interface.recursiveInputs.exists_pi SplitProperty splitAvailable with
-    ⟨splitProposals, splitSatisfies⟩
-  let ComponentProperty := fun component proposal =>
-    (components component).moduleStructure.IsSolution
-      (construction.componentInputs inputs splitProposals component)
-      (state (.component component)) proposal
-  have componentAvailable : ∀ component, ∃ proposal,
-      ComponentProperty component proposal := fun component =>
-    (components component).hasStructuralResult
-      (construction.componentInputs inputs splitProposals component)
-      (state (.component component))
-  rcases splitter.ports.outputs.labels.exists_pi ComponentProperty
-      componentAvailable with ⟨componentProposals, componentSatisfies⟩
-  let CombinerProperty := fun output proposal =>
-    splitter.combiner.certified.moduleStructure.IsSolution
-      (construction.combinerInputs componentProposals output)
-      (state (.combiner output)) proposal
-  have combinerAvailable : ∀ output, ∃ proposal,
-      CombinerProperty output proposal := fun output =>
-    splitter.combiner.certified.hasStructuralResult
-      (construction.combinerInputs componentProposals output)
-      (state (.combiner output))
-  rcases interface.outputs.exists_pi CombinerProperty combinerAvailable with
-    ⟨combinerProposals, combinerSatisfies⟩
-  let childProposals := interface.aggregateChildProposals splitter components
-    splitProposals componentProposals combinerProposals
-  refine ⟨ProposedValues.composite (construction.outputs combinerProposals)
-    childProposals, ?_⟩
-  constructor
-  · exact construction.boundary_eq inputs splitProposals componentProposals
-      combinerProposals
-  · intro child
-    cases child with
-    | splitter recursiveInput =>
-        change splitter.certified.moduleStructure.IsSolution
-          (ProposedValues.childInputs (interface.aggregateBody splitter)
-            (interface.aggregateChildStructure splitter components) inputs
-              childProposals (.splitter recursiveInput))
-          (state (.splitter recursiveInput)) (splitProposals recursiveInput)
-        rw [construction.splitterInputs_eq inputs splitProposals componentProposals
-          combinerProposals recursiveInput]
-        exact splitSatisfies recursiveInput
-    | component component =>
-        change (components component).moduleStructure.IsSolution
-          (ProposedValues.childInputs (interface.aggregateBody splitter)
-            (interface.aggregateChildStructure splitter components) inputs
-              childProposals (.component component))
-          (state (.component component)) (componentProposals component)
-        rw [construction.componentInputs_eq inputs splitProposals componentProposals
-          combinerProposals component]
-        exact componentSatisfies component
-    | combiner output =>
-        change splitter.combiner.certified.moduleStructure.IsSolution
-          (ProposedValues.childInputs (interface.aggregateBody splitter)
-            (interface.aggregateChildStructure splitter components) inputs
-              childProposals (.combiner output))
-          (state (.combiner output)) (combinerProposals output)
-        rw [construction.combinerInputs_eq inputs splitProposals componentProposals
-          combinerProposals output]
-        exact combinerSatisfies output
 
 @[reducible] def moduleStructure (interface : LeafwiseInterface)
     (bitStructure : ModuleStructure (interface.ports .bit)) :

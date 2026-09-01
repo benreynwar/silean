@@ -6,10 +6,10 @@ namespace Silean.Emitters.BitRegisterBank
 open Silean
 
 def naming :=
-  (Modules.RegisterBank.Naming.naming .bit 2).withKey
+  (Modules.RegisterBank.Naming.naming .bit 2 1).withKey
     ⟨"bit_register_bank", "", []⟩
 
-def firrtl : FIRRTL.RenderResult String := FIRRTL.renderCircuit naming
+def firrtl : FIRRTL.RenderResult String := FIRRTL.renderClosedCircuit naming
 
 end Silean.Emitters.BitRegisterBank
 

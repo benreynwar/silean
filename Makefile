@@ -18,8 +18,9 @@ POINTER_FIFO_SIM := $(POINTER_FIFO_DIR)/sim
 
 LEAN_SOURCES := $(shell find Silean -type f -name '*.lean')
 LEAN_BUILD_INPUTS := $(LEAN_SOURCES) lakefile.lean lean-toolchain lake-manifest.json
+CHECK_SOURCES := $(shell find Silean/Examples/Checks -type f -name '*Checks.lean' | sort)
 
-.PHONY: all firrtl-bit-register verilog-bit-register test-bit-register \
+.PHONY: all check-example-imports firrtl-bit-register verilog-bit-register test-bit-register \
 	firrtl-structured-fifo verilog-structured-fifo test-structured-fifo test clean \
 	firrtl-register-bank verilog-register-bank test-register-bank \
 	firrtl-pointer-fifo verilog-pointer-fifo test-pointer-fifo
@@ -30,7 +31,18 @@ firrtl-bit-register: $(BIT_REGISTER_FIRRTL)
 
 verilog-bit-register: $(BIT_REGISTER_VERILOG)
 
-test: test-bit-register test-structured-fifo test-register-bank test-pointer-fifo
+test: check-example-imports test-bit-register test-structured-fifo test-register-bank test-pointer-fifo
+
+check-example-imports:
+	@status=0; \
+	for file in $(CHECK_SOURCES); do \
+		module=$$(printf '%s' "$$file" | sed 's#/#.#g; s#\.lean$$##'); \
+		if ! grep -Fqx "import $$module" SileanExamples.lean; then \
+			echo "SileanExamples.lean does not import $$module"; \
+			status=1; \
+		fi; \
+	done; \
+	exit $$status
 
 test-bit-register: $(BIT_REGISTER_VERILOG)
 	$(MAKE) --no-print-directory -C tests/bit-register \

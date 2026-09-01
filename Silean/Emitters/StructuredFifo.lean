@@ -12,7 +12,7 @@ def naming :=
       ⟨"structured_fifo", "", []⟩
 
 def firrtl : FIRRTL.RenderResult String :=
-  FIRRTL.renderCircuit naming
+  FIRRTL.renderClosedCircuit naming
 
 end Silean.Emitters.StructuredFifo
 

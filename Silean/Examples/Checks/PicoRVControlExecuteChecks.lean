@@ -1,10 +1,10 @@
-import Silean.Examples.Checks.PicoRVControlFixtures
+import Silean.Examples.Fixtures.PicoRVControl
 
 namespace Silean.Examples.Checks.PicoRVControlExecuteChecks
 
 open Silean
 open Silean.Examples.PicoRV.Control
-open Silean.Examples.Checks.PicoRVControlFixtures
+open Silean.Examples.Fixtures.PicoRVControl
 
 def loadState := nextState { idleInputs with is_lb_lh_lw_lbu_lhu := true }
   (stateIn cpuStateLdRs1)

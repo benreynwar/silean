@@ -1,5 +1,4 @@
-import Silean.Composition.Reduction
-import Silean.Naming.ModuleNaming
+import Silean.Naming.ReductionNaming
 import Silean.Naming.PrimitiveNaming
 
 namespace Silean.Modules.All
@@ -266,7 +265,8 @@ theorem output_eq_true_iff_of_holds (width : Nat)
 def moduleStructure (width : Nat) : ModuleStructure (ports width) :=
   Composition.Reduction.moduleStructure andImplementation trueImplementation (tree width)
 
-private def reductionImplementation (width : Nat) :=
+/-- The reduction tree implementing `All` contains no blackboxes. -/
+private noncomputable def reductionImplementation (width : Nat) :=
   Composition.Reduction.certification andImplementation trueImplementation (tree width)
 
 private theorem implements (width : Nat) :
@@ -294,7 +294,7 @@ private theorem implements (width : Nat) :
     exact reductionEquation.trans (fold_eq_every (tree width) _)
   · rfl
 
-private def implementation (width : Nat) :
+private noncomputable def implementation (width : Nat) :
     Contracts.Cycle.ModuleCycleCertification (moduleStructure width) (cycleContract width) where
   stateCorresponds := (reductionImplementation width).stateCorresponds
   hasCorrespondingState := (reductionImplementation width).hasCorrespondingState
@@ -302,7 +302,7 @@ private def implementation (width : Nat) :
   structuralResultUnique := (reductionImplementation width).structuralResultUnique
   implements := implements width
 
-def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=
+noncomputable def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=
   (implementation width).bundle
 
 @[simp] theorem certified_cycleContract (width : Nat) :

@@ -3,6 +3,7 @@ import Silean.Composition.SignalAdapter
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Composition.SignalLogic
 import Silean.Composition.LeafwiseComposition
+import Silean.Composition.BinaryLeafwise
 import Silean.Composition.Reduction
 import Silean.Composition.FifoSerialComposition
 import Silean.Composition.FifoSerialRefinement

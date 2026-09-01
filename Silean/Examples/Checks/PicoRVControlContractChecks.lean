@@ -1,10 +1,10 @@
-import Silean.Examples.Checks.PicoRVControlFixtures
+import Silean.Examples.Fixtures.PicoRVControl
 
 namespace Silean.Examples.Checks.PicoRVControlContractChecks
 
 open Silean
 open Silean.Examples.PicoRV.Control
-open Silean.Examples.Checks.PicoRVControlFixtures
+open Silean.Examples.Fixtures.PicoRVControl
 
 def writebackState :=
   let state := stateMap.set (stateIn cpuStateFetch) .latched_store true

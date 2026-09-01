@@ -1,10 +1,10 @@
-import Silean.Contracts.Cycle.CycleSchedule
+import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Examples.Checks.HierarchicalDualNotCertificationChecks
 
 namespace Silean.Examples.Checks.BidirectionalDualNot
 
 open Silean
-open Silean.Contracts.Cycle.Certification
+open Silean.Contracts.Cycle.Certification.Layer
 
 inductive Instance
   | a
@@ -33,11 +33,17 @@ def wiring : Wiring context.ports context.instancePorts where
 
 @[reducible] def body : ModuleBody := ⟨context, wiring⟩
 
-def children : Contracts.Cycle.Certification.Children body
-  | .a | .b => Examples.Checks.HierarchicalDualNotCertification.dualNotCertified
+@[reducible] def childContracts : Contracts.Cycle.ChildCycleContracts body
+  | .a | .b => Examples.Fixtures.DualNot.cycleContract
+
+def children : Contracts.Cycle.Certification.Layer.ChildStructures body childContracts
+  | .a | .b =>
+      Examples.Checks.HierarchicalDualNotCertification.dualNotCertified.certifiedStructure
 
 def moduleStructure : ModuleStructure ports :=
-  Contracts.Cycle.Certification.moduleStructure body children
+  Contracts.Cycle.Certification.Layer.moduleStructure body children
+
+@[reducible] def layerChildren := children
 
 def inputSelection : (input : Examples.Fixtures.DualNot.Input) →
     SignalSelection ports.inputs (.ofList [.bit])
@@ -71,10 +77,10 @@ def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   stateRule := Contracts.Cycle.CycleStateRule.empty ports
   outputCoverage := by rfl
 
-abbrev aForward : RuleOccurrence children := ⟨.a, .forward⟩
-abbrev bForward : RuleOccurrence children := ⟨.b, .forward⟩
-abbrev aBackward : RuleOccurrence children := ⟨.a, .backward⟩
-abbrev bBackward : RuleOccurrence children := ⟨.b, .backward⟩
+abbrev aForward : RuleOccurrence body childContracts := ⟨.a, .forward⟩
+abbrev bForward : RuleOccurrence body childContracts := ⟨.b, .forward⟩
+abbrev aBackward : RuleOccurrence body childContracts := ⟨.a, .backward⟩
+abbrev bBackward : RuleOccurrence body childContracts := ⟨.b, .backward⟩
 
 @[simp] theorem aForward_reads : aForward.reads = [.forward] := rfl
 @[simp] theorem bForward_reads : bForward.reads = [.forward] := rfl
@@ -85,7 +91,7 @@ abbrev bBackward : RuleOccurrence children := ⟨.b, .backward⟩
 @[simp] theorem aBackward_writes : aBackward.writes = [.backward] := rfl
 @[simp] theorem bBackward_writes : bBackward.writes = [.backward] := rfl
 
-def forwardSchedule : OutputSchedule body children cycleContract .forward :=
+def forwardSchedule : OutputSchedule body childContracts cycleContract .forward :=
   .call aForward
     (by intro input member
         cases input with
@@ -106,7 +112,7 @@ def forwardSchedule : OutputSchedule body children cycleContract .forward :=
         simp [cycleContract, outputRule, outputSelection, SignalMap.select,
           SignalSelection.labels] at member)))
 
-def backwardSchedule : OutputSchedule body children cycleContract .backward :=
+def backwardSchedule : OutputSchedule body childContracts cycleContract .backward :=
   .call bBackward
     (by intro input member
         cases input with
@@ -127,15 +133,15 @@ def backwardSchedule : OutputSchedule body children cycleContract .backward :=
           SignalSelection.labels] at member
     | backward => exact ⟨.backward, by simp, by simp⟩)))
 
-def stateSchedule : StateSchedule body children :=
+def stateSchedule : StateSchedule body childContracts :=
   .done (by
     intro child input member
     cases child <;>
-      simp [children, Examples.Checks.HierarchicalDualNotCertification.dualNotCertified,
-        Examples.Fixtures.DualNot.cycleContract, Examples.Fixtures.DualNot.stateRule,
+      simp [childContracts, Examples.Fixtures.DualNot.cycleContract,
+        Examples.Fixtures.DualNot.stateRule,
         Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
 
-def ruleSchedules : RuleSchedules body children cycleContract where
+def ruleSchedules : RuleSchedules body childContracts cycleContract where
   output
     | .forward => forwardSchedule
     | .backward => backwardSchedule
@@ -144,25 +150,25 @@ def ruleSchedules : RuleSchedules body children cycleContract where
 theorem coversChildren : ruleSchedules.CoversChildren := by
   intro child rule
   cases child <;> cases rule
-  · apply RuleSchedules.Combined.add_preserves
-    apply RuleSchedules.mem_combineOutputs ruleSchedules .forward
+  · right
+    refine ⟨.forward, ?_⟩
     change aForward ∈ forwardSchedule.finalAvailability
-    simp [forwardSchedule, Schedule.finalAvailability]
-  · apply RuleSchedules.Combined.add_preserves
-    apply RuleSchedules.mem_combineOutputs ruleSchedules .backward
+    simp [forwardSchedule]
+  · right
+    refine ⟨.backward, ?_⟩
     change aBackward ∈ backwardSchedule.finalAvailability
-    simp [backwardSchedule, Schedule.finalAvailability]
-  · apply RuleSchedules.Combined.add_preserves
-    apply RuleSchedules.mem_combineOutputs ruleSchedules .forward
+    simp [backwardSchedule]
+  · right
+    refine ⟨.forward, ?_⟩
     change bForward ∈ forwardSchedule.finalAvailability
-    simp [forwardSchedule, Schedule.finalAvailability]
-  · apply RuleSchedules.Combined.add_preserves
-    apply RuleSchedules.mem_combineOutputs ruleSchedules .backward
+    simp [forwardSchedule]
+  · right
+    refine ⟨.backward, ?_⟩
     change bBackward ∈ backwardSchedule.finalAvailability
-    simp [backwardSchedule, Schedule.finalAvailability]
+    simp [backwardSchedule]
 
 theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution :=
-  ruleSchedules.hasAtMostOneSolution coversChildren
+  ruleSchedules.hasAtMostOneSolution coversChildren layerChildren
 
 private theorem certifiedForward
     (inputs : Examples.Fixtures.DualNot.ports.inputs.Values)
@@ -213,9 +219,11 @@ def bInputs (inputs : ports.inputs.Values) :
 theorem hasStructuralResult (inputs : ports.inputs.Values)
     (currentState : moduleStructure.State) :
     ∃ proposal, moduleStructure.IsSolution inputs currentState proposal := by
-  rcases (children .a).hasStructuralResult (aInputs inputs) (currentState .a) with
+  rcases (children .a).certification.hasStructuralResult
+      (aInputs inputs) (currentState .a) with
     ⟨aProposal, aSatisfies⟩
-  rcases (children .b).hasStructuralResult (bInputs inputs) (currentState .b) with
+  rcases (children .b).certification.hasStructuralResult
+      (bInputs inputs) (currentState .b) with
     ⟨bProposal, bSatisfies⟩
   have aForwardValue := certifiedForward (aInputs inputs) (currentState .a)
     aProposal aSatisfies
@@ -244,7 +252,8 @@ theorem hasStructuralResult (inputs : ports.inputs.Values)
   let outputs : ports.outputs.Values := fun
     | .forward => inputs .forward
     | .backward => inputs .backward
-  let childProposals : (name : Instance) → ProposedValues (childStructure children name)
+  let childProposals : (name : Instance) → ProposedValues
+      ((fun name => (children name).moduleStructure) name)
     | .a => aProposal
     | .b => bProposal
   refine ⟨ProposedValues.composite outputs childProposals, ?_⟩
@@ -259,9 +268,11 @@ theorem hasStructuralResult (inputs : ports.inputs.Values)
     cases child with
     | a =>
         change (children .a).moduleStructure.IsSolution
-          (ProposedValues.childInputs body (childStructure children) inputs
+          (ProposedValues.childInputs body
+            ((fun name => (children name).moduleStructure)) inputs
             childProposals .a) (currentState .a) aProposal
-        rw [show ProposedValues.childInputs body (childStructure children) inputs
+        rw [show ProposedValues.childInputs body
+          ((fun name => (children name).moduleStructure)) inputs
           childProposals .a = aInputs inputs by
             funext input
             cases input with
@@ -272,9 +283,11 @@ theorem hasStructuralResult (inputs : ports.inputs.Values)
         exact aSatisfies
     | b =>
         change (children .b).moduleStructure.IsSolution
-          (ProposedValues.childInputs body (childStructure children) inputs
+          (ProposedValues.childInputs body
+            ((fun name => (children name).moduleStructure)) inputs
             childProposals .b) (currentState .b) bProposal
-        rw [show ProposedValues.childInputs body (childStructure children) inputs
+        rw [show ProposedValues.childInputs body
+          ((fun name => (children name).moduleStructure)) inputs
           childProposals .b = bInputs inputs by
             funext input
             cases input with
@@ -291,9 +304,11 @@ theorem implements : Contracts.Cycle.Implements moduleStructure cycleContract st
   intro inputs contractState structuralState proposal corresponds satisfies
   rcases proposal with ⟨outputs, childProposals⟩
   rcases satisfies with ⟨boundary, childSatisfies⟩
-  let aActualInputs := ProposedValues.childInputs body (childStructure children)
+  let aActualInputs := ProposedValues.childInputs body
+    ((fun name => (children name).moduleStructure))
     inputs childProposals .a
-  let bActualInputs := ProposedValues.childInputs body (childStructure children)
+  let bActualInputs := ProposedValues.childInputs body
+    ((fun name => (children name).moduleStructure))
     inputs childProposals .b
   have aForwardValue := certifiedForward aActualInputs (structuralState .a)
     (childProposals .a) (childSatisfies .a)
@@ -331,7 +346,7 @@ theorem implements : Contracts.Cycle.Implements moduleStructure cycleContract st
           SignalSelection.Matches, SignalMap.select]
         constructor
         · simpa only [ProposedValues.outputs, moduleStructure,
-            Contracts.Cycle.Certification.moduleStructure] using outputForward
+            Contracts.Cycle.Certification.Layer.moduleStructure] using outputForward
         · trivial
     | backward =>
         simp only [cycleContract, outputRule, inputSelection, outputSelection,
@@ -339,7 +354,7 @@ theorem implements : Contracts.Cycle.Implements moduleStructure cycleContract st
           SignalSelection.Matches, SignalMap.select]
         constructor
         · simpa only [ProposedValues.outputs, moduleStructure,
-            Contracts.Cycle.Certification.moduleStructure] using outputBackward
+            Contracts.Cycle.Certification.Layer.moduleStructure] using outputBackward
         · trivial
   · rfl
 
@@ -364,7 +379,7 @@ theorem hasExactlyOneSolution (inputs : ports.inputs.Values)
 cycle: initially `a` lacks its backward input and `b` lacks its forward input.
 The two rule-local schedules above are therefore the material distinction. -/
 
-def wholeChildReady : Instance → Availability children → Prop
+def wholeChildReady : Instance → Availability body childContracts → Prop
   | .a, available => ∀ input,
       sourceAvailable (fun _ => True) available (body.wiring.instanceInput .a input)
   | .b, available => ∀ input,
@@ -375,12 +390,12 @@ theorem noWholeChildCanStart :
   constructor
   · intro ready
     have unavailable := ready Examples.Fixtures.DualNot.Input.backward
-    change outputAvailable ([] : Availability children) .b .backward at unavailable
+    change outputAvailable ([] : Availability body childContracts) .b .backward at unavailable
     rcases unavailable with ⟨rule, member, writes⟩
     cases member
   · intro ready
     have unavailable := ready Examples.Fixtures.DualNot.Input.forward
-    change outputAvailable ([] : Availability children) .a .forward at unavailable
+    change outputAvailable ([] : Availability body childContracts) .a .forward at unavailable
     rcases unavailable with ⟨rule, member, writes⟩
     cases member
 
