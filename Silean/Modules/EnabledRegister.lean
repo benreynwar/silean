@@ -1,10 +1,12 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.Mux
 import Silean.Modules.Register
 
 namespace Silean.Modules.EnabledRegister
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! ## Hardware structure -/
 
@@ -123,6 +125,7 @@ end Silean.Modules.EnabledRegister.Naming
 
 namespace Silean.Modules.EnabledRegister
 open Silean
+open Contracts.Cycle.Certification.Layer
 /-! ## Exact cycle behavior and certification -/
 
 inductive Rule | observe
@@ -160,78 +163,23 @@ abbrev storageRule (signalType : SignalType) :
       (body signalType) (childContracts signalType) :=
   ⟨.storage, Primitives.RegisterRule.observe⟩
 
-@[simp] theorem selectionRule_reads (signalType) :
-    (selectionRule signalType).reads = [.select, .whenFalse, .whenTrue] := rfl
-@[simp] theorem selectionRule_writes (signalType) :
-    (selectionRule signalType).writes = [.result] := rfl
-@[simp] theorem storageRule_reads (signalType) :
-    (storageRule signalType).reads = [] := rfl
-@[simp] theorem storageRule_writes (signalType) :
-    (storageRule signalType).writes = [.output] := rfl
+private def scheduleOrders (signalType : SignalType) :
+    ScheduleDerivation.RuleScheduleOrders (body signalType)
+      (childContracts signalType) (cycleContract signalType) where
+  output | .observe => [storageRule signalType]
+  state := [storageRule signalType, selectionRule signalType]
 
-def outputSchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body signalType) (childContracts signalType)
-      (cycleContract signalType) .observe :=
-  .call (storageRule signalType)
-    (by intro port member; cases port; cases member)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output
-    change Contracts.Cycle.Certification.Layer.outputAvailable ([storageRule signalType] :
-      Contracts.Cycle.Certification.Layer.Availability
-        (body signalType) (childContracts signalType)) .storage .output
-    exact ⟨Primitives.RegisterRule.observe, by simp, by simp⟩))
+private def derivedRuleSchedules (signalType : SignalType) :
+    ScheduleDerivation.DerivedRuleSchedules (body signalType)
+      (childContracts signalType) (cycleContract signalType) := by
+  derive_rule_schedules (scheduleOrders signalType)
 
-def stateSchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.StateSchedule
-      (body signalType) (childContracts signalType) :=
-  .call (storageRule signalType)
-    (by intro port member; cases port; cases member)
-    (by simp)
-  (.call (selectionRule signalType)
-    (by intro input member
-        cases input with
-        | select => trivial
-        | whenFalse =>
-            exact ⟨Primitives.RegisterRule.observe, by simp, by simp⟩
-        | whenTrue => trivial)
-    (by simp)
-  (.done (by
-    intro child input member
-    cases child with
-    | selection =>
-        simp [childContracts, Mux.cycleContract, Mux.stateRule, Contracts.Cycle.CycleStateRule.empty,
-          SignalSelection.labels] at member
-    | storage =>
-        cases input
-        exact ⟨Mux.Rule.select, by simp, by simp⟩)))
+private abbrev ruleSchedules (signalType : SignalType) :=
+  (derivedRuleSchedules signalType).schedules
 
-def ruleSchedules (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
-      (body signalType) (childContracts signalType)
-      (cycleContract signalType) where
-  output | .observe => outputSchedule signalType
-  state := stateSchedule signalType
-
-theorem coversChildren (signalType : SignalType) :
-    (ruleSchedules signalType).CoversChildren := by
-  intro child rule
-  cases child with
-  | selection =>
-    change Mux.Rule at rule
-    cases rule
-    left
-    change selectionRule signalType ∈ (stateSchedule signalType).finalAvailability
-    simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | storage =>
-    change Register.Rule at rule
-    cases rule
-    right
-    refine ⟨.observe, ?_⟩
-    change storageRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem coversChildren (signalType : SignalType) :
+    (ruleSchedules signalType).CoversChildren :=
+  (derivedRuleSchedules signalType).coversChildren
 
 @[simp] theorem outputRule_holds_iff (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)

@@ -150,34 +150,6 @@ inductive Schedule (body : ModuleBody) (childContracts : ChildCycleContracts bod
 
 namespace Schedule
 
-/-- List-like syntax for an explicitly ordered structural schedule. Every call
-uses the same caller-supplied proofs for read availability and freshness; the
-finish proof discharges the final boundary obligation. The macro elaborates
-directly to `Schedule.call` and `Schedule.done`, so it adds no semantic layer. -/
-syntax (name := structuralSchedule)
-  "structural_schedule" "[" term,* "]" "reads_proof" term
-    "fresh_proof" term "finish_proof" term : term
-
-macro_rules
-  | `(structural_schedule [] reads_proof $_reads:term
-        fresh_proof $_fresh:term finish_proof $finish:term) =>
-      `(.done $finish)
-  | `(structural_schedule [$head:term]
-        reads_proof $reads:term fresh_proof $fresh:term finish_proof $finish:term) =>
-      `(.call $head $reads $fresh
-        (structural_schedule [] reads_proof $reads
-          fresh_proof $fresh finish_proof $finish))
-  | `(structural_schedule [$head:term, $next:term]
-        reads_proof $reads:term fresh_proof $fresh:term finish_proof $finish:term) =>
-      `(.call $head $reads $fresh
-        (structural_schedule [$next] reads_proof $reads
-          fresh_proof $fresh finish_proof $finish))
-  | `(structural_schedule [$head:term, $next:term, $tail:term,*]
-        reads_proof $reads:term fresh_proof $fresh:term finish_proof $finish:term) =>
-      `(.call $head $reads $fresh
-        (structural_schedule [$next, $tail,*] reads_proof $reads
-          fresh_proof $fresh finish_proof $finish))
-
 def finalAvailability
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {inputAvailable : body.context.ports.inputs.Label → Prop}
@@ -367,6 +339,30 @@ theorem finished
   | done finished => exact finished
   | call _ _ _ _ induction => exact induction
 
+@[simp] theorem mem_finalAvailability_callFamilyAfter_iff
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    (initial : Availability body childContracts)
+    {Index : Type} (indices : Enumeration Index)
+    (occurrence : Index → RuleOccurrence body childContracts)
+    (injective : Function.Injective occurrence)
+    (fresh : ∀ index, occurrence index ∉ initial)
+    (readsAvailable : ∀ index input, input ∈ (occurrence index).reads →
+      sourceAvailable inputAvailable initial
+        (body.wiring.instanceInput (occurrence index).child input))
+    (called : RuleOccurrence body childContracts) :
+    called ∈ (callFamilyAfter initial indices occurrence injective fresh
+      readsAvailable).finalAvailability ↔
+      called ∈ initial ∨ ∃ index, called = occurrence index := by
+  let family := callFamilyAfter initial indices occurrence injective fresh readsAvailable
+  constructor
+  · exact family.finished.2.2 called
+  · intro member
+    rcases member with old | ⟨index, equal⟩
+    · exact family.finished.1 called old
+    · rw [equal]
+      exact family.finished.2.1 index
+
 /-- Change only the final obligation of a schedule. -/
 noncomputable def mapFinish
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
@@ -380,6 +376,22 @@ noncomputable def mapFinish
   | done finished => exact .done (implies _ finished)
   | call occurrence readsAvailable fresh rest induction =>
       exact .call occurrence readsAvailable fresh induction
+
+/-- Replace a schedule's terminal obligation with another fact proved for its
+actual final availability. Unlike `mapFinish`, this does not require an
+implication that holds at every intermediate availability. -/
+noncomputable def replaceFinish
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {FirstFinish SecondFinish : Availability body childContracts → Prop}
+    {initial : Availability body childContracts}
+    (schedule : Schedule body childContracts inputAvailable FirstFinish initial)
+    (finished : SecondFinish schedule.finalAvailability) :
+    Schedule body childContracts inputAvailable SecondFinish initial := by
+  induction schedule with
+  | done _ => exact .done finished
+  | call occurrence readsAvailable fresh rest induction =>
+      exact .call occurrence readsAvailable fresh (induction finished)
 
 end Schedule
 

@@ -1,8 +1,10 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 
 namespace Silean.Composition.Reduction
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! A reduction tree records hierarchy shape independently of the operation
 being reduced. Keeping the leaf count as a computed property makes recursive
@@ -142,6 +144,16 @@ abbrev Output := Primitives.SingleOutput
 
 @[reducible] def ports (signalType : SignalType) (tree : Tree) : ModulePorts :=
   ⟨inputMap signalType tree, outputMap signalType⟩
+
+/-! ## Width-indexed balanced reductions
+
+These helpers give specializations a common balanced tree and port boundary
+for a requested public width. -/
+
+def balancedTree (width : Nat) : Tree := Tree.balanced width
+
+@[reducible] def balancedPorts (signalType : SignalType) (width : Nat) : ModulePorts :=
+  ports signalType (balancedTree width)
 
 @[reducible] def binaryInputMap (signalType : SignalType) : SignalMap :=
   EnumeratedMap.of Primitives.BinaryInput fun | .left | .right => signalType
@@ -415,56 +427,33 @@ private abbrev emptyOccurrence
         (identity := identity)) :=
   ⟨EmptyInstance.identity, Rule.apply⟩
 
-private def emptyOutputSchedule
+private def emptyScheduleOrders
     (signalType : SignalType) (operation : signalType.Denote → signalType.Denote → signalType.Denote)
     (identity : signalType.Denote) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (emptyBody signalType)
-      (emptyChildContracts (signalType := signalType) (identity := identity))
-      (cycleContract signalType operation identity .empty) .apply :=
-  .call (emptyOccurrence signalType identity)
-    (by intro input member; exact nomatch input)
-    (by simp)
-    (.done (by
-      intro outputName member
-      cases outputName
-      exact ⟨Rule.apply, by simp,
-        by
-          change Primitives.SingleOutput.output ∈
-            (identityOutputRule signalType identity).writesOutputs.labels
-          simp [identityOutputRule, SignalMap.select, SignalSelection.labels]⟩))
-
-private def emptyStateSchedule
-    (signalType : SignalType) (identity : signalType.Denote) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (emptyBody signalType)
-      (emptyChildContracts (signalType := signalType) (identity := identity)) :=
-  .done (by
-    intro child input member
-    cases child
-    change input ∈ (Contracts.Cycle.CycleStateRule.empty (identityPorts signalType)).readsInputs.labels
-      at member
-    exact nomatch member)
-
-private def emptyRuleSchedules
-    (signalType : SignalType) (operation : signalType.Denote → signalType.Denote → signalType.Denote)
-    (identity : signalType.Denote) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (emptyBody signalType)
+    ScheduleDerivation.RuleScheduleOrders (emptyBody signalType)
       (emptyChildContracts (signalType := signalType) (identity := identity))
       (cycleContract signalType operation identity .empty) where
-  output | .apply => emptyOutputSchedule signalType operation identity
-  state := emptyStateSchedule signalType identity
+  output | .apply => [emptyOccurrence signalType identity]
+  state := []
 
-private theorem emptyCoversChildren
+private def emptyDerivedRuleSchedules
     (signalType : SignalType) (operation : signalType.Denote → signalType.Denote → signalType.Denote)
     (identity : signalType.Denote) :
-    (emptyRuleSchedules signalType operation identity).CoversChildren := by
-  intro child rule
-  cases child
-  change Rule at rule
-  cases rule
-  right
-  refine ⟨.apply, ?_⟩
-  simp [emptyRuleSchedules, emptyOutputSchedule,
-    Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    ScheduleDerivation.DerivedRuleSchedules (emptyBody signalType)
+      (emptyChildContracts (signalType := signalType) (identity := identity))
+      (cycleContract signalType operation identity .empty) := by
+  derive_rule_schedules (emptyScheduleOrders signalType operation identity)
+
+private abbrev emptyRuleSchedules (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) :=
+  (emptyDerivedRuleSchedules signalType operation identity).schedules
+
+private theorem emptyCoversChildren (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) :
+    (emptyRuleSchedules signalType operation identity).CoversChildren :=
+  (emptyDerivedRuleSchedules signalType operation identity).coversChildren
 
 section EmptyLayerCertification
 
@@ -664,129 +653,39 @@ private abbrev combineOccurrence
       (nodeChildContracts signalType operation identity left right) :=
   ⟨NodeInstance.combine, Rule.apply⟩
 
-private def nodeOutputSchedule
+private def nodeScheduleOrders
     (signalType : SignalType)
     (operation : signalType.Denote → signalType.Denote → signalType.Denote)
     (identity : signalType.Denote) (left right : Tree) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (nodeBody signalType left right)
-      (nodeChildContracts signalType operation identity left right)
-      (cycleContract signalType operation identity (.node left right)) .apply :=
-  .call (leftOccurrence (operation := operation) (identity := identity) left right)
-    (by
-      intro input _
-      cases input with
-      | leaf index =>
-          change (Input.leaf (Fin.castAdd right.leafCount index) :
-            Input (.node left right)) ∈
-              (inputMap signalType (.node left right)).allSelection.labels
-          rw [SignalMap.allSelection_labels]
-          exact ListIndex.get_eq
-            ((inputMap signalType (.node left right)).labels.locate
-              (Input.leaf (Fin.castAdd right.leafCount index))) ▸ List.get_mem _ _)
-    (by simp)
-    (.call (rightOccurrence (operation := operation) (identity := identity) left right)
-      (by
-        intro input _
-        cases input with
-        | leaf index =>
-            change (Input.leaf (Fin.natAdd left.leafCount index) :
-              Input (.node left right)) ∈
-                (inputMap signalType (.node left right)).allSelection.labels
-            rw [SignalMap.allSelection_labels]
-            exact ListIndex.get_eq
-              ((inputMap signalType (.node left right)).labels.locate
-                (Input.leaf (Fin.natAdd left.leafCount index))) ▸ List.get_mem _ _)
-      (by
-        intro member
-        have equal := List.mem_singleton.mp member
-        have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-        cases childEqual)
-      (.call (combineOccurrence (operation := operation) (identity := identity) left right)
-        (by
-          intro input _
-          cases input with
-          | left =>
-              refine ⟨Rule.apply, by simp, ?_⟩
-              change Primitives.SingleOutput.output ∈
-                (outputRule signalType operation identity left).writesOutputs.labels
-              simp [outputRule, SignalMap.select, SignalSelection.labels]
-          | right =>
-              refine ⟨Rule.apply, by simp, ?_⟩
-              change Primitives.SingleOutput.output ∈
-                (outputRule signalType operation identity right).writesOutputs.labels
-              simp [outputRule, SignalMap.select, SignalSelection.labels])
-        (by
-          intro member
-          rcases List.mem_cons.mp member with equal | member
-          · have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-            cases childEqual
-          · have equal := List.mem_singleton.mp member
-            have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-            cases childEqual)
-        (.done (by
-          intro outputName _
-          cases outputName
-          refine ⟨Rule.apply, by simp, ?_⟩
-          change Primitives.SingleOutput.output ∈
-            (binaryOutputRule signalType operation).writesOutputs.labels
-          simp [binaryOutputRule, SignalMap.select, SignalSelection.labels]))))
-
-private def nodeStateSchedule
-    (signalType : SignalType)
-    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
-    (identity : signalType.Denote) (left right : Tree) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (nodeBody signalType left right)
-      (nodeChildContracts signalType operation identity left right) :=
-  .done (by
-    intro child input member
-    cases child with
-    | left =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty (ports signalType left)).readsInputs.labels
-          at member
-        exact nomatch member
-    | right =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty (ports signalType right)).readsInputs.labels
-          at member
-        exact nomatch member
-    | combine =>
-        change input ∈
-          (Contracts.Cycle.CycleStateRule.empty (binaryPorts signalType)).readsInputs.labels at member
-        exact nomatch member)
-
-private def nodeRuleSchedules
-    (signalType : SignalType)
-    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
-    (identity : signalType.Denote) (left right : Tree) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (nodeBody signalType left right)
+    ScheduleDerivation.RuleScheduleOrders (nodeBody signalType left right)
       (nodeChildContracts signalType operation identity left right)
       (cycleContract signalType operation identity (.node left right)) where
-  output | .apply => nodeOutputSchedule signalType operation identity left right
-  state := nodeStateSchedule signalType operation identity left right
+  output := fun
+    | .apply =>
+        [leftOccurrence (operation := operation) (identity := identity) left right,
+          rightOccurrence (operation := operation) (identity := identity) left right,
+          combineOccurrence (operation := operation) (identity := identity) left right]
+  state := []
 
-private theorem nodeCoversChildren
+private def nodeDerivedRuleSchedules
     (signalType : SignalType)
     (operation : signalType.Denote → signalType.Denote → signalType.Denote)
     (identity : signalType.Denote) (left right : Tree) :
-    (nodeRuleSchedules signalType operation identity left right).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child with
-  | left =>
-      change Rule at rule
-      cases rule
-      simp [nodeRuleSchedules, nodeOutputSchedule,
-        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | right =>
-      change Rule at rule
-      cases rule
-      simp [nodeRuleSchedules, nodeOutputSchedule,
-        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | combine =>
-      change Rule at rule
-      cases rule
-      simp [nodeRuleSchedules, nodeOutputSchedule,
-        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    ScheduleDerivation.DerivedRuleSchedules (nodeBody signalType left right)
+      (nodeChildContracts signalType operation identity left right)
+      (cycleContract signalType operation identity (.node left right)) := by
+  derive_rule_schedules (nodeScheduleOrders signalType operation identity left right)
+
+private abbrev nodeRuleSchedules (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) (left right : Tree) :=
+  (nodeDerivedRuleSchedules signalType operation identity left right).schedules
+
+private theorem nodeCoversChildren (signalType : SignalType)
+    (operation : signalType.Denote → signalType.Denote → signalType.Denote)
+    (identity : signalType.Denote) (left right : Tree) :
+    (nodeRuleSchedules signalType operation identity left right).CoversChildren :=
+  (nodeDerivedRuleSchedules signalType operation identity left right).coversChildren
 
 private def leftInputs (inputs : (ports signalType (.node left right)).inputs.Values) :
     (ports signalType left).inputs.Values

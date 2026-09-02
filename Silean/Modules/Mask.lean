@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Composition.LeafwiseComposition
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
@@ -8,6 +9,7 @@ import Silean.Composition.SignalLogic
 namespace Silean.Modules.Mask
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! Gates every bit of a value with one shared mask bit. Aggregate signal types
 are handled recursively. -/
@@ -115,48 +117,21 @@ abbrev bitRule : Contracts.Cycle.Certification.Layer.RuleOccurrence
     bitBody bitChildContracts :=
   ⟨.gate, Primitives.AndRule.apply⟩
 
-def bitOutputSchedule : Contracts.Cycle.Certification.Layer.OutputSchedule
-    bitBody bitChildContracts
-    (cycleContract .bit) .apply :=
-  .call bitRule
-    (by
-      intro input member
-      cases input <;>
-        simp [cycleContract, outputRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-          bitBody, bitWiring,
-          bitContext, EndpointContext.moduleInput])
-    (by simp)
-    (.done (by
-      intro output member
-      cases output
-      exact ⟨Primitives.AndRule.apply, by simp,
-        by change Primitives.SingleOutput.output ∈ [.output]; simp⟩))
+private def bitScheduleOrders :
+    ScheduleDerivation.RuleScheduleOrders bitBody bitChildContracts
+      (cycleContract .bit) where
+  output | .apply => [bitRule]
+  state := []
 
-def bitStateSchedule : Contracts.Cycle.Certification.Layer.StateSchedule
-    bitBody bitChildContracts :=
-  .done (by
-    intro child input member
-    cases child
-    simp [bitChildContracts, Primitives.andCycleContract,
-      Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
+private def bitDerivedRuleSchedules :
+    ScheduleDerivation.DerivedRuleSchedules bitBody bitChildContracts
+      (cycleContract .bit) := by
+  derive_rule_schedules bitScheduleOrders
 
-def bitRuleSchedules : Contracts.Cycle.Certification.Layer.RuleSchedules
-    bitBody bitChildContracts
-    (cycleContract .bit) where
-  output | .apply => bitOutputSchedule
-  state := bitStateSchedule
+private abbrev bitRuleSchedules := bitDerivedRuleSchedules.schedules
 
-theorem bitCoversChildren : bitRuleSchedules.CoversChildren := by
-  intro child rule
-  right
-  cases child
-  change Primitives.AndRule at rule
-  cases rule
-  refine ⟨.apply, ?_⟩
-  change bitRule ∈ bitOutputSchedule.finalAvailability
-  simp [bitOutputSchedule,
-    Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem bitCoversChildren : bitRuleSchedules.CoversChildren :=
+  bitDerivedRuleSchedules.coversChildren
 
 section BitLayerCertification
 
@@ -273,188 +248,33 @@ abbrev combineOccurrence (splitter : Composition.SignalSplitter) :
       (aggregateBody splitter) (aggregateChildContracts splitter) :=
   interface.combinerOccurrence splitter (componentContracts splitter) .result
 
-@[simp] theorem splitOccurrence_writes (splitter : Composition.SignalSplitter) :
-    (splitOccurrence splitter).writes = splitter.ports.outputs.labels.values := by
-  change splitter.ports.outputs.allSelection.labels = _
-  rw [SignalMap.allSelection_labels]
-
-noncomputable def componentSchedule (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.Schedule (aggregateBody splitter)
-      (aggregateChildContracts splitter)
-      (fun input => input ∈ (outputRule splitter.aggregateType).readsInputs.labels)
-      (fun final =>
-        (∀ called, called ∈ [splitOccurrence splitter] → called ∈ final) ∧
-        (∀ component, componentOccurrence splitter component ∈ final) ∧
-        ∀ called, called ∈ final →
-          called ∈ [splitOccurrence splitter] ∨
-          ∃ component, called = componentOccurrence splitter component)
-      [splitOccurrence splitter] :=
-  interface.callComponentsAfter splitter (componentContracts splitter)
-    [splitOccurrence splitter] (fun _ => Rule.apply)
-    (by
-      intro component member
-      simp only [List.mem_singleton] at member
-      have childEqual := congrArg
-        Contracts.Cycle.Certification.Layer.RuleOccurrence.child member
-      cases childEqual)
-    (by
-      intro component input _
-      cases input with
-      | value =>
-          cases splitter with
-          | vector length element =>
-              exact ⟨Composition.SignalComponentRule.apply, by simp,
-                by rw [splitOccurrence_writes]
-                   exact ListIndex.get_eq
-                     ((Composition.SignalSplitter.vector length element).ports.outputs.labels.locate component) ▸
-                       List.get_mem _ _⟩
-          | tuple fields =>
-              exact ⟨Composition.SignalComponentRule.apply, by simp,
-                by rw [splitOccurrence_writes]
-                   exact ListIndex.get_eq
-                     ((Composition.SignalSplitter.tuple fields).ports.outputs.labels.locate component) ▸
-                       List.get_mem _ _⟩
-      | mask =>
-          cases splitter <;>
-            simp [outputRule, SignalSelection.prepend, SignalMap.select,
-              SignalSelection.labels,
-              Contracts.Cycle.Certification.Layer.sourceAvailable,
-              aggregateBody, Composition.LeafwiseInterface.aggregateWiring,
-              Composition.LeafwiseInterface.aggregateComponentInputSource,
-              Composition.LeafwiseInterface.aggregateContext,
-              Composition.LeafwiseInterface.aggregateInstances, interface,
-              Composition.LeafwiseInterface.inputType, EndpointContext.moduleInput])
-
-noncomputable def aggregateAfterSplitSchedule
-    (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.Schedule (aggregateBody splitter)
-      (aggregateChildContracts splitter)
-      (fun input => input ∈ (outputRule splitter.aggregateType).readsInputs.labels)
-      (Contracts.Cycle.Certification.Layer.BoundaryReady
-        (aggregateBody splitter) (aggregateChildContracts splitter)
-        (outputRule splitter.aggregateType).writesOutputs.labels
-        (fun input => input ∈
-          (outputRule splitter.aggregateType).readsInputs.labels))
-      [splitOccurrence splitter] := by
-  apply (componentSchedule splitter).append
-  refine .call (combineOccurrence splitter) ?_ ?_ (.done ?_)
-  · intro input _
-    cases splitter with
-    | vector length element =>
-        exact ⟨Rule.apply,
-          (componentSchedule (.vector length element)).finished.2.1 input,
-          by change Output.result ∈ [Output.result]; simp⟩
-    | tuple fields =>
-        exact ⟨Rule.apply,
-          (componentSchedule (.tuple fields)).finished.2.1 input,
-          by change Output.result ∈ [Output.result]; simp⟩
-  · intro present
-    rcases (componentSchedule splitter).finished.2.2 _ present with
-      atStart | fromComponent
-    · simp only [List.mem_singleton] at atStart
-      have childEqual := congrArg
-        Contracts.Cycle.Certification.Layer.RuleOccurrence.child atStart
-      cases childEqual
-    · rcases fromComponent with ⟨component, equal⟩
-      cases equal
-  · intro output _
-    cases output
-    cases splitter <;>
-      exact ⟨Composition.SignalComponentRule.apply, by simp,
-        by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]
-           simp⟩
-
-noncomputable def aggregateOutputSchedule (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (aggregateBody splitter) (aggregateChildContracts splitter)
-      (cycleContract splitter.aggregateType) .apply := by
-  refine .call (splitOccurrence splitter) ?_ (by simp) ?_
-  · intro input _
-    cases splitter <;> cases input <;>
-      simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-        aggregateBody, Composition.LeafwiseInterface.aggregateWiring,
-        Composition.LeafwiseInterface.aggregateSplitterInputSource,
-        Composition.LeafwiseInterface.aggregateContext,
-        Composition.LeafwiseInterface.aggregateInstances, interface,
-        Composition.LeafwiseInterface.inputType, EndpointContext.moduleInput]
-  · exact aggregateAfterSplitSchedule splitter
-
-def aggregateStateSchedule (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.StateSchedule
-      (aggregateBody splitter) (aggregateChildContracts splitter) :=
-  .done (by
-    intro child input member
-    cases child with
-    | splitter recursiveInput =>
-        cases recursiveInput
-        simp [aggregateChildContracts,
-          Composition.LeafwiseInterface.aggregateChildContracts,
-          Composition.SignalSplitter.cycleContract,
-          Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member
-    | component component =>
-        simp [aggregateChildContracts,
-          Composition.LeafwiseInterface.aggregateChildContracts,
-          componentContracts, cycleContract,
-          Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member
-    | combiner output =>
-        cases output
-        simp [aggregateChildContracts,
-          Composition.LeafwiseInterface.aggregateChildContracts,
-          Composition.SignalCombiner.cycleContract,
-          Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
-
-noncomputable def aggregateRuleSchedules (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
+private def aggregateScheduleOrders (splitter : Composition.SignalSplitter) :
+    ScheduleDerivation.RuleScheduleOrders
       (aggregateBody splitter) (aggregateChildContracts splitter)
       (cycleContract splitter.aggregateType) where
-  output | .apply => aggregateOutputSchedule splitter
-  state := aggregateStateSchedule splitter
+  output | .apply => [splitOccurrence splitter] ++
+    splitter.ports.outputs.labels.values.map (componentOccurrence splitter) ++
+    [combineOccurrence splitter]
+  state := []
+
+private noncomputable def aggregateDerivedRuleSchedules
+    (splitter : Composition.SignalSplitter) :
+    ScheduleDerivation.DerivedRuleSchedules
+      (aggregateBody splitter) (aggregateChildContracts splitter)
+      (cycleContract splitter.aggregateType) := by
+  cases splitter with
+  | vector length element =>
+      derive_rule_schedules
+        (aggregateScheduleOrders (.vector length element))
+  | tuple fields =>
+      derive_rule_schedules (aggregateScheduleOrders (.tuple fields))
+
+noncomputable abbrev aggregateRuleSchedules (splitter : Composition.SignalSplitter) :=
+  (aggregateDerivedRuleSchedules splitter).schedules
 
 theorem aggregateCoversChildren (splitter : Composition.SignalSplitter) :
-    (aggregateRuleSchedules splitter).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child with
-  | splitter recursiveInput =>
-      cases recursiveInput
-      change Composition.SignalComponentRule at rule
-      cases rule
-      change splitOccurrence splitter ∈
-        (aggregateOutputSchedule splitter).finalAvailability
-      unfold aggregateOutputSchedule
-      change splitOccurrence splitter ∈
-        (aggregateAfterSplitSchedule splitter).finalAvailability
-      unfold aggregateAfterSplitSchedule
-      rw [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-      exact List.mem_cons_of_mem (combineOccurrence splitter)
-        ((componentSchedule splitter).finished.1
-          (splitOccurrence splitter) (by simp))
-  | component component =>
-      change Rule at rule
-      cases rule
-      change componentOccurrence splitter component ∈
-        (aggregateOutputSchedule splitter).finalAvailability
-      unfold aggregateOutputSchedule
-      change componentOccurrence splitter component ∈
-        (aggregateAfterSplitSchedule splitter).finalAvailability
-      unfold aggregateAfterSplitSchedule
-      rw [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-      exact List.mem_cons_of_mem (combineOccurrence splitter)
-        ((componentSchedule splitter).finished.2.1 component)
-  | combiner output =>
-      cases output
-      change Composition.SignalComponentRule at rule
-      cases rule
-      change combineOccurrence splitter ∈
-        (aggregateOutputSchedule splitter).finalAvailability
-      unfold aggregateOutputSchedule
-      change combineOccurrence splitter ∈
-        (aggregateAfterSplitSchedule splitter).finalAvailability
-      unfold aggregateAfterSplitSchedule
-      rw [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-      exact List.mem_cons_self
+    (aggregateRuleSchedules splitter).CoversChildren :=
+  (aggregateDerivedRuleSchedules splitter).coversChildren
 
 def splitterInputs (splitter : Composition.SignalSplitter)
     (inputs : (ports splitter.aggregateType).inputs.Values) :
@@ -700,7 +520,7 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
         (portsWithNaming splitter.aggregateType typeNaming)
         (fun
           | .splitter .unit => "split"
-          | .component component => indexedComponent splitter.ports.outputs component
+          | .component component => .scoped "mask" (.indexed "component" component.val)
           | .combiner .result => "combine")
         (fun
           | .splitter .unit => Silean.Naming.SignalAdapter.splitterWithNaming splitter typeNaming

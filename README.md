@@ -207,8 +207,9 @@ Lean `List`, proving the public latency-independent FIFO contract. The final
 FIFO certificate exposes the structure and abstract FIFO guarantee; the
 state-mapping details remain private proof machinery. After reset, accepted
 and produced transfers obey the abstract bounded-queue transition on every
-cycle. Consequently, produced payloads are an ordered prefix of accepted
-payloads, and the sequences are equal once the FIFO is drained.
+subsequent non-reset cycle. Consequently, produced payloads are an ordered
+prefix of accepted payloads, and the sequences are equal once the FIFO is
+drained.
 
 As more complex designs are added, we expect to need both additional
 general-purpose contract forms and custom theorems expressing the important
@@ -257,6 +258,13 @@ Build and check all Lean definitions and proofs with:
 lake build
 ```
 
+Check that every focused `*Checks.lean` regression is included by the explicit
+`SileanExamples.lean` aggregate with:
+
+```sh
+make check-example-imports
+```
+
 Run the complete generated-hardware regression with:
 
 ```sh
@@ -296,8 +304,6 @@ Use `make clean` to remove generated build artifacts.
   contracts, and certification proofs.
 - [`docs/Architecture.md`](docs/Architecture.md) gives the detailed current
   design, and [`docs/SourceMap.md`](docs/SourceMap.md) maps concepts to files.
-- [`docs/PicoRV32Plan.md`](docs/PicoRV32Plan.md) is the authoritative plan and
-  status document for the PicoRV32 port.
 - [`Roadmap.md`](Roadmap.md) records the current direction and remaining work.
 
 The checked-in Nix flake supplies Lean, CIRCT, Verilator, and the Python/cocotb

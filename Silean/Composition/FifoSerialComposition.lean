@@ -1,10 +1,12 @@
 import Silean.Contracts.Fifo.FifoCycleBehavior
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 
 namespace Silean.Composition.FifoSerial
 
 open Silean
 open Contracts.Fifo.Cycle
+open Contracts.Cycle.Certification.Layer
 
 /-! Connects two FIFO implementations in series. The upstream FIFO accepts the
 external input, the downstream FIFO drives the external output, and their
@@ -85,171 +87,32 @@ private abbrev downstreamReady (upstream downstream : Contracts.Fifo.Cycle.Cycle
       (body signalType) (childContracts upstream downstream) :=
   ⟨.downstream, Contracts.Fifo.Cycle.Rule.ready⟩
 
-@[simp] private theorem upstreamForward_reads
+private def scheduleOrders
     (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (upstreamForward upstream downstream).reads = [.inputValid, .inputData] := rfl
-@[simp] private theorem upstreamForward_writes
-    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (upstreamForward upstream downstream).writes = [.outputValid, .outputData] := rfl
-@[simp] private theorem upstreamReady_reads
-    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (upstreamReady upstream downstream).reads = [.outputReady] := rfl
-@[simp] private theorem upstreamReady_writes
-    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (upstreamReady upstream downstream).writes = [.inputReady] := rfl
-@[simp] private theorem downstreamForward_reads
-    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (downstreamForward upstream downstream).reads = [.inputValid, .inputData] := rfl
-@[simp] private theorem downstreamForward_writes
-    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (downstreamForward upstream downstream).writes = [.outputValid, .outputData] := rfl
-@[simp] private theorem downstreamReady_reads
-    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (downstreamReady upstream downstream).reads = [.outputReady] := rfl
-@[simp] private theorem downstreamReady_writes
-    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (downstreamReady upstream downstream).writes = [.inputReady] := rfl
-
-private def forwardSchedule (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body signalType) (childContracts upstream downstream)
-      (upstream.serial downstream).cycleContract .forward :=
-  .call (upstreamForward upstream downstream)
-    (by
-      intro input member
-      cases input with
-      | inputValid | inputData =>
-          simp [Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-            EndpointContext.moduleInput]
-      | outputReady | reset => simp at member)
-    (by simp)
-  (.call (downstreamForward upstream downstream)
-    (by
-      intro input member
-      cases input with
-      | inputValid | inputData =>
-          exact ⟨Contracts.Fifo.Cycle.Rule.forward, by simp, by simp⟩
-      | outputReady | reset => simp at member)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | outputValid | outputData =>
-        exact ⟨Contracts.Fifo.Cycle.Rule.forward, by simp, by simp⟩
-    | inputReady => simp at member)))
-
-private def readySchedule (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body signalType) (childContracts upstream downstream)
-      (upstream.serial downstream).cycleContract .ready :=
-  .call (downstreamReady upstream downstream)
-    (by
-      intro input member
-      cases input with
-      | outputReady =>
-          simp [Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-            EndpointContext.moduleInput]
-      | inputValid | inputData | reset => simp at member)
-    (by simp)
-  (.call (upstreamReady upstream downstream)
-    (by
-      intro input member
-      cases input with
-      | outputReady => exact ⟨Contracts.Fifo.Cycle.Rule.ready, by simp, by simp⟩
-      | inputValid | inputData | reset => simp at member)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | inputReady => exact ⟨Contracts.Fifo.Cycle.Rule.ready, by simp, by simp⟩
-    | outputValid | outputData => simp at member)))
-
-private def stateSchedule (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    Contracts.Cycle.Certification.Layer.StateSchedule
-      (body signalType) (childContracts upstream downstream) :=
-  .call (upstreamForward upstream downstream)
-    (by
-      intro input member
-      cases input with
-      | inputValid | inputData =>
-          simp [Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-            EndpointContext.moduleInput]
-      | outputReady | reset => simp at member) (by simp)
-  (.call (downstreamForward upstream downstream)
-    (by
-      intro input member
-      cases input with
-      | inputValid | inputData =>
-          exact ⟨Contracts.Fifo.Cycle.Rule.forward, by simp, by simp⟩
-      | outputReady | reset => simp at member)
-    (by simp)
-  (.call (downstreamReady upstream downstream)
-    (by
-      intro input member
-      cases input with
-      | outputReady =>
-          simp [Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-            EndpointContext.moduleInput]
-      | inputValid | inputData | reset => simp at member) (by simp)
-  (.call (upstreamReady upstream downstream)
-    (by
-      intro input member
-      cases input with
-      | outputReady => exact ⟨Contracts.Fifo.Cycle.Rule.ready, by simp, by simp⟩
-      | inputValid | inputData | reset => simp at member)
-    (by simp)
-  (.done (by
-    intro child input member
-    cases child with
-    | upstream =>
-        cases input with
-        | inputValid | inputData | reset => trivial
-        | outputReady => exact ⟨Contracts.Fifo.Cycle.Rule.ready, by simp, by simp⟩
-    | downstream =>
-        cases input with
-        | inputValid | inputData =>
-            exact ⟨Contracts.Fifo.Cycle.Rule.forward, by simp, by simp⟩
-        | outputReady | reset => trivial)))))
-
-private def ruleSchedules (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
-      (body signalType) (childContracts upstream downstream)
-      (upstream.serial downstream).cycleContract where
+    ScheduleDerivation.RuleScheduleOrders (body signalType)
+      (childContracts upstream downstream) (upstream.serial downstream).cycleContract where
   output
-    | .forward => forwardSchedule upstream downstream
-    | .ready => readySchedule upstream downstream
-  state := stateSchedule upstream downstream
+    | .forward => [upstreamForward upstream downstream,
+        downstreamForward upstream downstream]
+    | .ready => [downstreamReady upstream downstream,
+        upstreamReady upstream downstream]
+  state := [upstreamForward upstream downstream, downstreamForward upstream downstream,
+    downstreamReady upstream downstream, upstreamReady upstream downstream]
 
-private theorem coversChildren (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
-    (ruleSchedules upstream downstream).CoversChildren := by
-  intro child rule
-  cases child with
-  | upstream =>
-      change Contracts.Fifo.Cycle.Rule at rule
-      cases rule with
-      | forward =>
-          left
-          change upstreamForward upstream downstream ∈
-            (stateSchedule upstream downstream).finalAvailability
-          simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-      | ready =>
-          left
-          change upstreamReady upstream downstream ∈
-            (stateSchedule upstream downstream).finalAvailability
-          simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | downstream =>
-      change Contracts.Fifo.Cycle.Rule at rule
-      cases rule with
-      | forward =>
-          left
-          change downstreamForward upstream downstream ∈
-            (stateSchedule upstream downstream).finalAvailability
-          simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-      | ready =>
-          left
-          change downstreamReady upstream downstream ∈
-            (stateSchedule upstream downstream).finalAvailability
-          simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private def derivedRuleSchedules
+    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
+    ScheduleDerivation.DerivedRuleSchedules (body signalType)
+      (childContracts upstream downstream) (upstream.serial downstream).cycleContract := by
+  derive_rule_schedules (scheduleOrders upstream downstream)
+
+private abbrev ruleSchedules
+    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :=
+  (derivedRuleSchedules upstream downstream).schedules
+
+private theorem coversChildren
+    (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType) :
+    (ruleSchedules upstream downstream).CoversChildren :=
+  (derivedRuleSchedules upstream downstream).coversChildren
 
 private def upstreamInputs (upstream downstream : Contracts.Fifo.Cycle.CycleBehavior signalType)
     (inputs : (Silean.Interfaces.Fifo.ports signalType).inputs.Values)

@@ -45,7 +45,7 @@ def namingWith (moduleName componentScope : String)
           | .splitter .left => "split_left"
           | .splitter .right => "split_right"
           | .component component =>
-              indexedComponent componentScope splitter.ports.outputs component
+              .scoped componentScope (.indexed "component" component.val)
           | .combiner .result => "combine")
         (fun
           | .splitter .left =>

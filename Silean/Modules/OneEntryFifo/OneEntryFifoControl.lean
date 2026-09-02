@@ -1,10 +1,12 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives
 
 namespace Silean.Modules.OneEntryFifo.Control
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-- Combinational handshake control for a fall-through one-entry FIFO. -/
 inductive Input
@@ -105,88 +107,18 @@ abbrev readyRule : Contracts.Cycle.Certification.Layer.RuleOccurrence body child
 abbrev updateRule : Contracts.Cycle.Certification.Layer.RuleOccurrence body childContracts :=
   ⟨.updateEq, Primitives.EqRule.apply⟩
 
-@[simp] theorem invertRule_reads : invertRule.reads = [.input] := rfl
-@[simp] theorem readyRule_reads : readyRule.reads = [.left, .right] := rfl
-@[simp] theorem updateRule_reads : updateRule.reads = [.left, .right] := rfl
-@[simp] theorem invertRule_writes : invertRule.writes = [.output] := rfl
-@[simp] theorem readyRule_writes : readyRule.writes = [.output] := rfl
-@[simp] theorem updateRule_writes : updateRule.writes = [.output] := rfl
+private def scheduleOrders : ScheduleDerivation.RuleScheduleOrders
+    body childContracts cycleContract where
+  output | .control => [invertRule, readyRule, updateRule]
+  state := []
 
-def outputSchedule :
-    Contracts.Cycle.Certification.Layer.OutputSchedule body childContracts cycleContract .control :=
-  .call invertRule
-    (by intro port member; cases port; simp [cycleContract, controlRule,
-      SignalSelection.prepend, SignalMap.select, SignalSelection.labels,
-      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-      EndpointContext.moduleInput])
-    (by simp)
-  (.call readyRule
-    (by intro input member
-        cases input with
-        | left => simp [cycleContract, controlRule, SignalSelection.prepend,
-            SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-            body, wiring, context, EndpointContext.moduleInput]
-        | right => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call updateRule
-    (by intro input member; cases input <;>
-      simp [cycleContract, controlRule, SignalSelection.prepend,
-        SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-        body, wiring, context, EndpointContext.moduleInput])
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | upstreamReady =>
-        change Contracts.Cycle.Certification.Layer.outputAvailable
-          ([updateRule, readyRule, invertRule] :
-            Contracts.Cycle.Certification.Layer.Availability body childContracts)
-          Instance.readyOr .output
-        exact ⟨Primitives.OrRule.apply, by simp, by simp⟩
-    | storageUpdate =>
-        change Contracts.Cycle.Certification.Layer.outputAvailable
-          ([updateRule, readyRule, invertRule] :
-            Contracts.Cycle.Certification.Layer.Availability body childContracts)
-          Instance.updateEq .output
-        exact ⟨Primitives.EqRule.apply, by simp, by simp⟩))))
+private def derivedRuleSchedules : ScheduleDerivation.DerivedRuleSchedules
+    body childContracts cycleContract := by
+  derive_rule_schedules scheduleOrders
 
-def stateSchedule : Contracts.Cycle.Certification.Layer.StateSchedule body childContracts :=
-  .done (by
-    intro child input member
-    cases child <;>
-      simp [childContracts, Primitives.notCycleContract,
-        Primitives.orCycleContract, Primitives.eqCycleContract,
-        Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
-
-def ruleSchedules :
-    Contracts.Cycle.Certification.Layer.RuleSchedules body childContracts cycleContract where
-  output | .control => outputSchedule
-  state := stateSchedule
-
-theorem coversChildren : ruleSchedules.CoversChildren := by
-  intro child rule
-  cases child with
-  | invertValid =>
-    change Primitives.NotRule at rule
-    cases rule
-    right
-    refine ⟨.control, ?_⟩
-    change invertRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | readyOr =>
-    change Primitives.OrRule at rule
-    cases rule
-    right
-    refine ⟨.control, ?_⟩
-    change readyRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | updateEq =>
-    change Primitives.EqRule at rule
-    cases rule
-    right
-    refine ⟨.control, ?_⟩
-    change updateRule ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private abbrev ruleSchedules := derivedRuleSchedules.schedules
+private theorem coversChildren : ruleSchedules.CoversChildren :=
+  derivedRuleSchedules.coversChildren
 
 theorem controlRule_holds_iff (inputs : ports.inputs.Values)
     (state : cycleContract.state.Values) (outputs : ports.outputs.Values) :

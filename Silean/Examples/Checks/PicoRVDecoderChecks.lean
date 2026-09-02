@@ -29,6 +29,20 @@ def capturedAddi : stateMap.Values := nextState captureAddi initialState
 def resolvedAddi : stateMap.Values := nextState resolveAddi capturedAddi
 def summarizedAddi : stateMap.Values := nextState idleInputs resolvedAddi
 
+-- Both stages see the same pre-edge state. The resolve stage therefore still
+-- decodes ADDI while the capture stage replaces its opcode class with LUI.
+def captureLuiResolveAddi : Inputs :=
+  { captureAddi with
+    mem_rdata_latched := wordOfNat 0x000000b7
+    decoder_trigger := true
+    mem_rdata_q := addiX1X2Five }
+
+def simultaneousResult : stateMap.Values :=
+  nextState captureLuiResolveAddi capturedAddi
+
+example : (simultaneousResult .instr_lui : Bool) = true := by rfl
+example : (simultaneousResult .instr_addi : Bool) = true := by rfl
+
 example : (capturedAddi .is_alu_reg_imm : Bool) = true := by rfl
 example : BitVector.toNat 5 (capturedAddi .decoded_rd) = 1 := by decide
 example : BitVector.toNat 5 (capturedAddi .decoded_rs1) = 2 := by decide
@@ -58,5 +72,15 @@ example : ((nextState { idleInputs with resetn := false } resetState) .instr_lui
 example : (outputValues resolvedAddi .instr_trap : Bool) = false := by rfl
 example : (outputValues initialState .instr_trap : Bool) = true := by rfl
 example : (resolvedAddi .instr_addi : Bool) = true := by rfl
+
+noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports := certified
+
+-- The capture stage is concrete; the unresolved second stage is the only
+-- remaining blackbox in the decoder hierarchy.
+example : ¬moduleStructure.HasNoBlackboxes := by
+  simp only [moduleStructure, ModuleStructure.HasNoBlackboxes]
+  intro closed
+  simpa [structuralChildren, Contracts.Cycle.ModuleCycleContract.blackboxStructure,
+    ModuleStructure.HasNoBlackboxes] using closed .resolve
 
 end Silean.Examples.Checks.PicoRVDecoderChecks

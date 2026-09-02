@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.BinaryToOneHot
 import Silean.Modules.CombMuxTree
 import Silean.Modules.EnabledRegister
@@ -10,6 +11,7 @@ import Silean.Composition.SignalAdapterImplementation
 namespace Silean.Modules.RegisterBank
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-- A synchronous-write bank containing `2 ^ addressWidth` entries of `element`,
 with an independently addressed combinational output for each read port. -/
@@ -385,371 +387,39 @@ private abbrev muxOccurrence (element : SignalType) (addressWidth readCount : Na
       (body element addressWidth readCount) (childContracts element addressWidth readCount) :=
   ⟨.readMux port, CombMuxTree.Rule.apply⟩
 
-@[simp] private theorem decoder_reads (element : SignalType) (addressWidth readCount : Nat) :
-    (decoderOccurrence element addressWidth readCount).reads = [.value] := rfl
-@[simp] private theorem decoder_writes (element : SignalType) (addressWidth readCount : Nat) :
-    (decoderOccurrence element addressWidth readCount).writes = [.result] := rfl
-@[simp] private theorem split_reads (element : SignalType) (addressWidth readCount : Nat) :
-    (splitOccurrence element addressWidth readCount).reads = [.value] := rfl
-@[simp] private theorem split_writes (element : SignalType) (addressWidth readCount : Nat) :
-    (splitOccurrence element addressWidth readCount).writes =
-      (Enumeration.fin (entryCount addressWidth)).values := by
-  change (Composition.SignalSplitter.vector (entryCount addressWidth) .bit).ports.outputs.allSelection.labels = _
-  rw [SignalMap.allSelection_labels]
-@[simp] private theorem gate_reads (element : SignalType) (addressWidth readCount : Nat)
-    (index : Fin (entryCount addressWidth)) :
-    (gateOccurrence element addressWidth readCount index).reads = [.left, .right] := rfl
-@[simp] private theorem gate_writes (element : SignalType) (addressWidth readCount : Nat)
-    (index : Fin (entryCount addressWidth)) :
-    (gateOccurrence element addressWidth readCount index).writes = [.output] := rfl
-@[simp] private theorem storage_reads (element : SignalType) (addressWidth readCount : Nat)
-    (index : Fin (entryCount addressWidth)) :
-    (storageOccurrence element addressWidth readCount index).reads = [] := rfl
-@[simp] private theorem storage_writes (element : SignalType) (addressWidth readCount : Nat)
-    (index : Fin (entryCount addressWidth)) :
-    (storageOccurrence element addressWidth readCount index).writes = [.value] := rfl
-@[simp] private theorem combine_reads (element : SignalType) (addressWidth readCount : Nat) :
-    (combineOccurrence element addressWidth readCount).reads =
-      (Enumeration.fin (entryCount addressWidth)).values := by
-  change (entryCombiner element addressWidth).ports.inputs.allSelection.labels = _
-  rw [SignalMap.allSelection_labels]
-  rfl
-@[simp] private theorem combine_writes (element : SignalType) (addressWidth readCount : Nat) :
-    (combineOccurrence element addressWidth readCount).writes = [.value] := rfl
-@[simp] private theorem mux_reads (element : SignalType) (addressWidth readCount : Nat)
-    (port : Fin readCount) :
-    (muxOccurrence element addressWidth readCount port).reads = [.values, .index] := rfl
-@[simp] private theorem mux_writes (element : SignalType) (addressWidth readCount : Nat)
-    (port : Fin readCount) :
-    (muxOccurrence element addressWidth readCount port).writes = [.result] := rfl
 
-private noncomputable def storageFamilySchedule (element : SignalType)
-    (addressWidth readCount : Nat) (port : Fin readCount) :
-    Contracts.Cycle.Certification.Layer.Schedule (body element addressWidth readCount) (childContracts element addressWidth readCount)
-      (fun input => input ∈
-        (readRule element addressWidth readCount port).readsInputs.labels)
-      (fun final =>
-        (∀ index, storageOccurrence element addressWidth readCount index ∈ final) ∧
-        ∀ called, called ∈ final →
-          ∃ index, called = storageOccurrence element addressWidth readCount index) [] :=
-  Contracts.Cycle.Certification.Layer.Schedule.callFamily (Enumeration.fin (entryCount addressWidth))
-    (storageOccurrence element addressWidth readCount)
-    (by
-      intro left right equal
-      have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-      exact Instance.storage.inj childEqual)
-    (by
-      intro index input member
-      change input ∈ ([] : List EnabledRegister.Input) at member
-      cases member)
 
-private noncomputable def outputSchedule (element : SignalType) (addressWidth readCount : Nat)
-    (port : Fin readCount) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (body element addressWidth readCount)
-      (childContracts element addressWidth readCount) (cycleContract element addressWidth readCount)
-      (.read port) := by
-  let family := storageFamilySchedule element addressWidth readCount port
-  apply family.append
-  refine .call (combineOccurrence element addressWidth readCount) ?_ ?_ ?_
-  · intro index _
-    exact ⟨EnabledRegister.Rule.observe, family.finished.1 index, by
-      simp⟩
-  · intro member
-    rcases family.finished.2 _ member with ⟨index, equal⟩
-    have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-    cases childEqual
-  · refine .call (muxOccurrence element addressWidth readCount port) ?_ ?_ (.done ?_)
-    · intro input _
-      cases input with
-      | values => exact ⟨Composition.SignalComponentRule.apply, by simp, by
-          simp⟩
-      | index =>
-          change Input.readAddress port ∈
-            (readRule element addressWidth readCount port).readsInputs.labels
-          simp [readRule, SignalMap.select, SignalSelection.labels]
-    · intro member
-      rcases List.mem_cons.mp member with equal | old
-      · have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-        cases childEqual
-      · rcases family.finished.2 _ old with ⟨index, equal⟩
-        have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-        cases childEqual
-    · intro output member
-      cases output with
-      | readValue outputPort =>
-        have equal : outputPort = port := by
-          simp [cycleContract, readRule, SignalMap.select, SignalSelection.labels] at member
-          exact Output.readValue.inj member
-        subst outputPort
-        exact ⟨CombMuxTree.Rule.apply, by simp, by simp⟩
-
-private noncomputable def gateFamilyAfterDecode (element : SignalType)
+private def scheduleOrders (element : SignalType)
     (addressWidth readCount : Nat) :
-    Contracts.Cycle.Certification.Layer.Schedule (body element addressWidth readCount) (childContracts element addressWidth readCount)
-      (fun _ => True)
-      (fun final =>
-        (∀ called, called ∈
-          [splitOccurrence element addressWidth readCount, decoderOccurrence element addressWidth readCount] →
-            called ∈ final) ∧
-        (∀ index, gateOccurrence element addressWidth readCount index ∈ final) ∧
-        ∀ called, called ∈ final →
-          called ∈ [splitOccurrence element addressWidth readCount,
-            decoderOccurrence element addressWidth readCount] ∨
-          ∃ index, called = gateOccurrence element addressWidth readCount index)
-      [splitOccurrence element addressWidth readCount, decoderOccurrence element addressWidth readCount] :=
-  Contracts.Cycle.Certification.Layer.Schedule.callFamilyAfter
-    [splitOccurrence element addressWidth readCount, decoderOccurrence element addressWidth readCount]
-    (Enumeration.fin (entryCount addressWidth))
-    (gateOccurrence element addressWidth readCount)
-    (by
-      intro left right equal
-      have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-      exact Instance.gate.inj childEqual)
-    (by
-      intro index member
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-      rcases member with equal | equal <;>
-        have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal <;>
-        cases childEqual)
-    (by
-      intro index input _
-      cases input with
-      | left => trivial
-      | right => exact ⟨Composition.SignalComponentRule.apply, by simp, by
-          simpa [split_writes] using
-            (ListIndex.get_eq ((Enumeration.fin _).locate index) ▸ List.get_mem _ _)⟩
-      )
+    ScheduleDerivation.RuleScheduleOrders (body element addressWidth readCount)
+      (childContracts element addressWidth readCount)
+      (cycleContract element addressWidth readCount) where
+  output := fun
+    | .read port => (Enumeration.fin (entryCount addressWidth)).values.map
+        (storageOccurrence element addressWidth readCount) ++
+      [combineOccurrence element addressWidth readCount,
+        muxOccurrence element addressWidth readCount port]
+  state := [decoderOccurrence element addressWidth readCount,
+      splitOccurrence element addressWidth readCount] ++
+    (Enumeration.fin (entryCount addressWidth)).values.map
+      (gateOccurrence element addressWidth readCount) ++
+    (Enumeration.fin (entryCount addressWidth)).values.map
+      (storageOccurrence element addressWidth readCount) ++
+    [combineOccurrence element addressWidth readCount]
 
-private structure StateScheduleData (element : SignalType) (addressWidth readCount : Nat) where
-  schedule : Contracts.Cycle.Certification.Layer.StateSchedule (body element addressWidth readCount)
-    (childContracts element addressWidth readCount)
-  decoderMem : decoderOccurrence element addressWidth readCount ∈ schedule.finalAvailability
-  splitMem : splitOccurrence element addressWidth readCount ∈ schedule.finalAvailability
-  gateMem : ∀ index, gateOccurrence element addressWidth readCount index ∈ schedule.finalAvailability
-  storageMem : ∀ index,
-    storageOccurrence element addressWidth readCount index ∈ schedule.finalAvailability
-  combineMem : combineOccurrence element addressWidth readCount ∈ schedule.finalAvailability
+private noncomputable def derivedRuleSchedules (element : SignalType)
+    (addressWidth readCount : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules (body element addressWidth readCount)
+      (childContracts element addressWidth readCount)
+      (cycleContract element addressWidth readCount) := by
+  derive_rule_schedules (scheduleOrders element addressWidth readCount)
 
-private noncomputable def makeStateSchedule (element : SignalType) (addressWidth readCount : Nat) :
-    StateScheduleData element addressWidth readCount := by
-  let gates := gateFamilyAfterDecode element addressWidth readCount
-  let stores := Contracts.Cycle.Certification.Layer.Schedule.callFamilyAfter
-    (inputAvailable := fun _ => True) gates.finalAvailability
-    (Enumeration.fin (entryCount addressWidth))
-    (storageOccurrence element addressWidth readCount)
-    (by
-      intro left right equal
-      have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-      exact Instance.storage.inj childEqual)
-    (by
-      intro index member
-      rcases gates.finished.2.2 _ member with old | ⟨gateIndex, equal⟩
-      · simp only [List.mem_cons, List.not_mem_nil, or_false] at old
-        rcases old with equal | equal <;>
-          have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal <;>
-          cases childEqual
-      · have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-        cases childEqual)
-    (by
-      intro index input _
-      cases input with
-      | value => trivial
-      | enable => exact ⟨Primitives.AndRule.apply, gates.finished.2.1 index, by simp⟩)
-  let combinedAvailability :=
-    combineOccurrence element addressWidth readCount :: stores.finalAvailability
-  let finish : Contracts.Cycle.Certification.Layer.ChildrenStateInputsReady
-      (body element addressWidth readCount) (childContracts element addressWidth readCount)
-      combinedAvailability := by
-      intro child input member
-      cases child with
-      | decoder =>
-        change input ∈ ([] : List BinaryToOneHot.Input) at member
-        cases member
-      | decodeSplit =>
-        change input ∈ ([] : List Composition.AggregatePort) at member
-        cases member
-      | gate index =>
-        change input ∈ ([] : List Primitives.BinaryInput) at member
-        cases member
-      | storage index =>
-        cases input with
-        | value => trivial
-        | enable =>
-          exact ⟨Primitives.AndRule.apply,
-            by exact List.mem_cons_of_mem _ (stores.finished.1 _ (gates.finished.2.1 index)),
-            by simp⟩
-      | combine =>
-        change input ∈ ([] : List (Fin (entryCount addressWidth))) at member
-        cases member
-      | readMux _ =>
-        change input ∈ ([] : List (CombMuxTree.Input)) at member
-        cases member
-  let tail : Contracts.Cycle.Certification.Layer.Schedule (body element addressWidth readCount)
-      (childContracts element addressWidth readCount) (fun _ => True)
-      (Contracts.Cycle.Certification.Layer.ChildrenStateInputsReady (body element addressWidth readCount)
-        (childContracts element addressWidth readCount)) stores.finalAvailability :=
-    .call (combineOccurrence element addressWidth readCount)
-      (by
-        intro index _
-        exact ⟨EnabledRegister.Rule.observe, stores.finished.2.1 index, by simp⟩)
-      (by
-        intro member
-        rcases stores.finished.2.2 _ member with old | ⟨index, equal⟩
-        · rcases gates.finished.2.2 _ old with old | ⟨gateIndex, equal⟩
-          · simp only [List.mem_cons, List.not_mem_nil, or_false] at old
-            rcases old with equal | equal
-            · have childEqual := congrArg
-                Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-              cases childEqual
-            · have childEqual := congrArg
-                Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-              cases childEqual
-          · have childEqual := congrArg
-              Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-            cases childEqual
-        · have childEqual := congrArg
-            Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-          cases childEqual)
-      (.done finish)
-  let afterStores := stores.append tail
-  let afterGates := gates.append afterStores
-  let afterSplit : Contracts.Cycle.Certification.Layer.Schedule (body element addressWidth readCount)
-      (childContracts element addressWidth readCount) (fun _ => True)
-      (Contracts.Cycle.Certification.Layer.ChildrenStateInputsReady (body element addressWidth readCount)
-        (childContracts element addressWidth readCount))
-      [decoderOccurrence element addressWidth readCount] :=
-    .call (splitOccurrence element addressWidth readCount)
-      (by
-        intro input _
-        cases input
-        exact ⟨BinaryToOneHot.Rule.apply, by simp, by simp⟩)
-      (by simp) afterGates
-  let schedule : Contracts.Cycle.Certification.Layer.StateSchedule (body element addressWidth readCount)
-      (childContracts element addressWidth readCount) :=
-    .call (decoderOccurrence element addressWidth readCount) (by intros; trivial)
-      (by simp) afterSplit
-  refine ⟨schedule, ?_, ?_, ?_, ?_, ?_⟩
-  · dsimp [schedule, afterSplit]
-    simp only [afterGates, afterStores,
-      Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-    change decoderOccurrence element addressWidth readCount ∈ combinedAvailability
-    exact List.mem_cons_of_mem _ (stores.finished.1 _ (gates.finished.1 _ (by simp)))
-  · dsimp [schedule, afterSplit]
-    simp only [afterGates, afterStores,
-      Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-    change splitOccurrence element addressWidth readCount ∈ combinedAvailability
-    exact List.mem_cons_of_mem _ (stores.finished.1 _ (gates.finished.1 _ (by simp)))
-  · intro index
-    dsimp [schedule, afterSplit]
-    simp only [afterGates, afterStores,
-      Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-    change gateOccurrence element addressWidth readCount index ∈ combinedAvailability
-    exact List.mem_cons_of_mem _ (stores.finished.1 _ (gates.finished.2.1 index))
-  · intro index
-    dsimp [schedule, afterSplit]
-    simp only [afterGates, afterStores,
-      Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-    change storageOccurrence element addressWidth readCount index ∈ combinedAvailability
-    exact List.mem_cons_of_mem _ (stores.finished.2.1 index)
-  · dsimp [schedule, afterSplit, tail, combinedAvailability]
-    simp only [afterGates, afterStores,
-      Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-    change combineOccurrence element addressWidth readCount ∈ combinedAvailability
-    simp [combinedAvailability]
-
-private noncomputable def stateSchedule (element : SignalType) (addressWidth readCount : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (body element addressWidth readCount) (childContracts element addressWidth readCount) :=
-  (makeStateSchedule element addressWidth readCount).schedule
-
-private noncomputable def ruleSchedules (element : SignalType) (addressWidth readCount : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (body element addressWidth readCount)
-      (childContracts element addressWidth readCount) (cycleContract element addressWidth readCount) where
-  output | .read port => outputSchedule element addressWidth readCount port
-  state := stateSchedule element addressWidth readCount
-
-private theorem output_mem_mux (element : SignalType) (addressWidth readCount : Nat)
-    (port : Fin readCount) :
-    muxOccurrence element addressWidth readCount port ∈
-      (outputSchedule element addressWidth readCount port).finalAvailability := by
-  unfold outputSchedule
-  rw [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-  simp [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-
-private theorem state_mem_decoder (element : SignalType) (addressWidth readCount : Nat) :
-    decoderOccurrence element addressWidth readCount ∈
-      (stateSchedule element addressWidth readCount).finalAvailability :=
-  (makeStateSchedule element addressWidth readCount).decoderMem
-
-private theorem state_mem_split (element : SignalType) (addressWidth readCount : Nat) :
-    splitOccurrence element addressWidth readCount ∈
-      (stateSchedule element addressWidth readCount).finalAvailability :=
-  (makeStateSchedule element addressWidth readCount).splitMem
-
-private theorem state_mem_gate (element : SignalType) (addressWidth readCount : Nat)
-    (index : Fin (entryCount addressWidth)) :
-    gateOccurrence element addressWidth readCount index ∈
-      (stateSchedule element addressWidth readCount).finalAvailability :=
-  (makeStateSchedule element addressWidth readCount).gateMem index
-
-private theorem state_mem_storage (element : SignalType) (addressWidth readCount : Nat)
-    (index : Fin (entryCount addressWidth)) :
-    storageOccurrence element addressWidth readCount index ∈
-      (stateSchedule element addressWidth readCount).finalAvailability :=
-  (makeStateSchedule element addressWidth readCount).storageMem index
-
-private theorem state_mem_combine (element : SignalType) (addressWidth readCount : Nat) :
-    combineOccurrence element addressWidth readCount ∈
-      (stateSchedule element addressWidth readCount).finalAvailability :=
-  (makeStateSchedule element addressWidth readCount).combineMem
-
+private noncomputable def ruleSchedules (element : SignalType) (addressWidth readCount : Nat) :=
+  (derivedRuleSchedules element addressWidth readCount).schedules
 
 private theorem coversChildren (element : SignalType) (addressWidth readCount : Nat) :
-    (ruleSchedules element addressWidth readCount).CoversChildren := by
-  intro child rule
-  cases child with
-  | decoder =>
-    change BinaryToOneHot.Rule at rule
-    cases rule
-    left
-    change decoderOccurrence element addressWidth readCount ∈
-      (stateSchedule element addressWidth readCount).finalAvailability
-    exact state_mem_decoder element addressWidth readCount
-  | decodeSplit =>
-    change Composition.SignalComponentRule at rule
-    cases rule
-    left
-    change splitOccurrence element addressWidth readCount ∈
-      (stateSchedule element addressWidth readCount).finalAvailability
-    exact state_mem_split element addressWidth readCount
-  | gate index =>
-    change Primitives.AndRule at rule
-    cases rule
-    left
-    change gateOccurrence element addressWidth readCount index ∈
-      (stateSchedule element addressWidth readCount).finalAvailability
-    exact state_mem_gate element addressWidth readCount index
-  | storage index =>
-    change EnabledRegister.Rule at rule
-    cases rule
-    left
-    change storageOccurrence element addressWidth readCount index ∈
-      (stateSchedule element addressWidth readCount).finalAvailability
-    exact state_mem_storage element addressWidth readCount index
-  | combine =>
-    change Composition.SignalComponentRule at rule
-    cases rule
-    left
-    change combineOccurrence element addressWidth readCount ∈
-      (stateSchedule element addressWidth readCount).finalAvailability
-    exact state_mem_combine element addressWidth readCount
-  | readMux port =>
-    change CombMuxTree.Rule at rule
-    cases rule
-    right
-    refine ⟨.read port, ?_⟩
-    change muxOccurrence element addressWidth readCount port ∈
-      (outputSchedule element addressWidth readCount port).finalAvailability
-    exact output_mem_mux element addressWidth readCount port
+    (ruleSchedules element addressWidth readCount).CoversChildren :=
+  (derivedRuleSchedules element addressWidth readCount).coversChildren
 
 section LayerCertification
 

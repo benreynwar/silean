@@ -101,7 +101,7 @@ combinational logic, not contract state.
 | --- | --- | --- | --- |
 | ALU | exact pure cycle behavior and public operation laws | complete and closed | nested future datapath child |
 | register file | exact read/write cycle behavior | complete and closed | blackbox boundary for now |
-| decoder | exact configured two-stage registered behavior | not implemented | blackbox |
+| decoder | exact configured two-stage registered behavior | certified parent and closed capture stage; resolve not implemented | capture concrete, resolve blackbox |
 | memory | exact configured request-state behavior and natural protocol views | not implemented | blackbox |
 | datapath | exact registered value-flow behavior | not implemented | blackbox |
 | control | exact configured sequencing behavior | not implemented | blackbox |
@@ -143,6 +143,71 @@ the remaining immediate. Simultaneous enables read the same pre-edge state,
 matching Verilog nonblocking assignments. The structure should retain the
 source one-hot signals; natural decode theorems can provide an instruction
 view and mutual-exclusion facts.
+
+The parent has this certified two-child hierarchy. Capture is concrete and
+resolve remains a blackbox whose contract is the only fact used by the parent
+proof. The planned internal resolve-stage hierarchy is:
+
+```text
+PicoRV32Decoder
+|- capture : DecoderCaptureStage
+`- resolve : DecoderResolveStage
+   |- match     : DecoderInstructionMatch
+   |- immediate : DecoderImmediate
+   `- summary   : DecoderInstructionSummary
+```
+
+`DecoderCaptureStage` owns 14 registers: the four directly recognized
+LUI/AUIPC/JAL/JALR flags, five broad opcode classes, three register addresses,
+the J immediate, and `compressed_instr`. Its common capture condition is
+`mem_do_rinst && mem_done`; compressed-instruction behavior remains fixed off.
+The branch-class register also applies the source's reset override.
+Its concrete certified structure uses generic slices, fixed-value equality,
+Boolean gates, signal adapters, and registers. The generated FIRRTL hierarchy
+is closed and lowers successfully through CIRCT.
+
+`DecoderResolveStage` owns 45 registered second-stage results. The
+ECALL/EBREAK predicate is retained as private state because it contributes to
+the source's current recognized-instruction view but is not consumed as a
+separate top-level decoder output.
+`DecoderInstructionMatch` takes only the instruction word, the five captured
+opcode classes, and captured JALR. It produces the 35 configured exact
+instruction predicates (including ECALL/EBREAK and FENCE) and the three
+same-cycle shift/non-shift groups. Disabled counter, IRQ, PCPI, and compressed
+predicates do not appear at its boundary.
+
+`DecoderImmediate` takes the instruction word, captured J immediate, and the
+captured classes that select J/I/B/S/U formats. Its natural Lean behavior is
+`Option Word`; its ports expose that as `valid` and `value`. An invalid
+selection tells the resolve stage to retain `decoded_imm`, rather than assigning
+a fabricated value for the source don't-care case. Its priority is J, U, I, B,
+then S, matching the source `case (1'b1)`.
+
+`DecoderInstructionSummary` takes the current pre-edge exact instruction flags,
+the four captured direct flags, and the broad branch class. It produces the six
+summary values assigned unconditionally each cycle and the configured
+continuous `instr_trap` result. Consequently it does not consume the newly
+computed match results on the same edge.
+
+The resolve stage owns all priority between ordinary summary updates, a
+resolve trigger, and reset. In particular, the ordinary summary values are
+formed from pre-edge flags, `decoder_trigger && !decoder_pseudo_trigger` then
+forces `is_lui_auipc_jal_jalr_addi_add_sub` and `is_compare` low, and reset has
+final priority for the selectively cleared registers. If capture and resolve
+fire together, resolve consumes the old capture-stage outputs, not values
+captured on the same edge.
+
+All three children are combinational zero-state cycle contracts. Their sole
+rules explicitly read their complete input boundaries and write their complete
+output boundaries. They contain no decoder trigger, pseudo-trigger, reset, or
+state: those dependencies and priorities remain visible in the resolve parent.
+
+The stage modules are PicoRV-private architectural components, not proposed
+general-purpose helpers. Their internal structures should use generic
+registers, muxes, reductions, gates, constants, equality, and aggregate
+adapters. A generic vector slice and equality-with-constant composition may be
+added first if their contracts and naming materially simplify this structure;
+neither should contain decoder-specific behavior.
 
 ### Memory interface
 

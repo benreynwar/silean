@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.BinaryToOneHot
 import Silean.Modules.Mux
 import Silean.Modules.VectorSplit
@@ -7,6 +8,7 @@ import Silean.Naming.SignalAdapterNaming
 namespace Silean.Modules.CombMuxTree
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! A combinational mux tree selecting one of `2 ^ indexWidth` values. -/
 
@@ -206,57 +208,23 @@ private abbrev baseOccurrence (element : SignalType) :
       (baseBody element) (baseChildContracts element) :=
   ⟨.split, Composition.SignalComponentRule.apply⟩
 
-private def baseOutputSchedule (element : SignalType) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (baseBody element) (baseChildContracts element)
-      (cycleContract element 0) .apply :=
-  .call (baseOccurrence element)
-    (by
-      intro input _
-      cases input
-      simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, baseBody, baseWiring,
-        baseContext, EndpointContext.moduleInput])
-    (by simp)
-    (.done (by
-      intro output _
-      cases output
-      exact ⟨Composition.SignalComponentRule.apply, by simp, by
-        change (⟨0, by omega⟩ : Fin 1) ∈
-          (baseOccurrence element).writes
-        change (⟨0, by omega⟩ : Fin 1) ∈
-          (baseSplitter element).ports.outputs.allSelection.labels
-        rw [SignalMap.allSelection_labels]
-        exact ListIndex.get_eq
-          ((baseSplitter element).ports.outputs.labels.locate ⟨0, by omega⟩) ▸
-            List.get_mem _ _⟩))
+private def baseScheduleOrders (element : SignalType) :
+    ScheduleDerivation.RuleScheduleOrders (baseBody element)
+      (baseChildContracts element) (cycleContract element 0) where
+  output | .apply => [baseOccurrence element]
+  state := []
 
-private def baseStateSchedule (element : SignalType) :
-    Contracts.Cycle.Certification.Layer.StateSchedule
-      (baseBody element) (baseChildContracts element) :=
-  .done (by
-    intro child input member
-    cases child
-    change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-    exact nomatch member)
+private def baseDerivedRuleSchedules (element : SignalType) :
+    ScheduleDerivation.DerivedRuleSchedules (baseBody element)
+      (baseChildContracts element) (cycleContract element 0) := by
+  derive_rule_schedules (baseScheduleOrders element)
 
-private def baseSchedules (element : SignalType) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
-      (baseBody element) (baseChildContracts element)
-      (cycleContract element 0) where
-  output | .apply => baseOutputSchedule element
-  state := baseStateSchedule element
+private abbrev baseSchedules (element : SignalType) :=
+  (baseDerivedRuleSchedules element).schedules
 
 private theorem baseCoversChildren (element : SignalType) :
-    (baseSchedules element).CoversChildren := by
-  intro child rule
-  cases child
-  change Composition.SignalComponentRule at rule
-  cases rule
-  right
-  refine ⟨.apply, ?_⟩
-  change baseOccurrence element ∈ (baseOutputSchedule element).finalAvailability
-  simp [baseOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (baseSchedules element).CoversChildren :=
+  (baseDerivedRuleSchedules element).coversChildren
 
 private def baseSplitInputs (element : SignalType)
     (inputs : (ports element 0).inputs.Values) :
@@ -356,130 +324,30 @@ private abbrev muxOccurrence (element) (indexWidth) :
       (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.mux, Mux.Rule.select⟩
 
-private theorem indexSplitWrites (element) (indexWidth)
-    (index : Fin (indexWidth + 1)) :
-    index ∈ (indexSplitOccurrence element indexWidth).writes := by
-  change index ∈ (indexSplitter indexWidth).ports.outputs.allSelection.labels
-  rw [SignalMap.allSelection_labels]
-  exact ListIndex.get_eq
-    ((indexSplitter indexWidth).ports.outputs.labels.locate index) ▸
-      List.get_mem _ _
-
-private def succOutputSchedule (element : SignalType) (indexWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (succBody element indexWidth)
-      (succChildContracts element indexWidth)
-      (cycleContract element (indexWidth + 1)) .apply :=
-  .call (valuesSplitOccurrence element indexWidth)
-    (by
-      intro input _
-      cases input
-      simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, succBody, succWiring,
-        succContext, EndpointContext.moduleInput])
-    (by simp)
-  (.call (indexSplitOccurrence element indexWidth)
-    (by
-      intro input _
-      cases input
-      simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, succBody, succWiring,
-        succContext, EndpointContext.moduleInput])
-    (by simp)
-  (.call (indexLowerOccurrence element indexWidth)
-    (by intro lowerIndex _; exact ⟨Composition.SignalComponentRule.apply, by simp,
-      indexSplitWrites element indexWidth lowerIndex.castSucc⟩)
-    (by simp)
-  (.call (lowerOccurrence element indexWidth)
-    (by intro input _; cases input with
-      | values => exact ⟨VectorSplit.Rule.apply, by simp,
-          by change VectorSplit.Output.left ∈ [.left, .right]; simp⟩
-      | index => exact ⟨Composition.SignalComponentRule.apply, by simp,
-          by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩)
-    (by simp)
-  (.call (upperOccurrence element indexWidth)
-    (by intro input _; cases input with
-      | values => exact ⟨VectorSplit.Rule.apply, by simp,
-          by change VectorSplit.Output.right ∈ [.left, .right]; simp⟩
-      | index => exact ⟨Composition.SignalComponentRule.apply, by simp,
-          by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩)
-    (by simp)
-  (.call (muxOccurrence element indexWidth)
-    (by intro input _; cases input with
-      | select => exact ⟨Composition.SignalComponentRule.apply, by simp,
-          indexSplitWrites element indexWidth (highIndex indexWidth)⟩
-      | whenFalse => exact ⟨Rule.apply, by simp,
-          by change Output.result ∈ [Output.result]; simp⟩
-      | whenTrue => exact ⟨Rule.apply, by simp,
-          by change Output.result ∈ [Output.result]; simp⟩)
-    (by simp)
-  (.done (by
-    intro output _
-    cases output
-    exact ⟨Mux.Rule.select, by simp,
-      by change Mux.Output.result ∈ [Mux.Output.result]; simp⟩)))))))
-
-private def succStateSchedule (element : SignalType) (indexWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (succBody element indexWidth)
-      (succChildContracts element indexWidth) :=
-  .done (by
-    intro child input member
-    cases child with
-    | valuesSplit =>
-        change input ∈ (VectorSplit.cycleContract _ _ _).stateRule.readsInputs.labels at member
-        exact nomatch member
-    | indexSplit | indexLower =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
-    | lower | upper =>
-        change input ∈ (cycleContract element indexWidth).stateRule.readsInputs.labels at member
-        exact nomatch member
-    | mux =>
-        change input ∈ (Mux.cycleContract element).stateRule.readsInputs.labels at member
-        exact nomatch member)
-
-private def succSchedules (element : SignalType) (indexWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (succBody element indexWidth)
+private def succScheduleOrders (element : SignalType) (indexWidth : Nat) :
+    ScheduleDerivation.RuleScheduleOrders (succBody element indexWidth)
       (succChildContracts element indexWidth)
       (cycleContract element (indexWidth + 1)) where
-  output | .apply => succOutputSchedule element indexWidth
-  state := succStateSchedule element indexWidth
+  output := fun
+    | .apply => [valuesSplitOccurrence element indexWidth,
+        indexSplitOccurrence element indexWidth,
+        indexLowerOccurrence element indexWidth,
+        lowerOccurrence element indexWidth, upperOccurrence element indexWidth,
+        muxOccurrence element indexWidth]
+  state := []
+
+private def succDerivedRuleSchedules (element : SignalType) (indexWidth : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules (succBody element indexWidth)
+      (succChildContracts element indexWidth)
+      (cycleContract element (indexWidth + 1)) := by
+  derive_rule_schedules (succScheduleOrders element indexWidth)
+
+private abbrev succSchedules (element : SignalType) (indexWidth : Nat) :=
+  (succDerivedRuleSchedules element indexWidth).schedules
 
 private theorem succCoversChildren (element : SignalType) (indexWidth : Nat) :
-    (succSchedules element indexWidth).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child with
-  | valuesSplit =>
-      change VectorSplit.Rule at rule; cases rule
-      change valuesSplitOccurrence element indexWidth ∈
-        (succOutputSchedule element indexWidth).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | indexSplit =>
-      change Composition.SignalComponentRule at rule; cases rule
-      change indexSplitOccurrence element indexWidth ∈
-        (succOutputSchedule element indexWidth).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | indexLower =>
-      change Composition.SignalComponentRule at rule; cases rule
-      change indexLowerOccurrence element indexWidth ∈
-        (succOutputSchedule element indexWidth).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | lower =>
-      change Rule at rule; cases rule
-      change lowerOccurrence element indexWidth ∈
-        (succOutputSchedule element indexWidth).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | upper =>
-      change Rule at rule; cases rule
-      change upperOccurrence element indexWidth ∈
-        (succOutputSchedule element indexWidth).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | mux =>
-      change Mux.Rule at rule; cases rule
-      change muxOccurrence element indexWidth ∈
-        (succOutputSchedule element indexWidth).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (succSchedules element indexWidth).CoversChildren :=
+  (succDerivedRuleSchedules element indexWidth).coversChildren
 
 private def valuesSplitInputs (element : SignalType) (indexWidth : Nat)
     (inputs : (ports element (indexWidth + 1)).inputs.Values) :

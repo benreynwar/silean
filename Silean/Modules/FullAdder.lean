@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.HalfAdder
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.Or
@@ -6,6 +7,7 @@ import Silean.Primitives.Or
 namespace Silean.Modules.FullAdder
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! A one-bit full adder. Its contract states the direct three-input Boolean
 behavior; the hardware implementation below is the standard composition of
@@ -168,124 +170,20 @@ private abbrev combinedCarry : Contracts.Cycle.Certification.Layer.RuleOccurrenc
     body childContracts :=
   ⟨.combineCarry, Primitives.OrRule.apply⟩
 
-@[simp] private theorem operandSum_writes : operandSum.writes = [.sum] := rfl
-@[simp] private theorem operandCarry_writes : operandCarry.writes = [.carry] := rfl
-@[simp] private theorem finalSum_writes : finalSum.writes = [.sum] := rfl
-@[simp] private theorem secondCarry_writes : secondCarry.writes = [.carry] := rfl
-@[simp] private theorem combinedCarry_writes : combinedCarry.writes = [.output] := rfl
-
-private def sumSchedule :
-    Contracts.Cycle.Certification.Layer.OutputSchedule body childContracts cycleContract .sum :=
-  .call operandSum
-    (by intro input _; cases input <;> simp [cycleContract, sumRule,
-      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-      EndpointContext.moduleInput, SignalSelection.prepend, SignalMap.select,
-      SignalSelection.labels])
-    (by simp)
-  (.call finalSum
-    (by intro input _; cases input with
-      | left => exact ⟨HalfAdder.Rule.sum, by simp, by simp⟩
-      | right => simp [cycleContract, sumRule,
-          Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-          EndpointContext.moduleInput, SignalSelection.prepend, SignalMap.select,
-          SignalSelection.labels])
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | sum => exact ⟨HalfAdder.Rule.sum, by simp, by simp⟩
-    | carryOut =>
-        simp [cycleContract, sumRule, SignalSelection.labels, SignalMap.select] at member)))
-
-private def carrySchedule :
-    Contracts.Cycle.Certification.Layer.OutputSchedule body childContracts cycleContract .carryOut :=
-  .call operandSum
-    (by intro input _; cases input <;> simp [cycleContract, carryRule,
-      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-      EndpointContext.moduleInput, SignalSelection.prepend, SignalMap.select,
-      SignalSelection.labels])
-    (by simp)
-  (.call operandCarry
-    (by intro input _; cases input <;> simp [cycleContract, carryRule,
-      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-      EndpointContext.moduleInput, SignalSelection.prepend, SignalMap.select,
-      SignalSelection.labels])
-    (by simp)
-  (.call secondCarry
-    (by intro input _; cases input with
-      | left => exact ⟨HalfAdder.Rule.sum, by simp, by simp⟩
-      | right => simp [cycleContract, carryRule,
-          Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-          EndpointContext.moduleInput, SignalSelection.prepend, SignalMap.select,
-          SignalSelection.labels])
-    (by simp)
-  (.call combinedCarry
-    (by intro input _; cases input with
-      | left => exact ⟨HalfAdder.Rule.carry, by simp, by simp⟩
-      | right => exact ⟨HalfAdder.Rule.carry, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | sum =>
-        simp [cycleContract, carryRule, SignalSelection.labels, SignalMap.select] at member
-    | carryOut => exact ⟨Primitives.OrRule.apply, by simp, by simp⟩)))))
-
-private def stateSchedule : Contracts.Cycle.Certification.Layer.StateSchedule body childContracts :=
-  .done (by
-    intro child input member
-    cases child with
-    | operands | carry =>
-        change input ∈ [] at member
-        cases member
-    | combineCarry =>
-        change input ∈ [] at member
-        cases member)
-
-private def ruleSchedules :
-    Contracts.Cycle.Certification.Layer.RuleSchedules body childContracts cycleContract where
+private def scheduleOrders : ScheduleDerivation.RuleScheduleOrders
+    body childContracts cycleContract where
   output
-    | .sum => sumSchedule
-    | .carryOut => carrySchedule
-  state := stateSchedule
+    | .sum => [operandSum, finalSum]
+    | .carryOut => [operandSum, operandCarry, secondCarry, combinedCarry]
+  state := []
 
-private theorem coversChildren : ruleSchedules.CoversChildren := by
-  intro child rule
-  right
-  cases child with
-  | operands =>
-      change HalfAdder.Rule at rule
-      cases rule with
-      | sum =>
-          refine ⟨.sum, ?_⟩
-          change operandSum ∈ sumSchedule.finalAvailability
-          simp [sumSchedule,
-            Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-      | carry =>
-          refine ⟨.carryOut, ?_⟩
-          change operandCarry ∈ carrySchedule.finalAvailability
-          simp [carrySchedule,
-            Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | carry =>
-      change HalfAdder.Rule at rule
-      cases rule with
-      | sum =>
-          refine ⟨.sum, ?_⟩
-          change finalSum ∈ sumSchedule.finalAvailability
-          simp [sumSchedule,
-            Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-      | carry =>
-          refine ⟨.carryOut, ?_⟩
-          change secondCarry ∈ carrySchedule.finalAvailability
-          simp [carrySchedule,
-            Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | combineCarry =>
-      change Primitives.OrRule at rule
-      cases rule
-      refine ⟨.carryOut, ?_⟩
-      change combinedCarry ∈ carrySchedule.finalAvailability
-      simp [carrySchedule,
-        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private def derivedRuleSchedules : ScheduleDerivation.DerivedRuleSchedules
+    body childContracts cycleContract := by
+  derive_rule_schedules scheduleOrders
+
+private abbrev ruleSchedules := derivedRuleSchedules.schedules
+private theorem coversChildren : ruleSchedules.CoversChildren :=
+  derivedRuleSchedules.coversChildren
 
 section LayerCertification
 

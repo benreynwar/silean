@@ -33,8 +33,9 @@ port belong in `Silean/Modules/`, not here.
 
 The `PicoRV32Alu`, `PicoRV32Regs`, `PicoRV32Decoder`, `PicoRV32Memory`,
 `PicoRV32Datapath`, and `PicoRV32Control` boundaries are defined. `PicoRV32Regs`
-and the combinational `PicoRV32Alu` now have closed structural implementations
-certified against their cycle contracts; the other PicoRV blocks remain
+and the combinational `PicoRV32Alu` have closed structural implementations.
+`PicoRV32Decoder` has a certified two-stage parent structure whose capture and
+resolve children remain explicit blackboxes; the other PicoRV blocks remain
 contract-only. The five direct-child contracts have been jointly reviewed
 against the fixed Verilog configuration. The focused boundary check maps every
 child input to a named producer and checks its signal type. `PicoRV.lean` now
@@ -70,9 +71,11 @@ Focused checks cover reset, sequential/JAL/JALR/branch PC flow, operand and ALU
 capture, effective addresses, signed and unsigned loads, writeback, and
 variable-latency iterative shifts.
 
-The decoder contract
-preserves the source's two registered decode stages and the extra cycle by
-which its summary flags observe detailed instruction flags. The memory
+The decoder contract preserves the source's two registered decode stages and
+the extra cycle by which its summary flags observe detailed instruction flags.
+Its capture stage is a closed certified structure built from reusable slices,
+comparisons, gates, adapters, and registers; the resolve stage remains an
+explicit blackbox. The memory
 contract preserves the single-outstanding external request state machine and
 adds a natural request/transfer/completion view, including PicoRV32's delayed
 prefetch completion. Neither is flattened into a simpler but cycle-inaccurate

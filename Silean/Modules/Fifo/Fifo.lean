@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.EnabledResetCounter
 import Silean.Interfaces.FifoPorts
 import Silean.Modules.Fifo.FifoPointerControl
@@ -8,6 +9,7 @@ import Silean.Naming.FifoPortsNaming
 namespace Silean.Modules.Fifo
 
 open Silean Silean.Interfaces.Fifo
+open Contracts.Cycle.Certification.Layer
 
 /-- A FIFO with `2 ^ addressWidth` entries of `element`, built from a register
 bank with read and write pointers.
@@ -337,163 +339,27 @@ private abbrev storageRule (element : SignalType) (addressWidth : Nat) :
       (body element addressWidth) (childContracts element addressWidth) :=
   ⟨.storage, RegisterBank.Rule.read 0⟩
 
-@[simp] private theorem readCounterRule_reads (element : SignalType)
-    (addressWidth : Nat) : (readCounterRule element addressWidth).reads = [] := rfl
-@[simp] private theorem writeCounterRule_reads (element : SignalType)
-    (addressWidth : Nat) : (writeCounterRule element addressWidth).reads = [] := rfl
-@[simp] private theorem controlRule_reads (element : SignalType)
-    (addressWidth : Nat) :
-    (controlRule element addressWidth).reads =
-      [.readPointer, .writePointer, .inputValid, .outputReady] := rfl
-@[simp] private theorem storageRule_reads (element : SignalType)
-    (addressWidth : Nat) : (storageRule element addressWidth).reads = [.readAddress 0] := rfl
-@[simp] private theorem readCounterRule_writes (element : SignalType)
-    (addressWidth : Nat) : (readCounterRule element addressWidth).writes = [.value] := rfl
-@[simp] private theorem writeCounterRule_writes (element : SignalType)
-    (addressWidth : Nat) : (writeCounterRule element addressWidth).writes = [.value] := rfl
-@[simp] private theorem controlRule_writes (element : SignalType)
-    (addressWidth : Nat) :
-    (controlRule element addressWidth).writes =
-      [.readAddress, .writeAddress, .inputReady, .outputValid,
-        .readAdvance, .writeAdvance] := rfl
-@[simp] private theorem storageRule_writes (element : SignalType)
-    (addressWidth : Nat) : (storageRule element addressWidth).writes = [.readValue 0] := rfl
-
-private def outputSchedule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (body element addressWidth)
-      (childContracts element addressWidth) (cycleContract element addressWidth) .observe :=
-  .call (readCounterRule element addressWidth)
-    (by intro input member; change input ∈ [] at member; cases member)
-    (by simp)
-  (.call (writeCounterRule element addressWidth)
-    (by intro input member; change input ∈ [] at member; cases member)
-    (by simp)
-  (.call (controlRule element addressWidth)
-    (by
-      intro input _
-      cases input with
-      | readPointer => exact ⟨EnabledResetCounter.Rule.observe, by simp,
-          by simp [readCounterRule_writes]⟩
-      | writePointer => exact ⟨EnabledResetCounter.Rule.observe, by simp,
-          by simp [writeCounterRule_writes]⟩
-      | inputValid =>
-          change Input.inputValid ∈
-            (outputRule element addressWidth).readsInputs.labels
-          simp [outputRule, SignalMap.select, SignalSelection.labels,
-            SignalSelection.prepend]
-      | outputReady =>
-          change Input.outputReady ∈
-            (outputRule element addressWidth).readsInputs.labels
-          simp [outputRule, SignalMap.select, SignalSelection.labels,
-            SignalSelection.prepend])
-    (by simp)
-  (.call (storageRule element addressWidth)
-    (by
-      intro input member
-      change input ∈ [.readAddress 0] at member
-      simp only [List.mem_singleton] at member
-      subst input
-      exact ⟨Fifo.PointerControl.Rule.apply, by simp,
-        by simp [controlRule_writes]⟩)
-    (by simp)
-    (.done (by
-      intro output _
-      cases output with
-      | outputValid | inputReady =>
-          exact ⟨Fifo.PointerControl.Rule.apply, by simp,
-            by simp [controlRule_writes]⟩
-      | outputData => exact ⟨RegisterBank.Rule.read 0, by simp,
-          by simp [storageRule_writes]⟩)))))
-
-private def stateSchedule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (body element addressWidth)
-      (childContracts element addressWidth) :=
-  .call (readCounterRule element addressWidth)
-    (by intros; trivial) (by simp)
-  (.call (writeCounterRule element addressWidth)
-    (by intros; trivial) (by simp)
-  (.call (controlRule element addressWidth)
-    (by
-      intro input _
-      cases input with
-      | readPointer => exact ⟨EnabledResetCounter.Rule.observe, by simp,
-          by simp [readCounterRule_writes]⟩
-      | writePointer => exact ⟨EnabledResetCounter.Rule.observe, by simp,
-          by simp [writeCounterRule_writes]⟩
-      | inputValid | outputReady => trivial)
-    (by simp)
-  (.done (by
-    intro child input member
-    cases child with
-    | readCounter =>
-        cases input with
-        | enable => exact ⟨Fifo.PointerControl.Rule.apply, by simp,
-            by simp [controlRule_writes]⟩
-        | reset => trivial
-    | writeCounter =>
-        cases input with
-        | enable => exact ⟨Fifo.PointerControl.Rule.apply, by simp,
-            by simp [controlRule_writes]⟩
-        | reset => trivial
-    | control =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
-    | storage =>
-        cases input with
-        | writeEnable | writeAddress =>
-            exact ⟨Fifo.PointerControl.Rule.apply, by simp,
-              by simp [controlRule_writes]⟩
-        | writeValue => trivial
-        | readAddress port =>
-            have equal : port = 0 := by omega
-            subst port
-            change RegisterBank.Input.readAddress 0 ∈
-              (RegisterBank.stateRule element addressWidth 1).readsInputs.labels at member
-            simp [RegisterBank.stateRule, SignalMap.select,
-              SignalSelection.labels, SignalSelection.prepend] at member))))
-
-private def ruleSchedules (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (body element addressWidth)
+private def scheduleOrders (element : SignalType) (addressWidth : Nat) :
+    ScheduleDerivation.RuleScheduleOrders (body element addressWidth)
       (childContracts element addressWidth) (cycleContract element addressWidth) where
-  output | .observe => outputSchedule element addressWidth
-  state := stateSchedule element addressWidth
+  output := fun
+    | .observe => [readCounterRule element addressWidth,
+        writeCounterRule element addressWidth, controlRule element addressWidth,
+        storageRule element addressWidth]
+  state := [readCounterRule element addressWidth,
+    writeCounterRule element addressWidth, controlRule element addressWidth]
+
+private def derivedRuleSchedules (element : SignalType) (addressWidth : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules (body element addressWidth)
+      (childContracts element addressWidth) (cycleContract element addressWidth) := by
+  derive_rule_schedules (scheduleOrders element addressWidth)
+
+private abbrev ruleSchedules (element : SignalType) (addressWidth : Nat) :=
+  (derivedRuleSchedules element addressWidth).schedules
 
 private theorem coversChildren (element : SignalType) (addressWidth : Nat) :
-    (ruleSchedules element addressWidth).CoversChildren := by
-  intro child rule
-  cases child with
-  | readCounter =>
-      change EnabledResetCounter.Rule at rule
-      cases rule
-      left
-      change readCounterRule element addressWidth ∈
-        (stateSchedule element addressWidth).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | writeCounter =>
-      change EnabledResetCounter.Rule at rule
-      cases rule
-      left
-      change writeCounterRule element addressWidth ∈
-        (stateSchedule element addressWidth).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | control =>
-      change Fifo.PointerControl.Rule at rule
-      cases rule
-      left
-      change controlRule element addressWidth ∈
-        (stateSchedule element addressWidth).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | storage =>
-      change RegisterBank.Rule 1 at rule
-      cases rule with
-      | read port =>
-        have equal : port = 0 := by omega
-        subst port
-        right
-        refine ⟨.observe, ?_⟩
-        change storageRule element addressWidth ∈
-          (outputSchedule element addressWidth).finalAvailability
-        simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (ruleSchedules element addressWidth).CoversChildren :=
+  (derivedRuleSchedules element addressWidth).coversChildren
 
 section LayerCertification
 

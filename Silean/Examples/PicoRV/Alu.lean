@@ -2,6 +2,7 @@ import Silean.Foundation.BitVector
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.AddSub
 import Silean.Modules.BitwiseAnd
 import Silean.Modules.BitwiseOr
@@ -18,6 +19,7 @@ import Silean.Primitives.Xor
 namespace Silean.Examples.PicoRV.Alu
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! Contract and certified concrete structure for the combinational PicoRV32
 ALU. The boundary names and operation-selection behavior follow the target
@@ -635,133 +637,29 @@ private abbrev selectArithmeticRule :=
 @[simp] private theorem selectComparisonRule_writes : selectComparisonRule.writes = [.result] := rfl
 @[simp] private theorem selectArithmeticRule_writes : selectArithmeticRule.writes = [.result] := rfl
 
-private theorem rootInputAvailable
-    {available : Contracts.Cycle.Certification.Layer.Availability body childContracts}
-    (input : ports.inputs.Label) :
-    Contracts.Cycle.Certification.Layer.sourceAvailable
-      (body := body)
-      (fun input : body.context.ports.inputs.Label =>
-        input ∈ (cycleContract.outputRule .apply).2.readsInputs.labels)
-      available (context.moduleInput input) := by
-  change input ∈ outputRule.readsInputs.labels
-  cases input <;> simp [outputRule, SignalSelection.prepend, SignalSelection.labels,
-    SignalMap.select]
 
-private theorem ruleOutputAvailable
-    {available : Contracts.Cycle.Certification.Layer.Availability body childContracts}
-    (calledRule : Contracts.Cycle.Certification.Layer.RuleOccurrence body childContracts)
-    (called : calledRule ∈ available)
-    (output : (instancePorts.ports calledRule.child).outputs.Label)
-    (written : output ∈ calledRule.writes) :
-    Contracts.Cycle.Certification.Layer.sourceAvailable
-      (body := body)
-      (fun input : body.context.ports.inputs.Label =>
-        input ∈ (cycleContract.outputRule .apply).2.readsInputs.labels)
-      available (context.instanceOutput calledRule.child output) :=
-  Contracts.Cycle.Certification.Layer.sourceAvailable_of_instanceOutput called written
+private def scheduleOrders :
+    ScheduleDerivation.RuleScheduleOrders body childContracts cycleContract where
+  output := fun | .apply => [leftSplitRule, rightSplitRule, subtractModeRule, addSubRule,
+        equalityRule, bitwiseXorRule, bitwiseOrRule, bitwiseAndRule,
+        zeroBitRule, zeroWordRule, unsignedLessRule, signDifferenceRule,
+        signedLessRule, notEqualRule, notSignedLessRule, notUnsignedLessRule,
+        selectUnsignedLessRule, selectSignedLessRule,
+        selectUnsignedGreaterEqualRule, selectSignedGreaterEqualRule,
+        selectNotEqualRule, selectEqualRule, comparisonWordRule,
+        xorSelectedRule, orSelectedRule, andSelectedRule,
+        selectAndRule, selectOrRule, selectXorRule,
+        selectComparisonRule, selectArithmeticRule]
+  state := []
 
-private def primaryRuleName : (child : Instance) →
-    (childContracts child).RuleName
-  | .leftSplit | .rightSplit | .comparisonWord => .apply
-  | .subtractMode | .xorSelected | .orSelected | .andSelected => .apply
-  | .addSub | .equality | .bitwiseXor | .bitwiseOr | .bitwiseAnd => .apply
-  | .zeroBit | .zeroWord => .apply
-  | .unsignedLess | .signDifference | .notEqual | .notSignedLess |
-      .notUnsignedLess => .apply
-  | .signedLess | .selectUnsignedLess | .selectSignedLess |
-      .selectUnsignedGreaterEqual | .selectSignedGreaterEqual | .selectNotEqual |
-      .selectEqual | .selectAnd | .selectOr | .selectXor | .selectComparison |
-      .selectArithmetic => .select
+private def derivedRuleSchedules :
+    ScheduleDerivation.DerivedRuleSchedules body childContracts cycleContract := by
+  derive_rule_schedules scheduleOrders
 
-private theorem primaryRule_writes (child : Instance)
-    (output : (instancePorts.ports child).outputs.Label) :
-    output ∈ (Contracts.Cycle.Certification.Layer.RuleOccurrence.mk child
-      (primaryRuleName child) :
-        Contracts.Cycle.Certification.Layer.RuleOccurrence body childContracts).writes := by
-  cases child <;> try cases output <;> simp [primaryRuleName]
-  all_goals exact List.mem_finRange _
+private abbrev ruleSchedules := derivedRuleSchedules.schedules
 
-private theorem primaryOutputAvailable
-    {available : Contracts.Cycle.Certification.Layer.Availability body childContracts}
-    {child : Instance} {output : (instancePorts.ports child).outputs.Label}
-    (called : (Contracts.Cycle.Certification.Layer.RuleOccurrence.mk child
-      (primaryRuleName child) :
-        Contracts.Cycle.Certification.Layer.RuleOccurrence body childContracts) ∈ available) :
-    Contracts.Cycle.Certification.Layer.sourceAvailable
-      (body := body)
-      (fun input : body.context.ports.inputs.Label =>
-        input ∈ (cycleContract.outputRule .apply).2.readsInputs.labels)
-      available (context.instanceOutput child output) :=
-  ruleOutputAvailable _ called output (primaryRule_writes child output)
-
-local syntax "alu_read" : tactic
-macro_rules
-  | `(tactic| alu_read) => `(tactic|
-      first
-      | exact rootInputAvailable _
-      | exact primaryOutputAvailable (by simp [primaryRuleName]))
-
-private theorem zeroBit_available_before_comparisonWord :
-    zeroBitRule ∈
-      [selectEqualRule, selectNotEqualRule, selectSignedGreaterEqualRule,
-        selectUnsignedGreaterEqualRule, selectSignedLessRule, selectUnsignedLessRule,
-        notUnsignedLessRule, notSignedLessRule, notEqualRule, signedLessRule,
-        signDifferenceRule, unsignedLessRule, zeroWordRule, zeroBitRule,
-        bitwiseAndRule, bitwiseOrRule, bitwiseXorRule, equalityRule, addSubRule,
-        subtractModeRule, rightSplitRule, leftSplitRule] := by
-  simp only [List.mem_cons]
-  right; right; right; right; right; right; right; right; right; right; right; right; right
-  exact Or.inl trivial
-
-private def outputSchedule :
-    Contracts.Cycle.Certification.Layer.OutputSchedule body childContracts cycleContract .apply :=
-  structural_schedule
-    [leftSplitRule, rightSplitRule, subtractModeRule, addSubRule,
-      equalityRule, bitwiseXorRule, bitwiseOrRule, bitwiseAndRule,
-      zeroBitRule, zeroWordRule, unsignedLessRule, signDifferenceRule,
-      signedLessRule, notEqualRule, notSignedLessRule, notUnsignedLessRule,
-      selectUnsignedLessRule, selectSignedLessRule,
-      selectUnsignedGreaterEqualRule, selectSignedGreaterEqualRule,
-      selectNotEqualRule, selectEqualRule, comparisonWordRule,
-      xorSelectedRule, orSelectedRule, andSelectedRule,
-      selectAndRule, selectOrRule, selectXorRule,
-      selectComparisonRule, selectArithmeticRule]
-    reads_proof (by
-      first
-      | (intro port member; cases port <;> alu_read)
-      | (intro index member
-         change Fin 32 at index
-         simp only [body, wiring]
-         by_cases first : index = 0
-         · simp only [first, ↓reduceIte]
-           exact ruleOutputAvailable selectEqualRule List.mem_cons_self .result (by simp)
-         · simp only [first, ↓reduceIte]
-           exact ruleOutputAvailable zeroBitRule
-             zeroBit_available_before_comparisonWord .output (by simp)))
-    fresh_proof (by simp)
-    finish_proof (by
-      intro output member
-      cases output <;> exact ⟨Modules.Mux.Rule.select, by simp, by simp⟩)
-
-private def stateSchedule :
-    Contracts.Cycle.Certification.Layer.StateSchedule body childContracts :=
-  .done (by
-    intro child input member
-    cases child <;> change input ∈ [] at member <;> cases member)
-
-private def ruleSchedules :
-    Contracts.Cycle.Certification.Layer.RuleSchedules body childContracts cycleContract where
-  output | .apply => outputSchedule
-  state := stateSchedule
-
-private theorem coversChildren : ruleSchedules.CoversChildren := by
-  apply Contracts.Cycle.Certification.Layer.RuleSchedules.coversChildren_of_outputMembership
-  intro child rule
-  cases child <;> cases rule
-  all_goals
-    refine ⟨.apply, ?_⟩
-    change _ ∈ outputSchedule.finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem coversChildren : ruleSchedules.CoversChildren :=
+  derivedRuleSchedules.coversChildren
 
 section LayerCertification
 

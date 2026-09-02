@@ -1,6 +1,7 @@
 import Silean.Foundation.BitVector
 import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.Constant
 import Silean.Modules.Equality
 import Silean.Modules.Mux
@@ -12,6 +13,7 @@ import Silean.Primitives.NotPrimitive
 namespace Silean.Examples.PicoRV.Regs
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! PicoRV32's 32-entry integer register file. Register zero always reads as
 zero and ignores writes. The exact cycle contract is followed by a structural
@@ -349,178 +351,25 @@ private abbrev rs2MuxRule :
     Contracts.Cycle.Certification.Layer.RuleOccurrence body childContracts :=
   ⟨.rs2Mux, Modules.Mux.Rule.select⟩
 
-@[simp] private theorem bankRead_reads (port : Fin 2) :
-    (bankRead port).reads = [.readAddress port] := rfl
-@[simp] private theorem bankRead_writes (port : Fin 2) :
-    (bankRead port).writes = [.readValue port] := rfl
-@[simp] private theorem zeroAddressRule_writes : zeroAddressRule.writes = [.output] := rfl
-@[simp] private theorem zeroWordRule_writes : zeroWordRule.writes = [.output] := rfl
-@[simp] private theorem rs1ZeroRule_writes : rs1ZeroRule.writes = [.result] := rfl
-@[simp] private theorem rs2ZeroRule_writes : rs2ZeroRule.writes = [.result] := rfl
-@[simp] private theorem rdZeroRule_writes : rdZeroRule.writes = [.result] := rfl
-@[simp] private theorem rdNonzeroRule_writes : rdNonzeroRule.writes = [.output] := rfl
-@[simp] private theorem requestedWriteRule_writes : requestedWriteRule.writes = [.output] := rfl
-@[simp] private theorem enabledWriteRule_writes : enabledWriteRule.writes = [.output] := rfl
-@[simp] private theorem rs1MuxRule_writes : rs1MuxRule.writes = [.result] := rfl
-@[simp] private theorem rs2MuxRule_writes : rs2MuxRule.writes = [.result] := rfl
 
-private def rs1Schedule :
-    Contracts.Cycle.Certification.Layer.OutputSchedule body childContracts cycleContract .cpuregs_rs1 :=
-  .call zeroAddressRule
-    (by intro input member; cases input)
-    (by simp)
-  (.call zeroWordRule
-    (by intro input member; cases input)
-    (by simp)
-  (.call rs1ZeroRule
-    (by intro input _; cases input with
-      | left => simp [cycleContract, cpuregsRs1Rule,
-          Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-          EndpointContext.moduleInput, SignalSelection.labels, SignalMap.select]
-      | right => exact ⟨Primitives.ConstantRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (bankRead 0)
-    (by
-      intro input member
-      have equal : input = .readAddress 0 := by
-        simpa using member
-      subst input
-      simp [cycleContract, cpuregsRs1Rule,
-        Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-        EndpointContext.moduleInput, SignalSelection.labels, SignalMap.select])
-    (by simp)
-  (.call rs1MuxRule
-    (by intro input _; cases input with
-      | select => exact ⟨Modules.Equality.Rule.apply, by simp, by simp⟩
-      | whenFalse => exact ⟨Modules.RegisterBank.Rule.read 0, by simp, by simp⟩
-      | whenTrue => exact ⟨Primitives.ConstantRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | cpuregs_rs1 => exact ⟨Modules.Mux.Rule.select, by simp, by simp⟩
-    | cpuregs_rs2 =>
-        simp [cycleContract, cpuregsRs1Rule, SignalSelection.labels,
-          SignalMap.select] at member))))))
-
-private def rs2Schedule :
-    Contracts.Cycle.Certification.Layer.OutputSchedule body childContracts cycleContract .cpuregs_rs2 :=
-  .call zeroAddressRule
-    (by intro input member; cases input)
-    (by simp)
-  (.call zeroWordRule
-    (by intro input member; cases input)
-    (by simp)
-  (.call rs2ZeroRule
-    (by intro input _; cases input with
-      | left => simp [cycleContract, cpuregsRs2Rule,
-          Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-          EndpointContext.moduleInput, SignalSelection.labels, SignalMap.select]
-      | right => exact ⟨Primitives.ConstantRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (bankRead 1)
-    (by
-      intro input member
-      have equal : input = .readAddress 1 := by
-        simpa using member
-      subst input
-      simp [cycleContract, cpuregsRs2Rule,
-        Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-        EndpointContext.moduleInput, SignalSelection.labels, SignalMap.select])
-    (by simp)
-  (.call rs2MuxRule
-    (by intro input _; cases input with
-      | select => exact ⟨Modules.Equality.Rule.apply, by simp, by simp⟩
-      | whenFalse => exact ⟨Modules.RegisterBank.Rule.read 1, by simp, by simp⟩
-      | whenTrue => exact ⟨Primitives.ConstantRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | cpuregs_rs1 =>
-        simp [cycleContract, cpuregsRs2Rule, SignalSelection.labels,
-          SignalMap.select] at member
-    | cpuregs_rs2 => exact ⟨Modules.Mux.Rule.select, by simp, by simp⟩))))))
-
-private def stateSchedule :
-    Contracts.Cycle.Certification.Layer.StateSchedule body childContracts :=
-  .call zeroAddressRule
-    (by intro input member; cases input)
-    (by simp)
-  (.call rdZeroRule
-    (by intro input _; cases input with
-      | left => trivial
-      | right => exact ⟨Primitives.ConstantRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call rdNonzeroRule
-    (by intro port _; cases port
-        exact ⟨Modules.Equality.Rule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call requestedWriteRule
-    (by intro input _; cases input <;> trivial)
-    (by simp)
-  (.call enabledWriteRule
-    (by intro input _; cases input with
-      | left => exact ⟨Primitives.AndRule.apply, by simp, by simp⟩
-      | right => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro child port member
-    cases child with
-    | bank =>
-        cases port with
-        | writeEnable => exact ⟨Primitives.AndRule.apply, by simp, by simp⟩
-        | writeAddress | writeValue => trivial
-        | readAddress port =>
-            change Modules.RegisterBank.Input.readAddress port ∈
-              [.writeEnable, .writeAddress, .writeValue] at member
-            simp at member
-    | zeroAddress | zeroWord | rs1Zero | rs2Zero | rdZero | rdNonzero |
-        requestedWrite | enabledWrite | rs1Mux | rs2Mux =>
-        change port ∈ [] at member
-        cases member))))))
-
-private def ruleSchedules :
-    Contracts.Cycle.Certification.Layer.RuleSchedules body childContracts cycleContract where
+private def scheduleOrders :
+    ScheduleDerivation.RuleScheduleOrders body childContracts cycleContract where
   output
-    | .cpuregs_rs1 => rs1Schedule
-    | .cpuregs_rs2 => rs2Schedule
-  state := stateSchedule
+    | .cpuregs_rs1 => [zeroAddressRule, zeroWordRule, rs1ZeroRule,
+        bankRead 0, rs1MuxRule]
+    | .cpuregs_rs2 => [zeroAddressRule, zeroWordRule, rs2ZeroRule,
+        bankRead 1, rs2MuxRule]
+  state := [zeroAddressRule, rdZeroRule, rdNonzeroRule,
+    requestedWriteRule, enabledWriteRule]
 
-private theorem coversChildren : ruleSchedules.CoversChildren := by
-  intro child rule
-  cases child with
-  | bank =>
-      change Modules.RegisterBank.Rule 2 at rule
-      cases rule with
-      | read port =>
-          have cases : port = 0 ∨ port = 1 := by omega
-          rcases cases with rfl | rfl
-          · right
-            refine ⟨.cpuregs_rs1, ?_⟩
-            change bankRead 0 ∈ rs1Schedule.finalAvailability
-            simp [rs1Schedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-          · right
-            refine ⟨.cpuregs_rs2, ?_⟩
-            change bankRead 1 ∈ rs2Schedule.finalAvailability
-            simp [rs2Schedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | zeroAddress | rdZero | rdNonzero | requestedWrite | enabledWrite =>
-      cases rule
-      left
-      change _ ∈ stateSchedule.finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | zeroWord | rs1Zero | rs1Mux =>
-      cases rule
-      right
-      refine ⟨.cpuregs_rs1, ?_⟩
-      change _ ∈ rs1Schedule.finalAvailability
-      simp [rs1Schedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | rs2Zero | rs2Mux =>
-      cases rule
-      right
-      refine ⟨.cpuregs_rs2, ?_⟩
-      change _ ∈ rs2Schedule.finalAvailability
-      simp [rs2Schedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private def derivedRuleSchedules :
+    ScheduleDerivation.DerivedRuleSchedules body childContracts cycleContract := by
+  derive_rule_schedules scheduleOrders
+
+private abbrev ruleSchedules := derivedRuleSchedules.schedules
+
+private theorem coversChildren : ruleSchedules.CoversChildren :=
+  derivedRuleSchedules.coversChildren
 
 section LayerCertification
 

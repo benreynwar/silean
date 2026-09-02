@@ -10,7 +10,7 @@ generic structural construction and certification. -/
 
 def ports (signalType : SignalType) (tree : Tree) :
     ModulePortsNaming (Reduction.ports signalType tree) where
-  inputs := SignalMapNaming.indexed _ "input"
+  inputs := ⟨fun | .leaf index => .indexed "input" index.val⟩
   outputs := ⟨fun | .output => "result"⟩
 
 private def treeParameters : Tree → List ModuleParameter

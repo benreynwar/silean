@@ -72,6 +72,13 @@ def toFin {α : Type u} {value : α} {values : List α} :
   | .head => 0
   | .tail index => index.toFin.succ
 
+/-- Forget the computational position and recover ordinary list membership. -/
+theorem mem {α : Type u} {value : α} {values : List α}
+    (index : ListIndex value values) : value ∈ values := by
+  induction index with
+  | head => simp
+  | tail _ member => exact List.mem_cons_of_mem _ member
+
 theorem get_eq {α : Type u} {value : α} {values : List α}
     (index : ListIndex value values) : values[index.toFin] = value := by
   induction index with
@@ -84,6 +91,24 @@ theorem get_map_eq {α : Type u} {β : Type v}
     (values.map transform)[index.toFin.val]'(by simp) = transform value := by
   rw [List.getElem_map]
   exact congrArg transform index.get_eq
+
+/-- A value has only one position in a duplicate-free list. -/
+theorem eq_of_nodup {α : Type u} {value : α} {values : List α}
+    (nodup : values.Nodup) (left right : ListIndex value values) :
+    left = right := by
+  induction left with
+  | head =>
+      cases right with
+      | head => rfl
+      | tail right =>
+          exact False.elim ((List.nodup_cons.mp nodup).1 right.mem)
+  | tail left induction =>
+      cases right with
+      | head =>
+          exact False.elim ((List.nodup_cons.mp nodup).1 left.mem)
+      | tail right =>
+          congr
+          exact induction (List.nodup_cons.mp nodup).2 right
 
 end ListIndex
 

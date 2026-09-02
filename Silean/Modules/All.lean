@@ -165,19 +165,20 @@ private def trueImplementation : Composition.Reduction.IdentityImplementation .b
       (Primitives.constantCertified true).structuralResultUnique
     implements := trueImplements }
 
-private def tree (width : Nat) : Composition.Reduction.Tree := Composition.Reduction.Tree.balanced width
+private abbrev tree (width : Nat) : Composition.Reduction.Tree :=
+  Composition.Reduction.balancedTree width
 
 @[reducible] def ports (width : Nat) : ModulePorts :=
-  Composition.Reduction.ports .bit (tree width)
+  Composition.Reduction.balancedPorts .bit width
 
 def input (width : Nat) (index : Fin width) : (ports width).inputs.Label :=
   .leaf ⟨index.val, by
-    rw [show (tree width).leafCount = width by simp [tree]]
-    exact index.isLt⟩
+    exact lt_of_lt_of_eq index.isLt (by
+      simp [Composition.Reduction.balancedTree])⟩
 
 def inputIndex (width : Nat) : (ports width).inputs.Label → Fin width
   | .leaf index => ⟨index.val, by
-      exact lt_of_lt_of_eq index.isLt (by simp [tree])⟩
+      simpa [Composition.Reduction.balancedTree] using index.isLt⟩
 
 @[simp] theorem inputIndex_input (width : Nat) (index : Fin width) :
     inputIndex width (input width index) = index := by
@@ -186,8 +187,7 @@ def inputIndex (width : Nat) : (ports width).inputs.Label → Fin width
 
 private def widthIndex (width : Nat)
     (index : Fin (tree width).leafCount) : Fin width :=
-  ⟨index.val, by
-    exact lt_of_lt_of_eq index.isLt (by simp [tree])⟩
+  ⟨index.val, by simpa [tree, Composition.Reduction.balancedTree] using index.isLt⟩
 
 @[simp] private theorem input_widthIndex (width : Nat)
     (index : Fin (tree width).leafCount) :
@@ -196,26 +196,20 @@ private def widthIndex (width : Nat)
   apply Fin.ext
   rfl
 
-inductive Rule | apply
-deriving Enumeration
+abbrev Rule := Composition.Reduction.Rule
 
-def outputRule (width : Nat) : Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap
-    { inputTypes := SignalTypes.ofList (Composition.Reduction.inputMap .bit (tree width)).types
-      outputTypes := .cons .bit .nil } where
-  readsInputs := (Composition.Reduction.inputMap .bit (tree width)).allSelection
-  writesOutputs := (Composition.Reduction.outputMap .bit).select .output
-  target := fun packed _ =>
-    (every (tree width).leafCount fun index =>
-      (Composition.Reduction.inputMap .bit (tree width)).unpack packed
-        (Composition.Reduction.Input.leaf index), ())
+namespace Rule
 
-@[reducible] def cycleContract (width : Nat) : Contracts.Cycle.ModuleCycleContract (ports width) where
-  state := emptySignalMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule width⟩
-  stateRule := Contracts.Cycle.CycleStateRule.empty _
-  outputCoverage := by rfl
+abbrev apply : Rule := Composition.Reduction.Rule.apply
+
+end Rule
+
+def outputRule (width : Nat) :=
+  Composition.Reduction.outputRule .bit andOperation trueValue (tree width)
+
+@[reducible] def cycleContract (width : Nat) :
+    Contracts.Cycle.ModuleCycleContract (ports width) :=
+  Composition.Reduction.cycleContract .bit andOperation trueValue (tree width)
 
 @[simp] theorem outputRule_holds_iff (width : Nat)
     (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
@@ -223,19 +217,10 @@ def outputRule (width : Nat) : Contracts.Cycle.CycleOutputRule (ports width) emp
     (outputRule width).Holds inputs state outputs ↔
       outputs .output = every (tree width).leafCount
         (fun index => inputs (.leaf index)) := by
-  have values_eq :
-      (fun index => (Composition.Reduction.inputMap .bit (tree width)).unpack
-        ((Composition.Reduction.inputMap .bit (tree width)).allSelection.project inputs)
-          (Composition.Reduction.Input.leaf index)) =
-      (fun index => inputs (Composition.Reduction.Input.leaf index)) := by
-    funext index
-    exact congrFun
-      (SignalMap.unpack_project (Composition.Reduction.inputMap .bit (tree width)) inputs)
-      (Composition.Reduction.Input.leaf index)
-  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalMap.select]
-  rw [values_eq]
-  simp
+  change (Composition.Reduction.outputRule .bit andOperation trueValue (tree width)).Holds
+      inputs state outputs ↔ _
+  rw [Composition.Reduction.outputRule_holds_iff]
+  rw [fold_eq_every]
 
 theorem output_eq_true_iff_of_holds (width : Nat)
     (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
@@ -252,7 +237,8 @@ theorem output_eq_true_iff_of_holds (width : Nat)
   · intro allTrue index
     let internal : Fin (tree width).leafCount :=
       ⟨index.val, by
-        rw [show (tree width).leafCount = width by simp [tree]]
+        rw [show (tree width).leafCount = width by
+          simp [tree, Composition.Reduction.balancedTree]]
         exact index.isLt⟩
     simpa [input, internal] using allTrue internal
   · intro allTrue index
@@ -269,41 +255,8 @@ def moduleStructure (width : Nat) : ModuleStructure (ports width) :=
 private noncomputable def reductionImplementation (width : Nat) :=
   Composition.Reduction.certification andImplementation trueImplementation (tree width)
 
-private theorem implements (width : Nat) :
-    Contracts.Cycle.Implements (moduleStructure width) (cycleContract width)
-      (reductionImplementation width).stateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
-  have contractState_eq : contractState = SignalMap.emptyValues := by
-    funext impossible
-    exact nomatch impossible
-  subst contractState
-  rcases (reductionImplementation width).implements inputs SignalMap.emptyValues
-      structuralState proposal corresponds satisfies with
-    ⟨nextState, evaluates, nextCorresponds⟩
-  have nextState_eq : nextState = SignalMap.emptyValues := by
-    funext impossible
-    exact nomatch impossible
-  subst nextState
-  refine ⟨SignalMap.emptyValues, ?_, nextCorresponds⟩
-  constructor
-  · intro rule
-    cases rule
-    rw [outputRule_holds_iff]
-    have reductionEquation := evaluates.1 Composition.Reduction.Rule.apply
-    rw [Composition.Reduction.outputRule_holds_iff] at reductionEquation
-    exact reductionEquation.trans (fold_eq_every (tree width) _)
-  · rfl
-
-private noncomputable def implementation (width : Nat) :
-    Contracts.Cycle.ModuleCycleCertification (moduleStructure width) (cycleContract width) where
-  stateCorresponds := (reductionImplementation width).stateCorresponds
-  hasCorrespondingState := (reductionImplementation width).hasCorrespondingState
-  hasStructuralResult := (reductionImplementation width).hasStructuralResult
-  structuralResultUnique := (reductionImplementation width).structuralResultUnique
-  implements := implements width
-
 noncomputable def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=
-  (implementation width).bundle
+  Composition.Reduction.certified andImplementation trueImplementation (tree width)
 
 @[simp] theorem certified_cycleContract (width : Nat) :
     (certified width).cycleContract = cycleContract width := rfl

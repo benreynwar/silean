@@ -1,6 +1,7 @@
 import Silean.Modules.BitMux
 import Silean.Modules.Constant
 import Silean.Modules.All
+import Silean.Modules.Any
 import Silean.Modules.HalfAdder
 import Silean.Modules.FullAdder
 import Silean.Modules.Add
@@ -27,6 +28,8 @@ import Silean.Modules.OneEntryFifo.OneEntryFifo
 import Silean.Modules.OneEntryFifo.OneEntryFifoCycleBehavior
 import Silean.Modules.VectorConcat
 import Silean.Modules.VectorSplit
+import Silean.Modules.VectorSlice
+import Silean.Modules.EqualsConstant
 import Silean.Modules.SerialDepthFifo.SerialDepthFifo
 import Silean.Modules.OneEntryFifo.OneEntryFifoCertified
 import Silean.Modules.SerialDepthFifo.SerialDepthFifoCertified

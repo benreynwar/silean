@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.All
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
@@ -8,6 +9,7 @@ import Silean.Composition.SignalLogic
 namespace Silean.Modules.Equality
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! Generic structural equality. Aggregate values are compared recursively and
 the component results are reduced with AND. -/
@@ -113,47 +115,19 @@ abbrev bitOccurrence : Contracts.Cycle.Certification.Layer.RuleOccurrence
     bitBody bitChildContracts :=
   ⟨.gate, Primitives.EqRule.apply⟩
 
-def bitOutputSchedule : Contracts.Cycle.Certification.Layer.OutputSchedule
-    bitBody bitChildContracts
-    (cycleContract .bit) .apply :=
-  .call bitOccurrence
-    (by
-      intro input member
-      cases input <;>
-        simp [cycleContract, outputRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-          bitBody, bitWiring, bitContext, EndpointContext.moduleInput])
-    (by simp)
-    (.done (by
-      intro output _
-      cases output
-      exact ⟨Primitives.EqRule.apply, by simp,
-        by change Primitives.SingleOutput.output ∈ [.output]; simp⟩))
+private def bitScheduleOrders : ScheduleDerivation.RuleScheduleOrders
+    bitBody bitChildContracts (cycleContract .bit) where
+  output | .apply => [bitOccurrence]
+  state := []
 
-def bitStateSchedule : Contracts.Cycle.Certification.Layer.StateSchedule
-    bitBody bitChildContracts :=
-  .done (by
-    intro child input member
-    cases child
-    simp [bitChildContracts, Primitives.eqCycleContract,
-      Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
+private def bitDerivedRuleSchedules : ScheduleDerivation.DerivedRuleSchedules
+    bitBody bitChildContracts (cycleContract .bit) := by
+  derive_rule_schedules bitScheduleOrders
 
-def bitRuleSchedules : Contracts.Cycle.Certification.Layer.RuleSchedules
-    bitBody bitChildContracts
-    (cycleContract .bit) where
-  output | .apply => bitOutputSchedule
-  state := bitStateSchedule
+private abbrev bitRuleSchedules := bitDerivedRuleSchedules.schedules
 
-theorem bitCoversChildren : bitRuleSchedules.CoversChildren := by
-  intro child rule
-  right
-  cases child
-  change Primitives.EqRule at rule
-  cases rule
-  refine ⟨.apply, ?_⟩
-  change bitOccurrence ∈ bitOutputSchedule.finalAvailability
-  simp [bitOutputSchedule,
-    Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem bitCoversChildren : bitRuleSchedules.CoversChildren :=
+  bitDerivedRuleSchedules.coversChildren
 
 def bitGateInputs (inputs : (ports .bit).inputs.Values) :
     Primitives.eq.ports.inputs.Values
@@ -379,218 +353,28 @@ abbrev allOccurrence (splitter : Composition.SignalSplitter) :
       (aggregateBody splitter) (aggregateChildContracts splitter) :=
   ⟨allInstance, All.Rule.apply⟩
 
-@[simp] theorem leftSplitOccurrence_writes (splitter : Composition.SignalSplitter) :
-    (leftSplitOccurrence splitter).writes =
-      splitter.ports.outputs.labels.values := by
-  change splitter.ports.outputs.allSelection.labels = _
-  rw [SignalMap.allSelection_labels]
-
-@[simp] theorem rightSplitOccurrence_writes (splitter : Composition.SignalSplitter) :
-    (rightSplitOccurrence splitter).writes =
-      splitter.ports.outputs.labels.values := by
-  change splitter.ports.outputs.allSelection.labels = _
-  rw [SignalMap.allSelection_labels]
-
-noncomputable def componentSchedule (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.Schedule (aggregateBody splitter)
-      (aggregateChildContracts splitter)
-      (fun input => input ∈ (outputRule splitter.aggregateType).readsInputs.labels)
-      (fun final =>
-        (∀ called, called ∈
-          [rightSplitOccurrence splitter,
-            leftSplitOccurrence splitter] → called ∈ final) ∧
-        (∀ component, componentOccurrence splitter component ∈ final) ∧
-        ∀ called, called ∈ final →
-          called ∈ [rightSplitOccurrence splitter,
-            leftSplitOccurrence splitter] ∨
-          ∃ component, called = componentOccurrence splitter component)
-      [rightSplitOccurrence splitter,
-        leftSplitOccurrence splitter] :=
-  Contracts.Cycle.Certification.Layer.Schedule.callFamilyAfter
-    [rightSplitOccurrence splitter,
-      leftSplitOccurrence splitter]
-    splitter.ports.outputs.labels
-    (componentOccurrence splitter)
-    (by
-      intro left right equal
-      have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-      exact Sum.inl.inj (Sum.inr.inj childEqual))
-    (by
-      intro component member
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-      rcases member with equal | equal <;>
-        have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal <;>
-        cases childEqual)
-    (by
-      intro component input _
-      cases input with
-      | left =>
-          refine ⟨Composition.SignalComponentRule.apply, by simp, ?_⟩
-          change component ∈ (leftSplitOccurrence splitter).writes
-          rw [leftSplitOccurrence_writes]
-          exact ListIndex.get_eq
-            (splitter.ports.outputs.labels.locate component) ▸ List.get_mem _ _
-      | right =>
-          refine ⟨Composition.SignalComponentRule.apply, by simp, ?_⟩
-          change component ∈ (rightSplitOccurrence splitter).writes
-          rw [rightSplitOccurrence_writes]
-          exact ListIndex.get_eq
-            (splitter.ports.outputs.labels.locate component) ▸ List.get_mem _ _)
-
-noncomputable def afterComponentsSchedule (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.Schedule (aggregateBody splitter)
-      (aggregateChildContracts splitter)
-      (fun input => input ∈ (outputRule splitter.aggregateType).readsInputs.labels)
-      (Contracts.Cycle.Certification.Layer.BoundaryReady (aggregateBody splitter)
-        (aggregateChildContracts splitter)
-        (outputRule splitter.aggregateType).writesOutputs.labels
-        (fun input => input ∈
-          (outputRule splitter.aggregateType).readsInputs.labels))
-      [rightSplitOccurrence splitter,
-        leftSplitOccurrence splitter] := by
-  apply (componentSchedule splitter).append
-  refine .call (allOccurrence splitter) ?_ ?_ (.done ?_)
-  · intro input _
-    let component := componentAt splitter
-      (All.inputIndex (componentCount splitter) input)
-    refine ⟨Rule.apply,
-      (componentSchedule splitter).finished.2.1 component, ?_⟩
-    change Output.result ∈
-      (outputRule (splitter.ports.outputs.signalType component)).writesOutputs.labels
-    simp [outputRule, SignalMap.select, SignalSelection.labels]
-  · intro present
-    rcases (componentSchedule splitter).finished.2.2 _ present with
-      atStart | fromComponent
-    · simp only [List.mem_cons, List.not_mem_nil, or_false] at atStart
-      rcases atStart with equal | equal <;>
-        have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal <;>
-        cases childEqual
-    · rcases fromComponent with ⟨component, equal⟩
-      have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-      cases childEqual
-  · intro output _
-    cases output
-    exact ⟨All.Rule.apply, by simp, by
-      change Primitives.SingleOutput.output ∈
-        (All.outputRule (componentCount splitter)).writesOutputs.labels
-      simp [All.outputRule, SignalMap.select, SignalSelection.labels]⟩
-
-noncomputable def aggregateOutputSchedule (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (aggregateBody splitter)
-      (aggregateChildContracts splitter) (cycleContract splitter.aggregateType)
-      .apply := by
-  refine .call (leftSplitOccurrence splitter) ?_ (by simp) ?_
-  · intro input _
-    cases splitter <;> cases input <;>
-      simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, aggregateBody,
-        aggregateWiring, aggregateContext, EndpointContext.moduleInput]
-  · refine .call (rightSplitOccurrence splitter) ?_
-      (by
-        intro member
-        have equal := List.mem_singleton.mp member
-        have childEqual := congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-        have inputEqual : Input.right = Input.left := by injection childEqual
-        cases inputEqual) ?_
-    · intro input _
-      cases splitter <;> cases input <;>
-        simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-          SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, aggregateBody,
-          aggregateWiring, aggregateContext, EndpointContext.moduleInput]
-    · exact afterComponentsSchedule splitter
-
-def aggregateStateSchedule (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (aggregateBody splitter)
-      (aggregateChildContracts splitter) :=
-  .done (by
-    intro child input member
-    rcases child with which | componentOrAll
-    · cases which <;>
-        simp [aggregateChildContracts,
-          Composition.SignalSplitter.cycleContract, Contracts.Cycle.CycleStateRule.empty,
-          SignalSelection.labels] at member
-    · rcases componentOrAll with component | allTag
-      · simp [aggregateChildContracts, cycleContract,
-          Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member
-      · cases allTag
-        simp [aggregateChildContracts, All.cycleContract,
-          Contracts.Cycle.CycleStateRule.empty] at member
-        change input ∈ SignalSelection.nil.labels at member
-        exact nomatch member)
-
-noncomputable def aggregateRuleSchedules (splitter : Composition.SignalSplitter) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (aggregateBody splitter)
+private def aggregateScheduleOrders (splitter : Composition.SignalSplitter) :
+    ScheduleDerivation.RuleScheduleOrders (aggregateBody splitter)
       (aggregateChildContracts splitter) (cycleContract splitter.aggregateType) where
-  output | .apply => aggregateOutputSchedule splitter
-  state := aggregateStateSchedule splitter
+  output := fun
+    | .apply => [leftSplitOccurrence splitter, rightSplitOccurrence splitter] ++
+        splitter.ports.outputs.labels.values.map (componentOccurrence splitter) ++
+        [allOccurrence splitter]
+  state := []
 
-theorem leftSplit_mem_outputSchedule (splitter : Composition.SignalSplitter) :
-    leftSplitOccurrence splitter ∈
-      (aggregateOutputSchedule splitter).finalAvailability := by
-  unfold aggregateOutputSchedule
-  change leftSplitOccurrence splitter ∈
-    (afterComponentsSchedule splitter).finalAvailability
-  unfold afterComponentsSchedule
-  simp only [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-  exact List.mem_cons_of_mem _
-    ((componentSchedule splitter).finished.1 _ (by simp))
+private noncomputable def aggregateDerivedRuleSchedules
+    (splitter : Composition.SignalSplitter) :
+    ScheduleDerivation.DerivedRuleSchedules (aggregateBody splitter)
+      (aggregateChildContracts splitter) (cycleContract splitter.aggregateType) := by
+  derive_rule_schedules (aggregateScheduleOrders splitter)
 
-theorem rightSplit_mem_outputSchedule (splitter : Composition.SignalSplitter) :
-    rightSplitOccurrence splitter ∈
-      (aggregateOutputSchedule splitter).finalAvailability := by
-  unfold aggregateOutputSchedule
-  change rightSplitOccurrence splitter ∈
-    (afterComponentsSchedule splitter).finalAvailability
-  unfold afterComponentsSchedule
-  simp only [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-  exact List.mem_cons_of_mem _
-    ((componentSchedule splitter).finished.1 _ (by simp))
+private noncomputable abbrev aggregateRuleSchedules
+    (splitter : Composition.SignalSplitter) :=
+  (aggregateDerivedRuleSchedules splitter).schedules
 
-theorem component_mem_outputSchedule (splitter : Composition.SignalSplitter)
-    (component : splitter.ports.outputs.Label) :
-    componentOccurrence splitter component ∈
-      (aggregateOutputSchedule splitter).finalAvailability := by
-  unfold aggregateOutputSchedule
-  change componentOccurrence splitter component ∈
-    (afterComponentsSchedule splitter).finalAvailability
-  unfold afterComponentsSchedule
-  simp only [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-  exact List.mem_cons_of_mem _
-    ((componentSchedule splitter).finished.2.1 component)
-
-theorem all_mem_outputSchedule (splitter : Composition.SignalSplitter) :
-    allOccurrence splitter ∈
-      (aggregateOutputSchedule splitter).finalAvailability := by
-  unfold aggregateOutputSchedule
-  change allOccurrence splitter ∈
-    (afterComponentsSchedule splitter).finalAvailability
-  unfold afterComponentsSchedule
-  simp only [Contracts.Cycle.Certification.Layer.Schedule.finalAvailability_append]
-  exact List.mem_cons_self
-
-theorem aggregateCoversChildren (splitter : Composition.SignalSplitter) :
-    (aggregateRuleSchedules splitter).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  rcases child with which | componentOrAll
-  · cases which with
-    | left =>
-        change Composition.SignalComponentRule at rule
-        cases rule
-        exact leftSplit_mem_outputSchedule splitter
-    | right =>
-        change Composition.SignalComponentRule at rule
-        cases rule
-        exact rightSplit_mem_outputSchedule splitter
-  · rcases componentOrAll with component | allTag
-    · change Rule at rule
-      cases rule
-      exact component_mem_outputSchedule splitter component
-    · cases allTag
-      change All.Rule at rule
-      cases rule
-      exact all_mem_outputSchedule splitter
+private theorem aggregateCoversChildren (splitter : Composition.SignalSplitter) :
+    (aggregateRuleSchedules splitter).CoversChildren :=
+  (aggregateDerivedRuleSchedules splitter).coversChildren
 
 section AggregateLayerCertification
 
@@ -850,7 +634,7 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
         (fun
           | .inl .left => "split_left"
           | .inl .right => "split_right"
-          | .inr (.inl component) => indexedComponent splitter.ports.outputs component
+          | .inr (.inl component) => .scoped "equal" (.indexed "component" component.val)
           | .inr (.inr _) => "all")
         (fun
           | .inl .left =>

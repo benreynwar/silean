@@ -19,6 +19,8 @@ import Silean.Examples.Checks.ModuleClosureChecks
 import Silean.Examples.Checks.StructuralEquationsChecks
 import Silean.Examples.Checks.StructuralExecutionChecks
 import Silean.Examples.Checks.VectorConcatChecks
+import Silean.Examples.Checks.VectorSliceChecks
+import Silean.Examples.Checks.EqualsConstantChecks
 import Silean.Examples.Checks.BinaryToOneHotChecks
 import Silean.Examples.Checks.CombMuxTreeChecks
 import Silean.Examples.Checks.RegisterBankChecks
@@ -30,6 +32,7 @@ import Silean.Examples.Checks.BidirectionalDualNotChecks
 import Silean.Examples.Checks.FIRRTLChecks
 import Silean.Examples.Checks.ConstantChecks
 import Silean.Examples.Checks.AllChecks
+import Silean.Examples.Checks.AnyChecks
 import Silean.Examples.Checks.HalfAdderChecks
 import Silean.Examples.Checks.FullAdderChecks
 import Silean.Examples.Checks.AddChecks
@@ -48,6 +51,9 @@ import Silean.Examples.PicoRV.AluLaws
 import Silean.Examples.Checks.PicoRVAluChecks
 import Silean.Examples.PicoRV.Decoder
 import Silean.Examples.Checks.PicoRVDecoderChecks
+import Silean.Examples.Checks.PicoRVDecoderCaptureStageChecks
+import Silean.Examples.Checks.PicoRVDecoderResolveChildrenChecks
+import Silean.Examples.PicoRV.Decoder.DecoderResolveStageSchedule
 import Silean.Examples.PicoRV.Memory
 import Silean.Examples.PicoRV.PicoRV
 import Silean.Examples.PicoRV.PicoRVSchedule

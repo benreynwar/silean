@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Naming.ModuleNaming
 import Silean.Naming.PrimitiveNaming
@@ -11,6 +12,7 @@ import Silean.Composition.SignalLogic
 namespace Silean.Modules.Fifo.PointerControl
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! Combinational control for a FIFO built from a power-of-two register bank.
 It derives storage addresses, empty/full status, valid/ready signals, and
@@ -393,172 +395,28 @@ private abbrev readRule (addressWidth : Nat) :=
 private abbrev writeRule (addressWidth : Nat) :=
   occurrence addressWidth .writeGate Primitives.AndRule.apply
 
-private theorem readSplitWrites (addressWidth : Nat)
-    (index : Fin (addressWidth + 1)) :
-    index ∈ (readSplitRule addressWidth).writes := by
-  change index ∈ (pointerSplitter addressWidth).ports.outputs.allSelection.labels
-  rw [SignalMap.allSelection_labels]
-  exact ListIndex.get_eq
-    ((pointerSplitter addressWidth).ports.outputs.labels.locate index) ▸
-      List.get_mem _ _
+private def scheduleOrders (addressWidth : Nat) :
+    ScheduleDerivation.RuleScheduleOrders (body addressWidth)
+      (childContracts addressWidth) (cycleContract addressWidth) where
+  output | .apply => [readSplitRule addressWidth, writeSplitRule addressWidth,
+    readAddressRule addressWidth, writeAddressRule addressWidth,
+    addressEqualityRule addressWidth, wrapEqualityRule addressWidth,
+    wrapDifferenceRule addressWidth, emptyRule addressWidth, fullRule addressWidth,
+    readyRule addressWidth, validRule addressWidth, readRule addressWidth,
+    writeRule addressWidth]
+  state := []
 
-private theorem writeSplitWrites (addressWidth : Nat)
-    (index : Fin (addressWidth + 1)) :
-    index ∈ (writeSplitRule addressWidth).writes := by
-  change index ∈ (pointerSplitter addressWidth).ports.outputs.allSelection.labels
-  rw [SignalMap.allSelection_labels]
-  exact ListIndex.get_eq
-    ((pointerSplitter addressWidth).ports.outputs.labels.locate index) ▸
-      List.get_mem _ _
+private def derivedRuleSchedules (addressWidth : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules (body addressWidth)
+      (childContracts addressWidth) (cycleContract addressWidth) := by
+  derive_rule_schedules (scheduleOrders addressWidth)
 
-@[simp] private theorem componentWrites (addressWidth : Nat) :
-    (readAddressRule addressWidth).writes = [.value] := rfl
-@[simp] private theorem componentWrites' (addressWidth : Nat) :
-    (writeAddressRule addressWidth).writes = [.value] := rfl
-@[simp] private theorem addressEqualityWrites (addressWidth : Nat) :
-    (addressEqualityRule addressWidth).writes = [.result] := rfl
-@[simp] private theorem wrapEqualityWrites (addressWidth : Nat) :
-    (wrapEqualityRule addressWidth).writes = [.output] := rfl
-@[simp] private theorem wrapDifferenceWrites (addressWidth : Nat) :
-    (wrapDifferenceRule addressWidth).writes = [.output] := rfl
-@[simp] private theorem emptyWrites (addressWidth : Nat) :
-    (emptyRule addressWidth).writes = [.output] := rfl
-@[simp] private theorem fullWrites (addressWidth : Nat) :
-    (fullRule addressWidth).writes = [.output] := rfl
-@[simp] private theorem readyWrites (addressWidth : Nat) :
-    (readyRule addressWidth).writes = [.output] := rfl
-@[simp] private theorem validWrites (addressWidth : Nat) :
-    (validRule addressWidth).writes = [.output] := rfl
-@[simp] private theorem readWrites (addressWidth : Nat) :
-    (readRule addressWidth).writes = [.output] := rfl
-@[simp] private theorem writeWrites (addressWidth : Nat) :
-    (writeRule addressWidth).writes = [.output] := rfl
-
-private def outputSchedule (addressWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body addressWidth) (childContracts addressWidth)
-      (cycleContract addressWidth) .apply :=
-  .call (readSplitRule addressWidth)
-    (by intro input _; cases input; simp [cycleContract, outputRule,
-      SignalSelection.prepend, SignalMap.select, SignalSelection.labels,
-      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-      EndpointContext.moduleInput])
-    (by simp)
-  (.call (writeSplitRule addressWidth)
-    (by intro input _; cases input; simp [cycleContract, outputRule,
-      SignalSelection.prepend, SignalMap.select, SignalSelection.labels,
-      Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-      EndpointContext.moduleInput])
-    (by simp)
-  (.call (readAddressRule addressWidth)
-    (by intro index _; exact ⟨Composition.SignalComponentRule.apply, by simp,
-      readSplitWrites addressWidth index.castSucc⟩)
-    (by simp)
-  (.call (writeAddressRule addressWidth)
-    (by intro index _; exact ⟨Composition.SignalComponentRule.apply, by simp,
-      writeSplitWrites addressWidth index.castSucc⟩)
-    (by simp)
-  (.call (addressEqualityRule addressWidth)
-    (by
-      intro input _
-      cases input with
-      | left => exact ⟨Composition.SignalComponentRule.apply, by simp, by simp⟩
-      | right => exact ⟨Composition.SignalComponentRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (wrapEqualityRule addressWidth)
-    (by
-      intro input _
-      cases input with
-      | left => exact ⟨Composition.SignalComponentRule.apply, by simp,
-          readSplitWrites addressWidth (Fin.last addressWidth)⟩
-      | right => exact ⟨Composition.SignalComponentRule.apply, by simp,
-          writeSplitWrites addressWidth (Fin.last addressWidth)⟩)
-    (by simp)
-  (.call (wrapDifferenceRule addressWidth)
-    (by intro port _; cases port
-        exact ⟨Primitives.EqRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (emptyRule addressWidth)
-    (by
-      intro input _
-      cases input with
-      | left => exact ⟨Equality.Rule.apply, by simp, by simp⟩
-      | right => exact ⟨Primitives.EqRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (fullRule addressWidth)
-    (by
-      intro input _
-      cases input with
-      | left => exact ⟨Equality.Rule.apply, by simp, by simp⟩
-      | right => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (readyRule addressWidth)
-    (by intro port _; cases port
-        exact ⟨Primitives.AndRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (validRule addressWidth)
-    (by intro port _; cases port
-        exact ⟨Primitives.AndRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (readRule addressWidth)
-    (by
-      intro input _
-      cases input with
-      | left => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩
-      | right => simp [cycleContract, outputRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-          body, wiring, context, EndpointContext.moduleInput])
-    (by simp)
-  (.call (writeRule addressWidth)
-    (by
-      intro input _
-      cases input with
-      | left => simp [cycleContract, outputRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-          body, wiring, context, EndpointContext.moduleInput]
-      | right => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro output _
-    cases output with
-    | readAddress => exact ⟨Composition.SignalComponentRule.apply, by simp, by simp⟩
-    | writeAddress => exact ⟨Composition.SignalComponentRule.apply, by simp, by simp⟩
-    | inputReady => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩
-    | outputValid => exact ⟨Primitives.NotRule.apply, by simp, by simp⟩
-    | readAdvance => exact ⟨Primitives.AndRule.apply, by simp, by simp⟩
-    | writeAdvance => exact ⟨Primitives.AndRule.apply, by simp, by simp⟩))))))))))))))
-
-private def stateSchedule (addressWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule
-      (body addressWidth) (childContracts addressWidth) :=
-  .done (by
-    intro child input member
-    cases child with
-    | readSplit | writeSplit | readAddress | writeAddress =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
-    | addressEquality =>
-        simp [childContracts] at member
-    | wrapEquality | wrapDifference | emptyGate | fullGate |
-        readyInverter | validInverter | readGate | writeGate =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member)
-
-private def ruleSchedules (addressWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
-      (body addressWidth) (childContracts addressWidth)
-      (cycleContract addressWidth) where
-  output | .apply => outputSchedule addressWidth
-  state := stateSchedule addressWidth
+private abbrev ruleSchedules (addressWidth : Nat) :=
+  (derivedRuleSchedules addressWidth).schedules
 
 private theorem coversChildren (addressWidth : Nat) :
-    (ruleSchedules addressWidth).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child <;> cases rule <;>
-    simp [ruleSchedules, outputSchedule,
-      Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (ruleSchedules addressWidth).CoversChildren :=
+  (derivedRuleSchedules addressWidth).coversChildren
 
 section LayerCertification
 

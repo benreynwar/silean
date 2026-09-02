@@ -1,10 +1,12 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Naming.SignalAdapterNaming
 import Silean.Composition.SignalAdapterImplementation
 
 namespace Silean.Modules.VectorSplit
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! Splits a vector into a low-index left vector and the remaining right
 vector. -/
@@ -180,71 +182,27 @@ private abbrev rightOccurrence (element : SignalType) (leftWidth rightWidth : Na
       (body element leftWidth rightWidth) (childContracts element leftWidth rightWidth) :=
   ⟨.right, Composition.SignalComponentRule.apply⟩
 
-private theorem splitWrites (element : SignalType) (leftWidth rightWidth : Nat)
-    (index : Fin (leftWidth + rightWidth)) :
-    index ∈ (splitOccurrence element leftWidth rightWidth).writes := by
-  change index ∈
-    (splitter element leftWidth rightWidth).ports.outputs.allSelection.labels
-  rw [SignalMap.allSelection_labels]
-  exact ListIndex.get_eq
-    ((splitter element leftWidth rightWidth).ports.outputs.labels.locate index) ▸
-      List.get_mem _ _
-
-def outputSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (body element leftWidth rightWidth)
-      (childContracts element leftWidth rightWidth)
-      (cycleContract element leftWidth rightWidth) .apply :=
-  .call (splitOccurrence element leftWidth rightWidth)
-    (by
-      intro input _
-      cases input
-      simp [cycleContract, outputRule, SignalSelection.prepend, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-        EndpointContext.moduleInput])
-    (by simp)
-    (.call (leftOccurrence element leftWidth rightWidth)
-      (by intro index _; exact ⟨Composition.SignalComponentRule.apply, by simp,
-        splitWrites element leftWidth rightWidth _⟩)
-      (by simp)
-      (.call (rightOccurrence element leftWidth rightWidth)
-        (by intro index _; exact ⟨Composition.SignalComponentRule.apply, by simp,
-          splitWrites element leftWidth rightWidth _⟩)
-        (by simp)
-        (.done (by
-          intro output _
-          cases output with
-          | left => exact ⟨Composition.SignalComponentRule.apply, by simp,
-              by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩
-          | right => exact ⟨Composition.SignalComponentRule.apply, by simp,
-              by change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩))))
-
-def stateSchedule (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (body element leftWidth rightWidth)
-      (childContracts element leftWidth rightWidth) :=
-  .done (by
-    intro child input member
-    cases child <;>
-      change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member <;>
-      exact nomatch member)
-
-def ruleSchedules (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (body element leftWidth rightWidth)
+private def scheduleOrders (element : SignalType) (leftWidth rightWidth : Nat) :
+    ScheduleDerivation.RuleScheduleOrders (body element leftWidth rightWidth)
       (childContracts element leftWidth rightWidth)
       (cycleContract element leftWidth rightWidth) where
-  output | .apply => outputSchedule element leftWidth rightWidth
-  state := stateSchedule element leftWidth rightWidth
+  output | .apply => [splitOccurrence element leftWidth rightWidth,
+    leftOccurrence element leftWidth rightWidth,
+    rightOccurrence element leftWidth rightWidth]
+  state := []
 
-theorem coversChildren (element : SignalType) (leftWidth rightWidth : Nat) :
-    (ruleSchedules element leftWidth rightWidth).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child with
-  | split | left | right =>
-      change Composition.SignalComponentRule at rule
-      cases rule
-      simp [ruleSchedules, outputSchedule,
-        Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private def derivedRuleSchedules (element : SignalType) (leftWidth rightWidth : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules (body element leftWidth rightWidth)
+      (childContracts element leftWidth rightWidth)
+      (cycleContract element leftWidth rightWidth) := by
+  derive_rule_schedules (scheduleOrders element leftWidth rightWidth)
+
+private abbrev ruleSchedules (element : SignalType) (leftWidth rightWidth : Nat) :=
+  (derivedRuleSchedules element leftWidth rightWidth).schedules
+
+private theorem coversChildren (element : SignalType) (leftWidth rightWidth : Nat) :
+    (ruleSchedules element leftWidth rightWidth).CoversChildren :=
+  (derivedRuleSchedules element leftWidth rightWidth).coversChildren
 
 def splitInputs (element : SignalType) (leftWidth rightWidth : Nat)
     (inputs : (ports element leftWidth rightWidth).inputs.Values) :

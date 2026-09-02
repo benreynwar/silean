@@ -326,63 +326,6 @@ abbrev combinerOccurrence (interface : LeafwiseInterface)
       (interface.aggregateChildContracts splitter componentContracts) :=
   ⟨.combiner output, Composition.SignalComponentRule.apply⟩
 
-theorem componentOccurrence_injective (interface : LeafwiseInterface)
-    (splitter : Composition.SignalSplitter)
-    (componentContracts : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleContract
-        (interface.ports (splitter.ports.outputs.signalType component)))
-    (rule : (component : splitter.ports.outputs.Label) →
-      (componentContracts component).RuleName) :
-    Function.Injective (fun component =>
-      interface.componentOccurrence splitter componentContracts component
-        (rule component)) := by
-  intro left right equal
-  have childEqual : AggregateInstance.component left =
-      AggregateInstance.component right :=
-    congrArg Contracts.Cycle.Certification.Layer.RuleOccurrence.child equal
-  exact AggregateInstance.component.inj childEqual
-
-noncomputable def callComponentsAfter (interface : LeafwiseInterface)
-    (splitter : Composition.SignalSplitter)
-    (componentContracts : (component : splitter.ports.outputs.Label) →
-      Contracts.Cycle.ModuleCycleContract
-        (interface.ports (splitter.ports.outputs.signalType component)))
-    {inputAvailable :
-      (interface.aggregateBody splitter).context.ports.inputs.Label → Prop}
-    (initial : Contracts.Cycle.Certification.Layer.Availability
-      (interface.aggregateBody splitter)
-      (interface.aggregateChildContracts splitter componentContracts))
-    (rule : (component : splitter.ports.outputs.Label) →
-      (componentContracts component).RuleName)
-    (fresh : ∀ component,
-      interface.componentOccurrence splitter componentContracts component
-        (rule component) ∉ initial)
-    (readsAvailable : ∀ component input,
-      input ∈ (interface.componentOccurrence splitter componentContracts component
-        (rule component)).reads →
-      Contracts.Cycle.Certification.Layer.sourceAvailable inputAvailable initial
-        ((interface.aggregateBody splitter).wiring.instanceInput
-          (.component component) input)) :
-    Contracts.Cycle.Certification.Layer.Schedule
-      (interface.aggregateBody splitter)
-      (interface.aggregateChildContracts splitter componentContracts)
-      inputAvailable
-      (fun final =>
-        (∀ called, called ∈ initial → called ∈ final) ∧
-        (∀ component,
-          interface.componentOccurrence splitter componentContracts component
-            (rule component) ∈ final) ∧
-        ∀ called, called ∈ final → called ∈ initial ∨
-          ∃ component, called =
-            interface.componentOccurrence splitter componentContracts component
-              (rule component)) initial :=
-  Contracts.Cycle.Certification.Layer.Schedule.callFamilyAfter initial
-    splitter.ports.outputs.labels
-    (fun component => interface.componentOccurrence splitter componentContracts
-      component (rule component))
-    (interface.componentOccurrence_injective splitter componentContracts rule)
-    fresh readsAvailable
-
 @[reducible] def moduleStructure (interface : LeafwiseInterface)
     (bitStructure : ModuleStructure (interface.ports .bit)) :
     (signalType : SignalType) → ModuleStructure (interface.ports signalType)

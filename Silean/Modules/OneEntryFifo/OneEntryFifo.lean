@@ -5,6 +5,7 @@ import Silean.Modules.Mux
 import Silean.Modules.OneEntryFifo.OneEntryFifoControl
 import Silean.Contracts.Fifo.FifoCycleBehavior
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Naming.FifoPortsNaming
 import Silean.Naming.PrimitiveNaming
 
@@ -12,6 +13,7 @@ namespace Silean.Modules.OneEntryFifo
 
 open Silean
 open Contracts.Fifo.Cycle
+open Contracts.Cycle.Certification.Layer
 
 /-- A one-entry FIFO with combinational fall-through when the entry is empty.
 Data is stored only when it cannot pass directly to the output. -/
@@ -208,189 +210,27 @@ private abbrev dataMuxRule (signalType : SignalType) :
       (body signalType) (childContracts signalType) :=
   ⟨.outputDataMux, Mux.Rule.select⟩
 
-@[simp] private theorem validRule_reads (signalType) : (validRule signalType).reads = [] := rfl
-@[simp] private theorem dataRule_reads (signalType) : (dataRule signalType).reads = [] := rfl
-@[simp] private theorem controlOccurrence_reads (signalType) :
-    (controlOccurrence signalType).reads = [.storedValid, .downstreamReady] := rfl
-@[simp] private theorem validOrRule_reads (signalType) :
-    (validOrRule signalType).reads = [.left, .right] := rfl
-@[simp] private theorem dataMuxRule_reads (signalType) :
-    (dataMuxRule signalType).reads = [.select, .whenFalse, .whenTrue] := rfl
-@[simp] private theorem validRule_writes (signalType) :
-    (validRule signalType).writes = [.value] := rfl
-@[simp] private theorem dataRule_writes (signalType) :
-    (dataRule signalType).writes = [.value] := rfl
-@[simp] private theorem controlOccurrence_writes (signalType) :
-    (controlOccurrence signalType).writes = [.upstreamReady, .storageUpdate] := rfl
-@[simp] private theorem validOrRule_writes (signalType) :
-    (validOrRule signalType).writes = [.output] := rfl
-@[simp] private theorem dataMuxRule_writes (signalType) :
-    (dataMuxRule signalType).writes = [.result] := rfl
+private def scheduleOrders (signalType : SignalType) :
+    ScheduleDerivation.RuleScheduleOrders (body signalType)
+      (childContracts signalType) (cycleContract signalType) where
+  output
+    | .forward => [validRule signalType, dataRule signalType,
+        validOrRule signalType, dataMuxRule signalType]
+    | .ready => [validRule signalType, controlOccurrence signalType]
+  state := [validRule signalType, dataRule signalType,
+    controlOccurrence signalType, validOrRule signalType, dataMuxRule signalType]
 
-private def forwardSchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body signalType) (childContracts signalType)
-      (cycleContract signalType) .forward :=
-  .call (validRule signalType)
-    (by intro input member; cases member)
-    (by simp)
-  (.call (dataRule signalType)
-    (by intro input member; cases member)
-    (by simp)
-  (.call (validOrRule signalType)
-    (by intro input member
-        cases input with
-        | left => exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩
-        | right => simp [cycleContract, forwardRule, SignalSelection.prepend,
-            SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-            body, wiring, context, EndpointContext.moduleInput])
-    (by simp)
-  (.call (dataMuxRule signalType)
-    (by intro input member
-        cases input with
-        | select => exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩
-        | whenFalse => simp [cycleContract, forwardRule,
-            SignalSelection.prepend, SignalMap.select, SignalSelection.labels,
-            Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-            EndpointContext.moduleInput]
-        | whenTrue => exact ⟨EnabledRegister.Rule.observe, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | outputValid =>
-        change Contracts.Cycle.Certification.Layer.outputAvailable
-          ([dataMuxRule signalType, validOrRule signalType, dataRule signalType, validRule signalType] :
-            Contracts.Cycle.Certification.Layer.Availability
-              (body signalType) (childContracts signalType)) Instance.outputValidOr .output
-        exact ⟨Primitives.OrRule.apply, by simp, by simp⟩
-    | outputData =>
-        change Contracts.Cycle.Certification.Layer.outputAvailable
-          ([dataMuxRule signalType, validOrRule signalType, dataRule signalType, validRule signalType] :
-            Contracts.Cycle.Certification.Layer.Availability
-              (body signalType) (childContracts signalType)) Instance.outputDataMux .result
-        exact ⟨Mux.Rule.select, by simp, by simp⟩
-    | inputReady =>
-        simp [cycleContract, forwardRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels] at member)))))
+private def derivedRuleSchedules (signalType : SignalType) :
+    ScheduleDerivation.DerivedRuleSchedules (body signalType)
+      (childContracts signalType) (cycleContract signalType) := by
+  derive_rule_schedules (scheduleOrders signalType)
 
-private def readySchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body signalType) (childContracts signalType)
-      (cycleContract signalType) .ready :=
-  .call (validRule signalType)
-    (by intro input member; cases member)
-    (by simp)
-  (.call (controlOccurrence signalType)
-    (by intro input member
-        cases input with
-        | storedValid => exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩
-        | downstreamReady => simp [cycleContract, readyRule, SignalMap.select,
-            SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring,
-            context, EndpointContext.moduleInput])
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | inputReady =>
-        change Contracts.Cycle.Certification.Layer.outputAvailable
-          ([controlOccurrence signalType, validRule signalType] :
-            Contracts.Cycle.Certification.Layer.Availability
-              (body signalType) (childContracts signalType))
-          Instance.control .upstreamReady
-        exact ⟨OneEntryFifo.Control.Rule.control, by simp, by simp⟩
-    | outputValid | outputData =>
-        simp [cycleContract, readyRule, SignalMap.select,
-          SignalSelection.labels] at member)))
-
-private def stateSchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.StateSchedule
-      (body signalType) (childContracts signalType) :=
-  .call (validRule signalType) (by intro input member; cases member) (by simp)
-  (.call (dataRule signalType) (by intro input member; cases member) (by simp)
-  (.call (controlOccurrence signalType)
-    (by intro input member
-        cases input with
-        | storedValid => exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩
-        | downstreamReady => trivial)
-    (by simp)
-  (.call (validOrRule signalType)
-    (by intro input member
-        cases input with
-        | left => exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩
-        | right => trivial)
-    (by simp)
-  (.call (dataMuxRule signalType)
-    (by intro input member
-        cases input with
-        | select => exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩
-        | whenFalse => trivial
-        | whenTrue => exact ⟨EnabledRegister.Rule.observe, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro child input member
-    cases child with
-    | validStorage =>
-        simp [childContracts] at member
-        cases input with
-        | enable => exact ⟨OneEntryFifo.Control.Rule.control, by simp, by simp⟩
-        | value | reset => trivial
-    | dataStorage =>
-        simp [childContracts] at member
-        cases input with
-        | enable => exact ⟨OneEntryFifo.Control.Rule.control, by simp, by simp⟩
-        | value => trivial
-    | control =>
-        simp [childContracts, OneEntryFifo.Control.cycleContract, Contracts.Cycle.CycleStateRule.empty,
-          SignalSelection.labels] at member
-    | outputValidOr =>
-        simp [childContracts, Primitives.orCycleContract,
-          Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member
-    | outputDataMux =>
-        simp [childContracts, Mux.cycleContract, Mux.stateRule, Contracts.Cycle.CycleStateRule.empty,
-          SignalSelection.labels] at member))))))
-
-private def ruleSchedules (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
-      (body signalType) (childContracts signalType)
-      (cycleContract signalType) where
-  output | .forward => forwardSchedule signalType | .ready => readySchedule signalType
-  state := stateSchedule signalType
+private abbrev ruleSchedules (signalType : SignalType) :=
+  (derivedRuleSchedules signalType).schedules
 
 private theorem coversChildren (signalType : SignalType) :
-    (ruleSchedules signalType).CoversChildren := by
-  intro child rule
-  cases child with
-  | validStorage =>
-    change EnabledResetRegister.Rule at rule
-    cases rule
-    left
-    change validRule signalType ∈ (stateSchedule signalType).finalAvailability
-    simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | dataStorage =>
-    change EnabledRegister.Rule at rule
-    cases rule
-    left
-    change dataRule signalType ∈ (stateSchedule signalType).finalAvailability
-    simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | control =>
-    change OneEntryFifo.Control.Rule at rule
-    cases rule
-    left
-    change controlOccurrence signalType ∈ (stateSchedule signalType).finalAvailability
-    simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | outputValidOr =>
-    change Primitives.OrRule at rule
-    cases rule
-    left
-    change validOrRule signalType ∈ (stateSchedule signalType).finalAvailability
-    simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | outputDataMux =>
-    change Mux.Rule at rule
-    cases rule
-    left
-    change dataMuxRule signalType ∈ (stateSchedule signalType).finalAvailability
-    simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (ruleSchedules signalType).CoversChildren :=
+  (derivedRuleSchedules signalType).coversChildren
 
 section LayerCertification
 

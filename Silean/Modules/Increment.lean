@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Foundation.BitVector
 import Silean.Modules.Constant
 import Silean.Modules.HalfAdder
@@ -8,6 +9,7 @@ import Silean.Naming.SignalAdapterNaming
 namespace Silean.Modules.Increment
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! A wrapping combinational incrementer for an LSB-first vector of bits. -/
 
@@ -292,46 +294,19 @@ private abbrev baseOccurrence :
     Contracts.Cycle.Certification.Layer.RuleOccurrence baseBody baseChildContracts :=
   ⟨.empty, Primitives.ConstantRule.apply⟩
 
-private def baseOutputSchedule : Contracts.Cycle.Certification.Layer.OutputSchedule
-    baseBody baseChildContracts
-    (cycleContract 0) .apply :=
-  .call baseOccurrence
-    (by intro input member; exact nomatch input)
-    (by simp)
-    (.done (by
-      intro output _
-      cases output with
-      | result => exact ⟨Primitives.ConstantRule.apply, by simp, by
-          change Primitives.SingleOutput.output ∈ [.output]
-          simp⟩
-      | carryOut =>
-          simp [cycleContract, outputRule, SignalSelection.labels,
-            SignalSelection.prepend, SignalMap.select, Contracts.Cycle.Certification.Layer.sourceAvailable,
-            baseBody, baseWiring, baseContext, EndpointContext.moduleInput]))
+private def baseScheduleOrders : ScheduleDerivation.RuleScheduleOrders
+    baseBody baseChildContracts (cycleContract 0) where
+  output | .apply => [baseOccurrence]
+  state := []
 
-private def baseStateSchedule : Contracts.Cycle.Certification.Layer.StateSchedule
-    baseBody baseChildContracts :=
-  .done (by
-    intro child input member
-    cases child
-    change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-    exact nomatch member)
+private def baseDerivedRuleSchedules : ScheduleDerivation.DerivedRuleSchedules
+    baseBody baseChildContracts (cycleContract 0) := by
+  derive_rule_schedules baseScheduleOrders
 
-private def baseSchedules : Contracts.Cycle.Certification.Layer.RuleSchedules
-    baseBody baseChildContracts
-    (cycleContract 0) where
-  output | .apply => baseOutputSchedule
-  state := baseStateSchedule
+private abbrev baseSchedules := baseDerivedRuleSchedules.schedules
 
-private theorem baseCoversChildren : baseSchedules.CoversChildren := by
-  intro child rule
-  cases child
-  change Primitives.ConstantRule at rule
-  cases rule
-  right
-  refine ⟨.apply, ?_⟩
-  change baseOccurrence ∈ baseOutputSchedule.finalAvailability
-  simp [baseOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem baseCoversChildren : baseSchedules.CoversChildren :=
+  baseDerivedRuleSchedules.coversChildren
 
 private theorem baseImplements
     (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
@@ -399,156 +374,27 @@ private abbrev concatOccurrence (width) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence (succBody width) (succChildContracts width) :=
   ⟨.concat, VectorConcat.Rule.apply⟩
 
-private theorem splitWrites (width : Nat)
-    (index : (splitter width).ports.outputs.Label) :
-    index ∈ (splitOccurrence width).writes := by
-  change index ∈ (splitter width).ports.outputs.allSelection.labels
-  rw [SignalMap.allSelection_labels]
-  exact ListIndex.get_eq ((splitter width).ports.outputs.labels.locate index) ▸
-    List.get_mem _ _
+private def succScheduleOrders (width : Nat) :
+    ScheduleDerivation.RuleScheduleOrders (succBody width)
+      (succChildContracts width) (cycleContract (width + 1)) where
+  output := fun
+    | .apply => [splitOccurrence width, lowerBitsOccurrence width,
+        lowerRippleOccurrence width, highSumOccurrence width,
+        highCarryOccurrence width, highBitOccurrence width,
+        concatOccurrence width]
+  state := []
 
-private def succOutputSchedule (width : Nat) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (succBody width) (succChildContracts width)
-      (cycleContract (width + 1)) .apply :=
-  .call (splitOccurrence width)
-    (by
-      intro input _
-      cases input
-      simp [cycleContract, outputRule, SignalMap.select,
-        SignalSelection.labels, SignalSelection.prepend,
-        Contracts.Cycle.Certification.Layer.sourceAvailable, succBody, succWiring, succContext,
-        EndpointContext.moduleInput])
-    (by simp)
-  (.call (lowerBitsOccurrence width)
-    (by intro index _; exact ⟨Composition.SignalComponentRule.apply, by simp,
-      splitWrites width index.castSucc⟩)
-    (by simp)
-  (.call (lowerRippleOccurrence width)
-    (by
-      intro input _
-      cases input with
-      | value => exact ⟨Composition.SignalComponentRule.apply, by simp, by
-          change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]
-          simp⟩
-      | carryIn =>
-          simp [cycleContract, outputRule, SignalMap.select,
-            SignalSelection.labels, SignalSelection.prepend,
-            Contracts.Cycle.Certification.Layer.sourceAvailable, succBody, succWiring, succContext,
-            EndpointContext.moduleInput])
-    (by simp)
-  (.call (highSumOccurrence width)
-    (by
-      intro input _
-      cases input with
-      | left => exact ⟨Composition.SignalComponentRule.apply, by simp,
-          splitWrites width (highIndex width)⟩
-      | right => exact ⟨Rule.apply, by simp, by
-          change Output.carryOut ∈ [Output.result, Output.carryOut]
-          simp⟩)
-    (by simp)
-  (.call (highCarryOccurrence width)
-    (by
-      intro input _
-      cases input with
-      | left => exact ⟨Composition.SignalComponentRule.apply, by simp,
-          splitWrites width (highIndex width)⟩
-      | right => exact ⟨Rule.apply, by simp, by
-          change Output.carryOut ∈ [Output.result, Output.carryOut]
-          simp⟩)
-    (by simp)
-  (.call (highBitOccurrence width)
-    (by intro index _; exact ⟨HalfAdder.Rule.sum, by simp, by
-      change HalfAdder.Output.sum ∈ [HalfAdder.Output.sum]
-      simp⟩)
-    (by simp)
-  (.call (concatOccurrence width)
-    (by
-      intro input _
-      cases input with
-      | left => exact ⟨Rule.apply, by simp, by
-          change Output.result ∈ [Output.result, Output.carryOut]
-          simp⟩
-      | right => exact ⟨Composition.SignalComponentRule.apply, by simp, by
-          change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]
-          simp⟩)
-    (by simp)
-  (.done (by
-    intro output _
-    cases output with
-    | result => exact ⟨VectorConcat.Rule.apply, by simp, by
-        change VectorConcat.Output.result ∈ [VectorConcat.Output.result]
-        simp⟩
-    | carryOut => exact ⟨HalfAdder.Rule.carry, by simp, by
-        change HalfAdder.Output.carry ∈ [HalfAdder.Output.carry]
-        simp⟩))))))))
+private def succDerivedRuleSchedules (width : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules (succBody width)
+      (succChildContracts width) (cycleContract (width + 1)) := by
+  derive_rule_schedules (succScheduleOrders width)
 
-private def succStateSchedule (width : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (succBody width) (succChildContracts width) :=
-  .done (by
-    intro child input member
-    cases child with
-    | split | lowerBits | highBit =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
-    | lowerRipple =>
-        change input ∈ (cycleContract width).stateRule.readsInputs.labels at member
-        exact nomatch member
-    | highAdder =>
-        change input ∈ HalfAdder.cycleContract.stateRule.readsInputs.labels at member
-        exact nomatch member
-    | concat =>
-        change input ∈ (VectorConcat.cycleContract .bit width 1).stateRule.readsInputs.labels
-          at member
-        exact nomatch member)
-
-private def succSchedules (width : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (succBody width) (succChildContracts width)
-      (cycleContract (width + 1)) where
-  output | .apply => succOutputSchedule width
-  state := succStateSchedule width
+private abbrev succSchedules (width : Nat) :=
+  (succDerivedRuleSchedules width).schedules
 
 private theorem succCoversChildren (width : Nat) :
-    (succSchedules width).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child with
-  | split =>
-      change Composition.SignalComponentRule at rule; cases rule
-      change splitOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | lowerBits =>
-      change Composition.SignalComponentRule at rule; cases rule
-      change lowerBitsOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | lowerRipple =>
-      change Rule at rule; cases rule
-      change lowerRippleOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | highAdder =>
-      change HalfAdder.Rule at rule
-      cases rule with
-      | sum =>
-          change highSumOccurrence width ∈
-            (succOutputSchedule width).finalAvailability
-          simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-      | carry =>
-          change highCarryOccurrence width ∈
-            (succOutputSchedule width).finalAvailability
-          simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | highBit =>
-      change Composition.SignalComponentRule at rule; cases rule
-      change highBitOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | concat =>
-      change VectorConcat.Rule at rule; cases rule
-      change concatOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (succSchedules width).CoversChildren :=
+  (succDerivedRuleSchedules width).coversChildren
 
 private def splitInputs (width : Nat) (inputs : (ports (width + 1)).inputs.Values) :
     (splitter width).ports.inputs.Values
@@ -848,62 +694,21 @@ private abbrev rippleOccurrence (width : Nat) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence (body width) (childContracts width) :=
   ⟨.ripple, Ripple.Rule.apply⟩
 
-private def outputSchedule (width : Nat) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body width) (childContracts width) (cycleContract width) .apply :=
-  .call (oneOccurrence width)
-    (by intro input member; exact nomatch input)
-    (by simp)
-  (.call (rippleOccurrence width)
-    (by
-      intro input _
-      cases input with
-      | value =>
-          simp [cycleContract, outputRule, SignalMap.select,
-            SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, body, wiring, context,
-            EndpointContext.moduleInput]
-      | carryIn => exact ⟨Primitives.ConstantRule.apply, by simp, by
-          change Primitives.SingleOutput.output ∈ [Primitives.SingleOutput.output]
-          simp⟩)
-    (by simp)
-  (.done (by
-    intro output _
-    cases output
-    exact ⟨Ripple.Rule.apply, by simp, by
-      change Ripple.Output.result ∈ [Ripple.Output.result, Ripple.Output.carryOut]
-      simp⟩)))
+private def scheduleOrders (width : Nat) : ScheduleDerivation.RuleScheduleOrders
+    (body width) (childContracts width) (cycleContract width) where
+  output | .apply => [oneOccurrence width, rippleOccurrence width]
+  state := []
 
-private def stateSchedule (width : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (body width) (childContracts width) :=
-  .done (by
-    intro child input member
-    cases child with
-    | one =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
-    | ripple =>
-        change input ∈ (Ripple.cycleContract width).stateRule.readsInputs.labels at member
-        exact nomatch member)
+private def derivedRuleSchedules (width : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules
+      (body width) (childContracts width) (cycleContract width) := by
+  derive_rule_schedules (scheduleOrders width)
 
-private def schedules (width : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
-      (body width) (childContracts width) (cycleContract width) where
-  output | .apply => outputSchedule width
-  state := stateSchedule width
+private abbrev schedules (width : Nat) :=
+  (derivedRuleSchedules width).schedules
 
-private theorem coversChildren (width : Nat) : (schedules width).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child with
-  | one =>
-      change Primitives.ConstantRule at rule; cases rule
-      change oneOccurrence width ∈ (outputSchedule width).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | ripple =>
-      change Ripple.Rule at rule; cases rule
-      change rippleOccurrence width ∈ (outputSchedule width).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem coversChildren (width : Nat) : (schedules width).CoversChildren :=
+  (derivedRuleSchedules width).coversChildren
 
 private def rippleInputs (width : Nat)
     (inputs : (ports width).inputs.Values)

@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Foundation.BitVector
 import Silean.Modules.Add
 import Silean.Modules.BitwiseXor
@@ -7,6 +8,7 @@ import Silean.Naming.SignalAdapterNaming
 namespace Silean.Modules.AddSub
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! Fixed-width addition and subtraction. The behavioral contract below uses
 direct carry/borrow recursion. The hardware separately implements subtraction
@@ -283,90 +285,23 @@ private abbrev addOccurrence (width : Nat) :
       (body width) (childContracts width) :=
   ⟨.add, Add.Rule.apply⟩
 
-private def outputSchedule (width : Nat) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (body width) (childContracts width)
-      (cycleContract width) .apply :=
-  .call (broadcastOccurrence width)
-    (by
-      intro _ _
-      simp [cycleContract, outputRule, Contracts.Cycle.Certification.Layer.sourceAvailable,
-        SignalSelection.labels, SignalSelection.prepend, SignalMap.select,
-        body, wiring, context, EndpointContext.moduleInput])
-    (by simp)
-  (.call (xorOccurrence width)
-    (by
-      intro input _
-      cases input with
-      | left =>
-          simp [cycleContract, outputRule, Contracts.Cycle.Certification.Layer.sourceAvailable,
-            SignalSelection.labels, SignalSelection.prepend, SignalMap.select,
-            body, wiring, context, EndpointContext.moduleInput]
-      | right => exact ⟨Composition.SignalComponentRule.apply, by simp, by
-          change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]
-          simp⟩)
-    (by simp)
-  (.call (addOccurrence width)
-    (by
-      intro input _
-      cases input with
-      | left | carryIn =>
-          simp [cycleContract, outputRule, Contracts.Cycle.Certification.Layer.sourceAvailable,
-            SignalSelection.labels, SignalSelection.prepend, SignalMap.select,
-            body, wiring, context, EndpointContext.moduleInput]
-      | right => exact ⟨BitwiseXor.Rule.apply, by simp, by
-          change BitwiseXor.Output.result ∈ [BitwiseXor.Output.result]
-          simp⟩)
-    (by simp)
-  (.done (by
-    intro output _
-    cases output with
-    | result => exact ⟨Add.Rule.apply, by simp, by
-        change Add.Output.result ∈ [Add.Output.result, Add.Output.carryOut]
-        simp⟩
-    | carryOut => exact ⟨Add.Rule.apply, by simp, by
-        change Add.Output.carryOut ∈ [Add.Output.result, Add.Output.carryOut]
-        simp⟩))))
+private def scheduleOrders (width : Nat) : ScheduleDerivation.RuleScheduleOrders
+    (body width) (childContracts width) (cycleContract width) where
+  output | .apply => [broadcastOccurrence width, xorOccurrence width,
+    addOccurrence width]
+  state := []
 
-private def stateSchedule (width : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (body width) (childContracts width) :=
-  .done (by
-    intro child input member
-    cases child with
-    | broadcastSubtract =>
-        change input ∈ (subtractVector width).cycleContract.stateRule.readsInputs.labels
-          at member
-        exact nomatch member
-    | transformRight =>
-        change input ∈ (BitwiseXor.cycleContract (.vector width .bit)).stateRule.readsInputs.labels
-          at member
-        exact nomatch member
-    | add =>
-        change input ∈ (Add.cycleContract width).stateRule.readsInputs.labels at member
-        exact nomatch member)
+private def derivedRuleSchedules (width : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules (body width)
+      (childContracts width) (cycleContract width) := by
+  derive_rule_schedules (scheduleOrders width)
 
-private def schedules (width : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (body width) (childContracts width)
-      (cycleContract width) where
-  output | .apply => outputSchedule width
-  state := stateSchedule width
+private abbrev schedules (width : Nat) :=
+  (derivedRuleSchedules width).schedules
 
-private theorem coversChildren (width : Nat) : (schedules width).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child with
-  | broadcastSubtract =>
-      change Composition.SignalComponentRule at rule; cases rule
-      change broadcastOccurrence width ∈ (outputSchedule width).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | transformRight =>
-      change BitwiseXor.Rule at rule; cases rule
-      change xorOccurrence width ∈ (outputSchedule width).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | add =>
-      change Add.Rule at rule; cases rule
-      change addOccurrence width ∈ (outputSchedule width).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem coversChildren (width : Nat) :
+    (schedules width).CoversChildren :=
+  (derivedRuleSchedules width).coversChildren
 
 private def broadcastInputs (width : Nat) (inputs : (ports width).inputs.Values) :
     (subtractVector width).ports.inputs.Values := fun _ => inputs .subtract

@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Naming.PrimitiveNaming
 import Silean.Modules.Mask
 import Silean.Modules.BitwiseOr
@@ -7,6 +8,7 @@ import Silean.Primitives.NotPrimitive
 namespace Silean.Modules.Mux
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! ## Hardware structure -/
 
@@ -163,6 +165,7 @@ end Silean.Modules.Mux.Naming
 namespace Silean.Modules.Mux
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! ## Exact cycle behavior and certification -/
 
@@ -210,106 +213,24 @@ abbrev combineRule (signalType : SignalType) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence (body signalType) (childContracts signalType) :=
   ⟨.combine, BitwiseOr.Rule.apply⟩
 
-@[simp] theorem invertRule_reads (signalType) :
-    (invertRule signalType).reads = [.input] := rfl
-@[simp] theorem falseRule_reads (signalType) :
-    (falseRule signalType).reads = [.value, .mask] := rfl
-@[simp] theorem trueRule_reads (signalType) :
-    (trueRule signalType).reads = [.value, .mask] := rfl
-@[simp] theorem combineRule_reads (signalType) :
-    (combineRule signalType).reads = [.left, .right] := rfl
-@[simp] theorem invertRule_writes (signalType) :
-    (invertRule signalType).writes = [.output] := rfl
-@[simp] theorem falseRule_writes (signalType) :
-    (falseRule signalType).writes = [.result] := rfl
-@[simp] theorem trueRule_writes (signalType) :
-    (trueRule signalType).writes = [.result] := rfl
-@[simp] theorem combineRule_writes (signalType) :
-    (combineRule signalType).writes = [.result] := rfl
+private def scheduleOrders (signalType : SignalType) :
+    ScheduleDerivation.RuleScheduleOrders (body signalType)
+      (childContracts signalType) (cycleContract signalType) where
+  output | .select => [invertRule signalType, falseRule signalType,
+    trueRule signalType, combineRule signalType]
+  state := []
 
-def outputSchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (body signalType) (childContracts signalType)
-      (cycleContract signalType) .select :=
-  .call (invertRule signalType)
-    (by intro port member; cases port
-        simp [cycleContract, selectRule, SignalSelection.prepend,
-          SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-          body, wiring, context, EndpointContext.moduleInput])
-    (by simp)
-  (.call (falseRule signalType)
-    (by intro input member
-        cases input with
-        | value => simp [cycleContract, selectRule, SignalSelection.prepend,
-            SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-            body, wiring, context, EndpointContext.moduleInput]
-        | mask => exact ⟨.apply, by simp, by simp⟩)
-    (by simp)
-  (.call (trueRule signalType)
-    (by intro input member; cases input <;>
-      simp [cycleContract, selectRule, SignalSelection.prepend,
-        SignalMap.select, SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable,
-        body, wiring, context, EndpointContext.moduleInput])
-    (by simp)
-  (.call (combineRule signalType)
-    (by intro input member
-        cases input with
-        | left => exact ⟨.apply, by simp, by simp⟩
-        | right => exact ⟨.apply, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output
-    change Contracts.Cycle.Certification.Layer.outputAvailable
-      ([combineRule signalType, trueRule signalType, falseRule signalType,
-        invertRule signalType] : Contracts.Cycle.Certification.Layer.Availability (body signalType) (childContracts signalType))
-        Instance.combine .result
-    exact ⟨BitwiseOr.Rule.apply, by simp, by simp⟩)))))
+private def derivedRuleSchedules (signalType : SignalType) :
+    ScheduleDerivation.DerivedRuleSchedules (body signalType)
+      (childContracts signalType) (cycleContract signalType) := by
+  derive_rule_schedules (scheduleOrders signalType)
 
-def stateSchedule (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (body signalType) (childContracts signalType) :=
-  .done (by
-    intro child input member
-    cases child <;>
-      simp [childContracts, Primitives.notCycleContract, Mask.cycleContract,
-        BitwiseOr.cycleContract,
-        Contracts.Cycle.CycleStateRule.empty,
-        SignalSelection.labels] at member)
+private abbrev ruleSchedules (signalType : SignalType) :=
+  (derivedRuleSchedules signalType).schedules
 
-def ruleSchedules (signalType : SignalType) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (body signalType) (childContracts signalType)
-      (cycleContract signalType) where
-  output | .select => outputSchedule signalType
-  state := stateSchedule signalType
-
-theorem coversChildren (signalType : SignalType) :
-    (ruleSchedules signalType).CoversChildren := by
-  intro child rule
-  right
-  cases child with
-  | invertSelect =>
-    change Primitives.NotRule at rule
-    cases rule
-    refine ⟨.select, ?_⟩
-    change invertRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | chooseFalse =>
-    change Mask.Rule at rule
-    cases rule
-    refine ⟨.select, ?_⟩
-    change falseRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | chooseTrue =>
-    change Mask.Rule at rule
-    cases rule
-    refine ⟨.select, ?_⟩
-    change trueRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | combine =>
-    change BitwiseOr.Rule at rule
-    cases rule
-    refine ⟨.select, ?_⟩
-    change combineRule signalType ∈ (outputSchedule signalType).finalAvailability
-    simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem coversChildren (signalType : SignalType) :
+    (ruleSchedules signalType).CoversChildren :=
+  (derivedRuleSchedules signalType).coversChildren
 
 theorem selectRule_holds_iff (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)

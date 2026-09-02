@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Examples.Checks.HierarchicalDualNotCertificationChecks
 
 namespace Silean.Examples.Checks.BidirectionalDualNot
@@ -82,90 +83,22 @@ abbrev bForward : RuleOccurrence body childContracts := ⟨.b, .forward⟩
 abbrev aBackward : RuleOccurrence body childContracts := ⟨.a, .backward⟩
 abbrev bBackward : RuleOccurrence body childContracts := ⟨.b, .backward⟩
 
-@[simp] theorem aForward_reads : aForward.reads = [.forward] := rfl
-@[simp] theorem bForward_reads : bForward.reads = [.forward] := rfl
-@[simp] theorem aForward_writes : aForward.writes = [.forward] := rfl
-@[simp] theorem bForward_writes : bForward.writes = [.forward] := rfl
-@[simp] theorem aBackward_reads : aBackward.reads = [.backward] := rfl
-@[simp] theorem bBackward_reads : bBackward.reads = [.backward] := rfl
-@[simp] theorem aBackward_writes : aBackward.writes = [.backward] := rfl
-@[simp] theorem bBackward_writes : bBackward.writes = [.backward] := rfl
-
-def forwardSchedule : OutputSchedule body childContracts cycleContract .forward :=
-  .call aForward
-    (by intro input member
-        cases input with
-        | forward => exact member
-        | backward => simp at member)
-    (by simp)
-  (.call bForward
-    (by intro input member
-        cases input with
-        | forward => exact ⟨.forward, by simp, by simp⟩
-        | backward => simp at member)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | forward => exact ⟨.forward, by simp, by simp⟩
-    | backward =>
-        simp [cycleContract, outputRule, outputSelection, SignalMap.select,
-          SignalSelection.labels] at member)))
-
-def backwardSchedule : OutputSchedule body childContracts cycleContract .backward :=
-  .call bBackward
-    (by intro input member
-        cases input with
-        | forward => simp at member
-        | backward => exact member)
-    (by simp)
-  (.call aBackward
-    (by intro input member
-        cases input with
-        | forward => simp at member
-        | backward => exact ⟨.backward, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | forward =>
-        simp [cycleContract, outputRule, outputSelection, SignalMap.select,
-          SignalSelection.labels] at member
-    | backward => exact ⟨.backward, by simp, by simp⟩)))
-
-def stateSchedule : StateSchedule body childContracts :=
-  .done (by
-    intro child input member
-    cases child <;>
-      simp [childContracts, Examples.Fixtures.DualNot.cycleContract,
-        Examples.Fixtures.DualNot.stateRule,
-        Contracts.Cycle.CycleStateRule.empty, SignalSelection.labels] at member)
-
-def ruleSchedules : RuleSchedules body childContracts cycleContract where
+def scheduleOrders : ScheduleDerivation.RuleScheduleOrders body childContracts cycleContract where
   output
-    | .forward => forwardSchedule
-    | .backward => backwardSchedule
-  state := stateSchedule
+    | .forward => [aForward, bForward]
+    | .backward => [bBackward, aBackward]
+  state := []
 
-theorem coversChildren : ruleSchedules.CoversChildren := by
-  intro child rule
-  cases child <;> cases rule
-  · right
-    refine ⟨.forward, ?_⟩
-    change aForward ∈ forwardSchedule.finalAvailability
-    simp [forwardSchedule]
-  · right
-    refine ⟨.backward, ?_⟩
-    change aBackward ∈ backwardSchedule.finalAvailability
-    simp [backwardSchedule]
-  · right
-    refine ⟨.forward, ?_⟩
-    change bForward ∈ forwardSchedule.finalAvailability
-    simp [forwardSchedule]
-  · right
-    refine ⟨.backward, ?_⟩
-    change bBackward ∈ backwardSchedule.finalAvailability
-    simp [backwardSchedule]
+def derivedRuleSchedules :
+    ScheduleDerivation.DerivedRuleSchedules body childContracts cycleContract := by
+  derive_rule_schedules scheduleOrders
+
+abbrev ruleSchedules := derivedRuleSchedules.schedules
+
+theorem coversChildren : ruleSchedules.CoversChildren :=
+  derivedRuleSchedules.coversChildren
+
+
 
 theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution :=
   ruleSchedules.hasAtMostOneSolution coversChildren layerChildren

@@ -22,3 +22,6 @@ lean_exe «emit-pointer-fifo» where
 
 lean_exe «emit-bit-register-bank» where
   root := `Silean.Emitters.BitRegisterBank
+
+lean_exe «emit-picorv-decoder-capture» where
+  root := `Silean.Emitters.PicoRVDecoderCapture

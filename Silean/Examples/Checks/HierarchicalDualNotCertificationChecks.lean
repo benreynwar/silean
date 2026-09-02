@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Examples.Fixtures.DualNot
 import Silean.Examples.Fixtures.HierarchicalDualNot
 
@@ -123,88 +124,25 @@ abbrev backwardOccurrence :
     RuleOccurrence Examples.Fixtures.HierarchicalDualNot.body childContracts :=
   ⟨Examples.Fixtures.HierarchicalDualNot.Instance.backwardNot, Primitives.NotRule.apply⟩
 
-@[simp] theorem forwardOccurrence_reads : forwardOccurrence.reads = [.input] := rfl
-@[simp] theorem forwardOccurrence_writes : forwardOccurrence.writes = [.output] := rfl
-@[simp] theorem backwardOccurrence_reads : backwardOccurrence.reads = [.input] := rfl
-@[simp] theorem backwardOccurrence_writes : backwardOccurrence.writes = [.output] := rfl
-@[simp] theorem dualForward_reads :
-    ((Examples.Fixtures.DualNot.cycleContract.outputRule Examples.Fixtures.DualNot.Rule.forward).2
-      |>.readsInputs.labels) = [.forward] := rfl
-@[simp] theorem dualForward_writes :
-    ((Examples.Fixtures.DualNot.cycleContract.outputRule Examples.Fixtures.DualNot.Rule.forward).2
-      |>.writesOutputs.labels) = [.forward] := rfl
-@[simp] theorem dualBackward_reads :
-    ((Examples.Fixtures.DualNot.cycleContract.outputRule Examples.Fixtures.DualNot.Rule.backward).2
-      |>.readsInputs.labels) = [.backward] := rfl
-@[simp] theorem dualBackward_writes :
-    ((Examples.Fixtures.DualNot.cycleContract.outputRule Examples.Fixtures.DualNot.Rule.backward).2
-      |>.writesOutputs.labels) = [.backward] := rfl
-
-def forwardSchedule : OutputSchedule Examples.Fixtures.HierarchicalDualNot.body
-    childContracts Examples.Fixtures.DualNot.cycleContract .forward :=
-  .call forwardOccurrence
-    (by
-      intro port member
-      cases port
-      change Examples.Fixtures.DualNot.Input.forward ∈
-        (Examples.Fixtures.DualNot.cycleContract.outputRule .forward).2.readsInputs.labels
-      simp)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | forward =>
-        change outputAvailable [forwardOccurrence] .forwardNot .output
-        exact ⟨Primitives.NotRule.apply, by simp, by simp⟩
-    | backward =>
-        simp at member))
-
-def backwardSchedule : OutputSchedule Examples.Fixtures.HierarchicalDualNot.body
-    childContracts Examples.Fixtures.DualNot.cycleContract .backward :=
-  .call backwardOccurrence
-    (by
-      intro port member
-      cases port
-      change Examples.Fixtures.DualNot.Input.backward ∈
-        (Examples.Fixtures.DualNot.cycleContract.outputRule .backward).2.readsInputs.labels
-      simp)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output with
-    | forward =>
-        simp at member
-    | backward =>
-        change outputAvailable [backwardOccurrence] .backwardNot .output
-        exact ⟨Primitives.NotRule.apply, by simp, by simp⟩))
-
-def stateSchedule : StateSchedule Examples.Fixtures.HierarchicalDualNot.body
-    childContracts :=
-  .done (by
-    intro child input member
-    cases child <;>
-      simp [childContracts, Examples.Fixtures.HierarchicalDualNot.childContracts,
-        Primitives.notCycleContract, Contracts.Cycle.CycleStateRule.empty,
-        SignalSelection.labels] at member)
-
-def ruleSchedules : RuleSchedules Examples.Fixtures.HierarchicalDualNot.body
-    childContracts Examples.Fixtures.DualNot.cycleContract where
+def scheduleOrders : ScheduleDerivation.RuleScheduleOrders
+    Examples.Fixtures.HierarchicalDualNot.body childContracts
+    Examples.Fixtures.DualNot.cycleContract where
   output
-    | .forward => forwardSchedule
-    | .backward => backwardSchedule
-  state := stateSchedule
+    | .forward => [forwardOccurrence]
+    | .backward => [backwardOccurrence]
+  state := []
 
-theorem coversChildren : ruleSchedules.CoversChildren := by
-  intro child rule
-  cases child <;> cases rule
-  · right
-    refine ⟨.forward, ?_⟩
-    change forwardOccurrence ∈ forwardSchedule.finalAvailability
-    simp [forwardSchedule]
-  · right
-    refine ⟨.backward, ?_⟩
-    change backwardOccurrence ∈ backwardSchedule.finalAvailability
-    simp [backwardSchedule]
+def derivedRuleSchedules : ScheduleDerivation.DerivedRuleSchedules
+    Examples.Fixtures.HierarchicalDualNot.body childContracts
+    Examples.Fixtures.DualNot.cycleContract := by
+  derive_rule_schedules scheduleOrders
+
+abbrev ruleSchedules := derivedRuleSchedules.schedules
+
+theorem coversChildren : ruleSchedules.CoversChildren :=
+  derivedRuleSchedules.coversChildren
+
+
 
 theorem hasAtMostOneSolution :
     Examples.Fixtures.HierarchicalDualNot.moduleStructure.HasAtMostOneSolution :=

@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Foundation.BitVector
 import Silean.Modules.Constant
 import Silean.Modules.Mask
@@ -10,6 +11,7 @@ import Silean.Primitives.NotPrimitive
 namespace Silean.Modules.BinaryToOneHot
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! A combinational binary-to-one-hot decoder. For a `width`-bit input, exactly
 one of the `2 ^ width` output bits is asserted. -/
@@ -295,42 +297,19 @@ private abbrev baseOccurrence :
     Contracts.Cycle.Certification.Layer.RuleOccurrence baseBody baseChildContracts :=
   ⟨.constant, Primitives.ConstantRule.apply⟩
 
-private def baseOutputSchedule : Contracts.Cycle.Certification.Layer.OutputSchedule
-    baseBody baseChildContracts
-    (cycleContract 0) .apply :=
-  .call baseOccurrence
-    (by intro input member; exact nomatch input)
-    (by simp)
-    (.done (by
-      intro output _
-      cases output
-      exact ⟨Primitives.ConstantRule.apply, by simp,
-        by change Primitives.SingleOutput.output ∈ [.output]; simp⟩))
+private def baseScheduleOrders : ScheduleDerivation.RuleScheduleOrders
+    baseBody baseChildContracts (cycleContract 0) where
+  output | .apply => [baseOccurrence]
+  state := []
 
-private def baseStateSchedule : Contracts.Cycle.Certification.Layer.StateSchedule
-    baseBody baseChildContracts :=
-  .done (by
-    intro child input member
-    cases child
-    change input ∈ (Contracts.Cycle.CycleStateRule.empty
-      (Modules.Constant.ports (.vector 1 .bit))).readsInputs.labels at member
-    exact nomatch member)
+private def baseDerivedRuleSchedules : ScheduleDerivation.DerivedRuleSchedules
+    baseBody baseChildContracts (cycleContract 0) := by
+  derive_rule_schedules baseScheduleOrders
 
-private def baseSchedules : Contracts.Cycle.Certification.Layer.RuleSchedules
-    baseBody baseChildContracts
-    (cycleContract 0) where
-  output | .apply => baseOutputSchedule
-  state := baseStateSchedule
+private abbrev baseSchedules := baseDerivedRuleSchedules.schedules
 
-private theorem baseCoversChildren : baseSchedules.CoversChildren := by
-  intro child rule
-  cases child
-  change Primitives.ConstantRule at rule
-  cases rule
-  right
-  refine ⟨.apply, ?_⟩
-  change baseOccurrence ∈ baseOutputSchedule.finalAvailability
-  simp [baseOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+private theorem baseCoversChildren : baseSchedules.CoversChildren :=
+  baseDerivedRuleSchedules.coversChildren
 
 private theorem baseImplements
     (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
@@ -419,154 +398,26 @@ private abbrev concatOccurrence (width) :
       (succBody width) (succChildContracts width) :=
   ⟨.concat, Modules.VectorConcat.Rule.apply⟩
 
-private def succOutputSchedule (width : Nat) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule (succBody width) (succChildContracts width)
-      (cycleContract (width + 1)) .apply :=
-  .call (splitOccurrence width)
-    (by
-      intro input _
-      cases input
-      simp [cycleContract, outputRule, SignalMap.select,
-        SignalSelection.labels, Contracts.Cycle.Certification.Layer.sourceAvailable, succBody,
-        succWiring, succContext, EndpointContext.moduleInput])
-    (by simp)
-  (.call (lowerBitsOccurrence width)
-    (by
-      intro index _
-      exact ⟨Composition.SignalComponentRule.apply, by simp, by
-        change index.castSucc ∈ (splitOccurrence width).writes
-        rw [show (splitOccurrence width).writes =
-            (splitter width).ports.outputs.labels.values by
-          change (splitter width).ports.outputs.allSelection.labels = _
-          rw [SignalMap.allSelection_labels]]
-        exact ListIndex.get_eq
-          ((splitter width).ports.outputs.labels.locate index.castSucc) ▸
-            List.get_mem _ _⟩)
-    (by simp)
-  (.call (decodeOccurrence width)
-    (by intro port _; cases port; exact ⟨Composition.SignalComponentRule.apply, by simp, by
-      change Composition.AggregatePort.value ∈ [Composition.AggregatePort.value]; simp⟩)
-    (by simp)
-  (.call (invertOccurrence width)
-    (by intro port _; cases port; exact ⟨Composition.SignalComponentRule.apply, by simp, by
-      change highIndex width ∈ (splitOccurrence width).writes
-      rw [show (splitOccurrence width).writes =
-          (splitter width).ports.outputs.labels.values by
-        change (splitter width).ports.outputs.allSelection.labels = _
-        rw [SignalMap.allSelection_labels]]
-      exact ListIndex.get_eq
-        ((splitter width).ports.outputs.labels.locate (highIndex width)) ▸
-          List.get_mem _ _⟩)
-    (by simp)
-  (.call (lowerOccurrence width)
-    (by intro input _; cases input with
-      | value => exact ⟨Rule.apply, by simp, by
-          change Output.result ∈ [Output.result]; simp⟩
-      | mask => exact ⟨Primitives.NotRule.apply, by simp, by
-          change Primitives.SingleOutput.output ∈ [.output]; simp⟩)
-    (by simp)
-  (.call (upperOccurrence width)
-    (by intro input _; cases input with
-      | value => exact ⟨Rule.apply, by simp, by
-          change Output.result ∈ [Output.result]; simp⟩
-      | mask => exact ⟨Composition.SignalComponentRule.apply, by simp, by
-          change highIndex width ∈ (splitOccurrence width).writes
-          rw [show (splitOccurrence width).writes =
-              (splitter width).ports.outputs.labels.values by
-            change (splitter width).ports.outputs.allSelection.labels = _
-            rw [SignalMap.allSelection_labels]]
-          exact ListIndex.get_eq
-            ((splitter width).ports.outputs.labels.locate (highIndex width)) ▸
-              List.get_mem _ _⟩)
-    (by simp)
-  (.call (concatOccurrence width)
-    (by intro input _; cases input with
-      | left => exact ⟨Modules.Mask.Rule.apply, by simp, by
-          change Modules.Mask.Output.result ∈ [Modules.Mask.Output.result]; simp⟩
-      | right => exact ⟨Modules.Mask.Rule.apply, by simp, by
-          change Modules.Mask.Output.result ∈ [Modules.Mask.Output.result]; simp⟩)
-    (by simp)
-  (.done (by
-    intro output _
-    cases output
-    exact ⟨Modules.VectorConcat.Rule.apply, by simp, by
-      change Modules.VectorConcat.Output.result ∈ [.result]; simp⟩))))))))
+private def succScheduleOrders (width : Nat) :
+    ScheduleDerivation.RuleScheduleOrders (succBody width)
+      (succChildContracts width) (cycleContract (width + 1)) where
+  output := fun
+    | .apply => [splitOccurrence width, lowerBitsOccurrence width,
+        decodeOccurrence width, invertOccurrence width, lowerOccurrence width,
+        upperOccurrence width, concatOccurrence width]
+  state := []
 
-private def succStateSchedule (width : Nat) :
-    Contracts.Cycle.Certification.Layer.StateSchedule (succBody width) (succChildContracts width) :=
-  .done (by
-    intro child input member
-    cases child with
-    | split | lowerBits =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
-    | decode =>
-        change input ∈ (cycleContract width).stateRule.readsInputs.labels at member
-        exact nomatch member
-    | invert =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
-    | lowerMask | upperMask =>
-        change input ∈ (Modules.Mask.cycleContract _).stateRule.readsInputs.labels at member
-        exact nomatch member
-    | concat =>
-        change input ∈ (Modules.VectorConcat.cycleContract _ _ _).stateRule.readsInputs.labels at member
-        exact nomatch member)
+private def succDerivedRuleSchedules (width : Nat) :
+    ScheduleDerivation.DerivedRuleSchedules (succBody width)
+      (succChildContracts width) (cycleContract (width + 1)) := by
+  derive_rule_schedules (succScheduleOrders width)
 
-private def succSchedules (width : Nat) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules (succBody width) (succChildContracts width)
-      (cycleContract (width + 1)) where
-  output | .apply => succOutputSchedule width
-  state := succStateSchedule width
+private abbrev succSchedules (width : Nat) :=
+  (succDerivedRuleSchedules width).schedules
 
 private theorem succCoversChildren (width : Nat) :
-    (succSchedules width).CoversChildren := by
-  intro child rule
-  right
-  refine ⟨.apply, ?_⟩
-  cases child with
-  | split =>
-      change Composition.SignalComponentRule at rule
-      cases rule
-      change splitOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | lowerBits =>
-      change Composition.SignalComponentRule at rule
-      cases rule
-      change lowerBitsOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | decode =>
-      change Rule at rule
-      cases rule
-      change decodeOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | invert =>
-      change Primitives.NotRule at rule
-      cases rule
-      change invertOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | lowerMask =>
-      change Modules.Mask.Rule at rule
-      cases rule
-      change lowerOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | upperMask =>
-      change Modules.Mask.Rule at rule
-      cases rule
-      change upperOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | concat =>
-      change Modules.VectorConcat.Rule at rule
-      cases rule
-      change concatOccurrence width ∈
-        (succOutputSchedule width).finalAvailability
-      simp [succOutputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (succSchedules width).CoversChildren :=
+  (succDerivedRuleSchedules width).coversChildren
 
 private def splitInputs (width : Nat) (inputs : (ports (width + 1)).inputs.Values) :
     (splitter width).ports.inputs.Values

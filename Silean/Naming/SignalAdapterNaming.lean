@@ -8,7 +8,7 @@ def splitterPortsWithNaming : (splitter : Composition.SignalSplitter) →
     SignalTypeNaming splitter.aggregateType → ModulePortsNaming splitter.ports
   | .vector length element, aggregateNaming =>
       { inputs := .indexed (aggregateSignalMap (.vector length element)) "aggregate"
-        outputs := .indexed (SignalType.vectorComponents length element) "component"
+        outputs := ⟨fun component => .indexed "component" component.val⟩
         inputTypes := fun | .value => aggregateNaming
         outputTypes := fun component => aggregateNaming.component component }
   | .tuple fields, aggregateNaming =>
@@ -20,7 +20,7 @@ def splitterPortsWithNaming : (splitter : Composition.SignalSplitter) →
 def combinerPortsWithNaming : (combiner : Composition.SignalCombiner) →
     SignalTypeNaming combiner.aggregateType → ModulePortsNaming combiner.ports
   | .vector length element, aggregateNaming =>
-      { inputs := .indexed (SignalType.vectorComponents length element) "component"
+      { inputs := ⟨fun component => .indexed "component" component.val⟩
         outputs := .indexed (aggregateSignalMap (.vector length element)) "aggregate"
         inputTypes := fun component => aggregateNaming.component component
         outputTypes := fun | .value => aggregateNaming }

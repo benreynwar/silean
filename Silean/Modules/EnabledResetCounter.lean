@@ -1,10 +1,12 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.EnabledResetRegister
 import Silean.Modules.Increment
 
 namespace Silean.Modules.EnabledResetCounter
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-- A wrapping binary counter which increments when enabled and can
 synchronously reset to a fixed bit-vector value. -/
@@ -185,81 +187,23 @@ private abbrev storageRule (width : Nat) (resetValue : Value width) :
       (body width) (childContracts width resetValue) :=
   ⟨.storage, EnabledResetRegister.Rule.observe⟩
 
-@[simp] private theorem incrementRule_reads (width : Nat)
-    (resetValue : Value width) :
-    (incrementRule width resetValue).reads = [.value] := rfl
+private def scheduleOrders (width : Nat) (resetValue : Value width) :
+    ScheduleDerivation.RuleScheduleOrders (body width)
+      (childContracts width resetValue) (cycleContract width resetValue) where
+  output | .observe => [storageRule width resetValue]
+  state := [storageRule width resetValue, incrementRule width resetValue]
 
-@[simp] private theorem incrementRule_writes (width : Nat)
-    (resetValue : Value width) :
-    (incrementRule width resetValue).writes = [.result] := rfl
+private def derivedRuleSchedules (width : Nat) (resetValue : Value width) :
+    ScheduleDerivation.DerivedRuleSchedules (body width)
+      (childContracts width resetValue) (cycleContract width resetValue) := by
+  derive_rule_schedules (scheduleOrders width resetValue)
 
-@[simp] private theorem storageRule_reads (width : Nat)
-    (resetValue : Value width) :
-    (storageRule width resetValue).reads = [] := rfl
-
-@[simp] private theorem storageRule_writes (width : Nat)
-    (resetValue : Value width) :
-    (storageRule width resetValue).writes = [.value] := rfl
-
-private def outputSchedule (width : Nat) (resetValue : Value width) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body width) (childContracts width resetValue)
-      (cycleContract width resetValue) .observe :=
-  .call (storageRule width resetValue)
-    (by intro input member; simp [storageRule_reads] at member)
-    (by simp)
-  (.done (by
-    intro output _
-    cases output
-    exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩))
-
-private def stateSchedule (width : Nat) (resetValue : Value width) :
-    Contracts.Cycle.Certification.Layer.StateSchedule
-      (body width) (childContracts width resetValue) :=
-  .call (storageRule width resetValue)
-    (by intro input member; simp [storageRule_reads] at member)
-    (by simp)
-  (.call (incrementRule width resetValue)
-    (by intro input _; cases input
-        exact ⟨EnabledResetRegister.Rule.observe, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro child input member
-    cases child with
-    | increment =>
-        change input ∈ (Contracts.Cycle.CycleStateRule.empty _).readsInputs.labels at member
-        exact nomatch member
-    | storage =>
-        cases input with
-        | value => exact ⟨Increment.Rule.apply, by simp, by simp⟩
-        | enable | reset => trivial)))
-
-private def ruleSchedules (width : Nat) (resetValue : Value width) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
-      (body width) (childContracts width resetValue)
-      (cycleContract width resetValue) where
-  output | .observe => outputSchedule width resetValue
-  state := stateSchedule width resetValue
+private abbrev ruleSchedules (width : Nat) (resetValue : Value width) :=
+  (derivedRuleSchedules width resetValue).schedules
 
 private theorem coversChildren (width : Nat) (resetValue : Value width) :
-    (ruleSchedules width resetValue).CoversChildren := by
-  intro child rule
-  cases child with
-  | increment =>
-      change Increment.Rule at rule
-      cases rule
-      left
-      change incrementRule width resetValue ∈
-        (stateSchedule width resetValue).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | storage =>
-      change EnabledResetRegister.Rule at rule
-      cases rule
-      right
-      refine ⟨.observe, ?_⟩
-      change storageRule width resetValue ∈
-        (outputSchedule width resetValue).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (ruleSchedules width resetValue).CoversChildren :=
+  (derivedRuleSchedules width resetValue).coversChildren
 
 section LayerCertification
 

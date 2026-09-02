@@ -1,10 +1,12 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.Mux
 import Silean.Modules.ResetRegister
 
 namespace Silean.Modules.EnabledResetRegister
 
 open Silean
+open Contracts.Cycle.Certification.Layer
 
 /-! ## Hardware structure -/
 
@@ -179,98 +181,27 @@ private abbrev storageRule (signalType : SignalType)
       (body signalType) (childContracts signalType resetValue) :=
   ⟨.storage, ResetRegister.Rule.observe⟩
 
-@[simp] private theorem selectionRule_reads (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    (selectionRule signalType resetValue).reads =
-      [.select, .whenFalse, .whenTrue] := rfl
-
-@[simp] private theorem selectionRule_writes (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    (selectionRule signalType resetValue).writes = [.result] := rfl
-
-@[simp] private theorem storageRule_reads (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    (storageRule signalType resetValue).reads = [] := rfl
-
-@[simp] private theorem storageRule_writes (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    (storageRule signalType resetValue).writes = [.value] := rfl
-
-private def outputSchedule (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    Contracts.Cycle.Certification.Layer.OutputSchedule
-      (body signalType) (childContracts signalType resetValue)
-      (cycleContract signalType resetValue) .observe :=
-  .call (storageRule signalType resetValue)
-    (by
-      intro port member
-      simp [storageRule_reads] at member)
-    (by simp)
-  (.done (by
-    intro output member
-    cases output
-    change Contracts.Cycle.Certification.Layer.outputAvailable
-      ([storageRule signalType resetValue] :
-        Contracts.Cycle.Certification.Layer.Availability
-          (body signalType) (childContracts signalType resetValue)) .storage .value
-    exact ⟨ResetRegister.Rule.observe, by simp, by simp⟩))
-
-private def stateSchedule (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    Contracts.Cycle.Certification.Layer.StateSchedule
-      (body signalType) (childContracts signalType resetValue) :=
-  .call (storageRule signalType resetValue)
-    (by
-      intro port member
-      simp [storageRule_reads] at member)
-    (by simp)
-  (.call (selectionRule signalType resetValue)
-    (by
-      intro input member
-      cases input with
-      | select | whenTrue => trivial
-      | whenFalse =>
-          exact ⟨ResetRegister.Rule.observe, by simp, by simp⟩)
-    (by simp)
-  (.done (by
-    intro child input member
-    cases child with
-    | selection =>
-        simp [childContracts, Mux.cycleContract, Mux.stateRule, Contracts.Cycle.CycleStateRule.empty,
-          SignalSelection.labels] at member
-    | storage =>
-        cases input with
-        | value => exact ⟨Mux.Rule.select, by simp, by simp⟩
-        | reset => trivial)))
-
-private def ruleSchedules (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    Contracts.Cycle.Certification.Layer.RuleSchedules
+private def scheduleOrders (signalType : SignalType)
+    (resetValue : signalType.Denote) : ScheduleDerivation.RuleScheduleOrders
       (body signalType) (childContracts signalType resetValue)
       (cycleContract signalType resetValue) where
-  output | .observe => outputSchedule signalType resetValue
-  state := stateSchedule signalType resetValue
+  output | .observe => [storageRule signalType resetValue]
+  state := [storageRule signalType resetValue, selectionRule signalType resetValue]
+
+private def derivedRuleSchedules (signalType : SignalType)
+    (resetValue : signalType.Denote) : ScheduleDerivation.DerivedRuleSchedules
+      (body signalType) (childContracts signalType resetValue)
+      (cycleContract signalType resetValue) := by
+  derive_rule_schedules (scheduleOrders signalType resetValue)
+
+private abbrev ruleSchedules (signalType : SignalType)
+    (resetValue : signalType.Denote) :=
+  (derivedRuleSchedules signalType resetValue).schedules
 
 private theorem coversChildren (signalType : SignalType)
     (resetValue : signalType.Denote) :
-    (ruleSchedules signalType resetValue).CoversChildren := by
-  intro child rule
-  cases child with
-  | selection =>
-      change Mux.Rule at rule
-      cases rule
-      left
-      change selectionRule signalType resetValue ∈
-        (stateSchedule signalType resetValue).finalAvailability
-      simp [stateSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
-  | storage =>
-      change ResetRegister.Rule at rule
-      cases rule
-      right
-      refine ⟨.observe, ?_⟩
-      change storageRule signalType resetValue ∈
-        (outputSchedule signalType resetValue).finalAvailability
-      simp [outputSchedule, Contracts.Cycle.Certification.Layer.Schedule.finalAvailability]
+    (ruleSchedules signalType resetValue).CoversChildren :=
+  (derivedRuleSchedules signalType resetValue).coversChildren
 
 section LayerCertification
 

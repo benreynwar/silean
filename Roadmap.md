@@ -63,14 +63,6 @@ ALU and register-file children currently have closed certified structures.
 
 ## Near-term work
 
-### Commit the cleanup checkpoint
-
-The architectural cleanup has passed the full Lean and generated-hardware
-regressions. Commit the accumulated changes before beginning another PicoRV
-implementation. Split a large module later only when its private certification
-detail demonstrably obscures the public ports, contract, structure, laws, and
-naming; use a unique descriptive sibling filename when that becomes useful.
-
 ### Replace PicoRV32 child blackboxes
 
 Implement and certify the remaining direct children against their existing
@@ -81,6 +73,23 @@ contracts, one source-faithful subsystem at a time:
 3. datapath, including iterative shifts and the already-certified ALU child;
 4. control state machine; and
 5. the top-level hierarchy with every blackbox replaced.
+
+The decoder now has natural contracts for its 14-register capture stage and
+45-register resolve stage. The capture stage has a closed certified structure,
+and the certified parent uses it while retaining only the resolve stage as an
+explicit blackbox. The resolve stage's private combinational instruction-match,
+immediate, and summary boundaries now have natural zero-state cycle contracts
+and focused checks. Next, implement and certify the resolve stage using those
+contracts; its update logic must preserve the verified pre-edge dependencies and reset priority
+described in [docs/PicoRV32Plan.md](docs/PicoRV32Plan.md).
+
+Reusable `VectorSlice` and `EqualsConstant` modules now provide the recurring
+field-extraction and fixed-pattern comparisons needed by decoder structures.
+The generic balanced reduction machinery now directly supports both the
+certified `All` (AND/true) and `Any` (OR/false) Boolean specializations; decoder
+summary logic can use `Any` instead of hand-built OR chains.
+Both have natural contracts and closed certified implementations; decoder code
+should use these modules instead of rebuilding those compositions locally.
 
 Child order may change when dependency evidence suggests a better route, but
 all concrete structures must preserve the configured `picorv32.v` signal and
