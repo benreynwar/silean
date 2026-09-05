@@ -55,7 +55,8 @@ end Rule
 def outputRule := Composition.BinaryLeafwise.outputRule
 @[reducible] def cycleContract := Composition.BinaryLeafwise.cycleContract
 def bitModuleStructure := Composition.BinaryLeafwise.bitModuleStructure
-def moduleStructure := Composition.BinaryLeafwise.moduleStructure
+def moduleStructure (signalType : SignalType) :=
+  Composition.BinaryLeafwise.moduleStructure signalType
 
 noncomputable def certified (signalType : SignalType) :=
   Composition.BinaryLeafwise.certified signalType

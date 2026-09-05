@@ -1,8 +1,9 @@
-import Silean.Naming
+import Silean.Authoring.SignalSchemaDeclaration
 
 namespace Silean.Emitters.StructuredPayload
 
 open Silean
+open Silean.Authoring
 
 /-! Shared backend fixture with enough hierarchy to exercise labelled tuple and
 vector payload names through FIRRTL and flattened SystemVerilog ports.
@@ -10,22 +11,24 @@ vector payload names through FIRRTL and flattened SystemVerilog ports.
 `{ a : Vector 3 Bit,
    b : { c : Bit, d : Vector 2 { e : Bit, f : Bit } } }`. -/
 
-def elementType : SignalType :=
-  .tuple (.cons .bit (.cons .bit .nil))
+signal_schema Element where
+  e : SignalSchema.bit,
+  f : SignalSchema.bit
 
-def bType : SignalType :=
-  .tuple (.cons .bit (.cons (.vector 2 elementType) .nil))
+signal_schema B where
+  c : SignalSchema.bit,
+  d : SignalSchema.vector 2 Element.schema
 
-def type : SignalType :=
-  .tuple (.cons (.vector 3 .bit) (.cons bType .nil))
+signal_schema Payload where
+  a : SignalSchema.vector 3 SignalSchema.bit,
+  b : B.schema
 
-def elementNaming : Naming.SignalTypeNaming elementType :=
-  .tuple (.cons "e" .bit (.cons "f" .bit .nil))
+abbrev elementType : SignalType := Element.signalType
+abbrev bType : SignalType := B.signalType
+abbrev type : SignalType := Payload.signalType
 
-def bNaming : Naming.SignalTypeNaming bType :=
-  .tuple (.cons "c" .bit (.cons "d" (.vector elementNaming) .nil))
-
-def naming : Naming.SignalTypeNaming type :=
-  .tuple (.cons "a" (.vector .bit) (.cons "b" bNaming .nil))
+abbrev elementNaming : Naming.SignalTypeNaming elementType := Element.schema
+abbrev bNaming : Naming.SignalTypeNaming bType := B.schema
+abbrev naming : Naming.SignalTypeNaming type := Payload.schema
 
 end Silean.Emitters.StructuredPayload

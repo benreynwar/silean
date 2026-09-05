@@ -178,14 +178,11 @@ def fold (operation : α → α → α) (identity : α) :
 def outputRule (signalType : SignalType)
     (operation : signalType.Denote → signalType.Denote → signalType.Denote)
     (identity : signalType.Denote) (tree : Tree) :
-    Contracts.Cycle.CycleOutputRule (ports signalType tree) emptySignalMap
-      { inputTypes := SignalTypes.ofList (inputMap signalType tree).types
-        outputTypes := .cons signalType .nil } where
-  readsInputs := (inputMap signalType tree).allSelection
-  writesOutputs := (outputMap signalType).select .output
-  target := fun packed _ =>
-    (fold operation identity tree fun index =>
-      (inputMap signalType tree).unpack packed (.leaf index), ())
+    Contracts.Cycle.CycleOutputRule (ports signalType tree) emptySignalMap where
+  readsInputs := .all (inputMap signalType tree)
+  writesOutputs := .all (outputMap signalType)
+  target inputs _ := fun
+    | .output => fold operation identity tree fun index => inputs (.leaf index)
 
 @[reducible] def cycleContract (signalType : SignalType)
     (operation : signalType.Denote → signalType.Denote → signalType.Denote)
@@ -194,7 +191,7 @@ def outputRule (signalType : SignalType)
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule signalType operation identity tree⟩
+  outputRule | .apply => outputRule signalType operation identity tree
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -203,26 +200,22 @@ def outputRule (signalType : SignalType)
     (outputRule signalType operation identity tree).Holds inputs state outputs ↔
       outputs .output = fold operation identity tree (fun index =>
         inputs (.leaf index)) := by
-  have values_eq :
-      (fun index => (inputMap signalType tree).unpack
-        ((inputMap signalType tree).allSelection.project inputs) (.leaf index)) =
-      (fun index => inputs (.leaf index)) := by
-    funext index
-    exact congrFun (SignalMap.unpack_project (inputMap signalType tree) inputs)
-      (.leaf index)
-  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalMap.select]
-  rw [values_eq]
-  simp
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .output
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
 def binaryOutputRule (signalType : SignalType)
     (operation : signalType.Denote → signalType.Denote → signalType.Denote) :
-    Contracts.Cycle.CycleOutputRule (binaryPorts signalType) emptySignalMap
-      { inputTypes := .cons signalType (.cons signalType .nil)
-        outputTypes := .cons signalType .nil } where
-  readsInputs := ((binaryInputMap signalType).select .right).prepend .left
-  writesOutputs := (outputMap signalType).select .output
-  target | (left, (right, ())), _ => (operation left right, ())
+    Contracts.Cycle.CycleOutputRule (binaryPorts signalType) emptySignalMap where
+  readsInputs := .all (binaryInputMap signalType)
+  writesOutputs := .all (outputMap signalType)
+  target inputs _ := fun | .output => operation (inputs .left) (inputs .right)
 
 @[reducible] def binaryCycleContract (signalType : SignalType)
     (operation : signalType.Denote → signalType.Denote → signalType.Denote) :
@@ -230,7 +223,7 @@ def binaryOutputRule (signalType : SignalType)
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, binaryOutputRule signalType operation⟩
+  outputRule | .apply => binaryOutputRule signalType operation
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -240,8 +233,15 @@ def binaryOutputRule (signalType : SignalType)
     (outputs : (binaryPorts signalType).outputs.Values) :
     (binaryOutputRule signalType operation).Holds inputs state outputs ↔
       outputs .output = operation (inputs .left) (inputs .right) := by
-  simp [binaryOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalSelection.prepend, SignalMap.select]
+  simp only [binaryOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .output
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
 abbrev BinaryImplementation (signalType : SignalType)
     (operation : signalType.Denote → signalType.Denote → signalType.Denote) :=
@@ -257,18 +257,17 @@ def BinaryImplementation.certified
   ⟨emptySignalMap, outputMap signalType⟩
 
 def identityOutputRule (signalType : SignalType) (identity : signalType.Denote) :
-    Contracts.Cycle.CycleOutputRule (identityPorts signalType) emptySignalMap
-      { inputTypes := .nil, outputTypes := .cons signalType .nil } where
-  readsInputs := .nil
-  writesOutputs := (outputMap signalType).select .output
-  target | (), _ => (identity, ())
+    Contracts.Cycle.CycleOutputRule (identityPorts signalType) emptySignalMap where
+  readsInputs := .empty (identityPorts signalType).inputs
+  writesOutputs := .all (outputMap signalType)
+  target _ _ := fun | .output => identity
 
 @[reducible] def identityCycleContract (signalType : SignalType)
     (identity : signalType.Denote) : Contracts.Cycle.ModuleCycleContract (identityPorts signalType) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, identityOutputRule signalType identity⟩
+  outputRule | .apply => identityOutputRule signalType identity
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -278,8 +277,15 @@ def identityOutputRule (signalType : SignalType) (identity : signalType.Denote) 
     (outputs : (identityPorts signalType).outputs.Values) :
     (identityOutputRule signalType identity).Holds inputs state outputs ↔
       outputs .output = identity := by
-  simp [identityOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalMap.select]
+  simp only [identityOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .output
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
 abbrev IdentityImplementation (signalType : SignalType)
     (identity : signalType.Denote) :=

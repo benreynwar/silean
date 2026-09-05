@@ -3,7 +3,7 @@ import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Composition.LeafwiseComposition
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
-import Silean.Primitives.RegisterPrimitive
+import Silean.Primitives.Register
 import Silean.Composition.SignalAdapterImplementation
 
 namespace Silean.Modules.Register
@@ -49,29 +49,26 @@ from registers for their component signal types. -/
 abbrev Rule := Primitives.RegisterRule
 
 def outputRule (signalType : SignalType) :
-    Contracts.Cycle.CycleOutputRule (ports signalType) (stateMap signalType)
-      { inputTypes := .nil
-        outputTypes := .cons signalType .nil } where
-  readsInputs := .nil
-  writesOutputs := (outputMap signalType).select .output
-  target | (), state => (state .stored, ())
+    Contracts.Cycle.CycleOutputRule (ports signalType) (stateMap signalType) where
+  readsInputs := .empty (inputMap signalType)
+  writesOutputs := .all (outputMap signalType)
+  target _ state := fun | .output => state .stored
 
 def stateRule (signalType : SignalType) :
     Contracts.Cycle.CycleStateRule (ports signalType) (stateMap signalType) where
-  inputTypes := .cons signalType .nil
-  readsInputs := (inputMap signalType).select .input
-  target := fun | (input, ()), _ => fun | .stored => input
+  readsInputs := .all (inputMap signalType)
+  target inputs _ := fun | .stored => inputs .input
 
 @[reducible] def cycleContract (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleContract (ports signalType) where
   state := stateMap signalType
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .observe => ⟨_, outputRule signalType⟩
+  outputRule | .observe => outputRule signalType
   stateRule := stateRule signalType
   outputCoverage := by rfl
 
-@[reducible] def aggregateBody (splitter : Composition.SignalSplitter) :=
+@[reducible] private def aggregateBody (splitter : Composition.SignalSplitter) :=
   interface.aggregateBody splitter
 
 theorem bit_ports : ports .bit = Primitives.register.ports := rfl
@@ -82,28 +79,34 @@ theorem bit_contract : cycleContract .bit = Primitives.registerCycleContract := 
 A bit is one register primitive. A vector or tuple is split into its immediate
 components, registered recursively, and recombined with the same shape. -/
 
-def moduleStructure : (signalType : SignalType) → ModuleStructure (ports signalType)
-  := interface.moduleStructure (.primitive Primitives.register)
+def moduleStructure (signalType : SignalType) :
+    ModuleStructure (ports signalType) :=
+  interface.moduleStructure (.primitive Primitives.register) signalType
 
 abbrev Implementation (signalType : SignalType) :=
-  Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType) (cycleContract signalType)
+  Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType)
+    (cycleContract signalType)
 
-def Implementation.certified (implementation : Implementation signalType) :
+def Implementation.certified {signalType : SignalType}
+    (implementation : Implementation signalType) :
     Contracts.Cycle.ModuleCycleCertified (ports signalType) := implementation.bundle
 
-@[reducible] def componentContracts (splitter : Composition.SignalSplitter) :
+@[reducible] private def componentContracts (splitter : Composition.SignalSplitter) :
     (component : splitter.ports.outputs.Label) →
       Contracts.Cycle.ModuleCycleContract
         (ports (splitter.ports.outputs.signalType component)) :=
   fun component => cycleContract (splitter.ports.outputs.signalType component)
 
-@[reducible] def aggregateChildContracts (splitter : Composition.SignalSplitter) :=
+@[reducible] private def aggregateChildContracts (splitter : Composition.SignalSplitter) :=
   interface.aggregateChildContracts splitter (componentContracts splitter)
 
 def bitImplementation : Implementation .bit := by
   have structureEq : Primitives.registerCertified.moduleStructure =
       moduleStructure .bit := by
-    rw [moduleStructure, Composition.LeafwiseInterface.moduleStructure.eq_1]
+    change Primitives.registerCertified.moduleStructure =
+      moduleStructure .bit
+    unfold moduleStructure
+    rw [Composition.LeafwiseInterface.moduleStructure.eq_1]
     simp [Primitives.registerCertified]
   have contractEq : Primitives.registerCertified.cycleContract =
       cycleContract .bit := by
@@ -115,18 +118,18 @@ def bitImplementation : Implementation .bit := by
     |>.transportStructure structureEq
     |>.transportContract contractEq
 
-def aggregateSplitterInputs (splitter : Composition.SignalSplitter)
+private def aggregateSplitterInputs (splitter : Composition.SignalSplitter)
     (inputs : (ports splitter.aggregateType).inputs.Values) :
     splitter.ports.inputs.Values :=
   splitter.inputValues (inputs .input)
 
-abbrev splitOccurrence (splitter : Composition.SignalSplitter) :
+private abbrev splitOccurrence (splitter : Composition.SignalSplitter) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (aggregateBody splitter) (aggregateChildContracts splitter) :=
   interface.splitterOccurrence splitter
     (componentContracts splitter) .unit
 
-abbrev componentOccurrence (splitter : Composition.SignalSplitter)
+private abbrev componentOccurrence (splitter : Composition.SignalSplitter)
     (component : splitter.ports.outputs.Label) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (aggregateBody splitter) (aggregateChildContracts splitter) :=
@@ -134,7 +137,7 @@ abbrev componentOccurrence (splitter : Composition.SignalSplitter)
     (componentContracts splitter) component
       Primitives.RegisterRule.observe
 
-abbrev combineOccurrence (splitter : Composition.SignalSplitter) :
+private abbrev combineOccurrence (splitter : Composition.SignalSplitter) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (aggregateBody splitter) (aggregateChildContracts splitter) :=
   interface.combinerOccurrence splitter
@@ -158,11 +161,11 @@ private noncomputable def aggregateDerivedRuleSchedules
   | tuple fields =>
       derive_rule_schedules (aggregateScheduleOrders (.tuple fields))
 
-noncomputable abbrev aggregateRuleSchedules
+private noncomputable abbrev aggregateRuleSchedules
     (splitter : Composition.SignalSplitter) :=
   (aggregateDerivedRuleSchedules splitter).schedules
 
-theorem aggregateCoversChildren (splitter : Composition.SignalSplitter) :
+private theorem aggregateCoversChildren (splitter : Composition.SignalSplitter) :
     (aggregateRuleSchedules splitter).CoversChildren :=
   (aggregateDerivedRuleSchedules splitter).coversChildren
 
@@ -172,10 +175,17 @@ theorem aggregateCoversChildren (splitter : Composition.SignalSplitter) :
     (outputs : (ports signalType).outputs.Values) :
     (outputRule signalType).Holds inputs state outputs ↔
       outputs .output = state .stored := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .output
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
-@[reducible] def aggregateComponentContractState (splitter : Composition.SignalSplitter)
+@[reducible] private def aggregateComponentContractState (splitter : Composition.SignalSplitter)
     (contractState : (stateMap splitter.aggregateType).Values)
     (component : splitter.ports.outputs.Label) :
     (stateMap (splitter.ports.outputs.signalType component)).Values := fun
@@ -356,7 +366,7 @@ private theorem aggregateImplements :
           rw [boundaryOutput', combinedOutput]
           change fields.assemble (fun component =>
             (childProposals (.component component)).outputs .output) = contractState .stored
-          have componentFunction : (fun component : SignalTypes.Position fields =>
+          have componentFunction : (fun component : fields.Position =>
               (childProposals (.component component)).outputs .output) =
               fields.get (contractState .stored) := by
             funext component
@@ -379,8 +389,7 @@ private theorem aggregateImplements :
           (ProposedValues.childInputs (aggregateBody splitter)
             ((fun name => (layerChildren name).moduleStructure)) inputs childProposals
               (.component component)) .input := by
-        simpa [stateRule, Contracts.Cycle.CycleStateRule.apply, SignalSelection.project,
-          SignalMap.select] using
+        simpa [stateRule, Contracts.Cycle.CycleStateRule.apply] using
           congrFun stateEvaluates Primitives.RegisterState.stored
       have childInputValue :
           (ProposedValues.childInputs (aggregateBody splitter)
@@ -393,7 +402,7 @@ private theorem aggregateImplements :
 
 end AggregateLayerCertification
 
-noncomputable opaque aggregateCertifiedLayer (splitter : Composition.SignalSplitter) :
+private noncomputable opaque aggregateCertifiedLayer (splitter : Composition.SignalSplitter) :
     Contracts.Cycle.ModuleCycleCertifiedLayer (aggregateBody splitter)
       (aggregateChildContracts splitter) (cycleContract splitter.aggregateType) :=
   Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
@@ -401,7 +410,7 @@ noncomputable opaque aggregateCertifiedLayer (splitter : Composition.SignalSplit
     (aggregateStateCorresponds splitter) (aggregateHasCorrespondingState splitter)
     (aggregateImplements splitter)
 
-@[reducible] noncomputable def aggregateCertifiedChildren
+@[reducible] private noncomputable def aggregateCertifiedChildren
     (splitter : Composition.SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component)) :
@@ -415,7 +424,7 @@ noncomputable opaque aggregateCertifiedLayer (splitter : Composition.SignalSplit
   | .combiner _ =>
       ⟨.combiner splitter.combiner, splitter.combiner.certified.certification⟩
 
-noncomputable def aggregateImplementation (splitter : Composition.SignalSplitter)
+private noncomputable def aggregateImplementation (splitter : Composition.SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component)) :
     Implementation splitter.aggregateType := by
@@ -427,14 +436,15 @@ noncomputable def aggregateImplementation (splitter : Composition.SignalSplitter
     change ModuleStructure.composite (aggregateBody splitter)
       (fun child => (aggregateCertifiedChildren splitter components child).moduleStructure) =
         moduleStructure splitter.aggregateType
+    unfold moduleStructure
     cases splitter with
     | vector length element =>
-        rw [moduleStructure, Composition.LeafwiseInterface.moduleStructure.eq_2]
+        rw [Composition.LeafwiseInterface.moduleStructure.eq_2]
         congr
         funext child
         cases child <;> rfl
     | tuple fields =>
-        rw [moduleStructure, Composition.LeafwiseInterface.moduleStructure.eq_3]
+        rw [Composition.LeafwiseInterface.moduleStructure.eq_3]
         congr
         funext child
         cases child <;> rfl
@@ -443,20 +453,21 @@ noncomputable def aggregateImplementation (splitter : Composition.SignalSplitter
 private noncomputable def implementationDefinition :
     (signalType : SignalType) → Implementation signalType
   | .bit => bitImplementation
-  | .vector length element =>
-      aggregateImplementation (.vector length element) fun _ =>
-        implementationDefinition element
+  | .vector length elementType =>
+      aggregateImplementation (.vector length elementType) fun _ =>
+        implementationDefinition elementType
   | .tuple fields =>
       aggregateImplementation (.tuple fields) fun component =>
         implementationDefinition (fields.typeAt component)
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
-  · exact SignalTypes.complexity_typeAt_lt fields component
+  · have smaller := SignalTypes.complexity_typeAt_lt
+      fields component
+    exact smaller
 
 noncomputable opaque implementation (signalType : SignalType) :
-    Implementation signalType :=
-  implementationDefinition signalType
+    Implementation signalType := implementationDefinition signalType
 
 noncomputable def certified (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleCertified (ports signalType) :=
@@ -489,17 +500,17 @@ private def componentName (splitter : Composition.SignalSplitter)
   .scoped "register"
     ((SignalMapNaming.indexed splitter.ports.outputs "component").name component)
 
-def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
-    ModuleNaming (Modules.Register.moduleStructure signalType)
+private def namingForType : (signalType : SignalType) → SignalTypeNaming signalType →
+      ModuleNaming (Modules.Register.moduleStructure signalType)
   | .bit, _ => by
-      rw [Modules.Register.moduleStructure,
-        Composition.LeafwiseInterface.moduleStructure.eq_1]
+      unfold Modules.Register.moduleStructure
+      rw [Composition.LeafwiseInterface.moduleStructure.eq_1]
       exact Silean.Naming.Primitive.register
-  | .vector length element, typeNaming => by
-      rw [Modules.Register.moduleStructure,
-        Composition.LeafwiseInterface.moduleStructure.eq_2]
-      let splitter : Composition.SignalSplitter := .vector length element
-      exact .composite ⟨"register", "structural", [.shape splitter.aggregateType]⟩
+  | .vector length elementType, typeNaming => by
+      unfold Modules.Register.moduleStructure
+      rw [Composition.LeafwiseInterface.moduleStructure.eq_2]
+      let splitter : Composition.SignalSplitter := .vector length elementType
+      exact .composite ⟨"register", "structural", [.signalType splitter.aggregateType]⟩
         (portsWithNaming splitter.aggregateType typeNaming)
         (fun
           | .splitter .unit => "split"
@@ -507,13 +518,14 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
           | .combiner .output => "combine")
         (fun
           | .splitter .unit => Silean.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
-          | .component component => namingWith element (typeNaming.component component)
+          | .component component =>
+              namingForType elementType (typeNaming.component component)
           | .combiner .output => Silean.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
   | .tuple fields, typeNaming => by
-      rw [Modules.Register.moduleStructure,
-        Composition.LeafwiseInterface.moduleStructure.eq_3]
+      unfold Modules.Register.moduleStructure
+      rw [Composition.LeafwiseInterface.moduleStructure.eq_3]
       let splitter : Composition.SignalSplitter := .tuple fields
-      exact .composite ⟨"register", "structural", [.shape splitter.aggregateType]⟩
+      exact .composite ⟨"register", "structural", [.signalType splitter.aggregateType]⟩
         (portsWithNaming splitter.aggregateType typeNaming)
         (fun
           | .splitter .unit => "split"
@@ -521,16 +533,44 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
           | .combiner .output => "combine")
         (fun
           | .splitter .unit => Silean.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
-          | .component component =>
-              namingWith (fields.typeAt component) (typeNaming.component component)
+          | .component component => by
+              exact namingForType (fields.typeAt component)
+                (typeNaming.component component)
           | .combiner .output => Silean.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
-  · exact SignalTypes.complexity_typeAt_lt fields component
+  · have smaller := SignalTypes.complexity_typeAt_lt
+      fields component
+    exact smaller
 
 def naming (signalType : SignalType) :
     ModuleNaming (Modules.Register.moduleStructure signalType) :=
-  namingWith signalType (.positional signalType)
+  namingForType signalType (.positional signalType)
+
+/-- Apply authored names only to the emitted register boundary. Recursive
+splitters, combiners, and component registers retain canonical positional
+naming. -/
+def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalType) :
+    ModuleNaming (Modules.Register.moduleStructure signalType) :=
+  (naming signalType).withPorts (portsWithNaming signalType typeNaming)
+
+end Silean.Modules.Register.Naming
+
+namespace Silean.Modules.Register.Naming
+
+/-- The canonical register structure paired with caller-supplied emitted names. -/
+def namedModuleWith {signalType : SignalType}
+    (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
+    Silean.Naming.NamedModule where
+  ports := Modules.Register.ports signalType
+  moduleStructure := Modules.Register.moduleStructure signalType
+  naming := namingWith signalType typeNaming
+
+/-- The generic register structure paired with its default recursive naming. -/
+def namedModule (signalType : SignalType) : Silean.Naming.NamedModule where
+  ports := Modules.Register.ports signalType
+  moduleStructure := Modules.Register.moduleStructure signalType
+  naming := naming signalType
 
 end Silean.Modules.Register.Naming

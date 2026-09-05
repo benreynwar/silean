@@ -439,25 +439,22 @@ theorem commands_wellFormed_iff_memory (inputs : Inputs) (state : stateMap.Value
 inductive Rule | outputs
 deriving Enumeration
 
-def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .nil, outputTypes := .ofList outputMap.types } where
-  readsInputs := .nil
-  writesOutputs := outputMap.allSelection
-  target := fun _ state => outputMap.allSelection.project (outputValues state)
+def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := .empty inputMap
+  writesOutputs := .all outputMap
+  target _ state := outputValues state
 
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
-  inputTypes := .ofList inputMap.types
-  readsInputs := inputMap.allSelection
-  target := fun selected state => nextState (inputsOfValues (inputMap.unpack selected)) state
+  readsInputs := .all inputMap
+  target inputs state := nextState (inputsOfValues inputs) state
 
 @[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := stateMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .outputs => ⟨_, outputRule⟩
+  outputRule | .outputs => outputRule
   stateRule := stateRule
   outputCoverage := by
-    change outputMap.allSelection.labels.Perm outputMap.labels.values
-    rw [SignalMap.allSelection_labels]
+    exact List.Perm.refl _
 
 end Silean.Examples.PicoRV.Control

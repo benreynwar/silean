@@ -21,22 +21,22 @@ inductive RegisterState
   | stored
 deriving Enumeration
 
-def unaryInputMap : SignalMap :=
+@[reducible] def unaryInputMap : SignalMap :=
   EnumeratedMap.of UnaryInput fun | .input => .bit
 
-def binaryInputMap : SignalMap :=
+@[reducible] def binaryInputMap : SignalMap :=
   EnumeratedMap.of BinaryInput fun | .left | .right => .bit
 
-def singleOutputMap : SignalMap :=
+@[reducible] def singleOutputMap : SignalMap :=
   EnumeratedMap.of SingleOutput fun | .output => .bit
 
-def registerStateMap : SignalMap :=
+@[reducible] def registerStateMap : SignalMap :=
   EnumeratedMap.of RegisterState fun | .stored => .bit
 
-def unaryPorts : ModulePorts := ⟨unaryInputMap, singleOutputMap⟩
+@[reducible] def unaryPorts : ModulePorts := ⟨unaryInputMap, singleOutputMap⟩
 
-def binaryPorts : ModulePorts := ⟨binaryInputMap, singleOutputMap⟩
+@[reducible] def binaryPorts : ModulePorts := ⟨binaryInputMap, singleOutputMap⟩
 
-def constantPorts : ModulePorts := ⟨emptySignalMap, singleOutputMap⟩
+@[reducible] def constantPorts : ModulePorts := ⟨emptySignalMap, singleOutputMap⟩
 
 end Silean.Primitives

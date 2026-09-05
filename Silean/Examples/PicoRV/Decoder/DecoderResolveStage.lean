@@ -291,6 +291,18 @@ def outputValues (inputs : Inputs) (state : stateMap.Values) : outputMap.Values
 inductive Rule | outputs
 deriving Enumeration
 
+namespace OutputRule
+inductive Input | instr_lui | instr_auipc | instr_jal | instr_jalr
+deriving Enumeration
+end OutputRule
+
+@[reducible] private def outputInputsGroup : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap OutputRule.Input fun
+    | .instr_lui => .instr_lui
+    | .instr_auipc => .instr_auipc
+    | .instr_jal => .instr_jal
+    | .instr_jalr => .instr_jalr
+
 def outputInputs (instr_lui instr_auipc instr_jal instr_jalr : Bool) : Inputs :=
   { resetn := true
     decoder_trigger := false
@@ -311,79 +323,52 @@ theorem outputValues_depends_only_on_instruction_flags
   funext output
   cases output <;> rfl
 
-def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .cons .bit (.cons .bit (.cons .bit (.cons .bit .nil))),
-      outputTypes := .ofList outputMap.types } where
-  readsInputs := (((inputMap.select .instr_jalr).prepend .instr_jal).prepend
-    .instr_auipc).prepend .instr_lui
-  writesOutputs := outputMap.allSelection
-  target
-    | (instr_lui, (instr_auipc, (instr_jal, (instr_jalr, ())))), state =>
-      outputMap.allSelection.project (outputValues
-        (outputInputs instr_lui instr_auipc instr_jal instr_jalr) state)
+def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := outputInputsGroup
+  writesOutputs := .all outputMap
+  target inputs state := outputValues
+    (outputInputs (inputs .instr_lui) (inputs .instr_auipc)
+      (inputs .instr_jal) (inputs .instr_jalr)) state
 
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
-  inputTypes := .ofList [.bit, .bit, .bit, .vector 32 .bit,
-    .bit, .bit, .bit, .bit, .vector 32 .bit,
-    .bit, .bit, .bit, .bit, .bit]
-  readsInputs := (((((((((((((inputMap.select .is_alu_reg_reg).prepend
-    .is_alu_reg_imm).prepend .is_sb_sh_sw).prepend .is_lb_lh_lw_lbu_lhu).prepend
-    .is_beq_bne_blt_bge_bltu_bgeu).prepend .decoded_imm_j).prepend .instr_jalr).prepend
-    .instr_jal).prepend .instr_auipc).prepend .instr_lui).prepend .mem_rdata_q).prepend
-    .decoder_pseudo_trigger).prepend .decoder_trigger).prepend .resetn
-  target := fun values state => nextState
-    { resetn := values.1
-      decoder_trigger := values.2.1
-      decoder_pseudo_trigger := values.2.2.1
-      mem_rdata_q := values.2.2.2.1
-      instr_lui := values.2.2.2.2.1
-      instr_auipc := values.2.2.2.2.2.1
-      instr_jal := values.2.2.2.2.2.2.1
-      instr_jalr := values.2.2.2.2.2.2.2.1
-      decoded_imm_j := values.2.2.2.2.2.2.2.2.1
-      is_beq_bne_blt_bge_bltu_bgeu := values.2.2.2.2.2.2.2.2.2.1
-      is_lb_lh_lw_lbu_lhu := values.2.2.2.2.2.2.2.2.2.2.1
-      is_sb_sh_sw := values.2.2.2.2.2.2.2.2.2.2.2.1
-      is_alu_reg_imm := values.2.2.2.2.2.2.2.2.2.2.2.2.1
-      is_alu_reg_reg := values.2.2.2.2.2.2.2.2.2.2.2.2.2.1 } state
+  readsInputs := .all inputMap
+  target inputs state := nextState (valuesOf inputs) state
 
 @[simp] theorem outputRule_reads (input : Input) :
     input ∈ outputRule.readsInputs.labels ↔
       input = .instr_lui ∨ input = .instr_auipc ∨ input = .instr_jal ∨
         input = .instr_jalr := by
-  cases input <;> simp [outputRule, SignalSelection.labels,
-    SignalSelection.prepend, SignalMap.select]
+  change input ∈ outputInputsGroup.labels ↔ _
+  letI : DecidableEq Input := inputMap.labels.decidableEq
+  cases input <;> decide
 
 @[simp] theorem outputRule_writes (output : Output) :
     output ∈ outputRule.writesOutputs.labels := by
-  rw [show outputRule.writesOutputs = outputMap.allSelection from rfl,
-    SignalMap.allSelection_labels]
+  change output ∈ (SignalGroup.all outputMap).labels
+  rw [SignalGroup.all_labels]
   exact (outputMap.labels.locate output).mem
 
 @[simp] theorem stateRule_reads (input : Input) :
     input ∈ stateRule.readsInputs.labels := by
-  cases input <;> simp [stateRule, SignalSelection.labels,
-    SignalSelection.prepend, SignalMap.select]
+  change input ∈ (SignalGroup.all inputMap).labels
+  rw [SignalGroup.all_labels]
+  exact (inputMap.labels.locate input).mem
 
 @[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := stateMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .outputs => ⟨_, outputRule⟩
+  outputRule | .outputs => outputRule
   stateRule := stateRule
   outputCoverage := by
-    change outputMap.allSelection.labels.Perm outputMap.labels.values
-    rw [SignalMap.allSelection_labels]
+    exact List.Perm.refl _
 
 @[simp] theorem outputRule_holds_iff
     (inputs : ports.inputs.Values) (state : stateMap.Values)
     (outputs : ports.outputs.Values) :
     outputRule.Holds inputs state outputs ↔ outputs = outputValues (valuesOf inputs) state := by
-  change outputMap.allSelection.Matches outputs
-      (outputMap.allSelection.project (outputValues
-        (outputInputs (inputs .instr_lui) (inputs .instr_auipc)
-          (inputs .instr_jal) (inputs .instr_jalr)) state)) ↔ _
-  rw [SignalSelection.allSelection_matches_project_iff]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
   change outputs = outputValues
       (outputInputs (valuesOf inputs).instr_lui (valuesOf inputs).instr_auipc
         (valuesOf inputs).instr_jal (valuesOf inputs).instr_jalr) state ↔ _

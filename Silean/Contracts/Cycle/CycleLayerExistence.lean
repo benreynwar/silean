@@ -227,10 +227,10 @@ noncomputable def evaluate {body : ModuleBody} {childContracts : ChildCycleContr
     (contractState : (childContracts occurrence.child).state.Values) :
     occurrence.Values :=
   let rule := (childContracts occurrence.child).outputRule occurrence.rule
-  rule.2.writesOutputs.write
+  rule.writesOutputs.write
     (body.context.instancePorts.ports occurrence.child).outputs.defaultValues
-    (rule.2.target
-      (rule.2.readsInputs.project
+    (rule.target
+      (rule.readsInputs.project
         (occurrence.inputValues readsAvailable values inputs)) contractState)
 
 theorem evaluate_holds {body : ModuleBody} {childContracts : ChildCycleContracts body}
@@ -243,11 +243,11 @@ theorem evaluate_holds {body : ModuleBody} {childContracts : ChildCycleContracts
     (values : available.Values)
     (inputs : body.context.ports.inputs.Values)
     (contractState : (childContracts occurrence.child).state.Values) :
-    ((childContracts occurrence.child).outputRule occurrence.rule).2.Holds
+    ((childContracts occurrence.child).outputRule occurrence.rule).Holds
       (occurrence.inputValues readsAvailable values inputs) contractState
       (RuleOccurrence.evaluate occurrence readsAvailable values inputs contractState) := by
   unfold CycleOutputRule.Holds evaluate
-  exact SignalSelection.write_matches _ _ _
+  exact SignalGroup.write_matches _ _ _
     ((childContracts occurrence.child).rule_writes_nodup occurrence.rule)
 
 end RuleOccurrence
@@ -366,7 +366,7 @@ theorem evaluateRules_new_rule_holds
     (member : occurrence ∈ schedule.finalAvailability)
     (new : occurrence ∉ initial) :
     let finalValues := Schedule.evaluateRules schedule inputs contractState initialValues
-    ((childContracts occurrence.child).outputRule occurrence.rule).2.Holds
+    ((childContracts occurrence.child).outputRule occurrence.rule).Holds
       (body.wiring.childInputValues inputs (finalValues.childOutputs covers)
         occurrence.child)
       (contractState occurrence.child)
@@ -385,12 +385,12 @@ theorem evaluateRules_new_rule_holds
         have immediate := RuleOccurrence.evaluate_holds called readsAvailable initialValues inputs
           (contractState called.child)
         have inputProjection :
-            ((childContracts called.child).outputRule called.rule).2.readsInputs.project
+            ((childContracts called.child).outputRule called.rule).readsInputs.project
                 (RuleOccurrence.inputValues called readsAvailable initialValues inputs) =
-              ((childContracts called.child).outputRule called.rule).2.readsInputs.project
+              ((childContracts called.child).outputRule called.rule).readsInputs.project
                 (body.wiring.childInputValues inputs
                   (finalValues.childOutputs coversRest) called.child) := by
-          apply SignalSelection.project_eq_of_eq_on
+          apply SignalGroup.project_eq_of_eq_on
           intro input inputMem
           have sourceAtFinal :=
             Schedule.evaluateRules_sourceValue_initial
@@ -411,15 +411,15 @@ theorem evaluateRules_new_rule_holds
           exact sourceAtFinal.trans sourceIsFinal
         unfold CycleOutputRule.Holds at immediate ⊢
         change
-          ((childContracts called.child).outputRule called.rule).2.writesOutputs.Matches
+          ((childContracts called.child).outputRule called.rule).writesOutputs.Matches
             (finalValues.childOutputs coversRest called.child)
-            (((childContracts called.child).outputRule called.rule).2.target
-              (((childContracts called.child).outputRule called.rule).2.readsInputs.project
+            (((childContracts called.child).outputRule called.rule).target
+              (((childContracts called.child).outputRule called.rule).readsInputs.project
                 (body.wiring.childInputValues inputs
                   (finalValues.childOutputs coversRest) called.child))
               (contractState called.child))
         rw [← inputProjection]
-        apply SignalSelection.Matches.of_eq_on _ immediate
+        apply SignalGroup.Matches.of_eq_on _ immediate
         intro output outputMem
         have preserved := Schedule.evaluateRules_get_initial rest inputs contractState extended
           called (List.Mem.head available)

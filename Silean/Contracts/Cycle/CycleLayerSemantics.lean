@@ -178,7 +178,7 @@ theorem childStateInputs_eq
         (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
           inputs right child) := by
   dsimp
-  apply SignalSelection.project_eq_of_eq_on
+  apply SignalGroup.project_eq_of_eq_on
   intro input inputMem
   apply sourceValue_eq_of_available
     (Schedule.finishAgreement schedule inputs inputs (fun _ _ => rfl) currentState

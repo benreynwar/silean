@@ -1,4 +1,4 @@
-import Silean.Modules.BitMux
+import Silean.Modules.BitMux.BitMux
 import Silean.Examples.Fixtures.DualNot
 import Silean.Examples.Fixtures.RepeatedDualNot
 
@@ -19,9 +19,11 @@ example : Modules.BitMux.selectRule.readsInputs.labels =
 example : Modules.BitMux.selectRule.writesOutputs.labels =
     [Modules.BitMux.Output.result] := rfl
 
-example : Modules.BitMux.selectRule.target
-    (Modules.BitMux.selectRule.readsInputs.project muxInputs)
-    SignalMap.emptyValues = (true, ()) := rfl
+def muxOutputs : Modules.BitMux.ports.outputs.Values
+  | .result => true
+
+example : Modules.BitMux.selectRule.Holds muxInputs SignalMap.emptyValues muxOutputs :=
+  (Modules.BitMux.selectRule_holds_iff _ _ _).2 rfl
 
 example : Modules.BitMux.cycleContract.writtenOutputs = [Modules.BitMux.Output.result] := rfl
 
@@ -38,13 +40,13 @@ example : Examples.Fixtures.DualNot.backwardRule.readsInputs.labels =
 example : Examples.Fixtures.DualNot.cycleContract.writtenOutputs =
     [Examples.Fixtures.DualNot.Output.forward, Examples.Fixtures.DualNot.Output.backward] := rfl
 
-example : Examples.Fixtures.DualNot.forwardRule.target
+example : (Examples.Fixtures.DualNot.forwardRule.target
     (Examples.Fixtures.DualNot.forwardRule.readsInputs.project dualInputs)
-    SignalMap.emptyValues = (false, ()) := rfl
+    SignalMap.emptyValues) .value = false := rfl
 
-example : Examples.Fixtures.DualNot.backwardRule.target
+example : (Examples.Fixtures.DualNot.backwardRule.target
     (Examples.Fixtures.DualNot.backwardRule.readsInputs.project dualInputs)
-    SignalMap.emptyValues = (true, ()) := rfl
+    SignalMap.emptyValues) .value = true := rfl
 
 example : Examples.Fixtures.RepeatedDualNot.cycleContract.state.labels.values = [] := rfl
 

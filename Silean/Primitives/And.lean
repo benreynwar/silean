@@ -1,35 +1,21 @@
 import Silean.Contracts.Cycle.CycleImplementation
-import Silean.Primitives.PrimitivePorts
+import Silean.Primitives.AndPrimitive
 
 namespace Silean.Primitives
 
 open Silean
 
-/-- Stateless one-bit AND primitive. -/
-@[reducible] def and : Primitive where
-  ports := binaryPorts
-  localState := emptySignalMap
-  outputReads := [.left, .right]
-  outputValues := fun inputs _ => fun | .output => inputs .left && inputs .right
-  nextStateValues := fun _ state => state
-  outputRespectsReads := by
-    intro left right state agrees
-    funext port
-    cases port
-    simp [agrees .left (by simp), agrees .right (by simp)]
-
 inductive AndRule | apply
 deriving Enumeration
-def andOutputRule : Contracts.Cycle.CycleOutputRule and.ports emptySignalMap
-    (.ofLists [.bit, .bit] [.bit]) where
-  readsInputs := (and.ports.inputs.select .right).prepend .left
-  writesOutputs := and.ports.outputs.select .output
-  target | (left, (right, ())), _ => (left && right, ())
+def andOutputRule : Contracts.Cycle.CycleOutputRule and.ports emptySignalMap where
+  readsInputs := .all and.ports.inputs
+  writesOutputs := .all and.ports.outputs
+  target inputs _ := fun | .output => inputs .left && inputs .right
 def andCycleContract : Contracts.Cycle.ModuleCycleContract and.ports where
   state := emptySignalMap
   RuleName := AndRule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, andOutputRule⟩
+  outputRule | .apply => andOutputRule
   stateRule := Contracts.Cycle.CycleStateRule.empty and.ports
   outputCoverage := by rfl
 
@@ -39,8 +25,15 @@ def andCycleContract : Contracts.Cycle.ModuleCycleContract and.ports where
     (outputs : and.ports.outputs.Values) :
     andOutputRule.Holds inputs state outputs ↔
       outputs .output = (inputs .left && inputs .right) := by
-  simp [andOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
-    SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
+  simp only [andOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .output
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
 private def andStateCorresponds (_ : andCycleContract.state.Values)
     (_ : (ModuleStructure.primitive and).State) : Prop := True
@@ -58,8 +51,7 @@ private theorem andImplements : Contracts.Cycle.Implements (.primitive and) andC
       simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
         Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
       rw [satisfies.1]
-      simp [andOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
-        SignalSelection.Matches, SignalMap.select, SignalSelection.prepend, and]
+      exact SignalGroup.matches_project _ _
   · rfl
 
 def andCertified : Contracts.Cycle.ModuleCycleCertified and.ports where

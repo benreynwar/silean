@@ -1,6 +1,6 @@
 import Silean.Contracts.Fifo.FifoCycleRefinement
 import Silean.Contracts.Fifo.FifoPortContract
-import Silean.Composition.FifoSerialComposition
+import Silean.Composition.FifoSerialCycleCertified
 
 namespace Silean.Composition.FifoSerial
 
@@ -10,26 +10,6 @@ open Contracts.Fifo.Cycle
 /-! Proves that serial composition preserves abstract FIFO behavior. The
 logical queue is the downstream queue followed by the upstream queue; this
 file defines no additional hardware. -/
-
-private def upstreamInputs (upstream downstream : CycleBehavior element)
-    (inputs : (Silean.Interfaces.Fifo.ports element).inputs.Values)
-    (state : (upstream.serial downstream).state.Values) :
-    (Silean.Interfaces.Fifo.ports element).inputs.Values
-  | .inputValid => inputs .inputValid
-  | .inputData => inputs .inputData
-  | .outputReady => downstream.ready (inputs .outputReady) (rightState state)
-  | .reset => inputs .reset
-
-private def downstreamInputs (upstream downstream : CycleBehavior element)
-    (inputs : (Silean.Interfaces.Fifo.ports element).inputs.Values)
-    (state : (upstream.serial downstream).state.Values) :
-    (Silean.Interfaces.Fifo.ports element).inputs.Values
-  | .inputValid =>
-      (upstream.forward (inputs .inputValid) (inputs .inputData) (leftState state)).1
-  | .inputData =>
-      (upstream.forward (inputs .inputValid) (inputs .inputData) (leftState state)).2
-  | .outputReady => inputs .outputReady
-  | .reset => inputs .reset
 
 /-- Serial composition preserves FIFO behavior. The proof uses only each
 child's cycle behavior and FIFO refinement; it does not inspect either child
@@ -62,10 +42,10 @@ def serialRefinement
   reset := by
     intro inputs state reset
     change (upstream.cycleBehavior.serial downstream.cycleBehavior).state.Values at state
-    let upstreamInput := upstreamInputs upstream.cycleBehavior
-      downstream.cycleBehavior inputs state
-    let downstreamInput := downstreamInputs upstream.cycleBehavior
-      downstream.cycleBehavior inputs state
+    let upstreamInput := CycleBehavior.serialUpstreamInputs upstream.cycleBehavior
+      downstream.cycleBehavior inputs (leftState state) (rightState state)
+    let downstreamInput := CycleBehavior.serialDownstreamInputs upstream.cycleBehavior
+      downstream.cycleBehavior inputs (leftState state) (rightState state)
     have upstreamReset :
         (Silean.Contracts.Fifo.standardContract element upstreamCapacity).resetAsserted upstreamInput = true := by
       exact reset
@@ -97,10 +77,10 @@ def serialRefinement
   ordinary := by
     intro inputs state valid notReset
     change (upstream.cycleBehavior.serial downstream.cycleBehavior).state.Values at state
-    let upstreamInput := upstreamInputs upstream.cycleBehavior
-      downstream.cycleBehavior inputs state
-    let downstreamInput := downstreamInputs upstream.cycleBehavior
-      downstream.cycleBehavior inputs state
+    let upstreamInput := CycleBehavior.serialUpstreamInputs upstream.cycleBehavior
+      downstream.cycleBehavior inputs (leftState state) (rightState state)
+    let downstreamInput := CycleBehavior.serialDownstreamInputs upstream.cycleBehavior
+      downstream.cycleBehavior inputs (leftState state) (rightState state)
     have upstreamNotReset :
         (Silean.Contracts.Fifo.standardContract element upstreamCapacity).resetAsserted upstreamInput = false := by
       exact notReset
@@ -123,7 +103,8 @@ def serialRefinement
             (Silean.Contracts.Fifo.standardContract element (upstreamCapacity + downstreamCapacity)).inputTransfer
               inputs (((upstream.cycleBehavior.serial downstream.cycleBehavior).cycleContract.evaluate
                 inputs state).1) := by
-        simp [Contracts.Fifo.standardContract_inputTransfer, upstreamInput, upstreamInputs,
+        simp [Contracts.Fifo.standardContract_inputTransfer, upstreamInput,
+          CycleBehavior.serialUpstreamInputs,
           CycleBehavior.serial] <;> rfl
       have middleTransferEq :
           (Silean.Contracts.Fifo.standardContract element upstreamCapacity).outputTransfer upstreamInput
@@ -133,7 +114,8 @@ def serialRefinement
               (downstream.cycleBehavior.cycleContract.evaluate downstreamInput
                 (rightState state)).1 := by
         simp [Contracts.Fifo.standardContract_outputTransfer, Contracts.Fifo.standardContract_inputTransfer,
-          upstreamInput, downstreamInput, upstreamInputs, downstreamInputs] <;> rfl
+          upstreamInput, downstreamInput, CycleBehavior.serialUpstreamInputs,
+          CycleBehavior.serialDownstreamInputs] <;> rfl
       have outputTransferEq :
           (Silean.Contracts.Fifo.standardContract element downstreamCapacity).outputTransfer downstreamInput
               (downstream.cycleBehavior.cycleContract.evaluate downstreamInput
@@ -142,7 +124,7 @@ def serialRefinement
               inputs (((upstream.cycleBehavior.serial downstream.cycleBehavior).cycleContract.evaluate
                 inputs state).1) := by
         simp [Contracts.Fifo.standardContract_outputTransfer, downstreamInput,
-          downstreamInputs, CycleBehavior.serial] <;> rfl
+          CycleBehavior.serialDownstreamInputs, CycleBehavior.serial] <;> rfl
       rw [inputTransferEq] at upstreamEquation
       rw [middleTransferEq] at upstreamEquation
       rw [outputTransferEq] at downstreamEquation

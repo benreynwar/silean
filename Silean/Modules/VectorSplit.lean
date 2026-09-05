@@ -42,13 +42,13 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports element leftWidth rightWidth) emptySignalMap
-      { inputTypes := .cons (.vector (leftWidth + rightWidth) element) .nil
-        outputTypes := .cons (.vector leftWidth element)
-          (.cons (.vector rightWidth element) .nil) } where
-  readsInputs := (inputMap element leftWidth rightWidth).select .value
-  writesOutputs := ((outputMap element leftWidth rightWidth).select .right).prepend .left
-  target | (value, ()), _ => (leftPart value, (rightPart value, ()))
+    Contracts.Cycle.CycleOutputRule
+      (ports element leftWidth rightWidth) emptySignalMap where
+  readsInputs := .all (inputMap element leftWidth rightWidth)
+  writesOutputs := .all (outputMap element leftWidth rightWidth)
+  target inputs _ := fun
+    | .left => leftPart (inputs .value)
+    | .right => rightPart (inputs .value)
 
 @[reducible] def cycleContract (element : SignalType)
     (leftWidth rightWidth : Nat) :
@@ -56,7 +56,7 @@ def outputRule (element : SignalType) (leftWidth rightWidth : Nat) :
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule element leftWidth rightWidth⟩
+  outputRule | .apply => outputRule element leftWidth rightWidth
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -68,8 +68,14 @@ def outputRule (element : SignalType) (leftWidth rightWidth : Nat) :
     (outputRule element leftWidth rightWidth).Holds inputs state outputs ↔
       outputs .left = leftPart (inputs .value) ∧
       outputs .right = rightPart (inputs .value) := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalSelection.prepend, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact ⟨congrFun equal .left, congrFun equal .right⟩
+  · rintro ⟨left, right⟩
+    funext output
+    cases output <;> assumption
 
 theorem left_of_holds (element : SignalType) (leftWidth rightWidth : Nat)
     (inputs : (ports element leftWidth rightWidth).inputs.Values)
@@ -342,7 +348,7 @@ def namingWith (element : SignalType) (leftWidth rightWidth : Nat)
     ModuleNaming (Modules.VectorSplit.moduleStructure element leftWidth rightWidth) :=
   .composite
     ⟨"vector_split", "structural",
-      [.shape element, .natural leftWidth, .natural rightWidth]⟩
+      [.signalType element, .natural leftWidth, .natural rightWidth]⟩
     (portsWithNaming element leftWidth rightWidth elementNaming)
     (fun | .split => "split" | .left => "combine_left" | .right => "combine_right")
     (fun

@@ -25,11 +25,10 @@ abbrev Output := Equality.Output
 abbrev Rule := Equality.Rule
 
 def outputRule (signalType : SignalType) (constant : signalType.Denote) :
-    Contracts.Cycle.CycleOutputRule (ports signalType) emptySignalMap
-      { inputTypes := .cons signalType .nil, outputTypes := .cons .bit .nil } where
-  readsInputs := (inputMap signalType).select .value
-  writesOutputs := Equality.outputMap.select .result
-  target | (value, ()), _ => (signalType.equal value constant, ())
+    Contracts.Cycle.CycleOutputRule (ports signalType) emptySignalMap where
+  readsInputs := .all (inputMap signalType)
+  writesOutputs := .all Equality.outputMap
+  target inputs _ := fun | .result => signalType.equal (inputs .value) constant
 
 @[reducible] def cycleContract (signalType : SignalType)
     (constant : signalType.Denote) :
@@ -37,7 +36,7 @@ def outputRule (signalType : SignalType) (constant : signalType.Denote) :
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule signalType constant⟩
+  outputRule | .apply => outputRule signalType constant
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -48,8 +47,11 @@ def outputRule (signalType : SignalType) (constant : signalType.Denote) :
     (outputs : (ports signalType).outputs.Values) :
     (outputRule signalType constant).Holds inputs state outputs ↔
       outputs .result = signalType.equal (inputs .value) constant := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalSelection.Matches, SignalSelection.project, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal; exact congrFun equal .result
+  · intro equal; funext output; cases output; exact equal
 
 theorem output_eq_true_iff_of_holds (signalType : SignalType)
     (constant : signalType.Denote)
@@ -218,16 +220,14 @@ noncomputable opaque certifiedLayer (signalType : SignalType)
     (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩)
     (implements signalType constant)
 
-noncomputable def certification (signalType : SignalType)
-    (constant : signalType.Denote) :
+noncomputable def certification (signalType : SignalType) (constant : signalType.Denote) :
     Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType constant)
       (cycleContract signalType constant) :=
   (certifiedLayer signalType constant).certifyComposite
     (structuralChildren signalType constant) (certifiedChildren signalType constant)
     (by intro child; cases child <;> rfl)
 
-noncomputable def certified (signalType : SignalType)
-    (constant : signalType.Denote) :
+noncomputable def certified (signalType : SignalType) (constant : signalType.Denote) :
     Contracts.Cycle.ModuleCycleCertified (ports signalType) :=
   (certification signalType constant).bundle
 
@@ -236,7 +236,7 @@ noncomputable def certified (signalType : SignalType)
     (certified signalType constant).moduleStructure =
       moduleStructure signalType constant := rfl
 
-@[simp] theorem certified_cycleContract (signalType : SignalType)
+@[simp] theorem certified_cycleContract {signalType : SignalType}
     (constant : signalType.Denote) :
     (certified signalType constant).cycleContract =
       cycleContract signalType constant := rfl
@@ -267,23 +267,23 @@ def ports (signalType : SignalType) :
     ModulePortsNaming (Modules.EqualsConstant.ports signalType) :=
   portsWithNaming signalType (.positional signalType)
 
-def namingWith (signalType : SignalType) (constant : signalType.Denote)
-    (typeNaming : SignalTypeNaming signalType) :
+def naming (signalType : SignalType) (constant : signalType.Denote) :
     ModuleNaming (Modules.EqualsConstant.moduleStructure signalType constant) :=
   .composite
     ⟨"equals_constant", "structural",
-      .shape signalType :: Constant.Naming.parameters signalType constant⟩
-    (portsWithNaming signalType typeNaming)
+      .signalType signalType :: Constant.Naming.parameters signalType constant⟩
+    (ports signalType)
     (fun | .constant => "constant" | .equality => "equality")
     (fun
-      | .constant => Constant.Naming.namingWith signalType constant typeNaming
-      | .equality => Equality.Naming.namingWith signalType typeNaming)
+      | .constant => Constant.Naming.naming signalType constant
+      | .equality => Equality.Naming.naming signalType)
 
-def naming (signalType : SignalType) (constant : signalType.Denote) :
+def namingWith (signalType : SignalType) (constant : signalType.Denote)
+    (typeNaming : SignalTypeNaming signalType) :
     ModuleNaming (Modules.EqualsConstant.moduleStructure signalType constant) :=
-  namingWith signalType constant (.positional signalType)
+  (naming signalType constant).withPorts (portsWithNaming signalType typeNaming)
 
-def namedModule (signalType : SignalType) (constant : signalType.Denote) : NamedModule where
+@[reducible] def namedModule (signalType : SignalType) (constant : signalType.Denote) : NamedModule where
   ports := Modules.EqualsConstant.ports signalType
   moduleStructure := Modules.EqualsConstant.moduleStructure signalType constant
   naming := naming signalType constant

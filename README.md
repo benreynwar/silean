@@ -109,7 +109,11 @@ structure Primitive where
 These types ensure that every connection joins signals of the same shape and
 that every child input and module output has a driver. Fan-out is expressed by
 using the same source more than once. Structural splitters and combiners take
-vectors and tuples apart and put them back together, while a module's state is
+vectors and labelled tuples apart and put them back together. Authoring
+`SignalSchema` values are hierarchical FIRRTL naming trees indexed by their
+name-independent `SignalType`; `signal_schema` declarations generate the typed
+field labels and `SignalMap` used to refer to aggregate components. Schemas do
+not enter structures, wiring, contracts, or proofs. A module's state is
 derived recursively from the local state owned by its primitive leaves.
 
 This supports familiar hierarchical construction. Generic modules such as
@@ -143,7 +147,9 @@ behavior toward more abstract externally visible properties.
 `Contracts.Cycle.ModuleCycleContract` is the foundation. It has its own
 behavioral state, a set of named output rules, and one complete next-state rule.
 Each output rule declares exactly which inputs it reads and which outputs it
-writes. The contract says what a module does on one cycle, but says nothing
+writes. These partial boundaries are typed, label-preserving `SignalGroup`
+values, so rule behavior uses signal names rather than positional tuples. The
+contract says what a module does on one cycle, but says nothing
 about its child instances, wiring, or evaluation schedule. For example, a
 register-bank contract is phrased in terms of reading and updating a vector of
 values, not in terms of its decoder, mux tree, and individual registers.
@@ -280,6 +286,7 @@ Individual hardware regressions can be run with:
 ```sh
 make test-bit-register
 make test-structured-fifo
+make test-serial-fifo
 make test-register-bank
 make test-pointer-fifo
 ```
@@ -300,6 +307,10 @@ Use `make clean` to remove generated build artifacts.
   maps, selections, ports, and state shapes.
 - [`Silean/Structure/`](Silean/Structure/) defines instances, endpoints,
   wiring, module bodies, and recursive module structures.
+- [`Silean/Authoring/`](Silean/Authoring/) provides concise module declarations
+  and parameterizable `signal_schema` declarations. These generate an aggregate
+  `SignalType`, its labelled `SignalMap`, hierarchical naming metadata, and
+  typed field accessors without changing structural shape compatibility.
 - [`Silean/Modules/`](Silean/Modules/) contains the reusable hardware,
   contracts, and certification proofs.
 - [`docs/Architecture.md`](docs/Architecture.md) gives the detailed current

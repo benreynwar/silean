@@ -7,7 +7,7 @@ namespace Silean.Emitters.StructuredFifo
 open Silean
 
 def naming :=
-  (Modules.OneEntryFifo.Naming.namingWith StructuredPayload.type
+  (Modules.OneEntryFifo.namingWith StructuredPayload.type
     StructuredPayload.naming).withKey
       ⟨"structured_fifo", "", []⟩
 

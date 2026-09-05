@@ -1,19 +1,30 @@
-import Silean.Modules.EnabledRegister
+import Silean.Modules.EnabledRegister.EnabledRegisterCertified
 
 namespace Silean.Examples.Checks.EnabledRegister
 
 open Silean
+
+example (signalType : SignalType) :
+    (Modules.EnabledRegister.observeRule signalType).readsInputs.labels = [] := rfl
+
+example (signalType : SignalType) :
+    (Modules.EnabledRegister.observeRule signalType).writesOutputs.labels =
+      [.q] := rfl
+
+example (signalType : SignalType) :
+    (Modules.EnabledRegister.stateRule signalType).readsInputs.labels =
+      [.enable, .data] := rfl
 
 noncomputable def structuralState (signalType : SignalType) :
     (Modules.EnabledRegister.moduleStructure signalType).State :=
   (Modules.EnabledRegister.moduleStructure signalType).structuralState.defaultValues
 
 def bitHoldInputs : (Modules.EnabledRegister.ports .bit).inputs.Values
-  | .value => true
+  | .data => true
   | .enable => false
 
 def bitUpdateInputs : (Modules.EnabledRegister.ports .bit).inputs.Values
-  | .value | .enable => true
+  | .data | .enable => true
 
 example : ∃ proposal,
     (Modules.EnabledRegister.moduleStructure .bit).IsSolution
@@ -39,7 +50,7 @@ def vectorValue : vectorType.Denote
   | ⟨2, _⟩ => true
 
 def vectorInputs : (Modules.EnabledRegister.ports vectorType).inputs.Values
-  | .value => vectorValue
+  | .data => vectorValue
   | .enable => true
 
 example : ∃ proposal,
@@ -60,7 +71,7 @@ def nestedValue : nestedType.Denote :=
     else (true, (false, ())), ()))
 
 def nestedInputs : (Modules.EnabledRegister.ports nestedType).inputs.Values
-  | .value => nestedValue
+  | .data => nestedValue
   | .enable => true
 
 example : ∃ proposal,

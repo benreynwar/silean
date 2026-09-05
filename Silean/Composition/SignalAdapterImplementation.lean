@@ -18,27 +18,21 @@ deriving Enumeration
 namespace SignalSplitter
 
 def outputRule (splitter : SignalSplitter) :
-    Contracts.Cycle.CycleOutputRule splitter.ports emptySignalMap
-      { inputTypes := .ofList splitter.ports.inputs.types
-        outputTypes := .ofList splitter.ports.outputs.types } where
-  readsInputs := splitter.ports.inputs.allSelection
-  writesOutputs := splitter.ports.outputs.allSelection
-  target := fun packed _ => splitter.ports.outputs.allSelection.project
-    (splitter.outputValues (splitter.ports.inputs.unpack packed))
+    Contracts.Cycle.CycleOutputRule splitter.ports emptySignalMap where
+  readsInputs := .all splitter.ports.inputs
+  writesOutputs := .all splitter.ports.outputs
+  target := fun inputs _ => splitter.outputValues inputs
 
 def cycleContract (splitter : SignalSplitter) :
     Contracts.Cycle.ModuleCycleContract splitter.ports where
   state := emptySignalMap
   RuleName := SignalComponentRule
   ruleNames := signalComponentRuleEnumeration
-  outputRule | .apply => ⟨_, outputRule splitter⟩
+  outputRule | .apply => outputRule splitter
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by
     rw [show signalComponentRuleEnumeration.values = [SignalComponentRule.apply] by rfl]
-    simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil]
-    change splitter.ports.outputs.allSelection.labels.Perm
-      splitter.ports.outputs.labels.values
-    rw [SignalMap.allSelection_labels]
+    simp [outputRule]
 
 theorem outputRule_holds_iff (splitter : SignalSplitter)
     (inputs : splitter.ports.inputs.Values)
@@ -46,9 +40,7 @@ theorem outputRule_holds_iff (splitter : SignalSplitter)
     (outputs : splitter.ports.outputs.Values) :
     splitter.outputRule.Holds inputs state outputs ↔
       outputs = splitter.outputValues inputs := by
-  simp only [Contracts.Cycle.CycleOutputRule.Holds, outputRule]
-  rw [splitter.ports.inputs.unpack_project]
-  exact SignalSelection.allSelection_matches_project_iff _ _ _
+  simp [Contracts.Cycle.CycleOutputRule.Holds, outputRule]
 
 private def emptyStateCorresponds (_ : emptySignalMap.Values)
     (_ : emptySignalMap.Values) : Prop := True
@@ -65,9 +57,7 @@ private theorem implements (splitter : SignalSplitter) :
     simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
       SignalSplitter.IsSolution] at satisfies
     rw [satisfies]
-    simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds]
-    rw [splitter.ports.inputs.unpack_project]
-    exact splitter.ports.outputs.allSelection.matches_project _
+    exact SignalGroup.matches_project _ _
   · rfl
 
 def certified (splitter : SignalSplitter) :
@@ -87,27 +77,21 @@ end SignalSplitter
 namespace SignalCombiner
 
 def outputRule (combiner : SignalCombiner) :
-    Contracts.Cycle.CycleOutputRule combiner.ports emptySignalMap
-      { inputTypes := .ofList combiner.ports.inputs.types
-        outputTypes := .ofList combiner.ports.outputs.types } where
-  readsInputs := combiner.ports.inputs.allSelection
-  writesOutputs := combiner.ports.outputs.allSelection
-  target := fun packed _ => combiner.ports.outputs.allSelection.project
-    (combiner.outputValues (combiner.ports.inputs.unpack packed))
+    Contracts.Cycle.CycleOutputRule combiner.ports emptySignalMap where
+  readsInputs := .all combiner.ports.inputs
+  writesOutputs := .all combiner.ports.outputs
+  target := fun inputs _ => combiner.outputValues inputs
 
 def cycleContract (combiner : SignalCombiner) :
     Contracts.Cycle.ModuleCycleContract combiner.ports where
   state := emptySignalMap
   RuleName := SignalComponentRule
   ruleNames := signalComponentRuleEnumeration
-  outputRule | .apply => ⟨_, outputRule combiner⟩
+  outputRule | .apply => outputRule combiner
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by
     rw [show signalComponentRuleEnumeration.values = [SignalComponentRule.apply] by rfl]
-    simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil]
-    change combiner.ports.outputs.allSelection.labels.Perm
-      combiner.ports.outputs.labels.values
-    rw [SignalMap.allSelection_labels]
+    simp [outputRule]
 
 theorem outputRule_holds_iff (combiner : SignalCombiner)
     (inputs : combiner.ports.inputs.Values)
@@ -115,9 +99,7 @@ theorem outputRule_holds_iff (combiner : SignalCombiner)
     (outputs : combiner.ports.outputs.Values) :
     combiner.outputRule.Holds inputs state outputs ↔
       outputs = combiner.outputValues inputs := by
-  simp only [Contracts.Cycle.CycleOutputRule.Holds, outputRule]
-  rw [combiner.ports.inputs.unpack_project]
-  exact SignalSelection.allSelection_matches_project_iff _ _ _
+  simp [Contracts.Cycle.CycleOutputRule.Holds, outputRule]
 
 private def emptyStateCorresponds (_ : emptySignalMap.Values)
     (_ : emptySignalMap.Values) : Prop := True
@@ -134,9 +116,7 @@ private theorem implements (combiner : SignalCombiner) :
     simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
       SignalCombiner.IsSolution] at satisfies
     rw [satisfies]
-    simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds]
-    rw [combiner.ports.inputs.unpack_project]
-    exact combiner.ports.outputs.allSelection.matches_project _
+    exact SignalGroup.matches_project _ _
   · rfl
 
 def certified (combiner : SignalCombiner) :

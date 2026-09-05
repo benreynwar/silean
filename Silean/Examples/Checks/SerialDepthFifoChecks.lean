@@ -1,5 +1,5 @@
 import Silean.FIRRTL.Render
-import Silean.Modules.SerialDepthFifo.SerialDepthFifoCertified
+import Silean.Modules.SerialDepthFifo.SerialDepthFifoFifoCertified
 
 namespace Silean.Examples.Checks.SerialDepthFifo
 
@@ -65,7 +65,7 @@ private def containsAll (result : RenderResult String) (fragments : List String)
 #guard containsAll
   (renderCircuit (SerialDepthFifo.Naming.depthNamingWith payloadType payloadNaming 3 (by omega)))
   ["public module serial_depth_fifo_structural_t_v3_bit_t_bit_v2_t_bit_bit_unit_unit_unit_3",
-   "inst upstream of one_entry_fifo_structural_t_v3_bit_t_bit_v2_t_bit_bit_unit_unit_unit",
+   "inst upstream of OneEntryFifo_t_v3_bit_t_bit_v2_t_bit_bit_unit_unit_unit",
    "inst downstream of serial_depth_fifo_structural_t_v3_bit_t_bit_v2_t_bit_bit_unit_unit_unit_2",
    "a : UInt<1>[3]", "b : { c : UInt<1>, d : { e : UInt<1>, f : UInt<1> }[2] }"]
 

@@ -3,10 +3,10 @@ import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Foundation.BitVector
 import Silean.Modules.Constant
 import Silean.Modules.Mask
-import Silean.Modules.VectorConcat
+import Silean.Modules.VectorConcat.VectorConcatCertified
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
-import Silean.Primitives.NotPrimitive
+import Silean.Primitives.Not
 
 namespace Silean.Modules.BinaryToOneHot
 
@@ -133,18 +133,16 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule (width : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap
-      { inputTypes := .cons (.vector width .bit) .nil
-        outputTypes := .cons (.vector (size width) .bit) .nil } where
-  readsInputs := (inputMap width).select .value
-  writesOutputs := (outputMap width).select .result
-  target | (value, ()), _ => (oneHot width value, ())
+    Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap where
+  readsInputs := .all (inputMap width)
+  writesOutputs := .all (outputMap width)
+  target inputs _ := fun | .result => oneHot width (inputs .value)
 
 @[reducible] def cycleContract (width : Nat) : Contracts.Cycle.ModuleCycleContract (ports width) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule width⟩
+  outputRule | .apply => outputRule width
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -153,8 +151,15 @@ def outputRule (width : Nat) :
     (outputs : (ports width).outputs.Values) :
     (outputRule width).Holds inputs state outputs ↔
       outputs .result = oneHot width (inputs .value) := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .result
+  · intro equal
+    funext output
+    cases output
+    exact equal
 
 theorem result_of_holds (width : Nat)
     (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
@@ -695,7 +700,7 @@ def naming : (width : Nat) →
           | .invert => Silean.Naming.Primitive.not
           | .lowerMask | .upperMask => Modules.Mask.Naming.naming
               (.vector (Modules.BinaryToOneHot.size width) .bit)
-          | .concat => Modules.VectorConcat.Naming.naming .bit
+          | .concat => Modules.VectorConcat.naming .bit
               (Modules.BinaryToOneHot.size width) (Modules.BinaryToOneHot.size width))
 
 def namedModule (width : Nat) : NamedModule where

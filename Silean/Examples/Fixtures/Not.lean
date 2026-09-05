@@ -66,17 +66,16 @@ open Silean
 inductive Rule | apply
 deriving Enumeration
 
-def outputRule : Contracts.Cycle.CycleOutputRule Examples.Fixtures.Not.ports emptySignalMap
-    (.ofLists [.bit] [.bit]) where
-  readsInputs := Examples.Fixtures.Not.inputMap.select .value
-  writesOutputs := Examples.Fixtures.Not.outputMap.select .inverted
-  target | (value, ()), _ => (!value, ())
+def outputRule : Contracts.Cycle.CycleOutputRule Examples.Fixtures.Not.ports emptySignalMap :=
+  { readsInputs := .all Examples.Fixtures.Not.inputMap
+    writesOutputs := .all Examples.Fixtures.Not.outputMap
+    target := fun inputs _ => fun | .inverted => !(inputs .value) }
 
 def cycleContract : Contracts.Cycle.ModuleCycleContract Examples.Fixtures.Not.ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule⟩
+  outputRule | .apply => outputRule
   stateRule := Contracts.Cycle.CycleStateRule.empty Examples.Fixtures.Not.ports
   outputCoverage := by rfl
 

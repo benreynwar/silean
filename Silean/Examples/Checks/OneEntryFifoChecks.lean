@@ -1,5 +1,5 @@
 import Silean.Contracts.Cycle.CycleEvaluation
-import Silean.Modules.OneEntryFifo.OneEntryFifo
+import Silean.Modules.OneEntryFifo.OneEntryFifoCycleCertified
 
 namespace Silean.Examples.Checks.OneEntryFifo
 

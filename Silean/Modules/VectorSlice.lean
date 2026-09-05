@@ -39,12 +39,10 @@ deriving Enumeration
 
 def outputRule (element : SignalType) (prefixWidth width suffixWidth : Nat) :
     Contracts.Cycle.CycleOutputRule
-      (ports element prefixWidth width suffixWidth) emptySignalMap
-      { inputTypes := .cons (.vector (prefixWidth + width + suffixWidth) element) .nil
-        outputTypes := .cons (.vector width element) .nil } where
-  readsInputs := (inputMap element prefixWidth width suffixWidth).select .value
-  writesOutputs := (outputMap element width).select .result
-  target | (value, ()), _ => (slice value, ())
+      (ports element prefixWidth width suffixWidth) emptySignalMap where
+  readsInputs := .all (inputMap element prefixWidth width suffixWidth)
+  writesOutputs := .all (outputMap element width)
+  target inputs _ := fun | .result => slice (inputs .value)
 
 @[reducible] def cycleContract (element : SignalType)
     (prefixWidth width suffixWidth : Nat) :
@@ -53,7 +51,7 @@ def outputRule (element : SignalType) (prefixWidth width suffixWidth : Nat) :
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule element prefixWidth width suffixWidth⟩
+  outputRule | .apply => outputRule element prefixWidth width suffixWidth
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -64,8 +62,15 @@ def outputRule (element : SignalType) (prefixWidth width suffixWidth : Nat) :
     (outputs : (ports element prefixWidth width suffixWidth).outputs.Values) :
     (outputRule element prefixWidth width suffixWidth).Holds inputs state outputs ↔
       outputs .result = slice (inputs .value) := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalSelection.Matches, SignalSelection.project, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .result
+  · intro equal
+    funext output
+    cases output
+    exact equal
 
 theorem result_at_of_holds (element : SignalType)
     (prefixWidth width suffixWidth : Nat)
@@ -340,7 +345,7 @@ def namingWith (element : SignalType) (prefixWidth width suffixWidth : Nat)
       element prefixWidth width suffixWidth) :=
   .composite
     ⟨"vector_slice", "structural",
-      [.shape element, .natural prefixWidth, .natural width, .natural suffixWidth]⟩
+      [.signalType element, .natural prefixWidth, .natural width, .natural suffixWidth]⟩
     (portsWithNaming element prefixWidth width suffixWidth elementNaming)
     (fun | .split => "split" | .combine => "combine")
     (fun
@@ -354,7 +359,7 @@ def naming (element : SignalType) (prefixWidth width suffixWidth : Nat) :
       element prefixWidth width suffixWidth) :=
   namingWith element prefixWidth width suffixWidth (.positional element)
 
-def namedModule (element : SignalType) (prefixWidth width suffixWidth : Nat) : NamedModule where
+@[reducible] def namedModule (element : SignalType) (prefixWidth width suffixWidth : Nat) : NamedModule where
   ports := Modules.VectorSlice.ports element prefixWidth width suffixWidth
   moduleStructure := Modules.VectorSlice.moduleStructure element prefixWidth width suffixWidth
   naming := naming element prefixWidth width suffixWidth

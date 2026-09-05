@@ -1,5 +1,5 @@
 import Silean.Contracts.Fifo.FifoCycleBehavior
-import Silean.Modules.OneEntryFifo.OneEntryFifo
+import Silean.Modules.OneEntryFifo.OneEntryFifoCycleCertified
 
 namespace Silean.Modules.OneEntryFifo
 
@@ -9,23 +9,10 @@ open Contracts.Fifo.Cycle
 /-! Packages the one-entry FIFO's cycle behavior in the generic form used by
 serial FIFO composition. -/
 
-def oneEntryCycleBehavior (signalType : SignalType) : CycleBehavior signalType where
-  state := OneEntryFifo.stateMap signalType
-  forward := fun inputValid inputData state =>
-    (state .storedValid || inputValid,
-      bif state .storedValid then state .storedData else inputData)
-  ready := fun outputReady state => outputReady || !state .storedValid
-  nextState := (OneEntryFifo.stateRule signalType).apply
-
-theorem oneEntryCycleBehavior_cycleContract (signalType : SignalType) :
-    (oneEntryCycleBehavior signalType).cycleContract =
-      OneEntryFifo.cycleContract signalType := rfl
-
 noncomputable def oneEntryCertified (signalType : SignalType) :
     CertifiedCycleBehavior signalType where
-  cycleBehavior := oneEntryCycleBehavior signalType
+  cycleBehavior := OneEntryFifo.cycleBehavior signalType
   moduleStructure := OneEntryFifo.moduleStructure signalType
-  certification := (OneEntryFifo.certification signalType).transportContract
-    (oneEntryCycleBehavior_cycleContract signalType).symm
+  certification := OneEntryFifo.certification signalType
 
 end Silean.Modules.OneEntryFifo

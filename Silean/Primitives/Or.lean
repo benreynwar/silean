@@ -1,35 +1,21 @@
 import Silean.Contracts.Cycle.CycleImplementation
-import Silean.Primitives.PrimitivePorts
+import Silean.Primitives.OrPrimitive
 
 namespace Silean.Primitives
 
 open Silean
 
-/-- Stateless one-bit OR primitive. -/
-@[reducible] def or : Primitive where
-  ports := binaryPorts
-  localState := emptySignalMap
-  outputReads := [.left, .right]
-  outputValues := fun inputs _ => fun | .output => inputs .left || inputs .right
-  nextStateValues := fun _ state => state
-  outputRespectsReads := by
-    intro left right state agrees
-    funext port
-    cases port
-    simp [agrees .left (by simp), agrees .right (by simp)]
-
 inductive OrRule | apply
 deriving Enumeration
-def orOutputRule : Contracts.Cycle.CycleOutputRule or.ports emptySignalMap
-    (.ofLists [.bit, .bit] [.bit]) where
-  readsInputs := (or.ports.inputs.select .right).prepend .left
-  writesOutputs := or.ports.outputs.select .output
-  target | (left, (right, ())), _ => (left || right, ())
+def orOutputRule : Contracts.Cycle.CycleOutputRule or.ports emptySignalMap where
+  readsInputs := .all or.ports.inputs
+  writesOutputs := .all or.ports.outputs
+  target inputs _ := fun | .output => inputs .left || inputs .right
 def orCycleContract : Contracts.Cycle.ModuleCycleContract or.ports where
   state := emptySignalMap
   RuleName := OrRule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, orOutputRule⟩
+  outputRule | .apply => orOutputRule
   stateRule := Contracts.Cycle.CycleStateRule.empty or.ports
   outputCoverage := by rfl
 
@@ -39,8 +25,15 @@ def orCycleContract : Contracts.Cycle.ModuleCycleContract or.ports where
     (outputs : or.ports.outputs.Values) :
     orOutputRule.Holds inputs state outputs ↔
       outputs .output = (inputs .left || inputs .right) := by
-  simp [orOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
-    SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
+  simp only [orOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .output
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
 private def orStateCorresponds (_ : orCycleContract.state.Values)
     (_ : (ModuleStructure.primitive or).State) : Prop := True
@@ -58,8 +51,7 @@ private theorem orImplements : Contracts.Cycle.Implements (.primitive or) orCycl
       simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
         Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
       rw [satisfies.1]
-      simp [orOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
-        SignalSelection.Matches, SignalMap.select, SignalSelection.prepend, or]
+      exact SignalGroup.matches_project _ _
   · rfl
 
 def orCertified : Contracts.Cycle.ModuleCycleCertified or.ports where

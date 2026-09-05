@@ -16,18 +16,48 @@ example : vectorSplitter.outputValues (fun | .value => vectorValue) 1 = false :=
 example : vectorCombiner.outputValues
     (vectorSplitter.outputValues (fun | .value => vectorValue)) .value = vectorValue := rfl
 
-def tupleFields : SignalTypes :=
-  .ofList [.bit, .vector 2 .bit]
+inductive NamedField
+  | enabled
+  | payload
+deriving Enumeration
 
-def tupleValue : (SignalType.tuple tupleFields).Denote :=
-  (true, (vectorValue, ()))
+@[reducible] def namedSignals : SignalMap :=
+  EnumeratedMap.of NamedField fun
+    | .enabled => .bit
+    | .payload => .vector 2 .bit
 
-@[reducible] def tupleSplitter : Composition.SignalSplitter := .tuple tupleFields
-@[reducible] def tupleCombiner : Composition.SignalCombiner := .tuple tupleFields
+def tupleValue : namedSignals.tupleType.Denote :=
+  namedSignals.pack fun
+    | .enabled => true
+    | .payload => vectorValue
 
+@[reducible] def tupleSplitter : Composition.SignalSplitter := .tuple namedSignals.tupleFields
+@[reducible] def tupleCombiner : Composition.SignalCombiner := .tuple namedSignals.tupleFields
+
+example : tupleSplitter.outputValues (fun | .value => tupleValue) .head = true := rfl
+example : tupleSplitter.outputValues (fun | .value => tupleValue) (.tail .head) = vectorValue := rfl
 example : tupleCombiner.outputValues
-    (tupleSplitter.outputValues (fun | .value => tupleValue)) .value = tupleValue :=
-  SignalTypes.assemble_get tupleFields tupleValue
+    (tupleSplitter.outputValues (fun | .value => tupleValue)) .value = tupleValue := by
+  exact tupleSplitter.combine_split tupleValue
+
+def namedValues : namedSignals.Values
+  | .enabled => true
+  | .payload => vectorValue
+
+example : namedSignals.unpack (namedSignals.pack namedValues) = namedValues := by
+  simp
+
+example (value : namedSignals.tupleType.Denote) :
+    namedSignals.pack (namedSignals.unpack value) = value := by
+  simp
+
+example : namedSignals.tupleFields.get (namedSignals.pack namedValues)
+    (namedSignals.tuplePosition .enabled) = true := by
+  rfl
+
+example : namedSignals.tupleFields.get (namedSignals.pack namedValues)
+    (namedSignals.tuplePosition .payload) = vectorValue := by
+  rfl
 
 def emptyComponentState : emptySignalMap.Values := SignalMap.emptyValues
 

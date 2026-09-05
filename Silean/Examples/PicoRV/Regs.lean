@@ -4,11 +4,12 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.Constant
 import Silean.Modules.Equality
-import Silean.Modules.Mux
-import Silean.Modules.RegisterBank
+import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxCertified
+import Silean.Modules.RegisterBank.RegisterBankCertified
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.And
-import Silean.Primitives.NotPrimitive
+import Silean.Primitives.Not
 
 namespace Silean.Examples.PicoRV.Regs
 
@@ -91,44 +92,71 @@ inductive Rule
   | cpuregs_rs2
 deriving Enumeration
 
+namespace Rs1Rule
+inductive Input | decoded_rs1 deriving Enumeration
+inductive Output | cpuregs_rs1 deriving Enumeration
+end Rs1Rule
+
+namespace Rs2Rule
+inductive Input | decoded_rs2 deriving Enumeration
+inductive Output | cpuregs_rs2 deriving Enumeration
+end Rs2Rule
+
+namespace UpdateRule
+inductive Input | resetn | cpuregs_write | latched_rd | cpuregs_wrdata
+deriving Enumeration
+end UpdateRule
+
+@[reducible] private def rs1Inputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap Rs1Rule.Input fun
+    | .decoded_rs1 => .decoded_rs1
+
+@[reducible] private def rs1Outputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap Rs1Rule.Output fun
+    | .cpuregs_rs1 => .cpuregs_rs1
+
+@[reducible] private def rs2Inputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap Rs2Rule.Input fun
+    | .decoded_rs2 => .decoded_rs2
+
+@[reducible] private def rs2Outputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap Rs2Rule.Output fun
+    | .cpuregs_rs2 => .cpuregs_rs2
+
+@[reducible] private def updateInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap UpdateRule.Input fun
+    | .resetn => .resetn
+    | .cpuregs_write => .cpuregs_write
+    | .latched_rd => .latched_rd
+    | .cpuregs_wrdata => .cpuregs_wrdata
+
 def cpuregsRs1Rule :
-    Contracts.Cycle.CycleOutputRule ports stateMap
-      { inputTypes := .cons (.vector 5 .bit) .nil
-        outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := inputMap.select .decoded_rs1
-  writesOutputs := outputMap.select .cpuregs_rs1
-  target
-    | (decoded_rs1, ()), state =>
-        (readRegister decoded_rs1 (state .cpuregs), ())
+    Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := rs1Inputs
+  writesOutputs := rs1Outputs
+  target inputs state := fun
+    | .cpuregs_rs1 => readRegister (inputs .decoded_rs1) (state .cpuregs)
 
 def cpuregsRs2Rule :
-    Contracts.Cycle.CycleOutputRule ports stateMap
-      { inputTypes := .cons (.vector 5 .bit) .nil
-        outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := inputMap.select .decoded_rs2
-  writesOutputs := outputMap.select .cpuregs_rs2
-  target
-    | (decoded_rs2, ()), state =>
-        (readRegister decoded_rs2 (state .cpuregs), ())
+    Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := rs2Inputs
+  writesOutputs := rs2Outputs
+  target inputs state := fun
+    | .cpuregs_rs2 => readRegister (inputs .decoded_rs2) (state .cpuregs)
 
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
-  inputTypes := .cons .bit
-    (.cons .bit (.cons (.vector 5 .bit) (.cons (.vector 32 .bit) .nil)))
-  readsInputs := ((((inputMap.select .cpuregs_wrdata).prepend .latched_rd).prepend
-    .cpuregs_write).prepend .resetn)
-  target
-    | (resetn, (cpuregs_write, (latched_rd, (cpuregs_wrdata, ())))), state =>
-        fun
-          | .cpuregs => nextRegisters resetn cpuregs_write latched_rd
-              cpuregs_wrdata (state .cpuregs)
+  readsInputs := updateInputs
+  target inputs state := fun
+    | .cpuregs => nextRegisters (inputs .resetn) (inputs .cpuregs_write)
+        (inputs .latched_rd) (inputs .cpuregs_wrdata) (state .cpuregs)
 
 @[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := stateMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
-    | .cpuregs_rs1 => ⟨_, cpuregsRs1Rule⟩
-    | .cpuregs_rs2 => ⟨_, cpuregsRs2Rule⟩
+    | .cpuregs_rs1 => cpuregsRs1Rule
+    | .cpuregs_rs2 => cpuregsRs2Rule
   stateRule := stateRule
   outputCoverage := by rfl
 
@@ -185,16 +213,30 @@ theorem nextRegisters_other (resetn cpuregs_write : Bool)
     (outputs : ports.outputs.Values) :
     cpuregsRs1Rule.Holds inputs state outputs ↔
       outputs .cpuregs_rs1 = readRegister (inputs .decoded_rs1) (state .cpuregs) := by
-  simp [cpuregsRs1Rule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalMap.select]
+  unfold cpuregsRs1Rule Contracts.Cycle.CycleOutputRule.Holds
+    SignalGroup.Matches
+  constructor
+  · intro equal
+    exact congrFun equal .cpuregs_rs1
+  · intro equal
+    funext output
+    cases output
+    exact equal
 
 @[simp] theorem cpuregsRs2Rule_holds_iff
     (inputs : ports.inputs.Values) (state : stateMap.Values)
     (outputs : ports.outputs.Values) :
     cpuregsRs2Rule.Holds inputs state outputs ↔
       outputs .cpuregs_rs2 = readRegister (inputs .decoded_rs2) (state .cpuregs) := by
-  simp [cpuregsRs2Rule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalMap.select]
+  unfold cpuregsRs2Rule Contracts.Cycle.CycleOutputRule.Holds
+    SignalGroup.Matches
+  constructor
+  · intro equal
+    exact congrFun equal .cpuregs_rs2
+  · intro equal
+    funext output
+    cases output
+    exact equal
 
 /-! ## Hardware structure -/
 
@@ -694,13 +736,19 @@ def naming : ModuleNaming Regs.moduleStructure := by
       | .rs1Mux => "rs1_mux"
       | .rs2Mux => "rs2_mux")
     (fun
-      | .bank => Modules.RegisterBank.Naming.naming (.vector 32 .bit) 5 2
-      | .zeroAddress => Modules.Constant.Naming.naming (.vector 5 .bit) (fun _ => false)
-      | .zeroWord => Modules.Constant.Naming.naming (.vector 32 .bit) (fun _ => false)
-      | .rs1Zero | .rs2Zero | .rdZero => Modules.Equality.Naming.naming (.vector 5 .bit)
+      | .bank => Modules.RegisterBank.Naming.namingWith Regs.wordType 5 2
+          (.positional Regs.wordType)
+      | .zeroAddress => Modules.Constant.Naming.namingWith Regs.addressType
+          (fun _ => false) (.positional Regs.addressType)
+      | .zeroWord => Modules.Constant.Naming.namingWith Regs.wordType
+          (fun _ => false) (.positional Regs.wordType)
+      | .rs1Zero | .rs2Zero | .rdZero =>
+          Modules.Equality.Naming.namingWith Regs.addressType
+            (.positional Regs.addressType)
       | .rdNonzero => Silean.Naming.Primitive.not
       | .requestedWrite | .enabledWrite => Silean.Naming.Primitive.and
-      | .rs1Mux | .rs2Mux => Modules.Mux.Naming.naming (.vector 32 .bit))
+      | .rs1Mux | .rs2Mux => Modules.Mux.namingWith Regs.wordType
+          (.positional Regs.wordType))
 
 def namedModule : NamedModule where
   ports := Regs.ports

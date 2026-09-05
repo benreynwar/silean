@@ -426,120 +426,244 @@ inductive Rule
   | memDone | memRdataWord | memRdataLatched | memRdataQ
 deriving Enumeration
 
-def registeredRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .nil,
-      outputTypes := .ofList [
-        .bit, .bit, .vector 32 .bit, .vector 32 .bit, .vector 4 .bit] } where
-  readsInputs := .nil
-  writesOutputs := ((((outputMap.select .mem_wstrb).prepend
-    .mem_wdata).prepend .mem_addr).prepend .mem_instr).prepend .mem_valid
-  target := fun _ state =>
-    (state .mem_valid, (state .mem_instr, (state .mem_addr, (state .mem_wdata,
-      (state .mem_wstrb, ())))))
+namespace RegisteredRule
+inductive Output | mem_valid | mem_instr | mem_addr | mem_wdata | mem_wstrb
+deriving Enumeration
+end RegisteredRule
 
-def memLaReadRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [.bit, .bit, .bit, .bit],
-      outputTypes := .cons .bit .nil } where
-  readsInputs := (((inputMap.select .mem_do_rdata).prepend .mem_do_rinst).prepend
-    .mem_do_prefetch).prepend .resetn
-  writesOutputs := outputMap.select .mem_la_read
-  target
-    | (resetn, (prefetch, (rinst, (rdata, ())))), state =>
-      (memLaReadFrom resetn prefetch rinst rdata state, ())
+namespace MemLaReadRule
+inductive Input | resetn | mem_do_prefetch | mem_do_rinst | mem_do_rdata
+deriving Enumeration
+inductive Output | mem_la_read deriving Enumeration
+end MemLaReadRule
 
-def memLaWriteRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [.bit, .bit], outputTypes := .cons .bit .nil } where
-  readsInputs := (inputMap.select .mem_do_wdata).prepend .resetn
-  writesOutputs := outputMap.select .mem_la_write
-  target
-    | (resetn, (wdata, ())), state =>
-      (memLaWriteFrom resetn wdata state, ())
+namespace MemLaWriteRule
+inductive Input | resetn | mem_do_wdata deriving Enumeration
+inductive Output | mem_la_write deriving Enumeration
+end MemLaWriteRule
 
-def memLaAddrRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [.bit, .bit, .vector 32 .bit, .vector 32 .bit],
-      outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := (((inputMap.select .reg_op1).prepend .next_pc).prepend
-    .mem_do_rinst).prepend .mem_do_prefetch
-  writesOutputs := outputMap.select .mem_la_addr
-  target
-    | (prefetch, (rinst, (nextPc, (regOp1, ())))), _ =>
-      (memLaAddrFrom prefetch rinst nextPc regOp1, ())
+namespace MemLaAddrRule
+inductive Input | mem_do_prefetch | mem_do_rinst | next_pc | reg_op1
+deriving Enumeration
+inductive Output | mem_la_addr deriving Enumeration
+end MemLaAddrRule
 
-def memLaWdataRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [.vector 2 .bit, .vector 32 .bit],
-      outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := (inputMap.select .reg_op2).prepend .mem_wordsize
-  writesOutputs := outputMap.select .mem_la_wdata
-  target
-    | (wordsize, (regOp2, ())), _ =>
-      (formattedWriteDataFrom wordsize regOp2, ())
+namespace MemLaWdataRule
+inductive Input | mem_wordsize | reg_op2 deriving Enumeration
+inductive Output | mem_la_wdata deriving Enumeration
+end MemLaWdataRule
 
-def memLaWstrbRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [.vector 2 .bit, .vector 32 .bit],
-      outputTypes := .cons (.vector 4 .bit) .nil } where
-  readsInputs := (inputMap.select .reg_op1).prepend .mem_wordsize
-  writesOutputs := outputMap.select .mem_la_wstrb
-  target
-    | (wordsize, (regOp1, ())), _ =>
-      (formattedWriteMaskFrom wordsize regOp1, ())
+namespace MemLaWstrbRule
+inductive Input | mem_wordsize | reg_op1 deriving Enumeration
+inductive Output | mem_la_wstrb deriving Enumeration
+end MemLaWstrbRule
 
-def memDoneRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [.bit, .bit, .bit, .bit, .bit],
-      outputTypes := .cons .bit .nil } where
-  readsInputs := ((((inputMap.select .mem_ready).prepend .mem_do_wdata).prepend
-    .mem_do_rdata).prepend .mem_do_rinst).prepend .resetn
-  writesOutputs := outputMap.select .mem_done
-  target
-    | (resetn, (rinst, (rdata, (wdata, (ready, ()))))), state =>
-      (memDoneFrom resetn rinst rdata wdata ready state, ())
+namespace MemDoneRule
+inductive Input | resetn | mem_do_rinst | mem_do_rdata | mem_do_wdata | mem_ready
+deriving Enumeration
+inductive Output | mem_done deriving Enumeration
+end MemDoneRule
 
-def memRdataWordRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [
-        .vector 2 .bit, .vector 32 .bit, .vector 32 .bit],
-      outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := ((inputMap.select .mem_rdata).prepend .reg_op1).prepend .mem_wordsize
-  writesOutputs := outputMap.select .mem_rdata_word
-  target
-    | (wordsize, (regOp1, (memRdata, ()))), _ =>
-      (formattedReadDataFrom wordsize regOp1 memRdata, ())
+namespace MemRdataWordRule
+inductive Input | mem_wordsize | reg_op1 | mem_rdata deriving Enumeration
+inductive Output | mem_rdata_word deriving Enumeration
+end MemRdataWordRule
 
-def memRdataLatchedRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [.bit, .vector 32 .bit],
-      outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := (inputMap.select .mem_rdata).prepend .mem_ready
-  writesOutputs := outputMap.select .mem_rdata_latched
-  target
-    | (ready, (memRdata, ())), state =>
-      (memRdataLatchedFrom ready memRdata state, ())
+namespace MemRdataLatchedRule
+inductive Input | mem_ready | mem_rdata deriving Enumeration
+inductive Output | mem_rdata_latched deriving Enumeration
+end MemRdataLatchedRule
 
-def memRdataQRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .nil,
-      outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := .nil
-  writesOutputs := outputMap.select .mem_rdata_q
-  target := fun _ state => (state .mem_rdata_q, ())
+namespace MemRdataQRule
+inductive Output | mem_rdata_q deriving Enumeration
+end MemRdataQRule
+
+@[reducible] private def registeredOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap RegisteredRule.Output fun
+    | .mem_valid => .mem_valid
+    | .mem_instr => .mem_instr
+    | .mem_addr => .mem_addr
+    | .mem_wdata => .mem_wdata
+    | .mem_wstrb => .mem_wstrb
+
+@[reducible] private def memLaReadInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap MemLaReadRule.Input fun
+    | .resetn => .resetn
+    | .mem_do_prefetch => .mem_do_prefetch
+    | .mem_do_rinst => .mem_do_rinst
+    | .mem_do_rdata => .mem_do_rdata
+
+@[reducible] private def memLaReadOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemLaReadRule.Output fun
+    | .mem_la_read => .mem_la_read
+
+@[reducible] private def memLaWriteInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap MemLaWriteRule.Input fun
+    | .resetn => .resetn
+    | .mem_do_wdata => .mem_do_wdata
+
+@[reducible] private def memLaWriteOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemLaWriteRule.Output fun
+    | .mem_la_write => .mem_la_write
+
+@[reducible] private def memLaAddrInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap MemLaAddrRule.Input fun
+    | .mem_do_prefetch => .mem_do_prefetch
+    | .mem_do_rinst => .mem_do_rinst
+    | .next_pc => .next_pc
+    | .reg_op1 => .reg_op1
+
+@[reducible] private def memLaAddrOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemLaAddrRule.Output fun
+    | .mem_la_addr => .mem_la_addr
+
+@[reducible] private def memLaWdataInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap MemLaWdataRule.Input fun
+    | .mem_wordsize => .mem_wordsize
+    | .reg_op2 => .reg_op2
+
+@[reducible] private def memLaWdataOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemLaWdataRule.Output fun
+    | .mem_la_wdata => .mem_la_wdata
+
+@[reducible] private def memLaWstrbInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap MemLaWstrbRule.Input fun
+    | .mem_wordsize => .mem_wordsize
+    | .reg_op1 => .reg_op1
+
+@[reducible] private def memLaWstrbOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemLaWstrbRule.Output fun
+    | .mem_la_wstrb => .mem_la_wstrb
+
+@[reducible] private def memDoneInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap MemDoneRule.Input fun
+    | .resetn => .resetn
+    | .mem_do_rinst => .mem_do_rinst
+    | .mem_do_rdata => .mem_do_rdata
+    | .mem_do_wdata => .mem_do_wdata
+    | .mem_ready => .mem_ready
+
+@[reducible] private def memDoneOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemDoneRule.Output fun
+    | .mem_done => .mem_done
+
+@[reducible] private def memRdataWordInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap MemRdataWordRule.Input fun
+    | .mem_wordsize => .mem_wordsize
+    | .reg_op1 => .reg_op1
+    | .mem_rdata => .mem_rdata
+
+@[reducible] private def memRdataWordOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemRdataWordRule.Output fun
+    | .mem_rdata_word => .mem_rdata_word
+
+@[reducible] private def memRdataLatchedInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap MemRdataLatchedRule.Input fun
+    | .mem_ready => .mem_ready
+    | .mem_rdata => .mem_rdata
+
+@[reducible] private def memRdataLatchedOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemRdataLatchedRule.Output fun
+    | .mem_rdata_latched => .mem_rdata_latched
+
+@[reducible] private def memRdataQOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap MemRdataQRule.Output fun
+    | .mem_rdata_q => .mem_rdata_q
+
+def registeredRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := .empty inputMap
+  writesOutputs := registeredOutputs
+  target _ state := fun
+    | .mem_valid => state .mem_valid
+    | .mem_instr => state .mem_instr
+    | .mem_addr => state .mem_addr
+    | .mem_wdata => state .mem_wdata
+    | .mem_wstrb => state .mem_wstrb
+
+def memLaReadRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := memLaReadInputs
+  writesOutputs := memLaReadOutputs
+  target inputs state := fun
+    | .mem_la_read =>
+      memLaReadFrom (inputs .resetn) (inputs .mem_do_prefetch)
+        (inputs .mem_do_rinst) (inputs .mem_do_rdata) state
+
+def memLaWriteRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := memLaWriteInputs
+  writesOutputs := memLaWriteOutputs
+  target inputs state := fun
+    | .mem_la_write =>
+      memLaWriteFrom (inputs .resetn) (inputs .mem_do_wdata) state
+
+def memLaAddrRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := memLaAddrInputs
+  writesOutputs := memLaAddrOutputs
+  target inputs _ := fun
+    | .mem_la_addr =>
+      memLaAddrFrom (inputs .mem_do_prefetch) (inputs .mem_do_rinst)
+        (inputs .next_pc) (inputs .reg_op1)
+
+def memLaWdataRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := memLaWdataInputs
+  writesOutputs := memLaWdataOutputs
+  target inputs _ := fun
+    | .mem_la_wdata =>
+      formattedWriteDataFrom (inputs .mem_wordsize) (inputs .reg_op2)
+
+def memLaWstrbRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := memLaWstrbInputs
+  writesOutputs := memLaWstrbOutputs
+  target inputs _ := fun
+    | .mem_la_wstrb =>
+      formattedWriteMaskFrom (inputs .mem_wordsize) (inputs .reg_op1)
+
+def memDoneRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := memDoneInputs
+  writesOutputs := memDoneOutputs
+  target inputs state := fun
+    | .mem_done =>
+      memDoneFrom (inputs .resetn) (inputs .mem_do_rinst)
+        (inputs .mem_do_rdata) (inputs .mem_do_wdata) (inputs .mem_ready) state
+
+def memRdataWordRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := memRdataWordInputs
+  writesOutputs := memRdataWordOutputs
+  target inputs _ := fun
+    | .mem_rdata_word =>
+      formattedReadDataFrom (inputs .mem_wordsize) (inputs .reg_op1)
+        (inputs .mem_rdata)
+
+def memRdataLatchedRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := memRdataLatchedInputs
+  writesOutputs := memRdataLatchedOutputs
+  target inputs state := fun
+    | .mem_rdata_latched =>
+      memRdataLatchedFrom (inputs .mem_ready) (inputs .mem_rdata) state
+
+def memRdataQRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := .empty inputMap
+  writesOutputs := memRdataQOutputs
+  target _ state := fun | .mem_rdata_q => state .mem_rdata_q
 
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
-  inputTypes := .ofList inputMap.types
-  readsInputs := inputMap.allSelection
-  target := fun selected state =>
-    nextState (inputsOfValues (inputMap.unpack selected)) state
+  readsInputs := .all inputMap
+  target := fun inputs state => nextState (inputsOfValues inputs) state
 
 @[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := stateMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
-    | .registered => ⟨_, registeredRule⟩
-    | .memLaRead => ⟨_, memLaReadRule⟩
-    | .memLaWrite => ⟨_, memLaWriteRule⟩
-    | .memLaAddr => ⟨_, memLaAddrRule⟩
-    | .memLaWdata => ⟨_, memLaWdataRule⟩
-    | .memLaWstrb => ⟨_, memLaWstrbRule⟩
-    | .memDone => ⟨_, memDoneRule⟩
-    | .memRdataWord => ⟨_, memRdataWordRule⟩
-    | .memRdataLatched => ⟨_, memRdataLatchedRule⟩
-    | .memRdataQ => ⟨_, memRdataQRule⟩
+    | .registered => registeredRule
+    | .memLaRead => memLaReadRule
+    | .memLaWrite => memLaWriteRule
+    | .memLaAddr => memLaAddrRule
+    | .memLaWdata => memLaWdataRule
+    | .memLaWstrb => memLaWstrbRule
+    | .memDone => memDoneRule
+    | .memRdataWord => memRdataWordRule
+    | .memRdataLatched => memRdataLatchedRule
+    | .memRdataQ => memRdataQRule
   stateRule := stateRule
   outputCoverage := by rfl
 

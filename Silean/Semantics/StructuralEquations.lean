@@ -134,6 +134,17 @@ def SignalSource.value (source : SignalSource ports instancePorts signalType)
   | .moduleInput port => inputs port
   | .instanceOutput name port => childOutputs name port
 
+@[simp] theorem SignalSource.value_castType
+    {sourceType targetType : SignalType} (equal : sourceType = targetType)
+    (source : SignalSource ports instancePorts sourceType)
+    (inputs : ports.inputs.Values)
+    (childOutputs : (name : instancePorts.Name) →
+      (instancePorts.ports name).outputs.Values) :
+    (SignalSource.castType equal source).value inputs childOutputs =
+      equal ▸ source.value inputs childOutputs := by
+  cases equal
+  rfl
+
 /-- Derive one child's complete input values from root inputs, sibling output
 values, and the composite wiring. -/
 @[simp] def Wiring.childInputValues (wiring : Wiring ports instancePorts)

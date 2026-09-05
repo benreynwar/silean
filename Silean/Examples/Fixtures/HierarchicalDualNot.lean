@@ -1,6 +1,6 @@
 import Silean.Contracts.Cycle.CycleLayerSchedule
 import Silean.Examples.Fixtures.DualNot
-import Silean.Primitives.NotPrimitive
+import Silean.Primitives.Not
 
 namespace Silean.Examples.Fixtures.HierarchicalDualNot
 

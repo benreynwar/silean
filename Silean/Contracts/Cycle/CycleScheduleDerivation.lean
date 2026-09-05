@@ -143,9 +143,9 @@ theorem enumerationValue_mem
     value ∈ enumeration.values :=
   ListIndex.get_eq (enumeration.locate value) ▸ List.get_mem _ _
 
-theorem signalLabel_mem_allSelection (signals : SignalMap)
-    (label : signals.Label) : label ∈ signals.allSelection.labels := by
-  rw [SignalMap.allSelection_labels]
+theorem signalLabel_mem_allGroup (signals : SignalMap)
+    (label : signals.Label) : label ∈ (SignalGroup.all signals).labels := by
+  rw [SignalGroup.all_labels]
   exact enumerationValue_mem signals.labels label
 
 /-- If a child contract has exactly one output rule, every child output is
@@ -620,8 +620,13 @@ private partial def listIndexAt (values : Expr) (index : Nat) : MetaM Expr := do
 private def sameExpr (left right : Expr) : MetaM Bool :=
   if left == right then
     pure true
-  else
-    withTransparency .all <| isDefEq left right
+  else do
+    let reducedLeft ← withTransparency .reducible <| whnf left
+    let reducedRight ← withTransparency .reducible <| whnf right
+    if reducedLeft == reducedRight then
+      pure true
+    else
+      withTransparency .all <| isDefEq reducedLeft reducedRight
 
 private def occurrenceProjection (projection : Name) (occurrence : Expr) : MetaM Expr := do
   let occurrenceType ← withTransparency .reducible <| whnf (← inferType occurrence)
@@ -770,6 +775,31 @@ private partial def proveSourceAvailable
       let requiredArguments := required.getAppArgs
       if requiredArguments.size >= 2 then
         let labels := requiredArguments[requiredArguments.size - 2]!
+        let (originalLabelsName, originalLabelsArguments) := labels.getAppFnArgs
+        if originalLabelsName == ``SignalGroup.labels &&
+            !originalLabelsArguments.isEmpty then
+          let group := originalLabelsArguments.back!
+          let (groupName, groupArguments) := group.getAppFnArgs
+          if groupName == ``SignalGroup.all && !groupArguments.isEmpty then
+            let signals := groupArguments.back!
+            let proof ← mkAppM
+              ``ScheduleDerivation.signalLabel_mem_allGroup
+              #[signals, input]
+            unless ← withTransparency .reducible <|
+                isDefEq (← inferType proof) required do
+              throwError "all-group membership has the wrong type"
+            return proof
+          let groupType ← whnf (← inferType group)
+          let parent := groupType.getAppArgs.back!
+          let allGroup ← mkAppM ``SignalGroup.all #[parent]
+          if ← withTransparency .all <| isDefEq group allGroup then
+            let proof ← mkAppM
+              ``ScheduleDerivation.signalLabel_mem_allGroup
+              #[parent, input]
+            unless ← withTransparency .all <|
+                isDefEq (← inferType proof) required do
+              throwError "all-group membership has the wrong type"
+            return proof
         try
           let entries ← exprList labels
           for (entry, index) in entries.zipIdx do
@@ -787,20 +817,6 @@ private partial def proveSourceAvailable
                 isDefEq (← inferType proof) required do
               throwError "enumeration membership has the wrong type"
             return proof
-          if labelsName == ``SignalSelection.labels &&
-              !labelsArguments.isEmpty then
-            let selection := labelsArguments.back!
-            let (selectionName, selectionArguments) := selection.getAppFnArgs
-            if selectionName == ``SignalMap.selectionFrom &&
-                selectionArguments.size >= 2 then
-              let signals := selectionArguments[selectionArguments.size - 2]!
-              let proof ← mkAppM
-                ``ScheduleDerivation.signalLabel_mem_allSelection
-                #[signals, input]
-              unless ← withTransparency .all <|
-                  isDefEq (← inferType proof) required do
-                throwError "all-selection membership has the wrong type"
-              return proof
         catch _ => pure ()
     let check := mkAppN (mkConst ``ScheduleDerivation.moduleInputReadyBool)
       #[body, inputAvailable, decideInput, input]
@@ -834,30 +850,30 @@ private partial def proveSourceAvailable
       if ← sameExpr providerChild sourceChild then
         let writes ← mkAppM ``RuleOccurrence.writes #[provider]
         let providerRule ← mkAppM ``RuleOccurrence.rule #[provider]
-        let writtenOutputs? ← try
-          pure (some (← exprList writes))
-        catch _ => pure none
         let mut writtenProof? : Option Expr := none
-        if let some writtenOutputs := writtenOutputs? then
-          for (written, writtenIndex) in writtenOutputs.zipIdx do
-            if ← sameExpr written sourceOutput then
-              writtenProof? := some (← membershipAt writes writtenIndex)
+        let childContract := mkApp childContracts sourceChild
+        let names ← mkAppM ``ModuleCycleContract.ruleNames #[childContract]
+        let ruleType := (← whnf (← inferType names)).getAppArgs[0]!
+        let ruleValues := mkAppN (mkConst ``Enumeration.values [.zero])
+          #[ruleType, names]
+        let rules? ← try
+          pure (some (← exprList ruleValues))
+        catch _ => pure none
+        if let some [onlyRule] := rules? then
+          if ← sameExpr onlyRule providerRule then
+            let onlyProof ← mkEqRefl ruleValues
+            writtenProof? := some (mkAppN
+              (mkConst ``ScheduleDerivation.output_written_by_only_rule)
+              #[body, childContracts, sourceChild, providerRule, onlyProof,
+                sourceOutput])
         if writtenProof?.isNone then
-          let childContract := mkApp childContracts sourceChild
-          let names ← mkAppM ``ModuleCycleContract.ruleNames #[childContract]
-          let ruleType := (← whnf (← inferType names)).getAppArgs[0]!
-          let ruleValues := mkAppN (mkConst ``Enumeration.values [.zero])
-            #[ruleType, names]
-          let rules? ← try
-            pure (some (← exprList ruleValues))
+          let writtenOutputs? ← try
+            pure (some (← exprList writes))
           catch _ => pure none
-          if let some [onlyRule] := rules? then
-            if ← sameExpr onlyRule providerRule then
-              let onlyProof ← mkEqRefl ruleValues
-              writtenProof? := some (mkAppN
-                (mkConst ``ScheduleDerivation.output_written_by_only_rule)
-                #[body, childContracts, sourceChild, providerRule, onlyProof,
-                  sourceOutput])
+          if let some writtenOutputs := writtenOutputs? then
+            for (written, writtenIndex) in writtenOutputs.zipIdx do
+              if ← sameExpr written sourceOutput then
+                writtenProof? := some (← membershipAt writes writtenIndex)
         if writtenProof?.isNone then
           let membership ← mkAppM ``List.Mem #[sourceOutput, writes]
           if let some proof ← observing? (proveOutputMembershipBySimp membership) then
@@ -1067,7 +1083,7 @@ private def buildSymbolicReadsProof
         (← `(tactic| first
           | cases member
           | (change input ∈ [] at member; cases member)
-          | simp_all [RuleOccurrence.reads, SignalSelection.labels]))
+          | simp_all [RuleOccurrence.reads]))
       if remaining.isEmpty then
         let proof := mkAppN (mkConst ``False.elim [.zero]) #[target, impossible]
         return ← mkLambdaFVars #[input, member] proof
@@ -1143,7 +1159,7 @@ private def stateReadLabels (childContracts child : Expr) : MetaM Expr := do
   let contract := mkApp childContracts child
   let stateRule ← mkAppM ``ModuleCycleContract.stateRule #[contract]
   let reads ← mkAppM ``CycleStateRule.readsInputs #[stateRule]
-  mkAppM ``SignalSelection.labels #[reads]
+  mkAppM ``SignalGroup.labels #[reads]
 
 private def buildStateChildCertificates
     (body childContracts inputAvailable decideInput available child : Expr)
@@ -1251,38 +1267,35 @@ private def buildStateBoundary
     (body childContracts inputAvailable decideInput available : Expr)
     (concreteProviders : List ConcreteProvider)
     (familyProviders : List FamilyProvider) : MetaM Expr := do
-  if familyProviders.isEmpty then
-    let directTarget := mkAppN (mkConst ``ChildrenStateInputsReady)
-      #[body, childContracts, available]
-    let directGoal ← mkFreshExprSyntheticOpaqueMVar directTarget
-    let (afterIntro, _) ← Lean.Elab.runTactic directGoal.mvarId!
-      (← `(tactic| intro child input member))
-    let mut directRemaining := []
-    for current in afterIntro do
-      let childId? ← current.withContext do
-        let mut result : Option FVarId := none
-        for id in (← getLCtx).getFVarIds do
-          let declaration ← id.getDecl
-          if declaration.userName.eraseMacroScopes == `child then
-            result := some id
-        pure result
-      let firstCases ← match childId? with
-        | some childId => pure <| (← current.cases childId).toList.map (·.mvarId)
-        | none => pure [current]
-      let mut afterCases := []
-      for firstCase in firstCases do
-        for structuralCase in (← caseStructuralIndexLocals firstCase) do
-          afterCases := afterCases ++ (← caseEmptyOrUnitLocals structuralCase)
-      for branch in afterCases do
-        let (next, _) ← Lean.Elab.runTactic branch
-          (← `(tactic| dsimp at member <;>
-            simp_all [CycleStateRule.empty, SignalMap.select,
-              SignalSelection.labels]))
-        for goal in next do
-          unless ← closeEmptyMembershipGoal? goal do
-            directRemaining := directRemaining ++ [goal]
-    if directRemaining.isEmpty then
-      return ← instantiateMVars directGoal
+  let directTarget := mkAppN (mkConst ``ChildrenStateInputsReady)
+    #[body, childContracts, available]
+  let directGoal ← mkFreshExprSyntheticOpaqueMVar directTarget
+  let (afterIntro, _) ← Lean.Elab.runTactic directGoal.mvarId!
+    (← `(tactic| intro child input member))
+  let mut directRemaining := []
+  for current in afterIntro do
+    let childId? ← current.withContext do
+      let mut result : Option FVarId := none
+      for id in (← getLCtx).getFVarIds do
+        let declaration ← id.getDecl
+        if declaration.userName.eraseMacroScopes == `child then
+          result := some id
+      pure result
+    let firstCases ← match childId? with
+      | some childId => pure <| (← current.cases childId).toList.map (·.mvarId)
+      | none => pure [current]
+    let mut afterCases := []
+    for firstCase in firstCases do
+      for structuralCase in (← caseStructuralIndexLocals firstCase) do
+        afterCases := afterCases ++ (← caseEmptyOrUnitLocals structuralCase)
+    for branch in afterCases do
+      let (next, _) ← Lean.Elab.runTactic branch
+        (← `(tactic| simp_all [CycleStateRule.empty, SignalMap.select]))
+      for goal in next do
+        unless ← closeEmptyMembershipGoal? goal do
+          directRemaining := directRemaining ++ [goal]
+  if directRemaining.isEmpty then
+    return ← instantiateMVars directGoal
   let context ← mkAppM ``ModuleBody.context #[body]
   let instancePorts ← mkAppM ``EndpointContext.instancePorts #[context]
   let names ← mkAppM ``EnumeratedMap.keys #[instancePorts]
@@ -1304,9 +1317,7 @@ private def buildStateBoundary
     let mut remaining := []
     for current in afterCases do
       let (next, _) ← Lean.Elab.runTactic current
-        (← `(tactic| dsimp at member <;>
-          simp_all [CycleStateRule.empty, SignalMap.select,
-            SignalSelection.labels]))
+        (← `(tactic| simp_all [CycleStateRule.empty, SignalMap.select]))
       for goal in next do
         unless ← closeEmptyMembershipGoal? goal do
           remaining := remaining ++ [goal]

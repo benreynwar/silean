@@ -1,5 +1,5 @@
 import Silean.Examples.PicoRV.Decoder.DecoderTypes
-import Silean.Composition.SignalLayout
+import Silean.Foundation.SignalLayout
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 
@@ -116,34 +116,31 @@ def outputValues (inputs : Inputs) : Output → Bool
 inductive Rule | apply
 deriving Enumeration
 
-def outputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap
-    { inputTypes := .ofList inputMap.types,
-      outputTypes := .ofList outputMap.types } where
-  readsInputs := inputMap.allSelection
-  writesOutputs := outputMap.allSelection
-  target := fun selected _ => outputMap.allSelection.project
-    (outputValues (valuesOf (inputMap.unpack selected)))
+def outputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap where
+  readsInputs := .all inputMap
+  writesOutputs := .all outputMap
+  target inputs _ := outputValues (valuesOf inputs)
 
 @[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule⟩
+  outputRule | .apply => outputRule
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by
-    change outputMap.allSelection.labels.Perm outputMap.labels.values
-    rw [SignalMap.allSelection_labels]
+    change outputMap.labels.values.Perm outputMap.labels.values
+    rfl
 
 @[simp] theorem outputRule_reads (input : Input) :
     input ∈ outputRule.readsInputs.labels := by
-  change input ∈ inputMap.allSelection.labels
-  rw [SignalMap.allSelection_labels]
+  change input ∈ (SignalGroup.all inputMap).labels
+  rw [SignalGroup.all_labels]
   exact (inputMap.labels.locate input).mem
 
 @[simp] theorem outputRule_writes (output : Output) :
     output ∈ outputRule.writesOutputs.labels := by
-  change output ∈ outputMap.allSelection.labels
-  rw [SignalMap.allSelection_labels]
+  change output ∈ (SignalGroup.all outputMap).labels
+  rw [SignalGroup.all_labels]
   exact (outputMap.labels.locate output).mem
 
 @[simp] theorem outputRule_holds_iff
@@ -151,10 +148,6 @@ def outputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap
     (outputs : ports.outputs.Values) :
     outputRule.Holds inputs state outputs ↔
       outputs = outputValues (valuesOf inputs) := by
-  change outputMap.allSelection.Matches outputs
-      (outputMap.allSelection.project
-        (outputValues (valuesOf (inputMap.unpack
-          (inputMap.allSelection.project inputs))))) ↔ _
-  rw [inputMap.unpack_project, SignalSelection.allSelection_matches_project_iff]
+  simp [Contracts.Cycle.CycleOutputRule.Holds, outputRule]
 
 end Silean.Examples.PicoRV.Decoder.InstructionMatch

@@ -19,6 +19,19 @@ the concepts and proof boundary; `../Roadmap.md` records remaining work.
 | `Silean.Naming` | Generic naming metadata plus primitive, adapter, and reusable composition naming |
 | `Silean.FIRRTL` | Generic traversal, rendering, validation, and emission |
 
+## Authoring
+
+| Source | Responsibility |
+| --- | --- |
+| `Authoring/SignalSchema.lean` | The thin authoring name for hierarchical `SignalTypeNaming` metadata |
+| `Authoring/SignalSchemaDeclaration.lean` | Parameterizable `signal_schema` declarations that generate typed labels, signal maps, aggregate types, typed field accessors, and naming |
+| `Authoring/ModulePorts.lean` | Concise port declarations and schema-derived port naming |
+| `Authoring/ModuleDesign.lean` | Self-contained ordinary composite declarations, including schema-aware recursive naming |
+| `Authoring/ModuleCycleContract.lean` | Natural named output and next-state rule declarations with generated contract plumbing and rule laws |
+| `Authoring/ModuleChildCertifications.lean` | Proof-side association of each structural child with one canonical certification, deriving its contract, certified hierarchy, and structure-match proof |
+| `Authoring/ModuleRuleSchedules.lean` | Visible child-rule ordering with generated schedule types and validity derivation |
+| `Authoring/ModuleCycleCertification.lean` | Assembly of validated schedules, state correspondence, and implementation evidence into the standard layer and concrete certification, with a derived public bundle |
+
 Internal files import the narrow dependency they need. The aggregates are
 entry points for consumers and do not create compatibility namespaces.
 
@@ -62,13 +75,24 @@ An interface selects and interprets part of a module boundary. The valid/ready
 interfaces say when a payload transfer occurs, but do not specify FIFO
 ordering, capacity, latency, or reset behavior.
 
-`Composition/SignalLayout.lean` and `Composition/SignalAdapter.lean` are the
-deliberate low-level Composition dependency of `ModuleStructure`: they describe
-closed, lossless immediate-component structural leaves.
+`Foundation/SignalLayout.lean` provides the label-directed aggregate value
+machinery, while `Composition/SignalAdapter.lean` defines the closed, lossless
+immediate-component structural leaves used by `ModuleStructure`. `SignalLayout`
+also
+provides the generic label-directed view between a `SignalMap` and its
+canonical tuple representation, including pack/unpack and field-access laws;
+tuple adapter ports use the original typed labels directly while the FIRRTL
+backend maps those labels to the corresponding aggregate fields.
 `Composition/SignalAdapterImplementation.lean` owns their equations, cycle
 contracts, and certificates; `Composition/SignalLogic.lean` contains generic
 signal-value logic laws, including recursive value equality and its
 equivalence to Lean equality.
+
+`Modules/TupleField.lean` wraps a tuple splitter to expose one type-correct
+field. The selected `SignalMap.Label` determines its signal type directly;
+no positional field witness or type transport is exposed.
+`TupleFieldCertified.lean` proves the wrapper's direct
+field-selection cycle contract.
 
 ## Meaning and certification
 
@@ -93,7 +117,8 @@ equivalence to Lean equality.
 | `Composition/LeafwiseComposition.lean` | Generic split/component/combine hierarchy, proposal construction, and shared component scheduling |
 | `Composition/BinaryLeafwise.lean` | Certified recursive construction for stateless binary leafwise operations |
 | `Composition/Reduction.lean` | Generic balanced reduction hierarchy parameterized by a binary operation and identity |
-| `Composition/FifoSerialComposition.lean` | Two-child serial FIFO structure and exact cycle certification |
+| `Composition/FifoSerialComposition.lean` | Generic two-child serial FIFO structural layer |
+| `Composition/FifoSerialCycleCertified.lean` | Contract-parametric cycle certification of the serial layer |
 | `Composition/FifoSerialRefinement.lean` | Preservation of latency-independent FIFO behavior under serial composition |
 
 Schedules are proof data. They neither belong to `ModuleStructure` nor define
@@ -130,7 +155,11 @@ the hierarchy. Register-bank child identities are a private named inductive;
 their executable enumeration lists those constructors directly. A public
 closure theorem composes reusable closure laws from the generic leafwise
 hierarchy and child modules, so clients need not unfold those identities.
-Decoder,
+The PicoRV32 decoder capture stage separates its readable hardware, exact cycle
+contract, and emission naming in `Examples/PicoRV/Decoder/DecoderCaptureStage.lean`
+from child schedules, state correspondence, and correctness proof in
+`Examples/PicoRV/Decoder/DecoderCaptureStageCertified.lean`.
+The decoder,
 mux-tree, and register-bank contracts share `BitVector.toIndex` from the
 foundation arithmetic utilities. The XOR primitive and `HalfAdder` provide the
 first arithmetic layer used by the ripple incrementer. HalfAdder owns two
@@ -157,12 +186,25 @@ state or reset input. `EnabledResetCounter` composes Increment and
 EnabledResetRegister into the generic synchronous state element used by FIFO
 pointers; its public
 contract describes modular arithmetic rather than feedback wiring.
+`Mux`, `EnabledResetCounter`, and `AddSub` keep readable structure and natural
+contract laws in their main sources and isolate structural certification in
+their corresponding `*Certified.lean` sources. Recursive `Add` and `Increment`
+retain ordinary Lean construction internally while exposing canonical
+`design` and `certification` values to parents.
 `Fifo` is the certified pointer-and-register-bank composition: two
 zero-reset counters feed FifoPointerControl, whose addresses and transfer
 enables drive RegisterBank and the counters. Its contract owns logical pointer
 and entry state and remains independent of those four structural children.
 Reset is synchronous: it wins in pointer next state without suppressing the
 current pre-edge handshake or clearing storage.
+`Fifo/FifoPointerControl.lean` contains its combinational equations, public
+laws, and complete thirteen-child design; `FifoPointerControlCertified.lean`
+contains its child certificates, schedule, and structural equivalence proof.
+`Modules/Fifo/Fifo.lean` contains the readable `module_design`, exact cycle
+behavior, and public contract laws. `FifoCycleCertified.lean` contains only the
+child certificates, explicit rule schedules, state correspondence, and proof
+that the structure implements that cycle contract. `FifoCertified.lean` then
+proves the separate latency-independent FIFO contract.
 `FifoProperties` gives this cycle contract its logical queue interpretation and
 proves the reachable occupancy invariant, empty/full boundaries, and exact
 ordinary-cycle enqueue/dequeue behavior. Generic circular-buffer arithmetic
@@ -182,8 +224,9 @@ trace execution machinery.
 `Naming/` owns generic executable naming metadata in `Silean.Naming`, including
 the shared FIFO boundary naming used by every FIFO implementation and the
 generic binary-leafwise, reduction-tree, and serial-FIFO hierarchy traversals.
-Module-specific metadata is in `Silean.Modules.<Module>.Naming`, inside the
-module's source file. `FIRRTL/` owns only backend operations in
+Authoring declarations generate a module's default `naming`, while specialized
+or recursive modules may keep additional naming builders in
+`Silean.Modules.<Module>.Naming` inside the module's source file. `FIRRTL/` owns only backend operations in
 `Silean.FIRRTL`: hierarchy traversal, identifier and definition validation,
 FIRRTL 4 text rendering, and the shared emitter command-line shell.
 

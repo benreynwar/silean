@@ -7,4 +7,5 @@ import Silean.Semantics
 import Silean.Contracts
 import Silean.Modules
 import Silean.Naming
+import Silean.Authoring
 import Silean.FIRRTL

@@ -1,40 +1,23 @@
 import Silean.Contracts.Cycle.CycleImplementation
-import Silean.Primitives.PrimitivePorts
+import Silean.Primitives.XorPrimitive
 
 namespace Silean.Primitives
 
 open Silean
 
-def xorValue (left right : Bool) : Bool :=
-  (left && !right) || (!left && right)
-
-/-- Stateless one-bit XOR primitive. -/
-@[reducible] def xor : Primitive where
-  ports := binaryPorts
-  localState := emptySignalMap
-  outputReads := [.left, .right]
-  outputValues := fun inputs _ => fun | .output => xorValue (inputs .left) (inputs .right)
-  nextStateValues := fun _ state => state
-  outputRespectsReads := by
-    intro left right state agrees
-    funext port
-    cases port
-    simp [agrees .left (by simp), agrees .right (by simp)]
-
 inductive XorRule | apply
 deriving Enumeration
 
-def xorOutputRule : Contracts.Cycle.CycleOutputRule xor.ports emptySignalMap
-    (.ofLists [.bit, .bit] [.bit]) where
-  readsInputs := (xor.ports.inputs.select .right).prepend .left
-  writesOutputs := xor.ports.outputs.select .output
-  target | (left, (right, ())), _ => (xorValue left right, ())
+def xorOutputRule : Contracts.Cycle.CycleOutputRule xor.ports emptySignalMap where
+  readsInputs := .all xor.ports.inputs
+  writesOutputs := .all xor.ports.outputs
+  target inputs _ := fun | .output => xorValue (inputs .left) (inputs .right)
 
 def xorCycleContract : Contracts.Cycle.ModuleCycleContract xor.ports where
   state := emptySignalMap
   RuleName := XorRule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, xorOutputRule⟩
+  outputRule | .apply => xorOutputRule
   stateRule := Contracts.Cycle.CycleStateRule.empty xor.ports
   outputCoverage := by rfl
 
@@ -44,17 +27,15 @@ def xorCycleContract : Contracts.Cycle.ModuleCycleContract xor.ports where
     (outputs : xor.ports.outputs.Values) :
     xorOutputRule.Holds inputs state outputs ↔
       outputs .output = xorValue (inputs .left) (inputs .right) := by
-  simp [xorOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
-    SignalSelection.Matches, SignalMap.select, SignalSelection.prepend]
-
-theorem xor_eq_true_iff (left right : Bool) :
-    xorValue left right = true ↔ left ≠ right := by
-  cases left <;> cases right <;> simp [xorValue]
-
-theorem xor_toNat_add_twice_and (left right : Bool) :
-    (xorValue left right).toNat + 2 * (left && right).toNat =
-      left.toNat + right.toNat := by
-  cases left <;> cases right <;> decide
+  simp only [xorOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .output
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
 private def stateCorresponds (_ : xorCycleContract.state.Values)
     (_ : (ModuleStructure.primitive xor).State) : Prop := True
@@ -72,8 +53,7 @@ private theorem implements : Contracts.Cycle.Implements (.primitive xor) xorCycl
       simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
         Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
       rw [satisfies.1]
-      simp [xorOutputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
-        SignalSelection.Matches, SignalMap.select, SignalSelection.prepend, xor]
+      exact SignalGroup.matches_project _ _
   · rfl
 
 def xorCertified : Contracts.Cycle.ModuleCycleCertified xor.ports where

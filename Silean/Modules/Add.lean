@@ -2,8 +2,8 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Foundation.BitVector
 import Silean.Modules.Constant
-import Silean.Modules.FullAdder
-import Silean.Modules.VectorConcat
+import Silean.Modules.FullAdder.FullAdderCertified
+import Silean.Modules.VectorConcat.VectorConcatCertified
 import Silean.Naming.SignalAdapterNaming
 
 namespace Silean.Modules.Add
@@ -105,21 +105,18 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule (width : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap
-      { inputTypes := .cons (.vector width .bit)
-          (.cons (.vector width .bit) (.cons .bit .nil))
-        outputTypes := .cons (.vector width .bit) (.cons .bit .nil) } where
-  readsInputs := (inputMap width).select .carryIn |>.prepend .right |>.prepend .left
-  writesOutputs := (outputMap width).select .carryOut |>.prepend .result
-  target := fun
-    | (left, (right, (carry, ()))), _ =>
-        ((addBits width left right carry).1, ((addBits width left right carry).2, ()))
+    Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap where
+  readsInputs := .all (inputMap width)
+  writesOutputs := .all (outputMap width)
+  target inputs _ := fun
+    | .result => (addBits width (inputs .left) (inputs .right) (inputs .carryIn)).1
+    | .carryOut => (addBits width (inputs .left) (inputs .right) (inputs .carryIn)).2
 
 @[reducible] def cycleContract (width : Nat) : Contracts.Cycle.ModuleCycleContract (ports width) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule width⟩
+  outputRule | .apply => outputRule width
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -129,8 +126,16 @@ def outputRule (width : Nat) :
     (outputRule width).Holds inputs state outputs ↔
       outputs .result = (addBits width (inputs .left) (inputs .right) (inputs .carryIn)).1 ∧
       outputs .carryOut = (addBits width (inputs .left) (inputs .right) (inputs .carryIn)).2 := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalSelection.prepend, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact ⟨congrFun equal .result, congrFun equal .carryOut⟩
+  · rintro ⟨result, carry⟩
+    funext output
+    cases output
+    · exact result
+    · exact carry
 
 theorem result_of_evaluatesTo (width : Nat)
     (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
@@ -746,9 +751,9 @@ def naming : (width : Nat) → ModuleNaming (Modules.Add.moduleStructure width)
           | .lowerRight =>
               Silean.Naming.SignalAdapter.combiner (Modules.Add.lowerCombiner width)
           | .lowerAdd => naming width
-          | .highAdder => FullAdder.Naming.naming
+          | .highAdder => FullAdder.design.naming
           | .highBit => Silean.Naming.SignalAdapter.combiner Modules.Add.highCombiner
-          | .concat => VectorConcat.Naming.naming .bit width 1)
+          | .concat => VectorConcat.naming .bit width 1)
 
 def namedModule (width : Nat) : NamedModule where
   ports := Modules.Add.ports width
@@ -756,3 +761,10 @@ def namedModule (width : Nat) : NamedModule where
   naming := naming width
 
 end Silean.Modules.Add.Naming
+
+namespace Silean.Modules.Add
+
+@[reducible] def design (width : Nat) : Silean.Naming.NamedModule :=
+  Naming.namedModule width
+
+end Silean.Modules.Add

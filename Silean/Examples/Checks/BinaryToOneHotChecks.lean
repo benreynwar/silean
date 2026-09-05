@@ -63,7 +63,7 @@ private def renders (width : Nat) (fragments : List String) : Bool :=
 
 #guard renders 0 ["binary_to_one_hot_base", "output result : UInt<1>[1]"]
 #guard renders 1 ["binary_to_one_hot_recursive_1", "output result : UInt<1>[2]",
-  "vector_concat_structural_bit_1_1"]
+  "VectorConcat_bit_1_1"]
 #guard renders 2 ["binary_to_one_hot_recursive_2", "output result : UInt<1>[4]",
   "lower_mask", "upper_mask"]
 #guard renders 3 ["binary_to_one_hot_recursive_3", "output result : UInt<1>[8]",

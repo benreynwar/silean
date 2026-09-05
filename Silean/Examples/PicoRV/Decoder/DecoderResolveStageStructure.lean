@@ -4,12 +4,14 @@ import Silean.Examples.PicoRV.Decoder.DecoderImmediate
 import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummary
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleBlackbox
-import Silean.Modules.EnabledRegister
-import Silean.Modules.EnabledResetRegister
+import Silean.Modules.EnabledRegister.EnabledRegisterCertified
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterCertified
 import Silean.Modules.Register
-import Silean.Modules.ResetRegister
-import Silean.Modules.Mux
+import Silean.Modules.ResetRegister.ResetRegisterCertified
+import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxCertified
 import Silean.Modules.Constant
+import Silean.Primitives.Not
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 
@@ -70,6 +72,7 @@ private theorem ordinarySummaryRegister_bit : ∀ index : Fin 4,
 private def resetMatchType : SignalType := .vector 23 .bit
 private def retainedMatchType : SignalType := .vector 15 .bit
 private def ordinarySummaryType : SignalType := .vector 4 .bit
+private def immediateType : SignalType := .vector 32 .bit
 
 private def resetMatchValue (state : stateMap.Values) : resetMatchType.Denote :=
   fun index => cast (congrArg SignalType.Denote (resetMatchRegister_bit index))
@@ -159,8 +162,9 @@ private def ordinarySummarySplitter : Composition.SignalSplitter := .vector 4 .b
   | .retainedMatchNext => retainedMatchCombiner.ports
   | .ordinarySummaryNext => ordinarySummaryCombiner.ports
   | .resetMatchStorage => Modules.EnabledResetRegister.ports resetMatchType
-  | .retainedMatchStorage => Modules.EnabledRegister.ports retainedMatchType
-  | .immediateStorage => Modules.EnabledRegister.ports (.vector 32 .bit)
+  | .retainedMatchStorage =>
+      Modules.EnabledRegister.ports retainedMatchType
+  | .immediateStorage => Modules.EnabledRegister.ports immediateType
   | .ordinarySummaryStorage => Modules.Register.ports ordinarySummaryType
   | .addSubSummaryStorage => Modules.Register.ports .bit
   | .compareStorage => Modules.ResetRegister.ports .bit
@@ -238,7 +242,7 @@ private def storedSource : (register : Register) →
   | .is_jalr_addi_slti_sltiu_xori_ori_andi =>
       retainedStoredBit 13
   | .is_sll_srl_sra => retainedStoredBit 14
-  | .decoded_imm => context.instanceOutput .immediateStorage .value
+  | .decoded_imm => context.instanceOutput .immediateStorage .q
   | .is_lui_auipc_jal => ordinarySummaryStoredBit 0
   | .is_slti_blt_slt => ordinarySummaryStoredBit 1
   | .is_sltiu_bltu_sltu => ordinarySummaryStoredBit 2
@@ -411,12 +415,12 @@ def wiring : Wiring context.ports context.instancePorts where
     | .resetMatchStorage, .value => context.instanceOutput .resetMatchNext .value
     | .resetMatchStorage, .enable => context.instanceOutput .triggerEnable .output
     | .resetMatchStorage, .reset => context.instanceOutput .resetInverter .output
-    | .retainedMatchStorage, .value => context.instanceOutput .retainedMatchNext .value
+    | .retainedMatchStorage, .data => context.instanceOutput .retainedMatchNext .value
     | .retainedMatchStorage, .enable => context.instanceOutput .triggerEnable .output
     | .immediateSelection, .select => context.instanceOutput .immediate .valid
-    | .immediateSelection, .whenFalse => context.instanceOutput .immediateStorage .value
+    | .immediateSelection, .whenFalse => context.instanceOutput .immediateStorage .q
     | .immediateSelection, .whenTrue => context.instanceOutput .immediate .value
-    | .immediateStorage, .value => context.instanceOutput .immediateSelection .result
+    | .immediateStorage, .data => context.instanceOutput .immediateSelection .result
     | .immediateStorage, .enable => context.instanceOutput .triggerEnable .output
     | .ordinarySummaryStorage, .input => context.instanceOutput .ordinarySummaryNext .value
     | .falseValue, impossible => nomatch impossible
@@ -431,7 +435,7 @@ def wiring : Wiring context.ports context.instancePorts where
     | .compareStorage, .value => context.instanceOutput .compareSelection .result
     | .compareStorage, .reset => context.instanceOutput .resetInverter .output
     | .resetMatchOutputs, .value => context.instanceOutput .resetMatchStorage .value
-    | .retainedMatchOutputs, .value => context.instanceOutput .retainedMatchStorage .value
+    | .retainedMatchOutputs, .value => context.instanceOutput .retainedMatchStorage .q
     | .ordinarySummaryOutputs, .value => context.instanceOutput .ordinarySummaryStorage .output
 
 @[reducible] def body : ModuleBody := ⟨context, wiring⟩
@@ -447,8 +451,10 @@ def wiring : Wiring context.ports context.instancePorts where
   | .ordinarySummaryNext => ordinarySummaryCombiner.cycleContract
   | .resetMatchStorage =>
       Modules.EnabledResetRegister.cycleContract resetMatchType falseResetMatches
-  | .retainedMatchStorage => Modules.EnabledRegister.cycleContract retainedMatchType
-  | .immediateStorage => Modules.EnabledRegister.cycleContract (.vector 32 .bit)
+  | .retainedMatchStorage =>
+      Modules.EnabledRegister.cycleContract retainedMatchType
+  | .immediateStorage =>
+      Modules.EnabledRegister.cycleContract immediateType
   | .ordinarySummaryStorage => Modules.Register.cycleContract ordinarySummaryType
   | .addSubSummaryStorage => Modules.Register.cycleContract .bit
   | .compareStorage => Modules.ResetRegister.cycleContract .bit false
@@ -471,12 +477,14 @@ def wiring : Wiring context.ports context.instancePorts where
   | .ordinarySummaryNext => .combiner ordinarySummaryCombiner
   | .resetMatchStorage =>
       Modules.EnabledResetRegister.moduleStructure resetMatchType falseResetMatches
-  | .retainedMatchStorage => Modules.EnabledRegister.moduleStructure retainedMatchType
-  | .immediateStorage => Modules.EnabledRegister.moduleStructure (.vector 32 .bit)
+  | .retainedMatchStorage =>
+      Modules.EnabledRegister.moduleStructure retainedMatchType
+  | .immediateStorage =>
+      Modules.EnabledRegister.moduleStructure immediateType
   | .ordinarySummaryStorage => Modules.Register.moduleStructure ordinarySummaryType
   | .addSubSummaryStorage => Modules.Register.moduleStructure .bit
   | .compareStorage => Modules.ResetRegister.moduleStructure .bit false
-  | .immediateSelection => Modules.Mux.moduleStructure (.vector 32 .bit)
+  | .immediateSelection => Modules.Mux.moduleStructure immediateType
   | .addSubSummarySelection | .compareSelection => Modules.Mux.moduleStructure .bit
   | .resetMatchOutputs => .splitter resetMatchSplitter
   | .retainedMatchOutputs => .splitter retainedMatchSplitter
@@ -503,13 +511,14 @@ def moduleStructure : ModuleStructure ports := .composite body structuralChildre
   | .retainedMatchStorage =>
       (Modules.EnabledRegister.certified retainedMatchType).certifiedStructure
   | .immediateStorage =>
-      (Modules.EnabledRegister.certified (.vector 32 .bit)).certifiedStructure
+      (Modules.EnabledRegister.certified immediateType).certifiedStructure
   | .ordinarySummaryStorage =>
       (Modules.Register.certified ordinarySummaryType).certifiedStructure
   | .addSubSummaryStorage => (Modules.Register.certified .bit).certifiedStructure
   | .compareStorage => (Modules.ResetRegister.certified .bit false).certifiedStructure
-  | .immediateSelection => Modules.Mux.certifiedStructure (.vector 32 .bit)
-  | .addSubSummarySelection | .compareSelection => Modules.Mux.certifiedStructure .bit
+  | .immediateSelection => (Modules.Mux.certified immediateType).certifiedStructure
+  | .addSubSummarySelection | .compareSelection =>
+      (Modules.Mux.certified .bit).certifiedStructure
   | .resetMatchOutputs => resetMatchSplitter.certified.certifiedStructure
   | .retainedMatchOutputs => retainedMatchSplitter.certified.certifiedStructure
   | .ordinarySummaryOutputs => ordinarySummarySplitter.certified.certifiedStructure

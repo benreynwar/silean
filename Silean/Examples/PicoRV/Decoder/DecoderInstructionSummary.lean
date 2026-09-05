@@ -1,5 +1,5 @@
 import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatch
-import Silean.Composition.SignalLayout
+import Silean.Foundation.SignalLayout
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 
@@ -114,87 +114,170 @@ def outputValues (inputs : Inputs) : Output → Bool
       inputs.matched .instr_slti, inputs.matched .instr_slt,
       inputs.matched .instr_sltiu, inputs.matched .instr_sltu]
 
-private def trapInputLabels : List Input := [
-  .instr_lui, .instr_auipc, .instr_jal, .instr_jalr,
-  .instr_beq, .instr_bne, .instr_blt, .instr_bge, .instr_bltu, .instr_bgeu,
-  .instr_lb, .instr_lh, .instr_lw, .instr_lbu, .instr_lhu,
-  .instr_sb, .instr_sh, .instr_sw,
-  .instr_addi, .instr_slti, .instr_sltiu, .instr_xori, .instr_ori, .instr_andi,
-  .instr_slli, .instr_srli, .instr_srai,
-  .instr_add, .instr_sub, .instr_sll, .instr_slt, .instr_sltu,
-  .instr_xor, .instr_srl, .instr_sra, .instr_or, .instr_and,
-  .instr_ecall_ebreak, .instr_fence]
-
-private def summaryOutputLabels : List Output := [
-  .is_lui_auipc_jal, .is_lui_auipc_jal_jalr_addi_add_sub,
-  .is_slti_blt_slt, .is_sltiu_bltu_sltu, .is_lbu_lhu_lw, .is_compare]
-
 inductive Rule | trap | summaries
 deriving Enumeration
 
-def trapOutputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap
-    { inputTypes := .ofList (trapInputLabels.map inputMap.signalType),
-      outputTypes := .cons .bit .nil } where
-  readsInputs := inputMap.selectionFrom trapInputLabels
-  writesOutputs := outputMap.select .instr_trap
-  target := fun selected _ =>
-    (!(recognized (valuesOf (inputMap.unpackFrom trapInputLabels selected))), ())
+namespace TrapRule
+inductive Input
+  | instr_lui | instr_auipc | instr_jal | instr_jalr
+  | instr_beq | instr_bne | instr_blt | instr_bge | instr_bltu | instr_bgeu
+  | instr_lb | instr_lh | instr_lw | instr_lbu | instr_lhu
+  | instr_sb | instr_sh | instr_sw
+  | instr_addi | instr_slti | instr_sltiu | instr_xori | instr_ori | instr_andi
+  | instr_slli | instr_srli | instr_srai
+  | instr_add | instr_sub | instr_sll | instr_slt | instr_sltu
+  | instr_xor | instr_srl | instr_sra | instr_or | instr_and
+  | instr_ecall_ebreak | instr_fence
+deriving Enumeration
 
-def summariesOutputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap
-    { inputTypes := .ofList inputMap.types,
-      outputTypes := .ofList (summaryOutputLabels.map outputMap.signalType) } where
-  readsInputs := inputMap.allSelection
-  writesOutputs := outputMap.selectionFrom summaryOutputLabels
-  target := fun selected _ => outputMap.selectionFrom summaryOutputLabels |>.project
-    (outputValues (valuesOf (inputMap.unpack selected)))
+inductive Output | instr_trap
+deriving Enumeration
+end TrapRule
+
+namespace SummariesRule
+inductive Output
+  | is_lui_auipc_jal | is_lui_auipc_jal_jalr_addi_add_sub
+  | is_slti_blt_slt | is_sltiu_bltu_sltu | is_lbu_lhu_lw | is_compare
+deriving Enumeration
+end SummariesRule
+
+private def trapInput (input : TrapRule.Input) : Input :=
+  match input with
+  | .instr_lui => .instr_lui | .instr_auipc => .instr_auipc
+  | .instr_jal => .instr_jal | .instr_jalr => .instr_jalr
+  | .instr_beq => .instr_beq | .instr_bne => .instr_bne
+  | .instr_blt => .instr_blt | .instr_bge => .instr_bge
+  | .instr_bltu => .instr_bltu | .instr_bgeu => .instr_bgeu
+  | .instr_lb => .instr_lb | .instr_lh => .instr_lh | .instr_lw => .instr_lw
+  | .instr_lbu => .instr_lbu | .instr_lhu => .instr_lhu
+  | .instr_sb => .instr_sb | .instr_sh => .instr_sh | .instr_sw => .instr_sw
+  | .instr_addi => .instr_addi | .instr_slti => .instr_slti
+  | .instr_sltiu => .instr_sltiu | .instr_xori => .instr_xori
+  | .instr_ori => .instr_ori | .instr_andi => .instr_andi
+  | .instr_slli => .instr_slli | .instr_srli => .instr_srli
+  | .instr_srai => .instr_srai | .instr_add => .instr_add
+  | .instr_sub => .instr_sub | .instr_sll => .instr_sll
+  | .instr_slt => .instr_slt | .instr_sltu => .instr_sltu
+  | .instr_xor => .instr_xor | .instr_srl => .instr_srl
+  | .instr_sra => .instr_sra | .instr_or => .instr_or | .instr_and => .instr_and
+  | .instr_ecall_ebreak => .instr_ecall_ebreak | .instr_fence => .instr_fence
+
+@[reducible] private def trapInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap TrapRule.Input trapInput
+
+@[reducible] private def trapOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap TrapRule.Output fun
+    | .instr_trap => .instr_trap
+
+private def trapValues (inputs : trapInputs.signals.Values) : Inputs where
+  instr_lui := inputs .instr_lui
+  instr_auipc := inputs .instr_auipc
+  instr_jal := inputs .instr_jal
+  instr_jalr := inputs .instr_jalr
+  is_beq_bne_blt_bge_bltu_bgeu := false
+  matched
+    | .instr_beq => inputs .instr_beq | .instr_bne => inputs .instr_bne
+    | .instr_blt => inputs .instr_blt | .instr_bge => inputs .instr_bge
+    | .instr_bltu => inputs .instr_bltu | .instr_bgeu => inputs .instr_bgeu
+    | .instr_lb => inputs .instr_lb | .instr_lh => inputs .instr_lh
+    | .instr_lw => inputs .instr_lw | .instr_lbu => inputs .instr_lbu
+    | .instr_lhu => inputs .instr_lhu
+    | .instr_sb => inputs .instr_sb | .instr_sh => inputs .instr_sh
+    | .instr_sw => inputs .instr_sw
+    | .instr_addi => inputs .instr_addi | .instr_slti => inputs .instr_slti
+    | .instr_sltiu => inputs .instr_sltiu | .instr_xori => inputs .instr_xori
+    | .instr_ori => inputs .instr_ori | .instr_andi => inputs .instr_andi
+    | .instr_slli => inputs .instr_slli | .instr_srli => inputs .instr_srli
+    | .instr_srai => inputs .instr_srai
+    | .instr_add => inputs .instr_add | .instr_sub => inputs .instr_sub
+    | .instr_sll => inputs .instr_sll | .instr_slt => inputs .instr_slt
+    | .instr_sltu => inputs .instr_sltu | .instr_xor => inputs .instr_xor
+    | .instr_srl => inputs .instr_srl | .instr_sra => inputs .instr_sra
+    | .instr_or => inputs .instr_or | .instr_and => inputs .instr_and
+    | .instr_ecall_ebreak => inputs .instr_ecall_ebreak
+    | .instr_fence => inputs .instr_fence
+    | .is_slli_srli_srai | .is_jalr_addi_slti_sltiu_xori_ori_andi
+    | .is_sll_srl_sra => false
+
+@[reducible] private def summaryOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap SummariesRule.Output fun
+    | .is_lui_auipc_jal => .is_lui_auipc_jal
+    | .is_lui_auipc_jal_jalr_addi_add_sub =>
+        .is_lui_auipc_jal_jalr_addi_add_sub
+    | .is_slti_blt_slt => .is_slti_blt_slt
+    | .is_sltiu_bltu_sltu => .is_sltiu_bltu_sltu
+    | .is_lbu_lhu_lw => .is_lbu_lhu_lw
+    | .is_compare => .is_compare
+
+def trapOutputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap where
+  readsInputs := trapInputs
+  writesOutputs := trapOutputs
+  target inputs _ := fun
+    | .instr_trap => !(recognized (trapValues inputs))
+
+def summariesOutputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap where
+  readsInputs := .all inputMap
+  writesOutputs := summaryOutputs
+  target inputs _ := fun
+    | .is_lui_auipc_jal => outputValues (valuesOf inputs) .is_lui_auipc_jal
+    | .is_lui_auipc_jal_jalr_addi_add_sub =>
+        outputValues (valuesOf inputs) .is_lui_auipc_jal_jalr_addi_add_sub
+    | .is_slti_blt_slt => outputValues (valuesOf inputs) .is_slti_blt_slt
+    | .is_sltiu_bltu_sltu => outputValues (valuesOf inputs) .is_sltiu_bltu_sltu
+    | .is_lbu_lhu_lw => outputValues (valuesOf inputs) .is_lbu_lhu_lw
+    | .is_compare => outputValues (valuesOf inputs) .is_compare
 
 @[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
-    | .trap => ⟨_, trapOutputRule⟩
-    | .summaries => ⟨_, summariesOutputRule⟩
+    | .trap => trapOutputRule
+    | .summaries => summariesOutputRule
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
 @[simp] theorem trapOutputRule_reads (input : Input) :
   input ∈ trapOutputRule.readsInputs.labels ↔
       input ≠ .is_beq_bne_blt_bge_bltu_bgeu := by
-  change input ∈ trapInputLabels ↔ _
-  cases input <;> simp [trapInputLabels]
+  change input ∈ trapInputs.labels ↔ _
+  letI : DecidableEq Input := inputMap.labels.decidableEq
+  cases input <;> decide
 
 @[simp] theorem summariesOutputRule_reads (input : Input) :
     input ∈ summariesOutputRule.readsInputs.labels := by
-  change input ∈ inputMap.allSelection.labels
-  rw [SignalMap.allSelection_labels]
+  change input ∈ (SignalGroup.all inputMap).labels
+  rw [SignalGroup.all_labels]
   exact (inputMap.labels.locate input).mem
 
 @[simp] theorem trapOutputRule_writes (output : Output) :
     output ∈ trapOutputRule.writesOutputs.labels ↔ output = .instr_trap := by
-  cases output <;> simp [trapOutputRule, SignalMap.select, SignalSelection.labels]
+  change output ∈ trapOutputs.labels ↔ _
+  letI : DecidableEq Output := outputMap.labels.decidableEq
+  cases output <;> decide
 
 @[simp] theorem summariesOutputRule_writes (output : Output) :
     output ∈ summariesOutputRule.writesOutputs.labels ↔ output ≠ .instr_trap := by
-  change output ∈ summaryOutputLabels ↔ _
-  cases output <;> simp [summaryOutputLabels]
+  change output ∈ summaryOutputs.labels ↔ _
+  letI : DecidableEq Output := outputMap.labels.decidableEq
+  cases output <;> decide
 
 @[simp] theorem trapOutputRule_holds_iff
     (inputs : ports.inputs.Values) (state : emptySignalMap.Values)
     (outputs : ports.outputs.Values) :
     trapOutputRule.Holds inputs state outputs ↔
       outputs .instr_trap = outputValues (valuesOf inputs) .instr_trap := by
-  let selected := inputMap.unpackFrom trapInputLabels
-    (inputMap.selectionFrom trapInputLabels |>.project inputs)
-  have selected_eq (input : Input) (member : input ∈ trapInputLabels) :
-      selected input = inputs input := by
-    exact inputMap.unpackFrom_project_eq_of_mem trapInputLabels inputs input member
-  have recognized_eq : recognized (valuesOf selected) = recognized (valuesOf inputs) := by
-    simp [recognized, valuesOf, matchedValues, selected_eq, trapInputLabels]
+  have recognized_eq :
+      recognized (trapValues (trapInputs.project inputs)) =
+        recognized (valuesOf inputs) := by
+    simp [recognized, trapValues, trapInputs, trapInput, valuesOf, matchedValues]
   simp only [trapOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalSelection.Matches, SignalMap.select]
-  change outputs .instr_trap = !recognized (valuesOf selected) ∧ True ↔ _
-  rw [recognized_eq]
-  simp [outputValues]
+    SignalGroup.fromLabels_matches_iff, outputValues]
+  constructor
+  · intro holds
+    simpa [recognized_eq] using holds .instr_trap
+  · intro holds label
+    cases label
+    simpa [recognized_eq] using holds
 
 end Silean.Examples.PicoRV.Decoder.InstructionSummary

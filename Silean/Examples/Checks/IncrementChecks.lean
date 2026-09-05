@@ -65,7 +65,7 @@ private def renders (width : Nat) (fragments : List String) : Bool :=
   "input value : UInt<1>[0]", "output result : UInt<1>[0]",
   "inst ripple of increment_ripple_base"]
 #guard renders 1 ["public module increment_structural_1",
-  "inst add_high of half_adder_structural",
+  "inst add_high of HalfAdder",
   "connect add_high.right, increment_lower.carry_out"]
 #guard renders 3 ["module increment_ripple_recursive_3",
   "inst increment_lower of increment_ripple_recursive_2",

@@ -27,17 +27,17 @@ def naming (family : String)
     (tree : Tree) → ModuleNaming
       (Reduction.moduleStructure binary identityModule tree)
   | .empty => .composite
-      ⟨family, "empty", .shape signalType :: treeParameters .empty⟩
+      ⟨family, "empty", .signalType signalType :: treeParameters .empty⟩
       (ports signalType .empty)
       (fun | .identity => "identity")
       (fun | .identity => identityNaming)
   | .leaf => .composite
-      ⟨family, "leaf", .shape signalType :: treeParameters .leaf⟩
+      ⟨family, "leaf", .signalType signalType :: treeParameters .leaf⟩
       (ports signalType .leaf)
       (fun impossible => nomatch impossible)
       (fun impossible => nomatch impossible)
   | .node left right => .composite
-      ⟨family, "node", .shape signalType :: treeParameters (.node left right)⟩
+      ⟨family, "node", .signalType signalType :: treeParameters (.node left right)⟩
       (ports signalType (.node left right))
       (fun
         | .left => "left"

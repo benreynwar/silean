@@ -1,7 +1,7 @@
 import Silean.Contracts.Cycle.CycleEvaluation
-import Silean.Modules.BitMux
+import Silean.Modules.BitMux.BitMux
 import Silean.Examples.Fixtures.DualNot
-import Silean.Modules.EnabledRegister
+import Silean.Modules.EnabledRegister.EnabledRegister
 
 namespace Silean.Examples.Checks.ModuleCycleEvaluation
 
@@ -34,14 +34,14 @@ def falseState : Primitives.registerStateMap.Values
   | .stored => false
 
 def holdInputs : (Modules.EnabledRegister.ports .bit).inputs.Values
-  | .value => true
+  | .data => true
   | .enable => false
 
 def updateInputs : (Modules.EnabledRegister.ports .bit).inputs.Values
-  | .value | .enable => true
+  | .data | .enable => true
 
 example : (Modules.EnabledRegister.cycleContract .bit).applyOutputRules holdInputs falseState
-    .value = false := rfl
+    .q = false := rfl
 
 example : ((Modules.EnabledRegister.cycleContract .bit).evaluate holdInputs falseState).2
     .stored = false := rfl

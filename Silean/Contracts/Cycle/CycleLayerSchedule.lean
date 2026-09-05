@@ -38,11 +38,11 @@ namespace RuleOccurrence
 
 def writes (occurrence : RuleOccurrence body childContracts) :
     List (body.context.instancePorts.ports occurrence.child).outputs.Label :=
-  ((childContracts occurrence.child).outputRule occurrence.rule).2.writesOutputs.labels
+  ((childContracts occurrence.child).outputRule occurrence.rule).writesOutputs.labels
 
 def reads (occurrence : RuleOccurrence body childContracts) :
     List (body.context.instancePorts.ports occurrence.child).inputs.Label :=
-  ((childContracts occurrence.child).outputRule occurrence.rule).2.readsInputs.labels
+  ((childContracts occurrence.child).outputRule occurrence.rule).readsInputs.labels
 
 end RuleOccurrence
 
@@ -68,6 +68,17 @@ def sourceAvailable
   match source with
   | .moduleInput input => inputAvailable input
   | .instanceOutput child output => outputAvailable available child output
+
+@[simp] theorem sourceAvailable_castType
+    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (available : Availability body childContracts)
+    (equal : sourceType = targetType)
+    (source : SignalSource body.context.ports body.context.instancePorts sourceType) :
+    sourceAvailable inputAvailable available
+        (SignalSource.castType equal source) ↔
+      sourceAvailable inputAvailable available source := by
+  cases equal
+  rfl
 
 @[simp] theorem sourceAvailable_moduleInput
     (inputAvailable : body.context.ports.inputs.Label → Prop)
@@ -406,7 +417,7 @@ abbrev OutputSchedule (body : ModuleBody)
     (childContracts : ChildCycleContracts body)
     (contract : ModuleCycleContract body.context.ports)
     (name : contract.RuleName) :=
-  let rule := (contract.outputRule name).2
+  let rule := contract.outputRule name
   Schedule body childContracts
     (fun input => input ∈ rule.readsInputs.labels)
     (BoundaryReady body childContracts rule.writesOutputs.labels

@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Fifo.FifoPointerControl
+import Silean.Modules.Fifo.FifoPointerControlCertified
 
 namespace Silean.Examples.Checks.FifoPointerControl
 
@@ -126,23 +126,23 @@ private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
 private def renders (addressWidth : Nat) (fragments : List String) : Bool :=
-  match renderCircuit (Naming.naming addressWidth) with
+  match renderCircuit (naming addressWidth) with
   | .error _ => false
   | .ok text => fragments.all (contains text)
 
 #guard renders 2
-  ["public module fifo_pointer_control_structural_2",
-   "inst read_split of split_aggregate_v3_bit",
-   "inst read_address_combiner of combine_aggregate_v2_bit",
-   "inst address_equality of equality_structural_v2_bit",
-   "inst wrap_equality of eq_bit",
-   "inst empty_gate of and_bit",
-   "inst full_gate of and_bit"]
+  ["public module PointerControl_2",
+   "inst readSplit of split_aggregate_v3_bit",
+   "inst readAddressCombiner of combine_aggregate_v2_bit",
+   "inst addressEquality of equality_structural_v2_bit",
+   "inst wrapEquality of eq_bit",
+   "inst emptyGate of and_bit",
+   "inst fullGate of and_bit"]
 
 #guard renders 0
-  ["public module fifo_pointer_control_structural_0",
-   "input read_pointer : UInt<1>[1]",
-   "output read_address : UInt<1>[0]",
-   "inst address_equality of equality_structural_v0_bit"]
+  ["public module PointerControl_0",
+   "input readPointer : UInt<1>[1]",
+   "output readAddress : UInt<1>[0]",
+   "inst addressEquality of equality_structural_v0_bit"]
 
 end Silean.Examples.Checks.FifoPointerControl

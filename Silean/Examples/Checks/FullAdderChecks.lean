@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.FullAdder
+import Silean.Modules.FullAdder.FullAdderCertified
 
 namespace Silean.Examples.Checks.FullAdder
 
@@ -60,18 +60,18 @@ example (left right carryIn : Bool) :
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
-#guard match renderRootModule Modules.FullAdder.Naming.naming with
+#guard match renderRootModule Modules.FullAdder.design.naming with
   | .error _ => false
   | .ok text =>
-      ["public module full_adder_structural",
+      ["public module FullAdder",
        "input left : UInt<1>", "input right : UInt<1>",
-       "input carry_in : UInt<1>",
-       "output sum : UInt<1>", "output carry_out : UInt<1>",
-       "inst operands of half_adder_structural",
-       "inst carry of half_adder_structural",
-       "inst combine_carry of or_bit",
+       "input carryIn : UInt<1>",
+       "output sum : UInt<1>", "output carryOut : UInt<1>",
+       "inst operands of HalfAdder",
+       "inst carry of HalfAdder",
+       "inst combineCarry of or_bit",
        "connect carry.left, operands.sum",
-       "connect combine_carry.left, operands.carry",
-       "connect combine_carry.right, carry.carry"].all (contains text)
+       "connect combineCarry.left, operands.carry",
+       "connect combineCarry.right, carry.carry"].all (contains text)
 
 end Silean.Examples.Checks.FullAdder

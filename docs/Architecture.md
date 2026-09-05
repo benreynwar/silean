@@ -108,7 +108,8 @@ cycles. They remain independent of behavioral contracts.
 
 `ModuleCycleContract` gives natural one-cycle behavior using its own labelled
 state. It contains named output rules and one next-state rule. Each output rule
-declares the exact inputs it reads and outputs it writes. The contract state
+declares the exact inputs it reads and outputs it writes through typed,
+label-preserving `SignalGroup` values. The contract state
 need not have the same shape as the structural state.
 
 `ModuleCycleCertification structure contract` contains:

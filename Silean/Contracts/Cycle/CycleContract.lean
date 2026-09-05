@@ -1,6 +1,6 @@
 import Silean.Foundation.DeriveEnumeration
 import Silean.Foundation.ModulePorts
-import Silean.Foundation.SignalSelection
+import Silean.Foundation.SignalGroup
 
 namespace Silean.Contracts.Cycle
 
@@ -29,27 +29,15 @@ outputs. `CycleImplementation` defines this separate proof that a
 They read a selected set of module inputs, see complete current state, and
 produce a selected set of module outputs. They contain no structure or order. -/
 
-structure CycleOutputRuleShape where
-  inputTypes : SignalTypes
-  outputTypes : SignalTypes
-
-def CycleOutputRuleShape.ofLists (inputTypes outputTypes : List SignalType) :
-    CycleOutputRuleShape where
-  inputTypes := .ofList inputTypes
-  outputTypes := .ofList outputTypes
-
-structure CycleOutputRule (ports : ModulePorts) (state : SignalMap)
-    (shape : CycleOutputRuleShape) where
-  /-- Module inputs required by this output rule. -/
-  readsInputs : SignalSelection ports.inputs shape.inputTypes
-  /-- Module outputs established by this rule. -/
-  writesOutputs : SignalSelection ports.outputs shape.outputTypes
-  /-- Computes those outputs from the selected inputs and complete current state. -/
-  target : shape.inputTypes.Denote → state.Values →
-    shape.outputTypes.Denote
-
-abbrev SomeCycleOutputRule (ports : ModulePorts) (state : SignalMap) :=
-  Sigma (CycleOutputRule ports state)
+structure CycleOutputRule (ports : ModulePorts) (state : SignalMap) where
+  /-- Named module-input group required by this rule. -/
+  readsInputs : SignalGroup ports.inputs
+  /-- Named module-output group established by this rule. -/
+  writesOutputs : SignalGroup ports.outputs
+  /-- Computes named output-group values from named input-group values and
+  complete current contract state. -/
+  target : readsInputs.signals.Values → state.Values →
+    writesOutputs.signals.Values
 
 /-! Every contract has one clock-edge transition with precise selected input
 dependencies and a complete next-state result. When its independent `state`
@@ -57,12 +45,10 @@ map is empty, both the input selection and result can be empty without
 requiring a separate combinational contract type. -/
 
 structure CycleStateRule (ports : ModulePorts) (state : SignalMap) where
-  /-- Shapes of the module inputs needed for the transition. -/
-  inputTypes : SignalTypes
-  /-- Selects those inputs from the module boundary. -/
-  readsInputs : SignalSelection ports.inputs inputTypes
+  /-- Named module-input group needed for the transition. -/
+  readsInputs : SignalGroup ports.inputs
   /-- Computes the complete next contract state. -/
-  target : inputTypes.Denote → state.Values → state.Values
+  target : readsInputs.signals.Values → state.Values → state.Values
 
 namespace CycleStateRule
 
@@ -72,8 +58,7 @@ def apply (rule : CycleStateRule ports state)
 
 def empty (ports : ModulePorts) :
     CycleStateRule ports emptySignalMap where
-  inputTypes := .nil
-  readsInputs := .nil
+  readsInputs := .empty ports.inputs
   target := fun _ _ => SignalMap.emptyValues
 
 @[simp] theorem empty_readsInputs_labels (ports : ModulePorts) :
@@ -98,19 +83,19 @@ structure ModuleCycleContract (ports : ModulePorts) where
   /-- Finite enumeration of every output rule. -/
   ruleNames : Enumeration RuleName
   /-- Behavioral rule associated with each name. -/
-  outputRule : RuleName → SomeCycleOutputRule ports state
+  outputRule : RuleName → CycleOutputRule ports state
   /-- The single complete clock-edge transition. -/
   stateRule : CycleStateRule ports state
   /-- Every boundary output is written exactly once across the output rules. -/
   outputCoverage :
     (ruleNames.values.flatMap fun name =>
-      (outputRule name).2.writesOutputs.labels).Perm ports.outputs.labels.values
+      (outputRule name).writesOutputs.labels).Perm ports.outputs.labels.values
 
 namespace ModuleCycleContract
 
 def writtenOutputs (contract : ModuleCycleContract ports) : List ports.outputs.Label :=
   contract.ruleNames.values.flatMap fun name =>
-    (contract.outputRule name).2.writesOutputs.labels
+    (contract.outputRule name).writesOutputs.labels
 
 theorem writtenOutputs_perm (contract : ModuleCycleContract ports) :
     contract.writtenOutputs.Perm ports.outputs.labels.values :=
@@ -122,10 +107,10 @@ theorem writtenOutputs_nodup (contract : ModuleCycleContract ports) :
 
 theorem rule_writes_nodup (contract : ModuleCycleContract ports)
     (name : contract.RuleName) :
-    ((contract.outputRule name).2.writesOutputs.labels).Nodup := by
+    ((contract.outputRule name).writesOutputs.labels).Nodup := by
   apply List.Sublist.nodup
     (List.sublist_flatMap_of_mem
-      (fun selected => (contract.outputRule selected).2.writesOutputs.labels)
+      (fun selected => (contract.outputRule selected).writesOutputs.labels)
       (ListIndex.get_eq (contract.ruleNames.locate name) ▸
         List.get_mem _ _))
     contract.writtenOutputs_nodup
@@ -134,12 +119,12 @@ theorem rule_writes_nodup (contract : ModuleCycleContract ports)
 theorem rule_eq_of_both_write (contract : ModuleCycleContract ports)
     {left right : contract.RuleName} {output : ports.outputs.Label}
     (leftWrites : output ∈
-      ((contract.outputRule left).2.writesOutputs.labels))
+      ((contract.outputRule left).writesOutputs.labels))
     (rightWrites : output ∈
-      ((contract.outputRule right).2.writesOutputs.labels)) :
+      ((contract.outputRule right).writesOutputs.labels)) :
     left = right :=
   List.eq_of_mem_of_mem_of_flatMap_nodup
-    (fun name => (contract.outputRule name).2.writesOutputs.labels)
+    (fun name => (contract.outputRule name).writesOutputs.labels)
     contract.writtenOutputs_nodup
     (ListIndex.get_eq (contract.ruleNames.locate left) ▸ List.get_mem _ _)
     (ListIndex.get_eq (contract.ruleNames.locate right) ▸ List.get_mem _ _)

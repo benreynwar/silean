@@ -1,5 +1,5 @@
 import Silean.Structure.ModuleStructure
-import Silean.Primitives
+import Silean.Primitives.Definitions
 
 namespace Silean.Naming
 
@@ -71,8 +71,20 @@ end
 
 inductive ModuleParameter where
   | natural (value : Nat)
-  | shape (signalType : SignalType)
+  | signalType (value : SignalType)
 deriving DecidableEq, Repr
+
+/-- Convert a typed module-constructor argument into stable emission identity
+metadata. `module_design` uses this to derive specialization keys from its
+ordinary parameters rather than asking the author to repeat them. -/
+class ToModuleParameter (α : Type) where
+  encode : α → ModuleParameter
+
+def ModuleParameter.of [ToModuleParameter α] (value : α) : ModuleParameter :=
+  ToModuleParameter.encode value
+
+instance : ToModuleParameter Nat := ⟨.natural⟩
+instance : ToModuleParameter SignalType := ⟨.signalType⟩
 
 structure ModuleKey where
   family : String

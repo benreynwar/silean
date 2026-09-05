@@ -5,6 +5,8 @@ namespace Silean.Examples.Checks.VectorSlice
 
 open Silean Silean.FIRRTL
 
+def pairBits : SignalType := .tuple (.cons .bit (.cons .bit .nil))
+
 noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.VectorSlice.ports .bit 2 3 1) :=
   Modules.VectorSlice.certified .bit 2 3 1
@@ -27,8 +29,8 @@ def result := ((Modules.VectorSlice.cycleContract .bit 2 3 1).evaluate
 #guard result 2
 
 noncomputable example : Contracts.Cycle.ModuleCycleCertified
-    (Modules.VectorSlice.ports (.tuple (.cons .bit (.cons .bit .nil))) 0 0 2) :=
-  Modules.VectorSlice.certified (.tuple (.cons .bit (.cons .bit .nil))) 0 0 2
+    (Modules.VectorSlice.ports pairBits 0 0 2) :=
+  Modules.VectorSlice.certified pairBits 0 0 2
 
 example (inputs : (Modules.VectorSlice.ports element prefixWidth width suffixWidth).inputs.Values)
     (outputs : (Modules.VectorSlice.ports element prefixWidth width suffixWidth).outputs.Values)

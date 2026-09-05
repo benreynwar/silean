@@ -1,5 +1,6 @@
 import Silean.FIRRTL
-import Silean.Modules.Fifo.Fifo
+import Silean.Modules.Fifo.FifoCycleCertified
+import Silean.Emitters.StructuredPayload
 
 namespace Silean.Examples.Checks.Fifo
 
@@ -109,7 +110,8 @@ def oneEnqueued := (cycle0 true true false false (state0 false false false)).2
 #guard (cycle0 false false false false oneEnqueued).1 .outputValid
 #guard !(cycle0 false false false false oneEnqueued).1 .inputReady
 
-noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports .bit) := certified .bit 0
+noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports .bit) :=
+  certified .bit 0
 noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports (.vector 3 .bit)) :=
   certified (.vector 3 .bit) 2
 
@@ -135,24 +137,35 @@ private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
 private def renders (addressWidth : Nat) (fragments : List String) : Bool :=
-  match renderCircuit (Naming.naming .bit addressWidth) with
+  match renderCircuit (Silean.Modules.Fifo.naming .bit addressWidth) with
   | .error _ => false
   | .ok text => fragments.all (contains text)
 
 #guard renders 2
-  ["public module fifo_structural_bit_2",
+  ["public module Fifo_bit_2",
    "input input_valid : UInt<1>", "input reset : UInt<1>",
    "output output_valid : UInt<1>", "output input_ready : UInt<1>",
-   "inst read_pointer of enabled_reset_counter_structural_3",
-   "inst write_pointer of enabled_reset_counter_structural_3",
-   "inst pointer_control of fifo_pointer_control_structural_2",
-   "inst storage of register_bank_structural_bit_2",
-   "connect pointer_control.read_pointer, read_pointer.value",
-   "connect storage.write_enable, pointer_control.write_advance"]
+   "inst readCounter of EnabledResetCounter_3",
+   "inst writeCounter of EnabledResetCounter_3",
+   "inst control of PointerControl_2",
+   "inst storage of RegisterBank_bit_2_1",
+   "connect control.readPointer, readCounter.value",
+   "connect storage.write_enable, control.writeAdvance"]
 
 #guard renders 0
-  ["public module fifo_structural_bit_0",
-   "inst pointer_control of fifo_pointer_control_structural_0",
-   "inst storage of register_bank_structural_bit_0"]
+  ["public module Fifo_bit_0",
+   "inst control of PointerControl_0",
+   "inst storage of RegisterBank_bit_0_1"]
+
+#guard match renderCircuit
+    (Silean.Modules.Fifo.Naming.namingWith
+      Silean.Emitters.StructuredPayload.type 2
+      Silean.Emitters.StructuredPayload.naming) with
+  | .error _ => false
+  | .ok text =>
+      (["input input_data : { a : UInt<1>[3], b : { c : UInt<1>, d : { e : UInt<1>, f : UInt<1> }[2] } }",
+       "output output_data : { a : UInt<1>[3], b : { c : UInt<1>, d : { e : UInt<1>, f : UInt<1> }[2] } }",
+       "input write_value : { a : UInt<1>[3], b : { c : UInt<1>, d : { e : UInt<1>, f : UInt<1> }[2] } }"]).all
+        (contains text)
 
 end Silean.Examples.Checks.Fifo

@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.HalfAdder
+import Silean.Modules.HalfAdder.HalfAdderCertified
 
 namespace Silean.Examples.Checks.HalfAdder
 
@@ -7,6 +7,16 @@ open Silean Silean.FIRRTL
 
 noncomputable example : Contracts.Cycle.ModuleCycleCertified Modules.HalfAdder.ports :=
   Modules.HalfAdder.certified
+
+example : Modules.HalfAdder.sumRule.readsInputs.labels =
+    [.left, .right] := rfl
+
+example : Modules.HalfAdder.sumRule.writesOutputs.labels = [.sum] := rfl
+
+example : Modules.HalfAdder.carryRule.readsInputs.labels =
+    [.left, .right] := rfl
+
+example : Modules.HalfAdder.carryRule.writesOutputs.labels = [.carry] := rfl
 
 /-- The public proof is a reusable layer certificate, not merely a proof about
 the concrete XOR/AND hierarchy selected by `moduleStructure`. -/
@@ -69,11 +79,11 @@ private def containsAll (rendered : RenderResult String) (fragments : List Strin
 #guard containsAll (renderCircuit Silean.Naming.Primitive.xor)
   ["public module xor_bit", "connect out, xor(left, right)"]
 
-#guard containsAll (renderCircuit Modules.HalfAdder.Naming.naming)
-  ["public module half_adder_structural",
+#guard containsAll (renderCircuit Modules.HalfAdder.design.naming)
+  ["public module HalfAdder",
    "input left : UInt<1>", "input right : UInt<1>",
    "output sum : UInt<1>", "output carry : UInt<1>",
-   "inst sum_gate of xor_bit", "inst carry_gate of and_bit",
-   "connect sum_gate.left, left", "connect carry_gate.right, right"]
+   "inst sumGate of xor_bit", "inst carryGate of and_bit",
+   "connect sumGate.left, left", "connect carryGate.right, right"]
 
 end Silean.Examples.Checks.HalfAdder

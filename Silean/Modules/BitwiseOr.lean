@@ -55,10 +55,16 @@ end Rule
 def outputRule := Composition.BinaryLeafwise.outputRule
 @[reducible] def cycleContract := Composition.BinaryLeafwise.cycleContract
 def bitModuleStructure := Composition.BinaryLeafwise.bitModuleStructure
-def moduleStructure := Composition.BinaryLeafwise.moduleStructure
+def moduleStructure (signalType : SignalType) :=
+  Composition.BinaryLeafwise.moduleStructure signalType
+
+noncomputable opaque certification (signalType : SignalType) :
+    Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType)
+      (cycleContract signalType) :=
+  (Composition.BinaryLeafwise.certified signalType).certification
 
 noncomputable def certified (signalType : SignalType) :=
-  Composition.BinaryLeafwise.certified signalType
+  (certification signalType).bundle
 
 theorem certified_moduleStructure (signalType : SignalType) :
     (certified signalType).moduleStructure = moduleStructure signalType := rfl
@@ -104,5 +110,14 @@ def naming (signalType : SignalType) :
   namingWith signalType (.positional signalType)
 
 end Naming
+
+@[reducible] def designWith (signalType : SignalType)
+    (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
+    Silean.Naming.NamedModule :=
+  ⟨ports signalType, moduleStructure signalType,
+    Naming.namingWith signalType typeNaming⟩
+
+@[reducible] def design (signalType : SignalType) : Silean.Naming.NamedModule :=
+  designWith signalType (.positional signalType)
 
 end Silean.Modules.BitwiseOr

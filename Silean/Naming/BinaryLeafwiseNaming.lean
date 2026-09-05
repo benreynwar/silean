@@ -35,11 +35,11 @@ def namingWith (moduleName componentScope : String)
       unfold BinaryLeafwise.bitModuleStructure
       exact .composite ⟨moduleName, "bit", []⟩ (ports .bit)
         (fun | .gate => "gate") (fun | .gate => bitNaming)
-  | .vector length element, typeNaming => by
+  | .vector length elementType, typeNaming => by
       rw [BinaryLeafwise.moduleStructure,
         LeafwiseInterface.moduleStructure.eq_2]
-      let splitter : SignalSplitter := .vector length element
-      exact .composite ⟨moduleName, "structural", [.shape splitter.aggregateType]⟩
+      let splitter : SignalSplitter := .vector length elementType
+      exact .composite ⟨moduleName, "structural", [.signalType splitter.aggregateType]⟩
         (portsWithNaming splitter.aggregateType typeNaming)
         (fun
           | .splitter .left => "split_left"
@@ -53,7 +53,7 @@ def namingWith (moduleName componentScope : String)
           | .splitter .right =>
               SignalAdapter.splitterWithNaming splitter typeNaming
           | .component component =>
-              namingWith moduleName componentScope bitNaming element
+              namingWith moduleName componentScope bitNaming elementType
                 (typeNaming.component component)
           | .combiner .result =>
               SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
@@ -61,7 +61,7 @@ def namingWith (moduleName componentScope : String)
       rw [BinaryLeafwise.moduleStructure,
         LeafwiseInterface.moduleStructure.eq_3]
       let splitter : SignalSplitter := .tuple fields
-      exact .composite ⟨moduleName, "structural", [.shape splitter.aggregateType]⟩
+      exact .composite ⟨moduleName, "structural", [.signalType splitter.aggregateType]⟩
         (portsWithNaming splitter.aggregateType typeNaming)
         (fun
           | .splitter .left => "split_left"
@@ -82,13 +82,14 @@ def namingWith (moduleName componentScope : String)
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
-  · exact SignalTypes.complexity_typeAt_lt fields component
+  · have smaller := SignalTypes.complexity_typeAt_lt
+      fields component
+    exact smaller
 
 def naming (moduleName componentScope : String)
     (bitNaming : ModuleNaming gate.certified.moduleStructure)
     (signalType : SignalType) :
     ModuleNaming (BinaryLeafwise.moduleStructure signalType) :=
-  namingWith moduleName componentScope bitNaming signalType
-    (.positional signalType)
+  namingWith moduleName componentScope bitNaming signalType (.positional signalType)
 
 end Silean.Naming.BinaryLeafwise

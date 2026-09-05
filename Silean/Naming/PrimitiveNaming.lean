@@ -44,3 +44,29 @@ def constant (value : Bool) :
     emptySignals (.constant value)
 
 end Silean.Naming.Primitive
+
+namespace Silean.Primitives
+
+/-- Primitive hardware definitions bundled with their default emission naming. -/
+@[reducible] def notDesign : Naming.NamedModule :=
+  ⟨not.ports, .primitive not, Naming.Primitive.not⟩
+
+@[reducible] def andDesign : Naming.NamedModule :=
+  ⟨and.ports, .primitive and, Naming.Primitive.and⟩
+
+@[reducible] def orDesign : Naming.NamedModule :=
+  ⟨or.ports, .primitive or, Naming.Primitive.or⟩
+
+@[reducible] def xorDesign : Naming.NamedModule :=
+  ⟨xor.ports, .primitive xor, Naming.Primitive.xor⟩
+
+@[reducible] def eqDesign : Naming.NamedModule :=
+  ⟨eq.ports, .primitive eq, Naming.Primitive.eq⟩
+
+@[reducible] def registerDesign : Naming.NamedModule :=
+  ⟨register.ports, .primitive register, Naming.Primitive.register⟩
+
+@[reducible] def constantDesign (value : Bool) : Naming.NamedModule :=
+  ⟨(constant value).ports, .primitive (constant value), Naming.Primitive.constant value⟩
+
+end Silean.Primitives

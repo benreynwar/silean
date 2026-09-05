@@ -1,4 +1,4 @@
-import Silean.Composition.SignalLayout
+import Silean.Foundation.SignalLayout
 import Silean.Primitives.PrimitivePorts
 
 namespace Silean.Composition
@@ -16,20 +16,20 @@ deriving Enumeration
 
 inductive SignalSplitter where
   /-- Splits a vector into its indexed elements. -/
-  | vector (length : Nat) (element : SignalType)
-  /-- Splits a named tuple into its fields. -/
+  | vector (length : Nat) (elementType : SignalType)
+  /-- Splits a tuple into its structurally labelled fields. -/
   | tuple (fields : SignalTypes)
 
 inductive SignalCombiner where
   /-- Combines indexed elements into a vector. -/
-  | vector (length : Nat) (element : SignalType)
-  /-- Combines fields into a named tuple. -/
+  | vector (length : Nat) (elementType : SignalType)
+  /-- Combines structurally labelled fields into a tuple. -/
   | tuple (fields : SignalTypes)
 
 namespace SignalSplitter
 
 @[reducible] def aggregateType : SignalSplitter → SignalType
-  | .vector length element => .vector length element
+  | .vector length elementType => .vector length elementType
   | .tuple fields => .tuple fields
 
 @[reducible] def combiner : SignalSplitter → SignalCombiner
@@ -37,9 +37,11 @@ namespace SignalSplitter
   | .tuple fields => .tuple fields
 
 @[reducible] def ports : SignalSplitter → ModulePorts
-  | .vector length element =>
-      ⟨aggregateSignalMap (.vector length element), SignalType.vectorComponents length element⟩
-  | .tuple fields => ⟨aggregateSignalMap (.tuple fields), fields.componentMap⟩
+  | .vector length elementType =>
+      ⟨aggregateSignalMap (.vector length elementType),
+        SignalType.vectorComponents length elementType⟩
+  | .tuple fields =>
+      ⟨aggregateSignalMap (.tuple fields), fields.componentMap⟩
 
 def outputValues : (splitter : SignalSplitter) →
     splitter.ports.inputs.Values → splitter.ports.outputs.Values
@@ -56,13 +58,15 @@ end SignalSplitter
 namespace SignalCombiner
 
 @[reducible] def aggregateType : SignalCombiner → SignalType
-  | .vector length element => .vector length element
+  | .vector length elementType => .vector length elementType
   | .tuple fields => .tuple fields
 
 @[reducible] def ports : SignalCombiner → ModulePorts
-  | .vector length element =>
-      ⟨SignalType.vectorComponents length element, aggregateSignalMap (.vector length element)⟩
-  | .tuple fields => ⟨fields.componentMap, aggregateSignalMap (.tuple fields)⟩
+  | .vector length elementType =>
+      ⟨SignalType.vectorComponents length elementType,
+        aggregateSignalMap (.vector length elementType)⟩
+  | .tuple fields =>
+      ⟨fields.componentMap, aggregateSignalMap (.tuple fields)⟩
 
 def outputValues : (combiner : SignalCombiner) →
     combiner.ports.inputs.Values → combiner.ports.outputs.Values

@@ -1,0 +1,351 @@
+import Silean.Contracts.Cycle.CycleEvaluation
+
+namespace Silean.Authoring
+
+open Lean Elab Command
+open Lean.Parser.Term
+
+declare_syntax_cat moduleCycleContractParam
+syntax "(" ident " : " term ")" : moduleCycleContractParam
+
+declare_syntax_cat moduleCycleWrite
+syntax ident " := " term : moduleCycleWrite
+
+declare_syntax_cat moduleCycleContractItem
+syntax "output_rule" ident " where "
+  ident " := " "[" ident,* "]"
+  ident " := " "{" moduleCycleWrite,* "}" : moduleCycleContractItem
+syntax "output_rule" ident " := " term : moduleCycleContractItem
+syntax "state_rule" " where "
+  ident " := " "[" ident,* "]"
+  ident " := " "{" moduleCycleWrite,* "}" : moduleCycleContractItem
+syntax "state_rule" " := " term : moduleCycleContractItem
+
+/--
+Declare an exact one-cycle contract from readable output equations and a
+complete next-state map. Input labels listed by `reads` are available under
+the same Lean names in the corresponding expressions; current contract state
+is available as `state`.
+
+The inline form generates private named input and output groups,
+rule definition, and a `...Rule_holds_iff` theorem. The form
+`output_rule name := existingRule` instead registers an ordinary Lean
+`CycleOutputRule`, allowing larger rules to reuse selections and targets
+defined outside the command. Likewise, `state_rule := existingRule` preserves
+a natural whole-map next-state function when listing every state field would
+make the contract less clear. In all cases the command generates the rule-name
+enumeration, exact output coverage, and contract assembly.
+-/
+syntax (name := moduleCycleContract)
+  "module_cycle_contract " ident moduleCycleContractParam* " for " term
+    " where " ident " := " term moduleCycleContractItem* : command
+
+private structure ModuleParam where
+  binder : TSyntax ``Parser.Term.bracketedBinder
+  argument : TSyntax `term
+
+private structure WriteDecl where
+  label : TSyntax `ident
+  value : TSyntax `term
+
+private structure OutputRuleDecl where
+  ruleName : TSyntax `ident
+  definitionName : TSyntax `ident
+  existingRule : Option (TSyntax `term) := none
+  reads : Array (TSyntax `ident)
+  writes : Array WriteDecl
+
+private structure StateRuleDecl where
+  existingRule : Option (TSyntax `term) := none
+  reads : Array (TSyntax `ident)
+  next : Array WriteDecl
+
+private def parseParam (param : TSyntax `moduleCycleContractParam) :
+    CommandElabM ModuleParam :=
+  match param with
+  | `(moduleCycleContractParam| ($name:ident : $type:term)) => do
+      pure {
+        binder := ← `(bracketedBinder| ($name : $type))
+        argument := name
+      }
+  | _ => throwUnsupportedSyntax
+
+private def parseWrite (entry : TSyntax `moduleCycleWrite) :
+    CommandElabM WriteDecl :=
+  match entry with
+  | `(moduleCycleWrite| $label:ident := $value:term) => pure { label, value }
+  | _ => throwUnsupportedSyntax
+
+private def validateSectionKeyword (actual : TSyntax `ident) (expected : Name) :
+    CommandElabM Unit := do
+  unless actual.getId == expected do
+    throwErrorAt actual "expected `{expected}`"
+
+private def parseOutputRule (item : TSyntax `moduleCycleContractItem) :
+    CommandElabM (Option OutputRuleDecl) := do
+  let make ruleName definitionName readsKeyword reads writesKeyword writes := do
+    validateSectionKeyword readsKeyword `reads
+    validateSectionKeyword writesKeyword `writes
+    let writes ← writes.getElems.mapM parseWrite
+    if writes.isEmpty then
+      throwErrorAt ruleName "an output rule must write at least one output"
+    pure <| some {
+      ruleName
+      definitionName
+      reads := reads.getElems
+      writes
+    }
+  match item with
+  | `(moduleCycleContractItem| output_rule $ruleName:ident where
+      $readsKeyword:ident := [ $reads:ident,* ]
+      $writesKeyword:ident := { $writes:moduleCycleWrite,* }) =>
+      make ruleName (mkIdentFrom ruleName (ruleName.getId.appendAfter "Rule"))
+        readsKeyword reads writesKeyword writes
+  | `(moduleCycleContractItem| output_rule $ruleName:ident := $rule:term) =>
+      pure <| some {
+        ruleName
+        definitionName := mkIdentFrom ruleName (ruleName.getId.appendAfter "Rule")
+        existingRule := some rule
+        reads := #[]
+        writes := #[]
+      }
+  | `(moduleCycleContractItem| state_rule where
+      $_:ident := [ $_:ident,* ] $_:ident := { $_:moduleCycleWrite,* }) =>
+      pure none
+  | `(moduleCycleContractItem| state_rule := $_:term) => pure none
+  | _ => throwUnsupportedSyntax
+
+private def parseStateRule (item : TSyntax `moduleCycleContractItem) :
+    CommandElabM (Option StateRuleDecl) := do
+  match item with
+  | `(moduleCycleContractItem| state_rule where
+      $readsKeyword:ident := [ $reads:ident,* ]
+      $nextKeyword:ident := { $next:moduleCycleWrite,* }) =>
+      validateSectionKeyword readsKeyword `reads
+      validateSectionKeyword nextKeyword `next
+      pure <| some { reads := reads.getElems, next := ← next.getElems.mapM parseWrite }
+  | `(moduleCycleContractItem| state_rule := $rule:term) =>
+      pure <| some { existingRule := some rule, reads := #[], next := #[] }
+  | `(moduleCycleContractItem| output_rule $_:ident where
+      $_:ident := [ $_:ident,* ] $_:ident := { $_:moduleCycleWrite,* }) => pure none
+  | `(moduleCycleContractItem| output_rule $_:ident := $_:term) => pure none
+  | _ => throwUnsupportedSyntax
+
+private def labelConstructor (label : TSyntax `ident) :
+    CommandElabM (TSyntax ``Parser.Command.ctor) :=
+  `(Parser.Command.ctor| | $label:ident)
+
+private def groupAlternative (label : TSyntax `ident) :
+    CommandElabM (TSyntax ``Parser.Term.matchAlt) :=
+  `(matchAltExpr| | .$label => .$label)
+
+private def declareGroupLabelType (name : TSyntax `ident)
+    (labels : Array (TSyntax `ident)) : CommandElabM Unit := do
+  let constructors ← labels.mapM labelConstructor
+  elabCommand <| ← `(
+    private inductive $name where
+      $constructors:ctor*
+    deriving Silean.Enumeration
+  )
+
+private def groupTerm (mapTerm : TSyntax `term)
+    (typeName : TSyntax `ident) (labels : Array (TSyntax `ident)) :
+    CommandElabM (TSyntax `term) := do
+  if labels.isEmpty then
+    `(Silean.SignalGroup.empty $mapTerm)
+  else
+    let alternatives ← labels.mapM groupAlternative
+    `(Silean.SignalGroup.fromLabels $mapTerm $typeName
+        fun $alternatives:matchAlt*)
+
+private def targetAlternative (write : WriteDecl) :
+    CommandElabM (TSyntax ``Parser.Term.matchAlt) :=
+  `(matchAltExpr| | .$(write.label):ident => $(write.value))
+
+private def stateAlternative (write : WriteDecl) :
+    CommandElabM (TSyntax ``Parser.Term.matchAlt) :=
+  `(matchAltExpr| | .$(write.label):ident => $(write.value))
+
+private def ruleConstructor (rule : OutputRuleDecl) :
+    CommandElabM (TSyntax ``Parser.Command.ctor) :=
+  `(Parser.Command.ctor| | $(rule.ruleName):ident)
+
+private def contractAlternative (rule : OutputRuleDecl)
+    (arguments : Array (TSyntax `term)) :
+    CommandElabM (TSyntax ``Parser.Term.matchAlt) := do
+  let ruleTerm ← match rule.existingRule with
+    | some existing => pure existing
+    | none => `($(rule.definitionName):ident $arguments:term*)
+  `(matchAltExpr| | .$(rule.ruleName):ident => $ruleTerm)
+
+private def outputEquality (outputs : TSyntax `ident) (write : WriteDecl) :
+    CommandElabM (TSyntax `term) :=
+  `($outputs .$(write.label):ident = $(write.value))
+
+private def outputEqualities (outputs : TSyntax `ident)
+    (writes : Array WriteDecl) : CommandElabM (TSyntax `term) := do
+  let mut result : Option (TSyntax `term) := none
+  for write in writes.reverse do
+    let equality ← outputEquality outputs write
+    result ← match result with
+      | none => pure (some equality)
+      | some tail => pure (some (← `($equality ∧ $tail)))
+  match result with
+  | some finalResult => pure finalResult
+  | none => throwError "internal error: output rule has no writes"
+
+private def selectedEqualities (holds : TSyntax `ident)
+    (writes : Array WriteDecl) : CommandElabM (TSyntax `term) := do
+  let mut result : Option (TSyntax `term) := none
+  for write in writes.reverse do
+    let equality ← `(by simpa using $holds .$(write.label):ident)
+    result ← match result with
+      | none => pure (some equality)
+      | some tail => pure (some (← `(⟨$equality, $tail⟩)))
+  match result with
+  | some finalResult => pure finalResult
+  | none => throwError "internal error: output rule has no writes"
+
+private def bindReadValues (inputs : TSyntax `ident)
+    (reads : Array (TSyntax `ident)) (body : TSyntax `term) :
+    CommandElabM (TSyntax `term) := do
+  let mut result := body
+  for read in reads.reverse do
+    result ← `(let $read := $inputs .$read; $result)
+  pure result
+
+elab_rules : command
+  | `(module_cycle_contract $contractName:ident
+      $params:moduleCycleContractParam* for $ports:term where
+      $stateKeyword:ident := $stateMap:term $items:moduleCycleContractItem*) => do
+    validateSectionKeyword stateKeyword `state
+    let parsedParams ← params.mapM parseParam
+    let binders := parsedParams.map (·.binder)
+    let arguments := parsedParams.map (·.argument)
+
+    let outputRules := (← items.mapM parseOutputRule).filterMap id
+    if outputRules.isEmpty then
+      throwErrorAt contractName "module_cycle_contract requires at least one output rule"
+    let stateRules := (← items.mapM parseStateRule).filterMap id
+    unless stateRules.size == 1 do
+      throwErrorAt contractName "module_cycle_contract requires exactly one state_rule"
+    let some stateRule := stateRules[0]? | throwError "internal error: missing state rule"
+
+    let mut seenRuleNames : List Name := []
+    let mut seenDefinitionNames : List Name := []
+    for rule in outputRules do
+      if seenRuleNames.contains rule.ruleName.getId then
+        throwErrorAt rule.ruleName "duplicate output-rule name"
+      if rule.existingRule.isNone &&
+          seenDefinitionNames.contains rule.definitionName.getId then
+        throwErrorAt rule.definitionName "duplicate output-rule definition name"
+      seenRuleNames := rule.ruleName.getId :: seenRuleNames
+      if rule.existingRule.isNone then
+        seenDefinitionNames := rule.definitionName.getId :: seenDefinitionNames
+
+    let ruleTypeName := mkIdentFrom contractName `Rule
+    let stateRuleName := mkIdentFrom contractName `stateRule
+    let constructors ← outputRules.mapM ruleConstructor
+
+    elabCommand <| ← `(
+      inductive $ruleTypeName where
+        $constructors:ctor*
+      deriving Silean.Enumeration
+    )
+
+    for rule in outputRules do
+      if rule.existingRule.isSome then continue
+      let inputMap ← `(($ports).inputs)
+      let outputMap ← `(($ports).outputs)
+      let outputLabels := rule.writes.map (·.label)
+      let inputTypeName := mkIdentFrom rule.definitionName
+        (rule.definitionName.getId.appendAfter "Input")
+      let outputTypeName := mkIdentFrom rule.definitionName
+        (rule.definitionName.getId.appendAfter "Output")
+      if !rule.reads.isEmpty then
+        declareGroupLabelType inputTypeName rule.reads
+      declareGroupLabelType outputTypeName outputLabels
+      let inputGroup ← groupTerm inputMap inputTypeName rule.reads
+      let outputGroup ← groupTerm outputMap outputTypeName outputLabels
+      let targetAlternatives ← rule.writes.mapM targetAlternative
+      let inputsBinder := mkIdentFrom rule.ruleName `inputs
+      let stateBinder := mkIdentFrom rule.ruleName `state
+      let targetBody ← bindReadValues inputsBinder rule.reads
+        (← `(fun $targetAlternatives:matchAlt*))
+      elabCommand <| ← `(
+        def $(rule.definitionName):ident $binders:bracketedBinder* :
+            Silean.Contracts.Cycle.CycleOutputRule $ports $stateMap where
+          readsInputs := $inputGroup
+          writesOutputs := $outputGroup
+          target := fun $inputsBinder $stateBinder => $targetBody
+      )
+
+    let stateRuleTerm ← match stateRule.existingRule with
+      | some existing => pure existing
+      | none => do
+          let stateInputMap ← `(($ports).inputs)
+          let stateInputTypeName := mkIdentFrom stateRuleName
+            (stateRuleName.getId.appendAfter "Input")
+          if !stateRule.reads.isEmpty then
+            declareGroupLabelType stateInputTypeName stateRule.reads
+          let stateInputGroup ← groupTerm stateInputMap stateInputTypeName stateRule.reads
+          let stateInputsBinder := mkIdentFrom contractName `inputs
+          let stateBinder := mkIdentFrom contractName `state
+          let stateTarget ← if stateRule.next.isEmpty then
+            `(fun _ _ => Silean.SignalMap.emptyValues)
+          else
+            let alternatives ← stateRule.next.mapM stateAlternative
+            let body ← bindReadValues stateInputsBinder stateRule.reads
+              (← `(fun $alternatives:matchAlt*))
+            `(fun $stateInputsBinder $stateBinder => $body)
+          elabCommand <| ← `(
+            def $stateRuleName $binders:bracketedBinder* :
+                Silean.Contracts.Cycle.CycleStateRule $ports $stateMap where
+              readsInputs := $stateInputGroup
+              target := $stateTarget
+          )
+          `($stateRuleName $arguments:term*)
+
+    let contractAlternatives ← outputRules.mapM fun rule =>
+      contractAlternative rule arguments
+    elabCommand <| ← `(
+      @[reducible] def $contractName $binders:bracketedBinder* :
+          Silean.Contracts.Cycle.ModuleCycleContract $ports where
+        state := $stateMap
+        RuleName := $ruleTypeName
+        ruleNames := inferInstance
+        outputRule $contractAlternatives:matchAlt*
+        stateRule := $stateRuleTerm
+        outputCoverage := by rfl
+    )
+
+    for rule in outputRules do
+      if rule.existingRule.isSome then continue
+      let inputsName := mkIdentFrom rule.ruleName `inputs
+      let theoremStateName := mkIdentFrom rule.ruleName `state
+      let outputsName := mkIdentFrom rule.ruleName `outputs
+      let equalities ← outputEqualities outputsName rule.writes
+      let rhs ← bindReadValues inputsName rule.reads equalities
+      let theoremName := mkIdentFrom rule.definitionName
+        (rule.definitionName.getId.appendAfter "_holds_iff")
+      let holdsName := mkIdentFrom rule.ruleName `holds
+      let selected ← selectedEqualities holdsName rule.writes
+      let labelName := mkIdentFrom rule.ruleName `output
+      elabCommand <| ← `(
+        @[simp] theorem $theoremName $binders:bracketedBinder*
+            ($inputsName : ($ports).inputs.Values)
+            ($theoremStateName : ($stateMap).Values)
+            ($outputsName : ($ports).outputs.Values) :
+            ($(rule.definitionName):ident $arguments:term*).Holds
+                $inputsName $theoremStateName $outputsName ↔ $rhs := by
+          simp only [$(rule.definitionName):ident,
+            Silean.Contracts.Cycle.CycleOutputRule.Holds,
+            Silean.SignalGroup.fromLabels_matches_iff]
+          constructor
+          · intro $holdsName:ident
+            exact $selected
+          · intro $holdsName:ident $labelName:ident
+            cases $labelName:ident <;> simp_all
+      )
+
+end Silean.Authoring

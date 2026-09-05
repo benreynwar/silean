@@ -1,6 +1,6 @@
 import Silean.Semantics.StructuralEquations
 import Silean.Examples.Fixtures.Not
-import Silean.Modules.BitMux
+import Silean.Modules.BitMux.BitMux
 import Silean.Examples.Fixtures.RepeatedDualNot
 
 namespace Silean.Examples.Checks.StructuralEquations

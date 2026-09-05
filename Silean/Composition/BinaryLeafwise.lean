@@ -70,19 +70,18 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule [operation : Operation] (signalType : SignalType) :
-    Contracts.Cycle.CycleOutputRule (ports signalType) emptySignalMap
-      { inputTypes := .cons signalType (.cons signalType .nil)
-        outputTypes := .cons signalType .nil } where
-  readsInputs := ((inputMap signalType).select .right).prepend .left
-  writesOutputs := (outputMap signalType).select .result
-  target | (left, (right, ())), _ => (operation.apply signalType left right, ())
+    Contracts.Cycle.CycleOutputRule (ports signalType) emptySignalMap where
+  readsInputs := .all (inputMap signalType)
+  writesOutputs := .all (outputMap signalType)
+  target inputs _ := fun
+    | .result => operation.apply signalType (inputs .left) (inputs .right)
 
 @[reducible] def cycleContract [Operation] (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleContract (ports signalType) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule signalType⟩
+  outputRule | .apply => outputRule signalType
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -93,28 +92,28 @@ class BitGate (operation : Operation) where
   certified : Contracts.Cycle.ModuleCycleCertifiedStructure cycleContract
   rule : cycleContract.RuleName
   everyRule : ∀ candidate, candidate = rule
-  reads : (cycleContract.outputRule rule).2.readsInputs.labels = [.left, .right]
-  writes : (cycleContract.outputRule rule).2.writesOutputs.labels = [.output]
+  reads : (cycleContract.outputRule rule).readsInputs.labels = [.left, .right]
+  writes : (cycleContract.outputRule rule).writesOutputs.labels = [.output]
   state : cycleContract.state.Values
   stateSubsingleton : Subsingleton cycleContract.state.Values
   stateReadsEmpty : cycleContract.stateRule.readsInputs.labels = []
   output_eq : ∀ inputs state outputs,
-    (cycleContract.outputRule rule).2.Holds inputs state outputs →
+    (cycleContract.outputRule rule).Holds inputs state outputs →
       outputs .output = operation.apply .bit (inputs .left) (inputs .right)
 
 theorem BitGate.reads_eq [operation : Operation]
     [gate : BitGate operation] :
-    (gate.cycleContract.outputRule gate.rule).2.readsInputs.labels =
+    (gate.cycleContract.outputRule gate.rule).readsInputs.labels =
       [.left, .right] :=
   gate.reads
 
 theorem BitGate.writes_eq [operation : Operation]
     [gate : BitGate operation] :
-    (gate.cycleContract.outputRule gate.rule).2.writesOutputs.labels =
+    (gate.cycleContract.outputRule gate.rule).writesOutputs.labels =
       [.output] :=
   gate.writes
 
-theorem BitGate.stateReads_eq [operation : Operation]
+@[simp] theorem BitGate.stateReads_eq [operation : Operation]
     [gate : BitGate operation] :
     gate.cycleContract.stateRule.readsInputs.labels = [] :=
   gate.stateReadsEmpty
@@ -223,8 +222,15 @@ private theorem bitImplements : Contracts.Cycle.Implements
     rw [show (outputRule .bit).Holds inputs contractState proposal.outputs ↔
         proposal.outputs .result = operation.apply .bit
           (inputs .left) (inputs .right) by
-      simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-        SignalSelection.project, SignalSelection.prepend, SignalMap.select]]
+      simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+        SignalGroup.all_matches]
+      constructor
+      · intro equal
+        exact congrFun equal .result
+      · intro equal
+        funext label
+        cases label
+        exact equal]
     rcases proposal with ⟨outputs, children⟩
     have boundary := satisfies.1
     change outputs .result = operation.apply .bit (inputs .left) (inputs .right)
@@ -261,13 +267,14 @@ noncomputable def bitCertifiedStructure :
 @[reducible] def aggregateBody (splitter : Composition.SignalSplitter) :=
   interface.aggregateBody splitter
 
-def moduleStructure : (signalType : SignalType) → ModuleStructure (ports signalType)
-  := interface.moduleStructure bitModuleStructure
+def moduleStructure (signalType : SignalType) :
+    ModuleStructure (ports signalType) := interface.moduleStructure bitModuleStructure signalType
 
 abbrev Implementation (signalType : SignalType) :=
   Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType) (cycleContract signalType)
 
-def Implementation.certified (implementation : Implementation signalType) :
+def Implementation.certified {signalType : SignalType}
+    (implementation : Implementation signalType) :
     Contracts.Cycle.ModuleCycleCertified (ports signalType) := implementation.bundle
 
 theorem moduleStructure_bit : moduleStructure .bit = bitModuleStructure := by
@@ -354,8 +361,15 @@ omit gate in
     (outputRule signalType).Holds inputs state outputs ↔
       outputs .result = operation.apply signalType
         (inputs .left) (inputs .right) := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalSelection.prepend, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .result
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
 section AggregateLayerCertification
 
@@ -542,20 +556,21 @@ noncomputable def aggregateImplementation (splitter : Composition.SignalSplitter
 private noncomputable def implementationDefinition :
     (signalType : SignalType) → Implementation signalType
   | .bit => bitImplementation
-  | .vector length element =>
-      aggregateImplementation (.vector length element) fun _ =>
-        implementationDefinition element
+  | .vector length elementType =>
+      aggregateImplementation (.vector length elementType) fun _ =>
+        implementationDefinition elementType
   | .tuple fields =>
       aggregateImplementation (.tuple fields) fun component =>
         implementationDefinition (fields.typeAt component)
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
-  · exact SignalTypes.complexity_typeAt_lt fields component
+  · have smaller := SignalTypes.complexity_typeAt_lt
+      fields component
+    exact smaller
 
 noncomputable opaque implementation (signalType : SignalType) :
-    Implementation signalType :=
-  implementationDefinition signalType
+    Implementation signalType := implementationDefinition signalType
 
 noncomputable def certified (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleCertified (ports signalType) := (implementation signalType).certified

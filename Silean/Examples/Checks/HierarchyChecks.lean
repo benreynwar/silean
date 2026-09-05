@@ -1,6 +1,6 @@
 import Silean.Examples.Fixtures.Not
 import Silean.Examples.Fixtures.DoubleNot
-import Silean.Modules.BitMux
+import Silean.Modules.BitMux.BitMux
 import Silean.Examples.Fixtures.RepeatedDualNot
 
 namespace Silean.Examples.Checks.Hierarchy

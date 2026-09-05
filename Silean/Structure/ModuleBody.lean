@@ -31,6 +31,19 @@ inductive SignalSource (ports : ModulePorts) (instancePorts : InstancePorts) :
       SignalSource ports instancePorts
         ((instancePorts.ports name).outputs.signalType port)
 
+namespace SignalSource
+
+/-- Transport a source across a proved equality of signal shapes. This is
+needed when a named structural selection is represented by its canonical tuple
+position. -/
+def castType {ports : ModulePorts} {instances : InstancePorts}
+    {sourceType targetType : SignalType} (equal : sourceType = targetType)
+    (source : SignalSource ports instances sourceType) :
+    SignalSource ports instances targetType :=
+  equal ▸ source
+
+end SignalSource
+
 /-- A signal consumed by a module output or a child input. Its type records the
 shape of the selected signal. -/
 inductive SignalSink (ports : ModulePorts) (instancePorts : InstancePorts) :

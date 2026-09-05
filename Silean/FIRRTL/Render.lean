@@ -43,7 +43,7 @@ where
 
 def renderModuleParameter : ModuleParameter → String
   | .natural value => toString value
-  | .shape signalType => renderSignalTypeKey signalType
+  | .signalType signalType => renderSignalTypeKey signalType
 
 def renderModuleKey (key : ModuleKey) : String :=
   String.intercalate "_"
@@ -144,6 +144,17 @@ private def sourceReference {body : ModuleBody}
   | .instanceOutput child port =>
       s!"{renderSourceName (instanceName child)}.{renderSourceName ((childNaming child).ports.outputs.name port)}"
 
+private def sourceTypeNaming {body : ModuleBody}
+    {children : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name)}
+    (ports : ModulePortsNaming body.context.ports)
+    (childNaming : (name : body.context.instancePorts.Name) →
+      ModuleNaming (children name)) :
+    (source : SignalSource body.context.ports body.context.instancePorts signalType) →
+      SignalTypeNaming signalType
+  | .moduleInput port => ports.inputTypes port
+  | .instanceOutput child port => (childNaming child).ports.outputTypes port
+
 private def sinkReference {body : ModuleBody}
     {children : (name : body.context.instancePorts.Name) →
       ModuleStructure (body.context.instancePorts.ports name)}
@@ -156,6 +167,69 @@ private def sinkReference {body : ModuleBody}
   | .instanceInput child port =>
       s!"{renderSourceName (instanceName child)}.{renderSourceName ((childNaming child).ports.inputs.name port)}"
 
+private def sinkTypeNaming {body : ModuleBody}
+    {children : (name : body.context.instancePorts.Name) →
+      ModuleStructure (body.context.instancePorts.ports name)}
+    (ports : ModulePortsNaming body.context.ports)
+    (childNaming : (name : body.context.instancePorts.Name) →
+      ModuleNaming (children name)) :
+    (sink : SignalSink body.context.ports body.context.instancePorts signalType) →
+      SignalTypeNaming signalType
+  | .moduleOutput port => ports.outputTypes port
+  | .instanceInput child port => (childNaming child).ports.inputTypes port
+
+mutual
+  private def sameSignalTypeNaming : {signalType : SignalType} →
+      SignalTypeNaming signalType → SignalTypeNaming signalType → Bool
+    | .bit, .bit, .bit => true
+    | .vector _ _, .vector left, .vector right =>
+        sameSignalTypeNaming left right
+    | .tuple _, .tuple left, .tuple right =>
+        sameSignalTypesNaming left right
+
+  private def sameSignalTypesNaming : {signalTypes : SignalTypes} →
+      SignalTypesNaming signalTypes → SignalTypesNaming signalTypes → Bool
+    | .nil, .nil, .nil => true
+    | .cons _ _, .cons leftName leftHead leftTail,
+        .cons rightName rightHead rightTail =>
+      decide (leftName = rightName) &&
+        sameSignalTypeNaming leftHead rightHead &&
+        sameSignalTypesNaming leftTail rightTail
+end
+
+private def fieldReference (aggregate : String) (name : SourceName) : String :=
+  s!"{aggregate}.{renderSourceName name}"
+
+mutual
+  /-- Render one shape-correct structural connection. FIRRTL aggregate fields
+  are nominal, so differently named aggregates are connected recursively by
+  structural position rather than with one whole-aggregate connect. -/
+  private def renderConnection : (signalType : SignalType) → String →
+      SignalTypeNaming signalType → String → SignalTypeNaming signalType →
+      List String
+    | signalType, sink, sinkNaming, source, sourceNaming =>
+        if sameSignalTypeNaming sinkNaming sourceNaming then
+          [s!"connect {sink}, {source}"]
+        else match signalType, sinkNaming, sourceNaming with
+          | .bit, .bit, .bit => [s!"connect {sink}, {source}"]
+          | .vector length _, .vector sinkElement, .vector sourceElement =>
+              (List.range length).flatMap fun index =>
+                renderConnection _ s!"{sink}[{index}]" sinkElement
+                  s!"{source}[{index}]" sourceElement
+          | .tuple _, .tuple sinkFields, .tuple sourceFields =>
+              renderTupleConnections sink sinkFields source sourceFields
+
+  private def renderTupleConnections : (sink : String) →
+      SignalTypesNaming signalTypes → (source : String) →
+      SignalTypesNaming signalTypes → List String
+    | _, .nil, _, .nil => []
+    | sink, .cons sinkName sinkHead sinkTail,
+        source, .cons sourceName sourceHead sourceTail =>
+      renderConnection _ (fieldReference sink sinkName) sinkHead
+          (fieldReference source sourceName) sourceHead ++
+        renderTupleConnections sink sinkTail source sourceTail
+end
+
 private def compositeStatements {body : ModuleBody}
     {children : (name : body.context.instancePorts.Name) →
       ModuleStructure (body.context.instancePorts.ports name)}
@@ -166,8 +240,12 @@ private def compositeStatements {body : ModuleBody}
   let instanceStatements := body.context.instancePorts.names.values.flatMap fun child =>
     [s!"inst {renderSourceName (instanceName child)} of {renderModuleKey (childNaming child).key}",
      s!"connect {renderSourceName (instanceName child)}.clock, clock"]
-  let connections := (connectionOccurrences body).map fun connection =>
-    s!"connect {sinkReference ports instanceName childNaming connection.sink}, {sourceReference ports instanceName childNaming connection.driver}"
+  let connections := (connectionOccurrences body).flatMap fun connection =>
+    renderConnection connection.signalType
+      (sinkReference ports instanceName childNaming connection.sink)
+      (sinkTypeNaming ports childNaming connection.sink)
+      (sourceReference ports instanceName childNaming connection.driver)
+      (sourceTypeNaming ports childNaming connection.driver)
   instanceStatements ++ connections
 
 private def renderModuleBody :

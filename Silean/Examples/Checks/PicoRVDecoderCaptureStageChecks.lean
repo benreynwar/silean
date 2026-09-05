@@ -52,9 +52,9 @@ example : moduleStructure.HasNoBlackboxes := by
   native_decide
 
 noncomputable example : RenderResult String :=
-  renderClosedCircuit Naming.naming
+  renderClosedCircuit naming
 
-#guard renderModuleKey Naming.naming.key = "picorv32_decoder_capture_structural"
+#guard renderModuleKey naming.key = "picorv32_decoder_capture"
 #guard Naming.ports.inputs.name .mem_rdata_latched = "mem_rdata_latched"
 #guard Naming.ports.outputs.name .decoded_imm_j = "decoded_imm_j"
 

@@ -406,46 +406,99 @@ def nextState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
 inductive Rule | registered | nextPc | comparison | writeback
 deriving Enumeration
 
-def registeredRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .nil,
-      outputTypes := .cons (.vector 32 .bit)
-        (.cons (.vector 32 .bit) (.cons (.vector 32 .bit)
-          (.cons (.vector 5 .bit) .nil))) } where
-  readsInputs := .nil
-  writesOutputs := (((outputMap.select .reg_sh).prepend .reg_op2).prepend
-    .reg_op1).prepend .reg_pc
-  target := fun _ state =>
-    (state .reg_pc, (state .reg_op1, (state .reg_op2, (state .reg_sh, ()))))
+namespace RegisteredRule
+inductive Output | reg_pc | reg_op1 | reg_op2 | reg_sh deriving Enumeration
+end RegisteredRule
 
-def nextPcRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .cons .bit (.cons .bit .nil),
-      outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := (inputMap.select .latched_branch).prepend .latched_store
-  writesOutputs := outputMap.select .next_pc
-  target
-    | (latchedStore, (latchedBranch, ())), state =>
-      (nextPcFrom latchedStore latchedBranch state, ())
+namespace NextPcRule
+inductive Input | latched_store | latched_branch deriving Enumeration
+inductive Output | next_pc deriving Enumeration
+end NextPcRule
 
-def comparisonRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .ofList [.bit, .bit, .bit, .bit, .bit, .bit],
-      outputTypes := .cons .bit .nil } where
-  readsInputs := (((((inputMap.select .is_sltiu_bltu_sltu).prepend
-    .is_slti_blt_slt).prepend .instr_bgeu).prepend .instr_bge).prepend
-    .instr_bne).prepend .instr_beq
-  writesOutputs := outputMap.select .alu_out_0
-  target
-    | (instrBeq, (instrBne, (instrBge, (instrBgeu,
-        (isSltiBltSlt, (isSltiuBltuSltu, ())))))), state =>
-    let aluInputs : Alu.Values := {
+namespace ComparisonRule
+inductive Input
+  | instr_beq | instr_bne | instr_bge | instr_bgeu
+  | is_slti_blt_slt | is_sltiu_bltu_sltu
+deriving Enumeration
+inductive Output | alu_out_0 deriving Enumeration
+end ComparisonRule
+
+namespace WritebackRule
+inductive Input | cpu_state | latched_store | latched_stalu | latched_branch
+deriving Enumeration
+inductive Output | cpuregs_wrdata deriving Enumeration
+end WritebackRule
+
+@[reducible] private def registeredOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap RegisteredRule.Output fun
+    | .reg_pc => .reg_pc
+    | .reg_op1 => .reg_op1
+    | .reg_op2 => .reg_op2
+    | .reg_sh => .reg_sh
+
+@[reducible] private def nextPcInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap NextPcRule.Input fun
+    | .latched_store => .latched_store
+    | .latched_branch => .latched_branch
+
+@[reducible] private def nextPcOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap NextPcRule.Output fun
+    | .next_pc => .next_pc
+
+@[reducible] private def comparisonInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap ComparisonRule.Input fun
+    | .instr_beq => .instr_beq
+    | .instr_bne => .instr_bne
+    | .instr_bge => .instr_bge
+    | .instr_bgeu => .instr_bgeu
+    | .is_slti_blt_slt => .is_slti_blt_slt
+    | .is_sltiu_bltu_sltu => .is_sltiu_bltu_sltu
+
+@[reducible] private def comparisonOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap ComparisonRule.Output fun
+    | .alu_out_0 => .alu_out_0
+
+@[reducible] private def writebackInputs : SignalGroup inputMap :=
+  SignalGroup.fromLabels inputMap WritebackRule.Input fun
+    | .cpu_state => .cpu_state
+    | .latched_store => .latched_store
+    | .latched_stalu => .latched_stalu
+    | .latched_branch => .latched_branch
+
+@[reducible] private def writebackOutputs : SignalGroup outputMap :=
+  SignalGroup.fromLabels outputMap WritebackRule.Output fun
+    | .cpuregs_wrdata => .cpuregs_wrdata
+
+def registeredRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := .empty inputMap
+  writesOutputs := registeredOutputs
+  target _ state := fun
+    | .reg_pc => state .reg_pc
+    | .reg_op1 => state .reg_op1
+    | .reg_op2 => state .reg_op2
+    | .reg_sh => state .reg_sh
+
+def nextPcRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := nextPcInputs
+  writesOutputs := nextPcOutputs
+  target inputs state := fun
+    | .next_pc => nextPcFrom (inputs .latched_store) (inputs .latched_branch) state
+
+def comparisonRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := comparisonInputs
+  writesOutputs := comparisonOutputs
+  target inputs state := fun
+    | .alu_out_0 =>
+      let aluInputs : Alu.Values := {
       reg_op1 := state .reg_op1
       reg_op2 := state .reg_op2
       instr_sub := false
-      instr_beq := instrBeq
-      instr_bne := instrBne
-      instr_bge := instrBge
-      instr_bgeu := instrBgeu
-      is_slti_blt_slt := isSltiBltSlt
-      is_sltiu_bltu_sltu := isSltiuBltuSltu
+      instr_beq := inputs .instr_beq
+      instr_bne := inputs .instr_bne
+      instr_bge := inputs .instr_bge
+      instr_bgeu := inputs .instr_bgeu
+      is_slti_blt_slt := inputs .is_slti_blt_slt
+      is_sltiu_bltu_sltu := inputs .is_sltiu_bltu_sltu
       is_lui_auipc_jal_jalr_addi_add_sub := false
       is_compare := false
       instr_xori := false
@@ -455,34 +508,30 @@ def comparisonRule : Contracts.Cycle.CycleOutputRule ports stateMap
       instr_andi := false
       instr_and := false
     }
-    (Alu.comparisonOutput aluInputs, ())
+      Alu.comparisonOutput aluInputs
 
-def writebackRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .cons (.vector 8 .bit) (.cons .bit (.cons .bit (.cons .bit .nil))),
-      outputTypes := .cons (.vector 32 .bit) .nil } where
-  readsInputs := (((inputMap.select .latched_branch).prepend
-    .latched_stalu).prepend .latched_store).prepend .cpu_state
-  writesOutputs := outputMap.select .cpuregs_wrdata
-  target
-    | (cpuState, (latchedStore, (latchedStalu, (latchedBranch, ())))), state =>
-      (writebackFrom (BitVector.toNat 8 cpuState) latchedStore latchedStalu
-        latchedBranch state, ())
+def writebackRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := writebackInputs
+  writesOutputs := writebackOutputs
+  target inputs state := fun
+    | .cpuregs_wrdata =>
+      writebackFrom (BitVector.toNat 8 (inputs .cpu_state))
+        (inputs .latched_store) (inputs .latched_stalu)
+        (inputs .latched_branch) state
 
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
-  inputTypes := .ofList inputMap.types
-  readsInputs := inputMap.allSelection
-  target := fun selected state =>
-    nextState (inputsOfValues (inputMap.unpack selected)) state
+  readsInputs := .all inputMap
+  target := fun inputs state => nextState (inputsOfValues inputs) state
 
 @[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := stateMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
-    | .registered => ⟨_, registeredRule⟩
-    | .nextPc => ⟨_, nextPcRule⟩
-    | .comparison => ⟨_, comparisonRule⟩
-    | .writeback => ⟨_, writebackRule⟩
+    | .registered => registeredRule
+    | .nextPc => nextPcRule
+    | .comparison => comparisonRule
+    | .writeback => writebackRule
   stateRule := stateRule
   outputCoverage := by rfl
 

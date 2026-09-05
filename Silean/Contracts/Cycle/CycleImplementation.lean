@@ -260,7 +260,7 @@ by parent schedules; it does not inspect the certified module's implementation. 
 def structuralRule (certified : ModuleCycleCertified ports)
     (name : certified.cycleContract.RuleName) :
     StructuralRule certified.moduleStructure := by
-  let rule := (certified.cycleContract.outputRule name).2
+  let rule := certified.cycleContract.outputRule name
   refine {
     reads := rule.readsInputs.labels
     writes := rule.writesOutputs.labels
@@ -283,7 +283,7 @@ def structuralRule (certified : ModuleCycleCertified ports)
   have rightHolds := rightEvaluates.1 name
   unfold CycleOutputRule.Holds at leftHolds rightHolds
   rw [selectedInputsEqual] at leftHolds
-  exact SignalSelection.Matches.eq_of_mem rule.writesOutputs
+  exact SignalGroup.Matches.eq_of_mem rule.writesOutputs
     leftHolds rightHolds output outputMem
 
 end ModuleCycleCertified

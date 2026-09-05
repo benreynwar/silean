@@ -1,4 +1,4 @@
-import Silean.Modules.Mux
+import Silean.Modules.Mux.MuxCertified
 
 namespace Silean.Examples.Checks.LeafwiseLogic
 

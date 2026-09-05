@@ -61,16 +61,15 @@ namespace Silean.Examples.Fixtures.DoubleNot
 open Silean
 inductive Rule | apply
 deriving Enumeration
-def outputRule : Contracts.Cycle.CycleOutputRule Examples.Fixtures.DoubleNot.ports emptySignalMap
-    (.ofLists [.bit] [.bit]) where
-  readsInputs := Examples.Fixtures.DoubleNot.ports.inputs.select .value
-  writesOutputs := Examples.Fixtures.DoubleNot.ports.outputs.select .result
-  target | (input, ()), _ => (input, ())
+def outputRule : Contracts.Cycle.CycleOutputRule Examples.Fixtures.DoubleNot.ports emptySignalMap :=
+  { readsInputs := .all Examples.Fixtures.DoubleNot.ports.inputs
+    writesOutputs := .all Examples.Fixtures.DoubleNot.ports.outputs
+    target := fun inputs _ => fun | .result => inputs .value }
 def cycleContract : Contracts.Cycle.ModuleCycleContract Examples.Fixtures.DoubleNot.ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule⟩
+  outputRule | .apply => outputRule
   stateRule := Contracts.Cycle.CycleStateRule.empty Examples.Fixtures.DoubleNot.ports
   outputCoverage := by rfl
 end Silean.Examples.Fixtures.DoubleNot

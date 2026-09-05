@@ -55,19 +55,18 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule (signalType : SignalType) :
-    Contracts.Cycle.CycleOutputRule (ports signalType) emptySignalMap
-      { inputTypes := .cons signalType (.cons .bit .nil)
-        outputTypes := .cons signalType .nil } where
-  readsInputs := ((inputMap signalType).select .mask).prepend .value
-  writesOutputs := (outputMap signalType).select .result
-  target | (value, (mask, ())), _ => (signalType.mask value mask, ())
+    Contracts.Cycle.CycleOutputRule (ports signalType) emptySignalMap where
+  readsInputs := .all (inputMap signalType)
+  writesOutputs := .all (outputMap signalType)
+  target inputs _ := fun
+    | .result => signalType.mask (inputs .value) (inputs .mask)
 
 @[reducible] def cycleContract (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleContract (ports signalType) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule signalType⟩
+  outputRule | .apply => outputRule signalType
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -162,9 +161,15 @@ private theorem bitImplements : Contracts.Cycle.Implements
     cases rule
     rw [show (outputRule .bit).Holds inputs contractState proposal.outputs ↔
         proposal.outputs .result = (inputs .value && inputs .mask) by
-      simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
-        SignalSelection.Matches, SignalSelection.project,
-        SignalSelection.prepend, SignalMap.select, SignalType.mask]]
+      simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+        SignalGroup.all_matches]
+      constructor
+      · intro equal
+        exact congrFun equal .result
+      · intro equal
+        funext label
+        cases label
+        simpa [SignalType.mask] using equal]
     rcases proposal with ⟨outputs, children⟩
     have boundary := satisfies.1
     change outputs .result = (inputs .value && inputs .mask)
@@ -202,14 +207,15 @@ noncomputable def bitCertifiedStructure :
 @[reducible] def aggregateBody (splitter : Composition.SignalSplitter) :=
   interface.aggregateBody splitter
 
-def moduleStructure : (signalType : SignalType) → ModuleStructure (ports signalType)
-  := interface.moduleStructure bitModuleStructure
+def moduleStructure (signalType : SignalType) :
+    ModuleStructure (ports signalType) := interface.moduleStructure bitModuleStructure signalType
 
 abbrev Implementation (signalType : SignalType) :=
   Contracts.Cycle.ModuleCycleCertification
     (moduleStructure signalType) (cycleContract signalType)
 
-def Implementation.certified (implementation : Implementation signalType) :
+def Implementation.certified {signalType : SignalType}
+    (implementation : Implementation signalType) :
     Contracts.Cycle.ModuleCycleCertified (ports signalType) :=
   implementation.bundle
 
@@ -286,8 +292,15 @@ def splitterInputs (splitter : Composition.SignalSplitter)
     (outputs : (ports signalType).outputs.Values) :
     (outputRule signalType).Holds inputs state outputs ↔
       outputs .result = signalType.mask (inputs .value) (inputs .mask) := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalSelection.prepend, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .result
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
 section AggregateLayerCertification
 
@@ -398,12 +411,14 @@ private theorem aggregateImplements :
         rw [congrFun combineOutputs Composition.AggregatePort.value]
         change fields.assemble (fun component =>
           (childProposals (.component component)).outputs .result) =
-            fields.mask (inputs .value) (inputs .mask)
-        rw [← fields.assemble_get (fields.mask (inputs .value) (inputs .mask))]
+            (SignalType.tuple fields).mask (inputs .value) (inputs .mask : Bool)
+        rw [← (Composition.SignalSplitter.tuple fields).combine_split
+          ((SignalType.tuple fields).mask (inputs .value) (inputs .mask : Bool))]
         apply congrArg fields.assemble
         funext component
         exact (componentOutputs component).trans
-          (fields.get_mask (inputs .value) (inputs .mask) component).symm
+          (congrFun (Silean.SignalSplitter.split_mask
+            (.tuple fields) (inputs .value) (inputs .mask : Bool)) component).symm
   · rfl
 
 end AggregateLayerCertification
@@ -461,23 +476,30 @@ noncomputable def aggregateImplementation (splitter : Composition.SignalSplitter
 private noncomputable def implementationDefinition :
     (signalType : SignalType) → Implementation signalType
   | .bit => bitImplementation
-  | .vector length element =>
-      aggregateImplementation (.vector length element) fun _ =>
-        implementationDefinition element
+  | .vector length elementType =>
+      aggregateImplementation (.vector length elementType) fun _ =>
+        implementationDefinition elementType
   | .tuple fields =>
       aggregateImplementation (.tuple fields) fun component =>
         implementationDefinition (fields.typeAt component)
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
-  · exact SignalTypes.complexity_typeAt_lt fields component
+  · have smaller := SignalTypes.complexity_typeAt_lt
+      fields component
+    exact smaller
 
 noncomputable opaque implementation (signalType : SignalType) :
-    Implementation signalType :=
-  implementationDefinition signalType
+    Implementation signalType := implementationDefinition signalType
+
+noncomputable opaque certification (signalType : SignalType) :
+    Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType)
+      (cycleContract signalType) :=
+  implementation signalType
 
 noncomputable def certified (signalType : SignalType) :
-    Contracts.Cycle.ModuleCycleCertified (ports signalType) := (implementation signalType).certified
+    Contracts.Cycle.ModuleCycleCertified (ports signalType) :=
+  (certification signalType).bundle
 
 theorem certified_moduleStructure (signalType : SignalType) :
     (certified signalType).moduleStructure = moduleStructure signalType :=
@@ -512,11 +534,11 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
       unfold Modules.Mask.bitModuleStructure
       exact .composite ⟨"mask", "bit", []⟩ (ports .bit)
         (fun | .gate => "gate") (fun | .gate => Silean.Naming.Primitive.and)
-  | .vector length element, typeNaming => by
+  | .vector length elementType, typeNaming => by
       rw [Modules.Mask.moduleStructure,
         Composition.LeafwiseInterface.moduleStructure.eq_2]
-      let splitter : Composition.SignalSplitter := .vector length element
-      exact .composite ⟨"mask", "structural", [.shape splitter.aggregateType]⟩
+      let splitter : Composition.SignalSplitter := .vector length elementType
+      exact .composite ⟨"mask", "structural", [.signalType splitter.aggregateType]⟩
         (portsWithNaming splitter.aggregateType typeNaming)
         (fun
           | .splitter .unit => "split"
@@ -524,13 +546,13 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
           | .combiner .result => "combine")
         (fun
           | .splitter .unit => Silean.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
-          | .component component => namingWith element (typeNaming.component component)
+          | .component component => namingWith elementType (typeNaming.component component)
           | .combiner .result => Silean.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
   | .tuple fields, typeNaming => by
       rw [Modules.Mask.moduleStructure,
         Composition.LeafwiseInterface.moduleStructure.eq_3]
       let splitter : Composition.SignalSplitter := .tuple fields
-      exact .composite ⟨"mask", "structural", [.shape splitter.aggregateType]⟩
+      exact .composite ⟨"mask", "structural", [.signalType splitter.aggregateType]⟩
         (portsWithNaming splitter.aggregateType typeNaming)
         (fun
           | .splitter .unit => "split"
@@ -544,10 +566,26 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
-  · exact SignalTypes.complexity_typeAt_lt fields component
+  · have smaller := SignalTypes.complexity_typeAt_lt
+      fields component
+    exact smaller
 
 def naming (signalType : SignalType) :
     ModuleNaming (Modules.Mask.moduleStructure signalType) :=
   namingWith signalType (.positional signalType)
 
 end Silean.Modules.Mask.Naming
+
+namespace Silean.Modules.Mask
+
+open Silean Silean.Naming
+
+@[reducible] def designWith (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType) : NamedModule :=
+  ⟨ports signalType, moduleStructure signalType,
+    Naming.namingWith signalType typeNaming⟩
+
+@[reducible] def design (signalType : SignalType) : NamedModule :=
+  designWith signalType (.positional signalType)
+
+end Silean.Modules.Mask

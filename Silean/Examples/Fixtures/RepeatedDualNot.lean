@@ -42,28 +42,25 @@ end Silean.Examples.Fixtures.RepeatedDualNot
 
 namespace Silean.Examples.Fixtures.RepeatedDualNot
 open Silean
-def inputSelection : (input : Examples.Fixtures.DualNot.Input) →
-    SignalSelection Examples.Fixtures.DualNot.ports.inputs (.ofList [.bit])
-  | .forward => Examples.Fixtures.DualNot.ports.inputs.select .forward
-  | .backward => Examples.Fixtures.DualNot.ports.inputs.select .backward
-def outputSelection : (output : Examples.Fixtures.DualNot.Output) →
-    SignalSelection Examples.Fixtures.DualNot.ports.outputs (.ofList [.bit])
-  | .forward => Examples.Fixtures.DualNot.ports.outputs.select .forward
-  | .backward => Examples.Fixtures.DualNot.ports.outputs.select .backward
-def outputRule (input : Examples.Fixtures.DualNot.Input) (output : Examples.Fixtures.DualNot.Output) :
-    Contracts.Cycle.CycleOutputRule Examples.Fixtures.DualNot.ports emptySignalMap (.ofLists [.bit] [.bit]) where
-  readsInputs := inputSelection input
-  writesOutputs := outputSelection output
-  target | (value, ()), _ => (value, ())
 inductive Rule | forward | backward
 deriving Enumeration
+def outputRule : Rule →
+    Contracts.Cycle.CycleOutputRule Examples.Fixtures.DualNot.ports emptySignalMap
+  | .forward =>
+      { readsInputs := Examples.Fixtures.DualNot.ruleInput .forward
+        writesOutputs := Examples.Fixtures.DualNot.ruleOutput .forward
+        target := fun inputs _ => fun | .value => inputs .value }
+  | .backward =>
+      { readsInputs := Examples.Fixtures.DualNot.ruleInput .backward
+        writesOutputs := Examples.Fixtures.DualNot.ruleOutput .backward
+        target := fun inputs _ => fun | .value => inputs .value }
 def cycleContract : Contracts.Cycle.ModuleCycleContract Examples.Fixtures.DualNot.ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
-    | .forward => ⟨_, outputRule .forward .forward⟩
-    | .backward => ⟨_, outputRule .backward .backward⟩
+    | .forward => outputRule .forward
+    | .backward => outputRule .backward
   stateRule := Contracts.Cycle.CycleStateRule.empty Examples.Fixtures.DualNot.ports
   outputCoverage := by rfl
 end Silean.Examples.Fixtures.RepeatedDualNot

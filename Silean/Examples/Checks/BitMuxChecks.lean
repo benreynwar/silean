@@ -1,4 +1,4 @@
-import Silean.Modules.BitMux
+import Silean.Modules.BitMux.BitMux
 
 namespace Silean.Examples.Checks.BitMux
 

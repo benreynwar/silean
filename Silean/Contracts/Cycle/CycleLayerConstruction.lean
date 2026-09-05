@@ -177,6 +177,24 @@ syntax (name := normalizeCompositeChildHyp)
     Lean.Parser.Tactic.simpArg ", " Lean.Parser.Tactic.simpArg ", "
     Lean.Parser.Tactic.simpArg : tactic
 
+/-- Introduce a dependent family of contract evaluations for children whose
+contract states are all definitionally the empty signal map.  The resulting
+fact uses only the supplied child certifications and structural-solution
+hypothesis. -/
+syntax (name := deriveEmptyStateChildMatches)
+  "derive_empty_state_child_matches " ident " from " term ", " term ", "
+    term ", " term ", " term : tactic
+
+/-- Introduce a named fact by applying a public child-contract theorem to a
+child evaluation and normalizing the inputs induced by the parent wiring. -/
+syntax (name := childContractFact)
+  "child_contract_fact " ident " : " term " from " term " using " term : tactic
+
+syntax (name := compositeChildContractFact)
+  "child_contract_fact " ident " : " term " from " term " using " term
+    " unfolding " Lean.Parser.Tactic.simpArg ", " Lean.Parser.Tactic.simpArg ", "
+    Lean.Parser.Tactic.simpArg : tactic
+
 macro_rules
   | `(tactic| normalize_child_contract $proof:term) =>
       `(tactic| simpa [ProposedValues.childInputs_apply,
@@ -192,5 +210,31 @@ macro_rules
       `(tactic| simp only [ProposedValues.childInputs_apply,
         EndpointContext.moduleInput, EndpointContext.instanceOutput,
         SignalSource.value] at $hyp)
+  | `(tactic| derive_empty_state_child_matches $name:ident from
+        $children:term, $inputs:term, $structuralState:term,
+        $proposal:term, $satisfies:term) =>
+      `(tactic|
+        have $name :=
+          childSolutionsMatchContracts_of_subsingletonState
+            $children $inputs $structuralState $proposal $satisfies
+            (fun child => by cases child <;> exact SignalMap.emptyValues)
+            (fun child => by
+              cases child <;>
+                change Subsingleton emptySignalMap.Values <;>
+                infer_instance))
+  | `(tactic| child_contract_fact $name:ident : $type:term from
+        $evaluation:term using $contractTheorem:term) =>
+      `(tactic|
+        have $name : $type := by
+          normalize_child_contract ($contractTheorem $evaluation))
+  | `(tactic| child_contract_fact $name:ident : $type:term from
+        $evaluation:term using $contractTheorem:term unfolding
+        $body, $wiring, $endpointContext) =>
+      `(tactic|
+        have $name : $type := by
+          simpa only [ProposedValues.childInputs_apply,
+            $body, $wiring, $endpointContext,
+            EndpointContext.moduleInput, EndpointContext.instanceOutput,
+            SignalSource.value] using ($contractTheorem $evaluation))
 
 end Silean.Contracts.Cycle.Certification.Layer

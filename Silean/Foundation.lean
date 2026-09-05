@@ -2,6 +2,8 @@ import Silean.Foundation.SignalType
 import Silean.Foundation.DeriveEnumeration
 import Silean.Foundation.Enumeration
 import Silean.Foundation.SignalMap
+import Silean.Foundation.SignalLayout
+import Silean.Foundation.SignalGroup
 import Silean.Foundation.SignalExpectation
 import Silean.Foundation.SignalSelection
 import Silean.Foundation.ModulePorts

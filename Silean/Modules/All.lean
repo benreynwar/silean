@@ -1,5 +1,7 @@
 import Silean.Naming.ReductionNaming
 import Silean.Naming.PrimitiveNaming
+import Silean.Primitives.And
+import Silean.Primitives.Constant
 
 namespace Silean.Modules.All
 
@@ -114,13 +116,9 @@ private theorem andImplements :
     cases rule
     rcases proposal with ⟨outputs, nextState⟩
     simp only [Composition.Reduction.binaryCycleContract]
-    simp only [Composition.Reduction.binaryOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
-      SignalSelection.Matches, SignalSelection.project,
-      SignalSelection.prepend, SignalMap.select]
-    change outputs .output = _ ∧ True
-    constructor
-    · simpa [andOperation, Primitives.and] using congrFun satisfies.1 .output
-    · trivial
+    rw [Composition.Reduction.binaryOutputRule_holds_iff]
+    change outputs .output = _
+    simpa [andOperation, Primitives.and] using congrFun satisfies.1 .output
   · rfl
 
 private def andImplementation :
@@ -147,12 +145,9 @@ private theorem trueImplements :
     cases rule
     rcases proposal with ⟨outputs, nextState⟩
     simp only [Composition.Reduction.identityCycleContract]
-    simp only [Composition.Reduction.identityOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
-      SignalSelection.Matches, SignalSelection.project, SignalMap.select]
-    change outputs .output = _ ∧ True
-    constructor
-    · simpa [trueValue, Primitives.constant] using congrFun satisfies.1 .output
-    · trivial
+    rw [Composition.Reduction.identityOutputRule_holds_iff]
+    change outputs .output = _
+    simpa [trueValue, Primitives.constant] using congrFun satisfies.1 .output
   · rfl
 
 private def trueImplementation : Composition.Reduction.IdentityImplementation .bit trueValue where

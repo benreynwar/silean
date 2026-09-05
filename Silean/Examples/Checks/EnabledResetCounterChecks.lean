@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EnabledResetCounter
+import Silean.Modules.EnabledResetCounter.EnabledResetCounterCertified
 
 namespace Silean.Examples.Checks.EnabledResetCounter
 
@@ -71,21 +71,21 @@ private def contains (text fragment : String) : Bool :=
 
 private def renders (width : Nat) (resetValue : Value width)
     (fragments : List String) : Bool :=
-  match renderCircuit (Naming.naming width resetValue) with
+  match renderCircuit (naming width resetValue) with
   | .error _ => false
   | .ok text => fragments.all (contains text)
 
 #guard renders 3 bits3Two
-  ["public module enabled_reset_counter_structural_3_0_1_0",
+  ["public module EnabledResetCounter_3_0_1_0",
    "input enable : UInt<1>", "input reset : UInt<1>",
    "output value : UInt<1>[3]",
    "inst increment of increment_structural_3",
-   "inst storage of enabled_reset_register_structural_v3_bit_0_1_0",
+   "inst storage of EnabledResetRegister_v3_bit_0_1_0",
    "connect increment.value, storage.value_out",
    "connect storage.value, increment.result"]
 
 #guard renders 0 bits0
-  ["public module enabled_reset_counter_structural_0",
+  ["public module EnabledResetCounter_0",
    "output value : UInt<1>[0]",
    "inst increment of increment_structural_0"]
 

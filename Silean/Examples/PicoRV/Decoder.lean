@@ -1,4 +1,4 @@
-import Silean.Examples.PicoRV.Decoder.DecoderCaptureStage
+import Silean.Examples.PicoRV.Decoder.DecoderCaptureStageCertified
 import Silean.Examples.PicoRV.Decoder.DecoderResolveStage
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
@@ -436,40 +436,29 @@ def outputValues (state : stateMap.Values) : outputMap.Values
 inductive Rule | outputs
 deriving Enumeration
 
-def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap
-    { inputTypes := .nil, outputTypes := .ofList outputMap.types } where
-  readsInputs := .nil
-  writesOutputs := outputMap.allSelection
-  target := fun _ state => outputMap.allSelection.project (outputValues state)
+def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap where
+  readsInputs := .empty inputMap
+  writesOutputs := .all outputMap
+  target := fun _ state => outputValues state
 
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
-  inputTypes := .cons .bit (.cons .bit (.cons .bit (.cons (.vector 32 .bit)
-    (.cons .bit (.cons .bit (.cons (.vector 32 .bit) .nil))))))
-  readsInputs := ((((((inputMap.select .mem_rdata_q).prepend .decoder_pseudo_trigger).prepend
-    .decoder_trigger).prepend .mem_rdata_latched).prepend .mem_done).prepend
-    .mem_do_rinst).prepend .resetn
-  target
-    | (resetn, (mem_do_rinst, (mem_done, (mem_rdata_latched,
-        (decoder_trigger, (decoder_pseudo_trigger, (mem_rdata_q, ()))))))), state =>
-      nextState ⟨resetn, mem_do_rinst, mem_done, mem_rdata_latched,
-        decoder_trigger, decoder_pseudo_trigger, mem_rdata_q⟩ state
+  readsInputs := .all inputMap
+  target inputs state := nextState (valuesOf inputs) state
 
 @[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := stateMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .outputs => ⟨_, outputRule⟩
+  outputRule | .outputs => outputRule
   stateRule := stateRule
   outputCoverage := by
-    change outputMap.allSelection.labels.Perm outputMap.labels.values
-    rw [SignalMap.allSelection_labels]
+    exact List.Perm.refl _
 
 @[simp] theorem outputRule_holds_iff
     (inputs : ports.inputs.Values) (state : stateMap.Values)
     (outputs : ports.outputs.Values) :
     outputRule.Holds inputs state outputs ↔ outputs = outputValues state := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalSelection.allSelection_matches_project_iff]
+  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds]
 
 /-! ## Two-stage structural decomposition -/
 

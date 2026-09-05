@@ -1,24 +1,28 @@
 import Silean.Foundation.BitVector
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
-import Silean.Modules.AddSub
+import Silean.Modules.AddSub.AddSubCertified
 import Silean.Modules.BitwiseAnd
 import Silean.Modules.BitwiseOr
 import Silean.Modules.BitwiseXor
 import Silean.Modules.Constant
 import Silean.Modules.Equality
-import Silean.Modules.Mux
+import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxCertified
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
-import Silean.Primitives.NotPrimitive
+import Silean.Primitives.Not
 import Silean.Primitives.Or
 import Silean.Primitives.Xor
 
 namespace Silean.Examples.PicoRV.Alu
 
 open Silean
+open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
 
 /-! Contract and certified concrete structure for the combinational PicoRV32
@@ -27,42 +31,26 @@ Verilog configuration. -/
 
 abbrev Word := Fin 32 → Bool
 
-inductive Input
-  | reg_op1
-  | reg_op2
-  | instr_sub
-  | instr_beq
-  | instr_bne
-  | instr_bge
-  | instr_bgeu
-  | is_slti_blt_slt
-  | is_sltiu_bltu_sltu
-  | is_lui_auipc_jal_jalr_addi_add_sub
-  | is_compare
-  | instr_xori
-  | instr_xor
-  | instr_ori
-  | instr_or
-  | instr_andi
-  | instr_and
-deriving Enumeration
-
-inductive Output
-  | alu_out
-  | alu_out_0
-deriving Enumeration
-
-@[reducible] def inputMap : SignalMap :=
-  EnumeratedMap.of Input fun
-    | .reg_op1 | .reg_op2 => .vector 32 .bit
-    | _ => .bit
-
-@[reducible] def outputMap : SignalMap :=
-  EnumeratedMap.of Output fun
-    | .alu_out => .vector 32 .bit
-    | .alu_out_0 => .bit
-
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
+module_ports ports where
+  input reg_op1 : .vector 32 .bit,
+  input reg_op2 : .vector 32 .bit,
+  input instr_sub : .bit,
+  input instr_beq : .bit,
+  input instr_bne : .bit,
+  input instr_bge : .bit,
+  input instr_bgeu : .bit,
+  input is_slti_blt_slt : .bit,
+  input is_sltiu_bltu_sltu : .bit,
+  input is_lui_auipc_jal_jalr_addi_add_sub : .bit,
+  input is_compare : .bit,
+  input instr_xori : .bit,
+  input instr_xor : .bit,
+  input instr_ori : .bit,
+  input instr_or : .bit,
+  input instr_andi : .bit,
+  input instr_and : .bit,
+  output alu_out : .vector 32 .bit,
+  output alu_out_0 : .bit
 
 def wordOfNat (value : Nat) : Word := BitVector.ofNat 32 value
 
@@ -238,56 +226,6 @@ def aluOut (inputs : Values) : Word := (evaluate inputs).alu_out
 
 def aluOut0 (inputs : Values) : Bool := (evaluate inputs).alu_out_0
 
-inductive Rule | apply
-deriving Enumeration
-
-def outputRule :
-    Contracts.Cycle.CycleOutputRule ports emptySignalMap
-      { inputTypes := .cons (.vector 32 .bit)
-          (.cons (.vector 32 .bit)
-            (.cons .bit (.cons .bit (.cons .bit (.cons .bit (.cons .bit
-              (.cons .bit (.cons .bit (.cons .bit (.cons .bit (.cons .bit
-                (.cons .bit (.cons .bit (.cons .bit (.cons .bit
-                  (.cons .bit .nil))))))))))))))))
-        outputTypes := .cons (.vector 32 .bit) (.cons .bit .nil) } where
-  readsInputs := ((((((((((((((((inputMap.select .instr_and).prepend
-    .instr_andi).prepend .instr_or).prepend .instr_ori).prepend
-    .instr_xor).prepend .instr_xori).prepend .is_compare).prepend
-    .is_lui_auipc_jal_jalr_addi_add_sub).prepend
-    .is_sltiu_bltu_sltu).prepend .is_slti_blt_slt).prepend
-    .instr_bgeu).prepend .instr_bge).prepend .instr_bne).prepend
-    .instr_beq).prepend .instr_sub).prepend .reg_op2).prepend .reg_op1
-  writesOutputs := (outputMap.select .alu_out_0).prepend .alu_out
-  target := fun values _ =>
-    let inputs : Values := {
-      reg_op1 := values.1
-      reg_op2 := values.2.1
-      instr_sub := values.2.2.1
-      instr_beq := values.2.2.2.1
-      instr_bne := values.2.2.2.2.1
-      instr_bge := values.2.2.2.2.2.1
-      instr_bgeu := values.2.2.2.2.2.2.1
-      is_slti_blt_slt := values.2.2.2.2.2.2.2.1
-      is_sltiu_bltu_sltu := values.2.2.2.2.2.2.2.2.1
-      is_lui_auipc_jal_jalr_addi_add_sub := values.2.2.2.2.2.2.2.2.2.1
-      is_compare := values.2.2.2.2.2.2.2.2.2.2.1
-      instr_xori := values.2.2.2.2.2.2.2.2.2.2.2.1
-      instr_xor := values.2.2.2.2.2.2.2.2.2.2.2.2.1
-      instr_ori := values.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-      instr_or := values.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-      instr_andi := values.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-      instr_and := values.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
-    }
-    (aluOut inputs, (aluOut0 inputs, ()))
-
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
-  state := emptySignalMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule⟩
-  stateRule := Contracts.Cycle.CycleStateRule.empty _
-  outputCoverage := by rfl
-
 def valuesOf (inputs : ports.inputs.Values) : Values where
   reg_op1 := inputs .reg_op1
   reg_op2 := inputs .reg_op2
@@ -307,6 +245,23 @@ def valuesOf (inputs : ports.inputs.Values) : Values where
   instr_or := inputs .instr_or
   instr_andi := inputs .instr_andi
   instr_and := inputs .instr_and
+
+def resultValues (result : Result) : ports.outputs.Values
+  | .alu_out => result.alu_out
+  | .alu_out_0 => result.alu_out_0
+
+def outputRule :
+    Contracts.Cycle.CycleOutputRule ports emptySignalMap where
+  readsInputs := .all ports.inputs
+  writesOutputs := .all ports.outputs
+  target inputs _ := resultValues (evaluate (valuesOf inputs))
+
+module_cycle_contract cycleContract for ports where
+  state := emptySignalMap
+  output_rule apply := outputRule
+  state_rule where
+    reads := []
+    next := {}
 
 private def selectedAluOut (inputs : ports.inputs.Values) : Word :=
   bif inputs .is_lui_auipc_jal_jalr_addi_add_sub then
@@ -339,9 +294,16 @@ private theorem wordType_bitwiseXor (left right : Word) :
     outputRule.Holds inputs state outputs ↔
       outputs .alu_out = aluOut (valuesOf inputs) ∧
       outputs .alu_out_0 = aluOut0 (valuesOf inputs) := by
-  change (outputs .alu_out = aluOut (valuesOf inputs) ∧
-    outputs .alu_out_0 = aluOut0 (valuesOf inputs) ∧ True) ↔ _
-  simp
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact ⟨congrFun equal .alu_out, congrFun equal .alu_out_0⟩
+  · rintro ⟨aluOutEqual, aluOut0Equal⟩
+    funext output
+    cases output
+    · exact aluOutEqual
+    · exact aluOut0Equal
 
 /-! ## Hardware structure -/
 
@@ -669,54 +631,17 @@ variable (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
 private def stateCorresponds (_ : cycleContract.state.Values)
     (_ : (Contracts.Cycle.Certification.Layer.moduleStructure body layerChildren).State) : Prop := True
 
-private def emptyChildState (child : Instance) :
-    (childContracts child).state.Values := by
-  cases child <;> exact SignalMap.emptyValues
-
-private theorem childContractStateSubsingleton (child : Instance) :
-    Subsingleton (childContracts child).state.Values := by
-  cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
-
 private theorem implements :
     Contracts.Cycle.Implements
       (Contracts.Cycle.Certification.Layer.moduleStructure body layerChildren)
       cycleContract (stateCorresponds layerChildren) := by
   intro inputs contractState structuralState proposal corresponds satisfies
-  have childMatch (child : Instance) := by
-    letI := childContractStateSubsingleton child
-    exact
-      Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-        layerChildren inputs structuralState proposal satisfies child (emptyChildState child)
-  have leftSplitEval := (childMatch .leftSplit).1
-  have rightSplitEval := (childMatch .rightSplit).1
-  have subtractModeEval := (childMatch .subtractMode).1
-  have addSubEval := (childMatch .addSub).1
-  have equalityEval := (childMatch .equality).1
-  have bitwiseXorEval := (childMatch .bitwiseXor).1
-  have bitwiseOrEval := (childMatch .bitwiseOr).1
-  have bitwiseAndEval := (childMatch .bitwiseAnd).1
-  have zeroBitEval := (childMatch .zeroBit).1
-  have zeroWordEval := (childMatch .zeroWord).1
-  have unsignedLessEval := (childMatch .unsignedLess).1
-  have signDifferenceEval := (childMatch .signDifference).1
-  have signedLessEval := (childMatch .signedLess).1
-  have notEqualEval := (childMatch .notEqual).1
-  have notSignedLessEval := (childMatch .notSignedLess).1
-  have notUnsignedLessEval := (childMatch .notUnsignedLess).1
-  have selectUnsignedLessEval := (childMatch .selectUnsignedLess).1
-  have selectSignedLessEval := (childMatch .selectSignedLess).1
-  have selectUnsignedGreaterEqualEval := (childMatch .selectUnsignedGreaterEqual).1
-  have selectSignedGreaterEqualEval := (childMatch .selectSignedGreaterEqual).1
-  have selectNotEqualEval := (childMatch .selectNotEqual).1
-  have selectEqualEval := (childMatch .selectEqual).1
-  have comparisonWordEval := (childMatch .comparisonWord).1
-  have xorSelectedEval := (childMatch .xorSelected).1
-  have orSelectedEval := (childMatch .orSelected).1
-  have andSelectedEval := (childMatch .andSelected).1
+  derive_empty_state_child_matches childMatch from
+    layerChildren, inputs, structuralState, proposal, satisfies
   have leftSplitEquation :=
-    (wordSplitter.outputRule_holds_iff _ _ _).mp (leftSplitEval.1 .apply)
+    (wordSplitter.outputRule_holds_iff _ _ _).mp ((childMatch .leftSplit).1.1 .apply)
   have rightSplitEquation :=
-    (wordSplitter.outputRule_holds_iff _ _ _).mp (rightSplitEval.1 .apply)
+    (wordSplitter.outputRule_holds_iff _ _ _).mp ((childMatch .rightSplit).1.1 .apply)
   have leftSign : (proposal.2 .leftSplit).outputs (Fin.last 31) = inputs .reg_op1 31 := by
     have equation := congrFun leftSplitEquation (Fin.last 31)
     simpa [ProposedValues.childInputs_apply, body, wiring, context, EndpointContext.moduleInput, EndpointContext.instanceOutput,
@@ -728,46 +653,48 @@ private theorem implements :
   have subtractModeValue : (proposal.2 .subtractMode).outputs .output =
       (inputs .instr_sub || inputs .is_compare) := by
     have equation := (Primitives.orOutputRule_holds_iff _ _ _).mp
-      (subtractModeEval.1 .apply)
+      ((childMatch .subtractMode).1.1 .apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context, EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] using equation
   have addSubResult : (proposal.2 .addSub).outputs .result =
       (Modules.AddSub.addSubBits 32 (inputs .reg_op1) (inputs .reg_op2)
         (inputs .instr_sub || inputs .is_compare)).1 := by
-    have equation := Modules.AddSub.result_of_evaluatesTo 32 _ _ _ _ addSubEval
+    have equation := Modules.AddSub.result_of_evaluatesTo 32 _ _ _ _ (childMatch .addSub).1
     simpa [ProposedValues.childInputs_apply, body, wiring, context, EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value,
       subtractModeValue] using equation
   have addSubCarry : (proposal.2 .addSub).outputs .carryOut =
       (Modules.AddSub.addSubBits 32 (inputs .reg_op1) (inputs .reg_op2)
         (inputs .instr_sub || inputs .is_compare)).2 := by
-    have equation := Modules.AddSub.carry_of_evaluatesTo 32 _ _ _ _ addSubEval
+    have equation := Modules.AddSub.carry_of_evaluatesTo 32 _ _ _ _ (childMatch .addSub).1
     simpa [ProposedValues.childInputs_apply, body, wiring, context, EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value,
       subtractModeValue] using equation
-  have equalityValue : (proposal.2 .equality).outputs .result =
-      wordType.equal (inputs .reg_op1) (inputs .reg_op2) := by
-    have equation := Modules.Equality.result_of_evaluatesTo wordType _ _ _ _ equalityEval
-    simpa [ProposedValues.childInputs_apply, body, wiring, context, EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] using equation
-  have bitwiseXorValue : (proposal.2 .bitwiseXor).outputs .result =
-      wordType.bitwiseXor (inputs .reg_op1) (inputs .reg_op2) := by
-    have equation := Modules.BitwiseXor.result_of_evaluatesTo wordType _ _ _ _ bitwiseXorEval
-    simpa [ProposedValues.childInputs_apply, body, wiring, context, EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] using equation
-  have bitwiseOrValue : (proposal.2 .bitwiseOr).outputs .result =
-      wordType.bitwiseOr (inputs .reg_op1) (inputs .reg_op2) := by
-    have equation := Modules.BitwiseOr.result_of_evaluatesTo wordType _ _ _ _ bitwiseOrEval
-    simpa [ProposedValues.childInputs_apply, body, wiring, context, EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] using equation
-  have bitwiseAndValue : (proposal.2 .bitwiseAnd).outputs .result =
-      wordType.bitwiseAnd (inputs .reg_op1) (inputs .reg_op2) := by
-    have equation := Modules.BitwiseAnd.result_of_evaluatesTo wordType _ _ _ _ bitwiseAndEval
-    simpa [ProposedValues.childInputs_apply, body, wiring, context, EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] using equation
+  child_contract_fact equalityValue : (proposal.2 .equality).outputs .result =
+      wordType.equal (inputs .reg_op1) (inputs .reg_op2) from
+      (childMatch .equality).1 using
+      Modules.Equality.result_of_evaluatesTo wordType _ _ _ _ unfolding body, wiring, context
+  child_contract_fact bitwiseXorValue : (proposal.2 .bitwiseXor).outputs .result =
+      wordType.bitwiseXor (inputs .reg_op1) (inputs .reg_op2) from
+      (childMatch .bitwiseXor).1 using
+      Modules.BitwiseXor.result_of_evaluatesTo wordType _ _ _ _ unfolding body, wiring, context
+  child_contract_fact bitwiseOrValue : (proposal.2 .bitwiseOr).outputs .result =
+      wordType.bitwiseOr (inputs .reg_op1) (inputs .reg_op2) from
+      (childMatch .bitwiseOr).1 using
+      Modules.BitwiseOr.result_of_evaluatesTo wordType _ _ _ _ unfolding body, wiring, context
+  child_contract_fact bitwiseAndValue : (proposal.2 .bitwiseAnd).outputs .result =
+      wordType.bitwiseAnd (inputs .reg_op1) (inputs .reg_op2) from
+      (childMatch .bitwiseAnd).1 using
+      Modules.BitwiseAnd.result_of_evaluatesTo wordType _ _ _ _ unfolding body, wiring, context
   have zeroBitValueEquation : (proposal.2 .zeroBit).outputs .output = false := by
-    have equation := Modules.Constant.output_of_evaluatesTo .bit zeroBitValue _ _ _ _ zeroBitEval
+    have equation := Modules.Constant.output_of_evaluatesTo .bit zeroBitValue _ _ _ _
+      (childMatch .zeroBit).1
     simpa [zeroBitValue] using equation
   have zeroWordValueEquation : (proposal.2 .zeroWord).outputs .output = wordOfNat 0 := by
-    have equation := Modules.Constant.output_of_evaluatesTo wordType zeroWordValue _ _ _ _ zeroWordEval
+    have equation := Modules.Constant.output_of_evaluatesTo wordType zeroWordValue _ _ _ _
+      (childMatch .zeroWord).1
     simpa [zeroWordValue] using equation
   have unsignedLessValue : (proposal.2 .unsignedLess).outputs .output =
       sharedUnsignedLess (valuesOf inputs) := by
     have equation := (Primitives.notOutputRule_holds_iff _ _ _).mp
-      (unsignedLessEval.1 .apply)
+      ((childMatch .unsignedLess).1.1 .apply)
     have normalized : (proposal.2 .unsignedLess).outputs .output =
         !((proposal.2 .addSub).outputs .carryOut) := by
       simpa [ProposedValues.childInputs_apply, body, wiring, context,
@@ -778,7 +705,7 @@ private theorem implements :
   have signDifferenceValue : (proposal.2 .signDifference).outputs .output =
       Bool.xor (inputs .reg_op1 31) (inputs .reg_op2 31) := by
     have equation := (Primitives.xorOutputRule_holds_iff _ _ _).mp
-      (signDifferenceEval.1 .apply)
+      ((childMatch .signDifference).1.1 .apply)
     have normalized : (proposal.2 .signDifference).outputs .output =
         Primitives.xorValue ((proposal.2 .leftSplit).outputs (Fin.last 31))
           ((proposal.2 .rightSplit).outputs (Fin.last 31)) := by
@@ -789,7 +716,8 @@ private theorem implements :
     cases inputs .reg_op1 31 <;> cases inputs .reg_op2 31 <;> rfl
   have signedLessValue : (proposal.2 .signedLess).outputs .result =
       sharedSignedLess (valuesOf inputs) := by
-    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _ signedLessEval
+    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _
+      (childMatch .signedLess).1
     simp only [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput,
       SignalSource.value] at equation
@@ -798,7 +726,8 @@ private theorem implements :
       simp [sharedSignedLess, valuesOf, left, right]
   have notEqualValue : (proposal.2 .notEqual).outputs .output =
       !(equal (inputs .reg_op1) (inputs .reg_op2)) := by
-    have equation := (Primitives.notOutputRule_holds_iff _ _ _).mp (notEqualEval.1 .apply)
+    have equation := (Primitives.notOutputRule_holds_iff _ _ _).mp
+      ((childMatch .notEqual).1.1 .apply)
     have normalized : (proposal.2 .notEqual).outputs .output =
         !((proposal.2 .equality).outputs .result) := by
       simpa [ProposedValues.childInputs_apply, body, wiring, context,
@@ -808,7 +737,7 @@ private theorem implements :
   have notSignedLessValue : (proposal.2 .notSignedLess).outputs .output =
       !(sharedSignedLess (valuesOf inputs)) := by
     have equation := (Primitives.notOutputRule_holds_iff _ _ _).mp
-      (notSignedLessEval.1 .apply)
+      ((childMatch .notSignedLess).1.1 .apply)
     have normalized : (proposal.2 .notSignedLess).outputs .output =
         !((proposal.2 .signedLess).outputs .result) := by
       simpa [ProposedValues.childInputs_apply, body, wiring, context,
@@ -818,7 +747,7 @@ private theorem implements :
   have notUnsignedLessValue : (proposal.2 .notUnsignedLess).outputs .output =
       !(sharedUnsignedLess (valuesOf inputs)) := by
     have equation := (Primitives.notOutputRule_holds_iff _ _ _).mp
-      (notUnsignedLessEval.1 .apply)
+      ((childMatch .notUnsignedLess).1.1 .apply)
     have normalized : (proposal.2 .notUnsignedLess).outputs .output =
         !((proposal.2 .unsignedLess).outputs .output) := by
       simpa [ProposedValues.childInputs_apply, body, wiring, context,
@@ -827,7 +756,8 @@ private theorem implements :
     rw [normalized, unsignedLessValue]
   have selectUnsignedLessValue : (proposal.2 .selectUnsignedLess).outputs .result =
       bif inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf inputs) else false := by
-    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _ selectUnsignedLessEval
+    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _
+      (childMatch .selectUnsignedLess).1
     simp only [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] at equation
     rw [equation, zeroBitValueEquation, unsignedLessValue]
@@ -835,7 +765,8 @@ private theorem implements :
   have selectSignedLessValue : (proposal.2 .selectSignedLess).outputs .result =
       bif inputs .is_slti_blt_slt then sharedSignedLess (valuesOf inputs)
       else bif inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf inputs) else false := by
-    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _ selectSignedLessEval
+    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _
+      (childMatch .selectSignedLess).1
     simp only [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] at equation
     rw [equation, selectUnsignedLessValue, signedLessValue]
@@ -847,7 +778,7 @@ private theorem implements :
         else bif inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf inputs)
         else false := by
     have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _
-      selectUnsignedGreaterEqualEval
+      (childMatch .selectUnsignedGreaterEqual).1
     simp only [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] at equation
     rw [equation, selectSignedLessValue, notUnsignedLessValue]
@@ -860,7 +791,7 @@ private theorem implements :
         else bif inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf inputs)
         else false := by
     have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _
-      selectSignedGreaterEqualEval
+      (childMatch .selectSignedGreaterEqual).1
     simp only [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] at equation
     rw [equation, selectUnsignedGreaterEqualValue, notSignedLessValue]
@@ -872,14 +803,16 @@ private theorem implements :
       else bif inputs .is_slti_blt_slt then sharedSignedLess (valuesOf inputs)
       else bif inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf inputs)
       else false := by
-    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _ selectNotEqualEval
+    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _
+      (childMatch .selectNotEqual).1
     simp only [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] at equation
     rw [equation, selectSignedGreaterEqualValue, notEqualValue]
     rfl
   have selectEqualValue : (proposal.2 .selectEqual).outputs .result =
       comparisonOutput (valuesOf inputs) := by
-    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _ selectEqualEval
+    have equation := Modules.Mux.result_of_evaluatesTo .bit _ _ _ _
+      (childMatch .selectEqual).1
     simp only [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] at equation
     rw [equation, selectNotEqualValue, equalityValue, ← equal_eq_signalEqual]
@@ -888,7 +821,7 @@ private theorem implements :
   have comparisonWordValue : (proposal.2 .comparisonWord).outputs .value =
       wordOfBool (comparisonOutput (valuesOf inputs)) := by
     have equation := (wordCombiner.outputRule_holds_iff _ _ _).mp
-      (comparisonWordEval.1 .apply)
+      ((childMatch .comparisonWord).1.1 .apply)
     have valueEquation := congrFun equation .value
     rw [valueEquation]
     funext index
@@ -905,17 +838,20 @@ private theorem implements :
       exact zeroBitValueEquation
   have xorSelectedValue : (proposal.2 .xorSelected).outputs .output =
       (inputs .instr_xori || inputs .instr_xor) := by
-    have equation := (Primitives.orOutputRule_holds_iff _ _ _).mp (xorSelectedEval.1 .apply)
+    have equation := (Primitives.orOutputRule_holds_iff _ _ _).mp
+      ((childMatch .xorSelected).1.1 .apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] using equation
   have orSelectedValue : (proposal.2 .orSelected).outputs .output =
       (inputs .instr_ori || inputs .instr_or) := by
-    have equation := (Primitives.orOutputRule_holds_iff _ _ _).mp (orSelectedEval.1 .apply)
+    have equation := (Primitives.orOutputRule_holds_iff _ _ _).mp
+      ((childMatch .orSelected).1.1 .apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] using equation
   have andSelectedValue : (proposal.2 .andSelected).outputs .output =
       (inputs .instr_andi || inputs .instr_and) := by
-    have equation := (Primitives.orOutputRule_holds_iff _ _ _).mp (andSelectedEval.1 .apply)
+    have equation := (Primitives.orOutputRule_holds_iff _ _ _).mp
+      ((childMatch .andSelected).1.1 .apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.moduleInput, EndpointContext.instanceOutput, SignalSource.value] using equation
   -- Follow the result-selection mux chain.  Intermediate expressions are
@@ -1035,30 +971,6 @@ namespace Silean.Examples.PicoRV.Alu.Naming
 
 open Silean Silean.Naming
 
-/-- Original PicoRV32 ALU signal names at the module boundary. -/
-def ports : ModulePortsNaming Alu.ports where
-  inputs := ⟨fun
-    | .reg_op1 => "reg_op1"
-    | .reg_op2 => "reg_op2"
-    | .instr_sub => "instr_sub"
-    | .instr_beq => "instr_beq"
-    | .instr_bne => "instr_bne"
-    | .instr_bge => "instr_bge"
-    | .instr_bgeu => "instr_bgeu"
-    | .is_slti_blt_slt => "is_slti_blt_slt"
-    | .is_sltiu_bltu_sltu => "is_sltiu_bltu_sltu"
-    | .is_lui_auipc_jal_jalr_addi_add_sub => "is_lui_auipc_jal_jalr_addi_add_sub"
-    | .is_compare => "is_compare"
-    | .instr_xori => "instr_xori"
-    | .instr_xor => "instr_xor"
-    | .instr_ori => "instr_ori"
-    | .instr_or => "instr_or"
-    | .instr_andi => "instr_andi"
-    | .instr_and => "instr_and"⟩
-  outputs := ⟨fun
-    | .alu_out => "alu_out"
-    | .alu_out_0 => "alu_out_0"⟩
-
 def naming : ModuleNaming Alu.moduleStructure := by
   unfold Alu.moduleStructure
   exact .composite ⟨"picorv32_alu", "structural", []⟩ ports
@@ -1097,21 +1009,26 @@ def naming : ModuleNaming Alu.moduleStructure := by
     (fun
       | .leftSplit | .rightSplit => SignalAdapter.splitter Alu.wordSplitter
       | .subtractMode | .xorSelected | .orSelected | .andSelected => Primitive.or
-      | .addSub => Modules.AddSub.Naming.naming 32
-      | .equality => Modules.Equality.Naming.naming Alu.wordType
-      | .bitwiseXor => Modules.BitwiseXor.Naming.naming Alu.wordType
-      | .bitwiseOr => Modules.BitwiseOr.Naming.naming Alu.wordType
-      | .bitwiseAnd => Modules.BitwiseAnd.Naming.naming Alu.wordType
+      | .addSub => Modules.AddSub.naming 32
+      | .equality => Modules.Equality.Naming.namingWith Alu.wordType
+          (.positional Alu.wordType)
+      | .bitwiseXor => Modules.BitwiseXor.Naming.namingWith Alu.wordType
+          (.positional Alu.wordType)
+      | .bitwiseOr => Modules.BitwiseOr.Naming.namingWith Alu.wordType
+          (.positional Alu.wordType)
+      | .bitwiseAnd => Modules.BitwiseAnd.Naming.namingWith Alu.wordType
+          (.positional Alu.wordType)
       | .zeroBit => Modules.Constant.Naming.naming .bit Alu.zeroBitValue
-      | .zeroWord => Modules.Constant.Naming.naming Alu.wordType Alu.zeroWordValue
+      | .zeroWord => Modules.Constant.Naming.namingWith Alu.wordType
+          Alu.zeroWordValue (.positional Alu.wordType)
       | .unsignedLess | .notEqual | .notSignedLess | .notUnsignedLess => Primitive.not
       | .signDifference => Primitive.xor
       | .signedLess | .selectUnsignedLess | .selectSignedLess |
           .selectUnsignedGreaterEqual | .selectSignedGreaterEqual | .selectNotEqual |
-          .selectEqual => Modules.Mux.Naming.naming .bit
+          .selectEqual => Modules.Mux.naming .bit
       | .comparisonWord => SignalAdapter.combiner Alu.wordCombiner
       | .selectAnd | .selectOr | .selectXor | .selectComparison | .selectArithmetic =>
-          Modules.Mux.Naming.naming Alu.wordType)
+          Modules.Mux.namingWith Alu.wordType (.positional Alu.wordType))
 
 def namedModule : NamedModule where
   ports := Alu.ports

@@ -160,10 +160,11 @@ def aggregateSplitterInputSource (interface : LeafwiseInterface)
     SignalSource (interface.aggregateContext splitter).ports
       (interface.aggregateContext splitter).instancePorts splitter.aggregateType :=
   match splitter with
-  | .vector length element => by
-      change SignalSource _ _ (.vector length element)
-      rw [← interface.recursiveInputType (.vector length element) recursiveInput]
-      exact (interface.aggregateContext (.vector length element)).moduleInput
+  | .vector length elementType => by
+      change SignalSource _ _ (.vector length elementType)
+      rw [← interface.recursiveInputType
+        (.vector length elementType) recursiveInput]
+      exact (interface.aggregateContext (.vector length elementType)).moduleInput
         (interface.inputLayout.label (.inl recursiveInput))
   | .tuple fields => by
       change SignalSource _ _ (.tuple fields)
@@ -180,24 +181,24 @@ def aggregateComponentInputSource (interface : LeafwiseInterface)
       ((interface.ports
         (splitter.ports.outputs.signalType component)).inputs.signalType input) :=
   match splitter with
-  | .vector length element =>
+  | .vector length elementType =>
       match layout : interface.inputLayout.classify input with
       | .inl recursiveInput => by
-          change SignalSource _ _ (interface.inputType element input)
+          change SignalSource _ _ (interface.inputType elementType input)
           rw [inputType, layout]
           exact (interface.aggregateContext
-            (.vector length element)).instanceOutput
+            (.vector length elementType)).instanceOutput
               (.splitter recursiveInput) component
       | .inr fixedInput => by
           rw [← interface.inputLayout.label_classify input, layout]
           change SignalSource _ _
-            (interface.inputType element
+            (interface.inputType elementType
               (interface.inputLayout.label (.inr fixedInput)))
           have source := (interface.aggregateContext
-            (.vector length element)).moduleInput
+            (.vector length elementType)).moduleInput
               (interface.inputLayout.label (.inr fixedInput))
           change SignalSource _ _
-            (interface.inputType (.vector length element)
+            (interface.inputType (.vector length elementType)
               (interface.inputLayout.label (.inr fixedInput))) at source
           simpa only [inputType,
             interface.inputLayout.classify_label] using source
@@ -330,11 +331,11 @@ abbrev combinerOccurrence (interface : LeafwiseInterface)
     (bitStructure : ModuleStructure (interface.ports .bit)) :
     (signalType : SignalType) → ModuleStructure (interface.ports signalType)
   | .bit => bitStructure
-  | .vector length element =>
-      .composite (interface.aggregateBody (.vector length element)) fun
-        | .splitter _ => .splitter (.vector length element)
-        | .component _ => interface.moduleStructure bitStructure element
-        | .combiner _ => .combiner (.vector length element)
+  | .vector length elementType =>
+      .composite (interface.aggregateBody (.vector length elementType)) fun
+        | .splitter _ => .splitter (.vector length elementType)
+        | .component _ => interface.moduleStructure bitStructure elementType
+        | .combiner _ => .combiner (.vector length elementType)
   | .tuple fields =>
       .composite (interface.aggregateBody (.tuple fields)) fun
         | .splitter _ => .splitter (.tuple fields)
@@ -344,7 +345,9 @@ abbrev combinerOccurrence (interface : LeafwiseInterface)
 termination_by signalType => signalType.complexity
 decreasing_by
   · simp [SignalType.complexity]
-  · exact SignalTypes.complexity_typeAt_lt fields component
+  · have smaller := SignalTypes.complexity_typeAt_lt
+      fields component
+    exact smaller
 
 end LeafwiseInterface
 

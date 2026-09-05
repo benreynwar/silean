@@ -46,35 +46,28 @@ def moduleStructure : ModuleStructure ports :=
 
 @[reducible] def layerChildren := children
 
-def inputSelection : (input : Examples.Fixtures.DualNot.Input) →
-    SignalSelection ports.inputs (.ofList [.bit])
-  | .forward => ports.inputs.select .forward
-  | .backward => ports.inputs.select .backward
-
-def outputSelection : (output : Examples.Fixtures.DualNot.Output) →
-    SignalSelection ports.outputs (.ofList [.bit])
-  | .forward => ports.outputs.select .forward
-  | .backward => ports.outputs.select .backward
-
-def outputRule (input : Examples.Fixtures.DualNot.Input)
-    (output : Examples.Fixtures.DualNot.Output) :
-    Contracts.Cycle.CycleOutputRule ports emptySignalMap (.ofLists [.bit] [.bit]) where
-  readsInputs := inputSelection input
-  writesOutputs := outputSelection output
-  target | (value, ()), _ => (value, ())
-
 inductive Rule
   | forward
   | backward
 deriving Enumeration
+
+def outputRule : Rule → Contracts.Cycle.CycleOutputRule ports emptySignalMap
+  | .forward =>
+      { readsInputs := Examples.Fixtures.DualNot.ruleInput .forward
+        writesOutputs := Examples.Fixtures.DualNot.ruleOutput .forward
+        target := fun inputs _ => fun | .value => inputs .value }
+  | .backward =>
+      { readsInputs := Examples.Fixtures.DualNot.ruleInput .backward
+        writesOutputs := Examples.Fixtures.DualNot.ruleOutput .backward
+        target := fun inputs _ => fun | .value => inputs .value }
 
 def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
   outputRule
-    | .forward => ⟨_, outputRule .forward .forward⟩
-    | .backward => ⟨_, outputRule .backward .backward⟩
+    | .forward => outputRule .forward
+    | .backward => outputRule .backward
   stateRule := Contracts.Cycle.CycleStateRule.empty ports
   outputCoverage := by rfl
 
@@ -118,8 +111,7 @@ private theorem certifiedForward
   have holds := evaluates.1 Examples.Fixtures.DualNot.Rule.forward
   change Examples.Fixtures.DualNot.forwardRule.Holds inputs contractState
     proposal.outputs at holds
-  simpa [Examples.Fixtures.DualNot.forwardRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalSelection.project, SignalSelection.Matches, SignalMap.select] using holds
+  exact (Examples.Fixtures.DualNot.forwardRule_holds_iff _ _ _).mp holds
 
 private theorem certifiedBackward
     (inputs : Examples.Fixtures.DualNot.ports.inputs.Values)
@@ -136,8 +128,7 @@ private theorem certifiedBackward
   have holds := evaluates.1 Examples.Fixtures.DualNot.Rule.backward
   change Examples.Fixtures.DualNot.backwardRule.Holds inputs contractState
     proposal.outputs at holds
-  simpa [Examples.Fixtures.DualNot.backwardRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalSelection.project, SignalSelection.Matches, SignalMap.select] using holds
+  exact (Examples.Fixtures.DualNot.backwardRule_holds_iff _ _ _).mp holds
 
 def aInputs (inputs : ports.inputs.Values) :
     Examples.Fixtures.DualNot.ports.inputs.Values
@@ -274,21 +265,19 @@ theorem implements : Contracts.Cycle.Implements moduleStructure cycleContract st
   · intro rule
     cases rule with
     | forward =>
-        simp only [cycleContract, outputRule, inputSelection, outputSelection,
-          Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
-          SignalSelection.Matches, SignalMap.select]
-        constructor
-        · simpa only [ProposedValues.outputs, moduleStructure,
-            Contracts.Cycle.Certification.Layer.moduleStructure] using outputForward
-        · trivial
+        unfold cycleContract outputRule Contracts.Cycle.CycleOutputRule.Holds
+          SignalGroup.Matches
+        funext output
+        cases output
+        change outputs .forward = inputs .forward
+        exact outputForward
     | backward =>
-        simp only [cycleContract, outputRule, inputSelection, outputSelection,
-          Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.project,
-          SignalSelection.Matches, SignalMap.select]
-        constructor
-        · simpa only [ProposedValues.outputs, moduleStructure,
-            Contracts.Cycle.Certification.Layer.moduleStructure] using outputBackward
-        · trivial
+        unfold cycleContract outputRule Contracts.Cycle.CycleOutputRule.Holds
+          SignalGroup.Matches
+        funext output
+        cases output
+        change outputs .backward = inputs .backward
+        exact outputBackward
   · rfl
 
 def certified : Contracts.Cycle.ModuleCycleCertified ports where

@@ -7,22 +7,6 @@ namespace Silean.Examples.Checks.HierarchicalDualNotCertification
 
 open Silean
 
-private theorem forwardRule_holds_iff (inputs : Examples.Fixtures.DualNot.ports.inputs.Values)
-    (state : Examples.Fixtures.DualNot.cycleContract.state.Values)
-    (outputs : Examples.Fixtures.DualNot.ports.outputs.Values) :
-    Examples.Fixtures.DualNot.forwardRule.Holds inputs state outputs ↔
-      outputs .forward = !inputs .forward := by
-  simp [Contracts.Cycle.CycleOutputRule.Holds, Examples.Fixtures.DualNot.forwardRule,
-    SignalSelection.Matches, SignalSelection.project, SignalMap.select]
-
-private theorem backwardRule_holds_iff (inputs : Examples.Fixtures.DualNot.ports.inputs.Values)
-    (state : Examples.Fixtures.DualNot.cycleContract.state.Values)
-    (outputs : Examples.Fixtures.DualNot.ports.outputs.Values) :
-    Examples.Fixtures.DualNot.backwardRule.Holds inputs state outputs ↔
-      outputs .backward = !inputs .backward := by
-  simp [Contracts.Cycle.CycleOutputRule.Holds, Examples.Fixtures.DualNot.backwardRule,
-    SignalSelection.Matches, SignalSelection.project, SignalMap.select]
-
 private def stateCorresponds (_ : Examples.Fixtures.DualNot.cycleContract.state.Values)
     (_ : Examples.Fixtures.HierarchicalDualNot.moduleStructure.State) : Prop := True
 
@@ -36,7 +20,7 @@ private theorem implements : Contracts.Cycle.Implements Examples.Fixtures.Hierar
     rcases satisfies with ⟨boundary, childSatisfies⟩
     cases name
     · change Examples.Fixtures.DualNot.forwardRule.Holds inputs contractState _
-      rw [forwardRule_holds_iff]
+      rw [Examples.Fixtures.DualNot.forwardRule_holds_iff]
       have boundary' := boundary Examples.Fixtures.DualNot.Output.forward
       have child := (childSatisfies Examples.Fixtures.HierarchicalDualNot.Instance.forwardNot).1
       simpa [ProposedValues.outputs, ProposedValues.boundaryOutputsSatisfy,
@@ -49,7 +33,7 @@ private theorem implements : Contracts.Cycle.Implements Examples.Fixtures.Hierar
         Primitive.OutputsSatisfy, Primitives.not] using
           boundary'.trans (congrFun child .output)
     · change Examples.Fixtures.DualNot.backwardRule.Holds inputs contractState _
-      rw [backwardRule_holds_iff]
+      rw [Examples.Fixtures.DualNot.backwardRule_holds_iff]
       have boundary' := boundary Examples.Fixtures.DualNot.Output.backward
       have child := (childSatisfies Examples.Fixtures.HierarchicalDualNot.Instance.backwardNot).1
       simpa [ProposedValues.outputs, ProposedValues.boundaryOutputsSatisfy,

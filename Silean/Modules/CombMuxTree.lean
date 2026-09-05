@@ -1,7 +1,8 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.BinaryToOneHot
-import Silean.Modules.Mux
+import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxCertified
 import Silean.Modules.VectorSplit
 import Silean.Naming.SignalAdapterNaming
 
@@ -37,20 +38,18 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule (element : SignalType) (indexWidth : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports element indexWidth) emptySignalMap
-      { inputTypes := .cons (.vector (BinaryToOneHot.size indexWidth) element)
-          (.cons (.vector indexWidth .bit) .nil)
-        outputTypes := .cons element .nil } where
-  readsInputs := ((inputMap element indexWidth).select .index).prepend .values
-  writesOutputs := (outputMap element).select .result
-  target | (values, (index, ())), _ => (select indexWidth values index, ())
+    Contracts.Cycle.CycleOutputRule (ports element indexWidth) emptySignalMap where
+  readsInputs := .all (inputMap element indexWidth)
+  writesOutputs := .all (outputMap element)
+  target inputs _ := fun
+    | .result => select indexWidth (inputs .values) (inputs .index)
 
 @[reducible] def cycleContract (element : SignalType) (indexWidth : Nat) :
     Contracts.Cycle.ModuleCycleContract (ports element indexWidth) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule element indexWidth⟩
+  outputRule | .apply => outputRule element indexWidth
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -60,8 +59,11 @@ def outputRule (element : SignalType) (indexWidth : Nat) :
     (outputs : (ports element indexWidth).outputs.Values) :
     (outputRule element indexWidth).Holds inputs state outputs ↔
       outputs .result = select indexWidth (inputs .values) (inputs .index) := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalSelection.prepend, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal; exact congrFun equal .result
+  · intro equal; funext output; cases output; exact equal
 
 theorem result_of_holds (element : SignalType) (indexWidth : Nat)
     (inputs : (ports element indexWidth).inputs.Values)
@@ -81,7 +83,8 @@ theorem result_of_holds (element : SignalType) (indexWidth : Nat)
 
 Width zero has one value and no selector bits. -/
 
-private def baseSplitter (element : SignalType) : Composition.SignalSplitter := .vector 1 element
+private def baseSplitter (element : SignalType) : Composition.SignalSplitter :=
+  .vector 1 element
 
 private inductive BaseInstance
   /-- Exposes the sole input value. -/
@@ -299,27 +302,33 @@ private noncomputable def baseImplementation (element : SignalType) : Implementa
   | .lower | .upper => cycleContract element indexWidth
   | .mux => Mux.cycleContract element
 
-private abbrev valuesSplitOccurrence (element) (indexWidth) :
+private abbrev valuesSplitOccurrence (element : SignalType)
+    (indexWidth : Nat) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.valuesSplit, VectorSplit.Rule.apply⟩
-private abbrev indexSplitOccurrence (element) (indexWidth) :
+private abbrev indexSplitOccurrence (element : SignalType)
+    (indexWidth : Nat) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.indexSplit, Composition.SignalComponentRule.apply⟩
-private abbrev indexLowerOccurrence (element) (indexWidth) :
+private abbrev indexLowerOccurrence (element : SignalType)
+    (indexWidth : Nat) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.indexLower, Composition.SignalComponentRule.apply⟩
-private abbrev lowerOccurrence (element) (indexWidth) :
+private abbrev lowerOccurrence (element : SignalType)
+    (indexWidth : Nat) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.lower, Rule.apply⟩
-private abbrev upperOccurrence (element) (indexWidth) :
+private abbrev upperOccurrence (element : SignalType)
+    (indexWidth : Nat) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.upper, Rule.apply⟩
-private abbrev muxOccurrence (element) (indexWidth) :
+private abbrev muxOccurrence (element : SignalType)
+    (indexWidth : Nat) :
     Contracts.Cycle.Certification.Layer.RuleOccurrence
       (succBody element indexWidth) (succChildContracts element indexWidth) :=
   ⟨.mux, Mux.Rule.select⟩
@@ -591,7 +600,7 @@ def namingWith (element : SignalType) : (indexWidth : Nat) →
   | 0, elementNaming => by
       rw [Modules.CombMuxTree.moduleStructure.eq_def]
       exact .composite
-        ⟨"comb_mux_tree", "base", [.shape element]⟩
+        ⟨"comb_mux_tree", "base", [.signalType element]⟩
         (portsWithNaming element 0 elementNaming)
         (fun | Modules.CombMuxTree.BaseInstance.split => "split_value")
         (fun
@@ -602,7 +611,7 @@ def namingWith (element : SignalType) : (indexWidth : Nat) →
   | indexWidth + 1, elementNaming => by
       rw [Modules.CombMuxTree.moduleStructure.eq_def]
       exact .composite
-        ⟨"comb_mux_tree", "recursive", [.shape element, .natural (indexWidth + 1)]⟩
+        ⟨"comb_mux_tree", "recursive", [.signalType element, .natural (indexWidth + 1)]⟩
         (portsWithNaming element (indexWidth + 1) elementNaming)
         (fun
           | .valuesSplit => "split_values"
@@ -620,15 +629,19 @@ def namingWith (element : SignalType) : (indexWidth : Nat) →
           | .indexLower => Silean.Naming.SignalAdapter.combiner
               (Modules.CombMuxTree.indexLowerCombiner indexWidth)
           | .lower | .upper => namingWith element indexWidth elementNaming
-          | .mux => Mux.Naming.namingWith element elementNaming)
+          | .mux => Mux.naming element)
 
 def naming (element : SignalType) (indexWidth : Nat) :
     ModuleNaming (Modules.CombMuxTree.moduleStructure element indexWidth) :=
   namingWith element indexWidth (.positional element)
 
-def namedModule (element : SignalType) (indexWidth : Nat) : NamedModule where
+@[reducible] def namedModuleWith (element : SignalType) (indexWidth : Nat)
+    (elementNaming : SignalTypeNaming element) : NamedModule where
   ports := Modules.CombMuxTree.ports element indexWidth
   moduleStructure := Modules.CombMuxTree.moduleStructure element indexWidth
-  naming := naming element indexWidth
+  naming := namingWith element indexWidth elementNaming
+
+@[reducible] def namedModule (element : SignalType) (indexWidth : Nat) : NamedModule :=
+  namedModuleWith element indexWidth (.positional element)
 
 end Silean.Modules.CombMuxTree.Naming

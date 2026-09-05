@@ -2,8 +2,8 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Foundation.BitVector
 import Silean.Modules.Constant
-import Silean.Modules.HalfAdder
-import Silean.Modules.VectorConcat
+import Silean.Modules.HalfAdder.HalfAdderCertified
+import Silean.Modules.VectorConcat.VectorConcatCertified
 import Silean.Naming.SignalAdapterNaming
 
 namespace Silean.Modules.Increment
@@ -92,18 +92,16 @@ inductive Rule | apply
 deriving Enumeration
 
 def outputRule (width : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap
-      { inputTypes := .cons (.vector width .bit) .nil
-        outputTypes := .cons (.vector width .bit) .nil } where
-  readsInputs := (inputMap width).select .value
-  writesOutputs := (outputMap width).select .result
-  target | (value, ()), _ => (incrementValue width value, ())
+    Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap where
+  readsInputs := .all (inputMap width)
+  writesOutputs := .all (outputMap width)
+  target inputs _ := fun | .result => incrementValue width (inputs .value)
 
 @[reducible] def cycleContract (width : Nat) : Contracts.Cycle.ModuleCycleContract (ports width) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule width⟩
+  outputRule | .apply => outputRule width
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -112,8 +110,15 @@ def outputRule (width : Nat) :
     (outputs : (ports width).outputs.Values) :
     (outputRule width).Holds inputs state outputs ↔
       outputs .result = incrementValue width (inputs .value) := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .result
+  · intro equal
+    funext output
+    cases output
+    exact equal
 
 theorem result_of_evaluatesTo (width : Nat)
     (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
@@ -167,20 +172,18 @@ private inductive Rule | apply
 deriving Enumeration
 
 private def outputRule (width : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap
-      { inputTypes := .cons (.vector width .bit) (.cons .bit .nil)
-        outputTypes := .cons (.vector width .bit) (.cons .bit .nil) } where
-  readsInputs := (inputMap width).select .carryIn |>.prepend .value
-  writesOutputs := (outputMap width).select .carryOut |>.prepend .result
-  target := fun
-    | (value, (carry, ())), _ =>
-        ((addCarry width value carry).1, ((addCarry width value carry).2, ()))
+    Contracts.Cycle.CycleOutputRule (ports width) emptySignalMap where
+  readsInputs := .all (inputMap width)
+  writesOutputs := .all (outputMap width)
+  target inputs _ := fun
+    | .result => (addCarry width (inputs .value) (inputs .carryIn)).1
+    | .carryOut => (addCarry width (inputs .value) (inputs .carryIn)).2
 
 @[reducible] private def cycleContract (width : Nat) : Contracts.Cycle.ModuleCycleContract (ports width) where
   state := emptySignalMap
   RuleName := Rule
   ruleNames := inferInstance
-  outputRule | .apply => ⟨_, outputRule width⟩
+  outputRule | .apply => outputRule width
   stateRule := Contracts.Cycle.CycleStateRule.empty _
   outputCoverage := by rfl
 
@@ -190,8 +193,14 @@ private def outputRule (width : Nat) :
     (outputRule width).Holds inputs state outputs ↔
       outputs .result = (addCarry width (inputs .value) (inputs .carryIn)).1 ∧
       outputs .carryOut = (addCarry width (inputs .value) (inputs .carryIn)).2 := by
-  simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds, SignalSelection.Matches,
-    SignalSelection.project, SignalSelection.prepend, SignalMap.select]
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact ⟨congrFun equal .result, congrFun equal .carryOut⟩
+  · rintro ⟨result, carryOut⟩
+    funext output
+    cases output <;> assumption
 
 private def emptyValue : (SignalType.vector 0 .bit).Denote :=
   fun index => Fin.elim0 index
@@ -772,7 +781,7 @@ private noncomputable opaque certifiedLayer (width : Nat) :
   | .one => (Modules.Constant.certified .bit true).certifiedStructure
   | .ripple => (Ripple.certified width).certifiedStructure
 
-private noncomputable def proofCertification (width : Nat) :
+noncomputable def certification (width : Nat) :
     Contracts.Cycle.ModuleCycleCertification (moduleStructure width) (cycleContract width) :=
   ((certifiedLayer width).certify (certifiedChildren width)).transportStructure (by
     unfold Contracts.Cycle.Certification.Layer.moduleStructure
@@ -783,7 +792,7 @@ private noncomputable def proofCertification (width : Nat) :
     cases child <;> rfl)
 
 noncomputable def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=
-  (proofCertification width).bundle
+  (certification width).bundle
 
 end Silean.Modules.Increment
 
@@ -822,9 +831,9 @@ private def naming : (width : Nat) → ModuleNaming (Ripple.moduleStructure widt
           | .lowerBits =>
               Silean.Naming.SignalAdapter.combiner (Ripple.lowerCombiner width)
           | .lowerRipple => naming width
-          | .highAdder => HalfAdder.Naming.naming
+          | .highAdder => HalfAdder.design.naming
           | .highBit => Silean.Naming.SignalAdapter.combiner Ripple.highCombiner
-          | .concat => VectorConcat.Naming.naming .bit width 1)
+          | .concat => VectorConcat.naming .bit width 1)
 
 end Silean.Modules.Increment.Ripple.Naming
 
@@ -853,3 +862,10 @@ def namedModule (width : Nat) : NamedModule where
   naming := naming width
 
 end Silean.Modules.Increment.Naming
+
+namespace Silean.Modules.Increment
+
+@[reducible] def design (width : Nat) : Silean.Naming.NamedModule :=
+  Naming.namedModule width
+
+end Silean.Modules.Increment

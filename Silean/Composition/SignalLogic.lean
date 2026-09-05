@@ -177,6 +177,128 @@ theorem get_bitwiseXor : ∀ (fields : SignalTypes)
 
 end SignalTypes
 
+namespace SignalSelection
+
+theorem project_mask (selection : SignalSelection signals types)
+    (values : signals.Values) (mask : Bool) :
+    selection.project (fun label =>
+      (signals.signalType label).mask (values label) mask) =
+      types.mask (selection.project values) mask := by
+  induction selection with
+  | nil => rfl
+  | cons label tail induction =>
+      change (_, _) = (_, _)
+      rw [induction]
+
+theorem project_bitwiseOr (selection : SignalSelection signals types)
+    (left right : signals.Values) :
+    selection.project (fun label =>
+      (signals.signalType label).bitwiseOr (left label) (right label)) =
+      types.bitwiseOr (selection.project left) (selection.project right) := by
+  induction selection with
+  | nil => rfl
+  | cons label tail induction =>
+      change (_, _) = (_, _)
+      rw [induction]
+
+theorem project_bitwiseAnd (selection : SignalSelection signals types)
+    (left right : signals.Values) :
+    selection.project (fun label =>
+      (signals.signalType label).bitwiseAnd (left label) (right label)) =
+      types.bitwiseAnd (selection.project left) (selection.project right) := by
+  induction selection with
+  | nil => rfl
+  | cons label tail induction =>
+      change (_, _) = (_, _)
+      rw [induction]
+
+theorem project_bitwiseXor (selection : SignalSelection signals types)
+    (left right : signals.Values) :
+    selection.project (fun label =>
+      (signals.signalType label).bitwiseXor (left label) (right label)) =
+      types.bitwiseXor (selection.project left) (selection.project right) := by
+  induction selection with
+  | nil => rfl
+  | cons label tail induction =>
+      change (_, _) = (_, _)
+      rw [induction]
+
+end SignalSelection
+
+namespace SignalMap
+
+theorem pack_mask (signals : SignalMap.{0}) (values : signals.Values)
+    (mask : Bool) :
+    signals.pack (fun field =>
+      (signals.signalType field).mask (values field) mask) =
+      signals.tupleType.mask (signals.pack values) mask := by
+  change signals.allSelection.project _ =
+    signals.tupleFields.mask (signals.allSelection.project values) mask
+  exact signals.allSelection.project_mask values mask
+
+theorem pack_bitwiseOr (signals : SignalMap.{0})
+    (left right : signals.Values) :
+    signals.pack (fun field =>
+      (signals.signalType field).bitwiseOr (left field) (right field)) =
+      signals.tupleType.bitwiseOr (signals.pack left) (signals.pack right) := by
+  change signals.allSelection.project _ = signals.tupleFields.bitwiseOr
+    (signals.allSelection.project left) (signals.allSelection.project right)
+  exact signals.allSelection.project_bitwiseOr left right
+
+theorem pack_bitwiseAnd (signals : SignalMap.{0})
+    (left right : signals.Values) :
+    signals.pack (fun field =>
+      (signals.signalType field).bitwiseAnd (left field) (right field)) =
+      signals.tupleType.bitwiseAnd (signals.pack left) (signals.pack right) := by
+  change signals.allSelection.project _ = signals.tupleFields.bitwiseAnd
+    (signals.allSelection.project left) (signals.allSelection.project right)
+  exact signals.allSelection.project_bitwiseAnd left right
+
+theorem pack_bitwiseXor (signals : SignalMap.{0})
+    (left right : signals.Values) :
+    signals.pack (fun field =>
+      (signals.signalType field).bitwiseXor (left field) (right field)) =
+      signals.tupleType.bitwiseXor (signals.pack left) (signals.pack right) := by
+  change signals.allSelection.project _ = signals.tupleFields.bitwiseXor
+    (signals.allSelection.project left) (signals.allSelection.project right)
+  exact signals.allSelection.project_bitwiseXor left right
+
+theorem unpack_mask (signals : SignalMap.{0}) (value : signals.tupleType.Denote)
+    (mask : Bool) :
+    signals.unpack (signals.tupleType.mask value mask) =
+      fun field => (signals.signalType field).mask (signals.unpack value field) mask := by
+  apply signals.pack_injective
+  rw [signals.pack_unpack, signals.pack_mask, signals.pack_unpack]
+
+theorem unpack_bitwiseOr (signals : SignalMap.{0})
+    (left right : signals.tupleType.Denote) :
+    signals.unpack (signals.tupleType.bitwiseOr left right) =
+      fun field => (signals.signalType field).bitwiseOr
+        (signals.unpack left field) (signals.unpack right field) := by
+  apply signals.pack_injective
+  rw [signals.pack_unpack, signals.pack_bitwiseOr,
+    signals.pack_unpack, signals.pack_unpack]
+
+theorem unpack_bitwiseAnd (signals : SignalMap.{0})
+    (left right : signals.tupleType.Denote) :
+    signals.unpack (signals.tupleType.bitwiseAnd left right) =
+      fun field => (signals.signalType field).bitwiseAnd
+        (signals.unpack left field) (signals.unpack right field) := by
+  apply signals.pack_injective
+  rw [signals.pack_unpack, signals.pack_bitwiseAnd,
+    signals.pack_unpack, signals.pack_unpack]
+
+theorem unpack_bitwiseXor (signals : SignalMap.{0})
+    (left right : signals.tupleType.Denote) :
+    signals.unpack (signals.tupleType.bitwiseXor left right) =
+      fun field => (signals.signalType field).bitwiseXor
+        (signals.unpack left field) (signals.unpack right field) := by
+  apply signals.pack_injective
+  rw [signals.pack_unpack, signals.pack_bitwiseXor,
+    signals.pack_unpack, signals.pack_unpack]
+
+end SignalMap
+
 namespace SignalSplitter
 
 theorem split_mask (splitter : SignalSplitter)
@@ -188,9 +310,7 @@ theorem split_mask (splitter : SignalSplitter)
           (splitter.outputValues (splitter.inputValues value) component) mask := by
   cases splitter with
   | vector => rfl
-  | tuple fields =>
-      funext component
-      exact fields.get_mask value mask component
+  | tuple fields => funext component; exact fields.get_mask value mask component
 
 theorem split_bitwiseOr (splitter : SignalSplitter)
     (left right : splitter.aggregateType.Denote) :
@@ -202,9 +322,7 @@ theorem split_bitwiseOr (splitter : SignalSplitter)
           (splitter.outputValues (splitter.inputValues right) component) := by
   cases splitter with
   | vector => rfl
-  | tuple fields =>
-      funext component
-      exact fields.get_bitwiseOr left right component
+  | tuple fields => funext component; exact fields.get_bitwiseOr left right component
 
 theorem split_bitwiseAnd (splitter : SignalSplitter)
     (left right : splitter.aggregateType.Denote) :
@@ -216,9 +334,7 @@ theorem split_bitwiseAnd (splitter : SignalSplitter)
           (splitter.outputValues (splitter.inputValues right) component) := by
   cases splitter with
   | vector => rfl
-  | tuple fields =>
-      funext component
-      exact fields.get_bitwiseAnd left right component
+  | tuple fields => funext component; exact fields.get_bitwiseAnd left right component
 
 theorem split_bitwiseXor (splitter : SignalSplitter)
     (left right : splitter.aggregateType.Denote) :
@@ -230,9 +346,7 @@ theorem split_bitwiseXor (splitter : SignalSplitter)
           (splitter.outputValues (splitter.inputValues right) component) := by
   cases splitter with
   | vector => rfl
-  | tuple fields =>
-      funext component
-      exact fields.get_bitwiseXor left right component
+  | tuple fields => funext component; exact fields.get_bitwiseXor left right component
 
 end SignalSplitter
 

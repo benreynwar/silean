@@ -69,9 +69,9 @@ private def contains (text fragment : String) : Bool :=
   | .ok text =>
       ["public module add_ripple_3", "inst left_split", "inst right_split",
        "inst add_lower of add_ripple_2",
-       "inst add_high_bit of full_adder_structural",
+       "inst add_high_bit of FullAdder",
        "connect add_high_bit.left, left_split.component_2",
        "connect add_high_bit.right, right_split.component_2",
-       "connect add_high_bit.carry_in, add_lower.carry_out"].all (contains text)
+       "connect add_high_bit.carryIn, add_lower.carry_out"].all (contains text)
 
 end Silean.Examples.Checks.Add

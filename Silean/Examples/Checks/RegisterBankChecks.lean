@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.RegisterBank
+import Silean.Modules.RegisterBank.RegisterBankCertified
 
 namespace Silean.Examples.Checks.RegisterBank
 
@@ -62,7 +62,7 @@ private def contains (text fragment : String) : Bool :=
 
 #guard match renderCircuit (Modules.RegisterBank.Naming.naming .bit 2 1) with
   | .error _ => false
-  | .ok text => ["public module register_bank_structural_bit_2",
+  | .ok text => ["public module RegisterBank_bit_2_1",
       "input write_enable : UInt<1>", "input write_address : UInt<1>[2]",
       "input read_0_address : UInt<1>[2]", "output read_0_value : UInt<1>",
       "inst entry_0", "inst entry_3",

@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.AddSub
+import Silean.Modules.AddSub.AddSub
 
 namespace Silean.Examples.Checks.AddSub
 
@@ -70,16 +70,16 @@ example (width : Nat) (left right : Fin width → Bool) :
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
-#guard match renderRootModule (Modules.AddSub.Naming.naming 4) with
+#guard match renderRootModule (Modules.AddSub.naming 4) with
   | .error _ => false
   | .ok text =>
-      ["public module add_sub_structural_4", "input left : UInt<1>[4]",
+      ["public module AddSub_4", "input left : UInt<1>[4]",
        "input right : UInt<1>[4]", "input subtract : UInt<1>",
-       "output result : UInt<1>[4]", "output carry_out : UInt<1>",
-       "inst broadcast_subtract", "inst transform_right",
+       "output result : UInt<1>[4]", "output carryOut : UInt<1>",
+       "inst broadcastSubtract", "inst transformRight",
        "inst add of add_ripple_4",
-       "connect transform_right.right, broadcast_subtract.aggregate_0",
-       "connect add.right, transform_right.result",
+       "connect transformRight.right, broadcastSubtract.aggregate_0",
+       "connect add.right, transformRight.result",
        "connect add.carry_in, subtract"].all (contains text)
 
 end Silean.Examples.Checks.AddSub

@@ -254,6 +254,17 @@ namespace Enumeration
     | .inl value => (left.locate value).map Sum.inl |>.appendRight _
     | .inr value => (right.locate value).map Sum.inr |>.prependMany _
 
+/-- Transport an executable enumeration across a pair of mutually inverse
+functions. The source order is preserved exactly. -/
+@[reducible] def relabel (source : Enumeration α) (forward : α → β)
+    (backward : β → α) (leftInverse : Function.LeftInverse backward forward)
+    (rightInverse : Function.RightInverse backward forward) : Enumeration β where
+  values := source.values.map forward
+  nodup := List.nodup_map_of_injective forward leftInverse.injective source.nodup
+  locate value := by
+    rw [← rightInverse value]
+    exact (source.locate (backward value)).map forward
+
 def ordinal (enumeration : Enumeration α) (value : α) :
     Fin enumeration.values.length := (enumeration.locate value).toFin
 

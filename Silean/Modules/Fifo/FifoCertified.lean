@@ -1,5 +1,6 @@
 import Silean.Contracts.Fifo.FifoCycleRefinement
 import Silean.Contracts.Fifo.FifoPortContract
+import Silean.Modules.Fifo.FifoCycleCertified
 import Silean.Modules.Fifo.FifoProperties
 
 namespace Silean.Modules.Fifo
@@ -19,7 +20,8 @@ private def logicalQueue (element : SignalType) (addressWidth : Nat)
     List (Contracts.Fifo.standardContract element (Properties.capacity addressWidth)).Payload :=
   (Properties.contents addressWidth state).map wrapPayload
 
-private def fifoRefinement (element : SignalType) (addressWidth : Nat) :
+private def fifoRefinement (element : SignalType)
+    (addressWidth : Nat) :
     Contracts.Fifo.FifoCycleRefinement (certified element addressWidth)
       (Contracts.Fifo.standardContract element (Properties.capacity addressWidth)) where
   Invariant := Properties.Invariant addressWidth
@@ -120,7 +122,8 @@ private def fifoRefinement (element : SignalType) (addressWidth : Nat) :
           List.map_append, wrapPayload] at mapped ⊢
         exact mapped
 
-noncomputable def fifoCertified (element : SignalType) (addressWidth : Nat) :
+noncomputable def fifoCertified (element : SignalType)
+    (addressWidth : Nat) :
     Contracts.Fifo.FifoCertified (ports element) (payloadTypes element) :=
   (fifoRefinement element addressWidth).certify
 

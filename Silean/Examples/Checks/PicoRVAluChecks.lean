@@ -8,6 +8,16 @@ open Silean Silean.FIRRTL Silean.Examples.PicoRV
 noncomputable example : Contracts.Cycle.ModuleCycleCertified Alu.ports :=
   Alu.certified
 
+example : Alu.outputRule.readsInputs.labels =
+    Alu.ports.inputs.labels.values := by
+  change (SignalGroup.all Alu.ports.inputs).labels = _
+  exact SignalGroup.all_labels _
+
+example : Alu.outputRule.writesOutputs.labels =
+    Alu.ports.outputs.labels.values := by
+  change (SignalGroup.all Alu.ports.outputs).labels = _
+  exact SignalGroup.all_labels _
+
 private def base (left right : Alu.Word) : Alu.Values where
   reg_op1 := left
   reg_op2 := right

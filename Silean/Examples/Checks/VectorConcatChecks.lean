@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.VectorConcat
+import Silean.Modules.VectorConcat.VectorConcatCertified
 import Silean.Composition.SignalLogic
 
 namespace Silean.Examples.Checks.VectorConcat
@@ -95,22 +95,22 @@ private def containsAll (result : RenderResult String)
   | .error _ => false
   | .ok text => fragments.all (contains text)
 
-#guard containsAll (renderCircuit (Modules.VectorConcat.Naming.naming .bit 0 3))
-  ["public module vector_concat_structural_bit_0_3", "inst split_left",
-   "inst split_right", "inst combine", "output result : UInt<1>[3]"]
+#guard containsAll (renderCircuit (Modules.VectorConcat.naming .bit 0 3))
+  ["public module VectorConcat_bit_0_3", "inst leftSplit",
+   "inst rightSplit", "inst combine", "output result : UInt<1>[3]"]
 
-#guard containsAll (renderCircuit (Modules.VectorConcat.Naming.naming .bit 2 0))
-  ["public module vector_concat_structural_bit_2_0", "input left : UInt<1>[2]",
+#guard containsAll (renderCircuit (Modules.VectorConcat.naming .bit 2 0))
+  ["public module VectorConcat_bit_2_0", "input left : UInt<1>[2]",
    "output result : UInt<1>[2]"]
 
-#guard containsAll (renderCircuit (Modules.VectorConcat.Naming.naming .bit 2 3))
-  ["public module vector_concat_structural_bit_2_3", "input left : UInt<1>[2]",
+#guard containsAll (renderCircuit (Modules.VectorConcat.naming .bit 2 3))
+  ["public module VectorConcat_bit_2_3", "input left : UInt<1>[2]",
    "input right : UInt<1>[3]", "output result : UInt<1>[5]",
-   "connect combine.component_0, split_left.component_0",
-   "connect combine.component_4, split_right.component_2"]
+   "connect combine.component_0, leftSplit.component_0",
+   "connect combine.component_4, rightSplit.component_2"]
 
-#guard containsAll (renderCircuit (Modules.VectorConcat.Naming.naming pairBits 1 2))
-  ["public module vector_concat_structural", "inst split_left",
-   "inst split_right", "inst combine"]
+#guard containsAll (renderCircuit (Modules.VectorConcat.naming pairBits 1 2))
+  ["public module VectorConcat", "inst leftSplit",
+   "inst rightSplit", "inst combine"]
 
 end Silean.Examples.Checks.VectorConcat

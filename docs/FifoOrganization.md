@@ -49,15 +49,19 @@ that result.
 
 | Source | Responsibility |
 | --- | --- |
-| `Modules/OneEntryFifo/OneEntryFifo.lean` | One-entry structure, exact cycle contract, certification, and naming |
-| `Modules/OneEntryFifo/OneEntryFifoControl.lean` | Private combinational control child used only by OneEntryFifo |
-| `Modules/OneEntryFifo/OneEntryFifoCycleBehavior.lean` | Natural exact cycle behavior for the one-entry implementation |
-| `Modules/OneEntryFifo/OneEntryFifoCertified.lean` | Capacity-one logical queue refinement and public FIFO certification |
-| `Composition/FifoSerialComposition.lean` | Generic two-child serial structure and cycle certification |
+| `Modules/OneEntryFifo/OneEntryFifo.lean` | One-entry structure, natural exact-cycle behavior and contract, public cycle laws, and naming |
+| `Modules/OneEntryFifo/Control/OneEntryFifoControl.lean` | Private combinational control structure and exact cycle contract |
+| `Modules/OneEntryFifo/Control/OneEntryFifoControlCertified.lean` | Structural certification of the private control child |
+| `Modules/OneEntryFifo/OneEntryFifoCycleCertified.lean` | Structural certification of the one-entry FIFO against its exact cycle contract |
+| `Modules/OneEntryFifo/OneEntryFifoCycleBehavior.lean` | Small adapter exposing the certified exact behavior to serial FIFO composition |
+| `Modules/OneEntryFifo/OneEntryFifoFifoCertified.lean` | Capacity-one logical queue refinement and public FIFO certification |
+| `Composition/FifoSerialComposition.lean` | Generic two-child serial structural layer |
+| `Composition/FifoSerialCycleCertified.lean` | Exact-cycle certification using only the two public child contracts |
 | `Composition/FifoSerialRefinement.lean` | Generic composition of two child FIFO refinements; downstream contents precede upstream contents and the internal transfer cancels |
 | `Naming/FifoSerialNaming.lean` | Presentation names for the generic serial hierarchy |
-| `Modules/SerialDepthFifo/SerialDepthFifo.lean` | Recursive positive-depth concrete structure, exact cycle contract, certification, and naming |
-| `Modules/SerialDepthFifo/SerialDepthFifoCertified.lean` | Recursive FIFO certification with capacity equal to depth |
+| `Modules/SerialDepthFifo/SerialDepthFifo.lean` | Recursive positive-depth structure, natural exact-cycle behavior, naming, and complete design bundles |
+| `Modules/SerialDepthFifo/SerialDepthFifoCycleCertified.lean` | Recursive structural certification for every positive depth |
+| `Modules/SerialDepthFifo/SerialDepthFifoFifoCertified.lean` | Recursive abstract FIFO certification with capacity equal to depth |
 | `Modules/Fifo/Fifo.lean` | Pointer/register-bank structure and exact cycle contract |
 | `Modules/Fifo/FifoPointerControl.lean` | Private pointer interpretation and transfer-control child used by the FIFO built from a register bank and pointers |
 | `Modules/Fifo/FifoProperties.lean` | Circular-buffer occupancy, logical contents, invariant, and one-cycle queue lemmas |

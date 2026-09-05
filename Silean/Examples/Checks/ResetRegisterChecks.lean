@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EnabledResetRegister
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterCertified
 
 namespace Silean.Examples.Checks.ResetRegister
 
@@ -126,23 +126,24 @@ private def renders {ports : ModulePorts} {moduleStructure : ModuleStructure por
   | .error _ => false
   | .ok text => fragments.all (contains text)
 
-#guard renders (Modules.ResetRegister.Naming.naming .bit false)
-  ["public module reset_register_structural_bit_0",
+#guard renders (Modules.ResetRegister.naming .bit false)
+  ["public module ResetRegister_bit_0",
    "input reset : UInt<1>",
-   "inst reset_value of constant_bit_0",
-   "inst selection of mux_structural_bit",
-   "inst storage of register"]
+   "inst resetValue of constant_bit_0",
+   "inst selection of Mux_bit",
+   "inst storage of register_bit"]
 
-#guard renders (Modules.EnabledResetRegister.Naming.naming .bit false)
-  ["public module enabled_reset_register_structural_bit_0",
+#guard renders (Modules.EnabledResetRegister.naming .bit false)
+  ["public module EnabledResetRegister_bit_0",
    "input enable : UInt<1>",
    "input reset : UInt<1>",
-   "inst storage of reset_register_structural_bit_0"]
+   "inst storage of ResetRegister_bit_0"]
 
 #guard renders
-  (Modules.EnabledResetRegister.Naming.namingWith tupleType tupleReset tupleNaming)
+  (Modules.EnabledResetRegister.namingWith tupleReset tupleNaming)
   ["input value : { flag : UInt<1>, payload : UInt<1>[2] }",
    "output value_out : { flag : UInt<1>, payload : UInt<1>[2] }",
-   "inst storage of reset_register_structural"]
+   "inst storage of ResetRegister"]
+
 
 end Silean.Examples.Checks.ResetRegister

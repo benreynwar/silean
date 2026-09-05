@@ -5,9 +5,11 @@ namespace Silean.Composition.FifoSerial.Naming
 
 open Silean Silean.Naming
 
-/-! Naming for the generic serial FIFO composition lives above Composition:
-the structural construction itself has no dependency on presentation names. -/
+/-! Naming stays above the generic composition layer so structural and proof
+machinery do not depend on presentation metadata. -/
 
+/-- Attach authored payload names and child naming trees to the generic serial
+FIFO layer. -/
 def serialNamingWith (signalType : SignalType)
     (typeNaming : SignalTypeNaming signalType) (depth : Nat)
     {upstream downstream : ModuleStructure (Silean.Interfaces.Fifo.ports signalType)}
@@ -16,7 +18,7 @@ def serialNamingWith (signalType : SignalType)
     ModuleNaming (Composition.FifoSerial.moduleStructure signalType upstream downstream) := by
   unfold Composition.FifoSerial.moduleStructure
   exact .composite
-    ⟨"serial_depth_fifo", "structural", [.shape signalType, .natural depth]⟩
+    ⟨"serial_depth_fifo", "structural", [.signalType signalType, .natural depth]⟩
     (Silean.Naming.FifoPorts.portsWithNaming signalType typeNaming)
     (fun | .upstream => "upstream" | .downstream => "downstream")
     (fun | .upstream => upstreamNaming | .downstream => downstreamNaming)
