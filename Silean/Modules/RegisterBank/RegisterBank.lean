@@ -1,6 +1,6 @@
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.BinaryToOneHot
-import Silean.Modules.CombMuxTree
+import Silean.Modules.BinaryToOneHot.BinaryToOneHot
+import Silean.Modules.CombMuxTree.CombMuxTree
 import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
@@ -244,7 +244,7 @@ module_design RegisterBank (element : SignalType) (addressWidth : Nat)
     (naming := RegisterBank.Naming.ports element addressWidth readCount)
   instances {
     -- Decodes the binary write address into one-hot form.
-    decoder := BinaryToOneHot.Naming.namedModule addressWidth,
+    decoder := BinaryToOneHot.design addressWidth,
     -- Exposes the individual one-hot write-select bits.
     decodeSplit :=
       Naming.SignalAdapter.splitterDesign
@@ -264,7 +264,7 @@ module_design RegisterBank (element : SignalType) (addressWidth : Nat)
     -- Selects the asynchronously read entry.
     readMux (port : Fin readCount in Enumeration.fin readCount)
       (name := s!"read_{port.val}_mux") :=
-        CombMuxTree.Naming.namedModule element addressWidth }
+        CombMuxTree.design element addressWidth }
   wiring {
     outputs {
       -- Each read mux directly drives its corresponding bank output.

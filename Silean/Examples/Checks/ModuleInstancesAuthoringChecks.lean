@@ -1,7 +1,7 @@
 import Silean.Authoring.ModuleInstances
 import Silean.Modules.HalfAdder.HalfAdder
 import Silean.Modules.Mux.Mux
-import Silean.Modules.Register
+import Silean.Modules.Register.Register
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.OrPrimitive
 

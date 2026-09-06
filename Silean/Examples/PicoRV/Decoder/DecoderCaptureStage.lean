@@ -3,11 +3,11 @@ import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
 import Silean.Authoring.ModulePorts
 import Silean.Authoring.SignalSchemaDeclaration
-import Silean.Modules.VectorSlice
-import Silean.Modules.EqualsConstant
+import Silean.Modules.VectorSlice.VectorSlice
+import Silean.Modules.EqualsConstant.EqualsConstant
 import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.EnabledResetRegister.EnabledResetRegister
-import Silean.Modules.Constant
+import Silean.Modules.Constant.Constant
 import Silean.Modules.VectorLayout.VectorLayout
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Naming.SignalAdapterNaming
@@ -99,39 +99,39 @@ module_design CaptureStage (name := "picorv32_decoder_capture") where
   instances {
     captureEnable := Primitives.andDesign,
     reset := Primitives.notDesign,
-    opcode := Modules.VectorSlice.Naming.namedModule .bit 0 7 25,
-    funct3 := Modules.VectorSlice.Naming.namedModule .bit 12 3 17,
-    decodedRd := Modules.VectorSlice.Naming.namedModule .bit 7 5 20,
-    decodedRs1 := Modules.VectorSlice.Naming.namedModule .bit 15 5 12,
-    decodedRs2 := Modules.VectorSlice.Naming.namedModule .bit 20 5 7,
-    opcodeLui := Modules.EqualsConstant.Naming.namedModule
+    opcode := Modules.VectorSlice.design .bit 0 7 25,
+    funct3 := Modules.VectorSlice.design .bit 12 3 17,
+    decodedRd := Modules.VectorSlice.design .bit 7 5 20,
+    decodedRs1 := Modules.VectorSlice.design .bit 15 5 12,
+    decodedRs2 := Modules.VectorSlice.design .bit 20 5 7,
+    opcodeLui := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x37),
-    opcodeAuipc := Modules.EqualsConstant.Naming.namedModule
+    opcodeAuipc := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x17),
-    opcodeJal := Modules.EqualsConstant.Naming.namedModule
+    opcodeJal := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x6f),
-    opcodeJalr := Modules.EqualsConstant.Naming.namedModule
+    opcodeJalr := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x67),
-    opcodeBranch := Modules.EqualsConstant.Naming.namedModule
+    opcodeBranch := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x63),
-    opcodeLoad := Modules.EqualsConstant.Naming.namedModule
+    opcodeLoad := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x03),
-    opcodeStore := Modules.EqualsConstant.Naming.namedModule
+    opcodeStore := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x23),
-    opcodeAluImm := Modules.EqualsConstant.Naming.namedModule
+    opcodeAluImm := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x13),
-    opcodeAluReg := Modules.EqualsConstant.Naming.namedModule
+    opcodeAluReg := Modules.EqualsConstant.design
       (.vector 7 .bit) (CaptureStage.bits 7 0x33),
-    funct3Zero := Modules.EqualsConstant.Naming.namedModule
+    funct3Zero := Modules.EqualsConstant.design
       (.vector 3 .bit) (CaptureStage.bits 3 0),
     jalr := Primitives.andDesign,
-    zero := Modules.Constant.Naming.namedModule .bit false,
+    zero := Modules.Constant.design .bit false,
     immediate := Modules.VectorLayout.design 32 32 CaptureStage.immediateJLayout,
-    storedNext := Modules.NamedTupleCombiner.Naming.design
+    storedNext := Modules.NamedTupleCombiner.designWith
       CaptureStage.storedMap CaptureStage.Stored.schema,
     stored := Modules.EnabledRegister.designWith CaptureStage.storedType
       CaptureStage.Stored.schema,
-    storedOutputs := Modules.NamedTupleSplitter.Naming.design
+    storedOutputs := Modules.NamedTupleSplitter.designWith
       CaptureStage.storedMap CaptureStage.Stored.schema,
     branch := Modules.EnabledResetRegister.design .bit false }
   wiring {

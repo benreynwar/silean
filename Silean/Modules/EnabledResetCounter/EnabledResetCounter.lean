@@ -1,7 +1,7 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.EnabledResetRegister.EnabledResetRegister
-import Silean.Modules.Increment
+import Silean.Modules.Increment.Increment
 
 namespace Silean.Modules.EnabledResetCounter
 

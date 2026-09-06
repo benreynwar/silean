@@ -28,6 +28,14 @@ syntax (name := moduleRuleSchedules)
     " for " term " with " term " implementing " term " where "
     ident moduleOutputSchedule+ ident " := " moduleRuleOrder : command
 
+/-- Declare one dependency order that exercises every rule of every child.
+This is the contract-independent counterpart of `module_rule_schedules`, used
+to establish that a structural layer is acyclic before it has a parent
+behavioral contract. -/
+syntax (name := moduleCompleteSchedule)
+    "module_complete_schedule " ident moduleRuleScheduleParam*
+    " for " term " with " term " := " moduleRuleOrder : command
+
 private structure ScheduleParam where
   binder : TSyntax ``Parser.Term.bracketedBinder
   argument : TSyntax `term
@@ -98,6 +106,20 @@ elab_rules : command
           Silean.Contracts.Cycle.Certification.Layer.ScheduleDerivation.DerivedRuleSchedules
             ($body) ($childContracts) ($contract) := by
         derive_rule_schedules ($ordersName $arguments:term*)
+    )
+
+elab_rules : command
+  | `(module_complete_schedule $derivedName:ident
+      $parameters:moduleRuleScheduleParam* for $body:term with
+      $childContracts:term := $order:moduleRuleOrder) => do
+    let params ← parameters.mapM parseParam
+    let binders := params.map (·.binder)
+    let orderValue ← orderTerm order
+    elabCommand <| ← `(
+      private noncomputable def $derivedName $binders:bracketedBinder* :
+          Silean.Contracts.Cycle.Certification.Layer.ScheduleDerivation.DerivedCompleteSchedule
+            ($body) ($childContracts) := by
+        derive_complete_schedule $orderValue
     )
 
 end Silean.Authoring

@@ -1,6 +1,6 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
-import Silean.Modules.All
+import Silean.Modules.All.All
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.Eq
@@ -690,16 +690,13 @@ def naming (signalType : SignalType) :
     ModuleNaming (Modules.Equality.moduleStructure signalType) :=
   namingWith signalType (.positional signalType)
 
-def namedModule (signalType : SignalType) : NamedModule where
-  ports := Modules.Equality.ports signalType
-  moduleStructure := Modules.Equality.moduleStructure signalType
-  naming := naming signalType
-
 end Silean.Modules.Equality.Naming
 
 namespace Silean.Modules.Equality
 
-@[reducible] def design (signalType : SignalType) : Silean.Naming.NamedModule :=
-  Naming.namedModule signalType
+@[reducible] def design (signalType : SignalType) : Silean.Naming.NamedModule where
+  ports := ports signalType
+  moduleStructure := moduleStructure signalType
+  naming := Naming.naming signalType
 
 end Silean.Modules.Equality

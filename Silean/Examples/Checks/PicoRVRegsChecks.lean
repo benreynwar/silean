@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Examples.PicoRV.Regs
+import Silean.Examples.PicoRV.RegsCertified
 
 namespace Silean.Examples.Checks.PicoRVRegs
 
@@ -47,10 +47,10 @@ private def resetWrite := Silean.Examples.PicoRV.Regs.cycleContract.evaluate
 
 -- The closed renderer checks and accepts the public concrete hierarchy.
 noncomputable example : RenderResult String :=
-  renderClosedCircuit Silean.Examples.PicoRV.Regs.Naming.naming
+  renderClosedCircuit Silean.Examples.PicoRV.Regs.naming
 
-#guard renderModuleKey Silean.Examples.PicoRV.Regs.Naming.naming.key =
-  "picorv32_regs_structural"
+#guard renderModuleKey Silean.Examples.PicoRV.Regs.naming.key =
+  "picorv32_regs"
 #guard Silean.Examples.PicoRV.Regs.Naming.ports.inputs.name .resetn = "resetn"
 #guard Silean.Examples.PicoRV.Regs.Naming.ports.inputs.name .decoded_rs1 = "decoded_rs1"
 #guard Silean.Examples.PicoRV.Regs.Naming.ports.inputs.name .cpuregs_wrdata = "cpuregs_wrdata"
@@ -62,10 +62,10 @@ private def contains (text fragment : String) : Bool :=
 
 -- Render the actual root module without normalizing the much larger repeated
 -- transitive hierarchy into this `.olean`.
-#guard match renderRootModule Silean.Examples.PicoRV.Regs.Naming.naming with
+#guard match renderRootModule Silean.Examples.PicoRV.Regs.naming with
   | .error _ => false
   | .ok text =>
-      ["public module picorv32_regs_structural",
+      ["public module picorv32_regs",
        "input resetn : UInt<1>",
        "input decoded_rs1 : UInt<1>[5]",
        "input decoded_rs2 : UInt<1>[5]",
@@ -74,8 +74,8 @@ private def contains (text fragment : String) : Bool :=
        "input cpuregs_wrdata : UInt<1>[32]",
        "output cpuregs_rs1 : UInt<1>[32]",
        "output cpuregs_rs2 : UInt<1>[32]",
-       "inst cpuregs",
-       "inst rs1_mux",
-       "inst rs2_mux"].all (contains text)
+       "inst bank",
+       "inst rs1Mux",
+       "inst rs2Mux"].all (contains text)
 
 end Silean.Examples.Checks.PicoRVRegs

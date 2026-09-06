@@ -469,9 +469,14 @@ decreasing_by
 noncomputable opaque implementation (signalType : SignalType) :
     Implementation signalType := implementationDefinition signalType
 
+noncomputable def certification (signalType : SignalType) :
+    Contracts.Cycle.ModuleCycleCertification (moduleStructure signalType)
+      (cycleContract signalType) :=
+  implementation signalType
+
 noncomputable def certified (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleCertified (ports signalType) :=
-  (implementation signalType).certified
+  (certification signalType).bundle
 
 theorem certified_moduleStructure (signalType : SignalType) :
     (certified signalType).moduleStructure = moduleStructure signalType :=
@@ -557,20 +562,20 @@ def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalTy
 
 end Silean.Modules.Register.Naming
 
-namespace Silean.Modules.Register.Naming
+namespace Silean.Modules.Register
 
 /-- The canonical register structure paired with caller-supplied emitted names. -/
-def namedModuleWith {signalType : SignalType}
+def designWith {signalType : SignalType}
     (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
     Silean.Naming.NamedModule where
-  ports := Modules.Register.ports signalType
-  moduleStructure := Modules.Register.moduleStructure signalType
-  naming := namingWith signalType typeNaming
+  ports := ports signalType
+  moduleStructure := moduleStructure signalType
+  naming := Naming.namingWith signalType typeNaming
 
 /-- The generic register structure paired with its default recursive naming. -/
-def namedModule (signalType : SignalType) : Silean.Naming.NamedModule where
-  ports := Modules.Register.ports signalType
-  moduleStructure := Modules.Register.moduleStructure signalType
-  naming := naming signalType
+def design (signalType : SignalType) : Silean.Naming.NamedModule where
+  ports := ports signalType
+  moduleStructure := moduleStructure signalType
+  naming := Naming.naming signalType
 
-end Silean.Modules.Register.Naming
+end Silean.Modules.Register

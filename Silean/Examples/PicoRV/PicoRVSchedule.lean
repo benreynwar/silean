@@ -1,45 +1,44 @@
 import Silean.Examples.PicoRV.PicoRV
-import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Contracts.Cycle.CycleScheduleDerivation
+import Silean.Authoring.ModuleChildCertifications
+import Silean.Authoring.ModuleRuleSchedules
 
 namespace Silean.Examples.PicoRV.PicoRV
 
 open Silean Silean.Contracts.Cycle.Certification
+open Silean.Authoring
 
 /-! The schedule witnesses below establish a topological order for the
 blackbox contracts. They are proof inputs, not execution order stored in the
 module structure. -/
 
-private abbrev controlOutputs : Layer.RuleOccurrence body childContracts := ⟨.control, .outputs⟩
-private abbrev decoderOutputs : Layer.RuleOccurrence body childContracts := ⟨.decoder, .outputs⟩
-private abbrev datapathRegistered : Layer.RuleOccurrence body childContracts := ⟨.datapath, .registered⟩
-private abbrev memoryRegistered : Layer.RuleOccurrence body childContracts := ⟨.mem, .registered⟩
-private abbrev memoryRdataQ : Layer.RuleOccurrence body childContracts := ⟨.mem, .memRdataQ⟩
-private abbrev regsRs1 : Layer.RuleOccurrence body childContracts := ⟨.cpuregs, .cpuregs_rs1⟩
-private abbrev regsRs2 : Layer.RuleOccurrence body childContracts := ⟨.cpuregs, .cpuregs_rs2⟩
-private abbrev datapathNextPc : Layer.RuleOccurrence body childContracts := ⟨.datapath, .nextPc⟩
-private abbrev datapathComparison : Layer.RuleOccurrence body childContracts := ⟨.datapath, .comparison⟩
-private abbrev datapathWriteback : Layer.RuleOccurrence body childContracts := ⟨.datapath, .writeback⟩
-private abbrev memoryLaRead : Layer.RuleOccurrence body childContracts := ⟨.mem, .memLaRead⟩
-private abbrev memoryLaWrite : Layer.RuleOccurrence body childContracts := ⟨.mem, .memLaWrite⟩
-private abbrev memoryLaAddr : Layer.RuleOccurrence body childContracts := ⟨.mem, .memLaAddr⟩
-private abbrev memoryLaWdata : Layer.RuleOccurrence body childContracts := ⟨.mem, .memLaWdata⟩
-private abbrev memoryLaWstrb : Layer.RuleOccurrence body childContracts := ⟨.mem, .memLaWstrb⟩
-private abbrev memoryDone : Layer.RuleOccurrence body childContracts := ⟨.mem, .memDone⟩
-private abbrev memoryRdataWord : Layer.RuleOccurrence body childContracts := ⟨.mem, .memRdataWord⟩
-private abbrev memoryRdataLatched : Layer.RuleOccurrence body childContracts := ⟨.mem, .memRdataLatched⟩
+module_child_certifications childContracts for body where
+  control := Control.cycleContract.blackboxCertification,
+  datapath := Datapath.cycleContract.blackboxCertification,
+  mem := Memory.cycleContract.blackboxCertification,
+  decoder := Decoder.cycleContract.blackboxCertification,
+  cpuregs := Regs.cycleContract.blackboxCertification
 
-/-! Invoke every child rule in dependency order. From this one explicit order,
-the generic derivation tactic proves both state readiness and complete coverage. -/
-private def scheduleOrder : List (Layer.RuleOccurrence body childContracts) :=
-  [controlOutputs, decoderOutputs, datapathRegistered, memoryRegistered,
-    memoryRdataQ, regsRs1, regsRs2, datapathNextPc, datapathComparison,
-    datapathWriteback, memoryLaRead, memoryLaWrite, memoryLaAddr, memoryLaWdata,
-    memoryLaWstrb, memoryDone, memoryRdataWord, memoryRdataLatched]
-
-private noncomputable def derivedCompleteSchedule :
-    Layer.ScheduleDerivation.DerivedCompleteSchedule body childContracts := by
-  derive_complete_schedule scheduleOrder
+/-! Invoke every child rule in dependency order. The generic declaration
+checks both state readiness and complete child-rule coverage. -/
+module_complete_schedule derivedCompleteSchedule for body with childContracts :=
+  [.control => Control.Rule.outputs,
+    .decoder => Decoder.Rule.outputs,
+    .datapath => Datapath.Rule.registered,
+    .mem => Memory.Rule.registered,
+    .mem => Memory.Rule.memRdataQ,
+    .cpuregs => Regs.Rule.cpuregs_rs1,
+    .cpuregs => Regs.Rule.cpuregs_rs2,
+    .datapath => Datapath.Rule.nextPc,
+    .datapath => Datapath.Rule.comparison,
+    .datapath => Datapath.Rule.writeback,
+    .mem => Memory.Rule.memLaRead,
+    .mem => Memory.Rule.memLaWrite,
+    .mem => Memory.Rule.memLaAddr,
+    .mem => Memory.Rule.memLaWdata,
+    .mem => Memory.Rule.memLaWstrb,
+    .mem => Memory.Rule.memDone,
+    .mem => Memory.Rule.memRdataWord,
+    .mem => Memory.Rule.memRdataLatched]
 
 noncomputable def allRulesSchedule :
     Layer.Schedule body childContracts (fun _ => True) (Layer.CoversAllRules body childContracts) [] :=
@@ -60,7 +59,12 @@ noncomputable def outputSchedule (output : Output) : ParentOutputSchedule output
 
 theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution := by
   unfold moduleStructure
-  exact allRulesSchedule.hasAtMostOneSolution children
+  have childrenEqual :
+      (fun child => (certifiedChildren child).moduleStructure) = structuralChildren := by
+    funext child
+    exact certifiedChildren_moduleStructure child
+  rw [← childrenEqual]
+  exact allRulesSchedule.hasAtMostOneSolution certifiedChildren
     (fun _ => trivial) allRulesSchedule.finished
 
 end Silean.Examples.PicoRV.PicoRV

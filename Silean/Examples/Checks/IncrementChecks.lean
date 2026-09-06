@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Increment
+import Silean.Modules.Increment.Increment
 
 namespace Silean.Examples.Checks.Increment
 

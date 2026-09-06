@@ -284,8 +284,11 @@ theorem output_eq_true_iff_of_holds (width : Nat)
 def moduleStructure (width : Nat) : ModuleStructure (ports width) :=
   Composition.Reduction.moduleStructure orImplementation falseImplementation (tree width)
 
+noncomputable def certification (width : Nat) :=
+  Composition.Reduction.certification orImplementation falseImplementation (tree width)
+
 noncomputable def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=
-  Composition.Reduction.certified orImplementation falseImplementation (tree width)
+  (certification width).bundle
 
 @[simp] theorem certified_cycleContract (width : Nat) :
     (certified width).cycleContract = cycleContract width := rfl
@@ -304,9 +307,13 @@ def naming (width : Nat) : ModuleNaming (Modules.Any.moduleStructure width) :=
     Modules.Any.falseImplementation Primitive.or (Primitive.constant false)
     (Modules.Any.tree width) |>.withKey ⟨"any", "bit", [.natural width]⟩
 
-def namedModule (width : Nat) : NamedModule where
-  ports := Modules.Any.ports width
-  moduleStructure := Modules.Any.moduleStructure width
-  naming := naming width
-
 end Silean.Modules.Any.Naming
+
+namespace Silean.Modules.Any
+
+@[reducible] def design (width : Nat) : Silean.Naming.NamedModule where
+  ports := ports width
+  moduleStructure := moduleStructure width
+  naming := Naming.naming width
+
+end Silean.Modules.Any

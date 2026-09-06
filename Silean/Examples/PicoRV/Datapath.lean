@@ -1,8 +1,11 @@
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Examples.PicoRV.Alu
 
 namespace Silean.Examples.PicoRV.Datapath
 
 open Silean
+open Silean.Authoring
 
 attribute [local simp] SignalMap.set_other
 
@@ -21,54 +24,70 @@ abbrev Word := Fin 32 → Bool
 abbrev FiveBits := Fin 5 → Bool
 abbrev EightBits := Fin 8 → Bool
 
-inductive Input
-  | resetn | cpu_state
-  | latched_store | latched_stalu | latched_branch
-  | latched_is_lu | latched_is_lh | latched_is_lb
-  | mem_do_prefetch | mem_do_rdata | mem_do_wdata | decoder_trigger
-  | instr_lui | instr_jal | instr_sub
-  | instr_beq | instr_bne | instr_bge | instr_bgeu
-  | instr_xori | instr_xor | instr_ori | instr_or | instr_andi | instr_and
-  | instr_slli | instr_srli | instr_srai | instr_sll | instr_srl | instr_sra
-  | is_lui_auipc_jal | is_lb_lh_lw_lbu_lhu | is_slli_srli_srai
-  | is_jalr_addi_slti_sltiu_xori_ori_andi
-  | is_lui_auipc_jal_jalr_addi_add_sub
-  | is_slti_blt_slt | is_sltiu_bltu_sltu | is_compare
-  | decoded_imm | decoded_imm_j | decoded_rs2
-  | cpuregs_rs1 | cpuregs_rs2
-  | mem_done | mem_rdata_word
-deriving Enumeration
-
-inductive Output
-  | reg_pc | reg_op1 | reg_op2 | reg_sh | next_pc | alu_out_0 | cpuregs_wrdata
-deriving Enumeration
-
 inductive State
   | reg_pc | reg_next_pc | reg_op1 | reg_op2 | reg_out | reg_sh | alu_out_q
 deriving Enumeration
-
-def inputType : Input → SignalType
-  | .cpu_state => .vector 8 .bit
-  | .decoded_rs2 => .vector 5 .bit
-  | .decoded_imm | .decoded_imm_j | .cpuregs_rs1 | .cpuregs_rs2
-  | .mem_rdata_word => .vector 32 .bit
-  | _ => .bit
-
-@[reducible] def inputMap : SignalMap := EnumeratedMap.of Input inputType
-
-def outputType : Output → SignalType
-  | .alu_out_0 => .bit
-  | .reg_sh => .vector 5 .bit
-  | _ => .vector 32 .bit
-
-@[reducible] def outputMap : SignalMap := EnumeratedMap.of Output outputType
 
 def stateType : State → SignalType
   | .reg_sh => .vector 5 .bit
   | _ => .vector 32 .bit
 
 @[reducible] def stateMap : SignalMap := EnumeratedMap.of State stateType
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
+
+module_ports ports where
+  input resetn : .bit,
+  input cpu_state : .vector 8 .bit,
+  input latched_store : .bit,
+  input latched_stalu : .bit,
+  input latched_branch : .bit,
+  input latched_is_lu : .bit,
+  input latched_is_lh : .bit,
+  input latched_is_lb : .bit,
+  input mem_do_prefetch : .bit,
+  input mem_do_rdata : .bit,
+  input mem_do_wdata : .bit,
+  input decoder_trigger : .bit,
+  input instr_lui : .bit,
+  input instr_jal : .bit,
+  input instr_sub : .bit,
+  input instr_beq : .bit,
+  input instr_bne : .bit,
+  input instr_bge : .bit,
+  input instr_bgeu : .bit,
+  input instr_xori : .bit,
+  input instr_xor : .bit,
+  input instr_ori : .bit,
+  input instr_or : .bit,
+  input instr_andi : .bit,
+  input instr_and : .bit,
+  input instr_slli : .bit,
+  input instr_srli : .bit,
+  input instr_srai : .bit,
+  input instr_sll : .bit,
+  input instr_srl : .bit,
+  input instr_sra : .bit,
+  input is_lui_auipc_jal : .bit,
+  input is_lb_lh_lw_lbu_lhu : .bit,
+  input is_slli_srli_srai : .bit,
+  input is_jalr_addi_slti_sltiu_xori_ori_andi : .bit,
+  input is_lui_auipc_jal_jalr_addi_add_sub : .bit,
+  input is_slti_blt_slt : .bit,
+  input is_sltiu_bltu_sltu : .bit,
+  input is_compare : .bit,
+  input decoded_imm : .vector 32 .bit,
+  input decoded_imm_j : .vector 32 .bit,
+  input decoded_rs2 : .vector 5 .bit,
+  input cpuregs_rs1 : .vector 32 .bit,
+  input cpuregs_rs2 : .vector 32 .bit,
+  input mem_done : .bit,
+  input mem_rdata_word : .vector 32 .bit,
+  output reg_pc : .vector 32 .bit,
+  output reg_op1 : .vector 32 .bit,
+  output reg_op2 : .vector 32 .bit,
+  output reg_sh : .vector 5 .bit,
+  output next_pc : .vector 32 .bit,
+  output alu_out_0 : .bit,
+  output cpuregs_wrdata : .vector 32 .bit
 
 structure Inputs where
   resetn : Bool
@@ -403,9 +422,6 @@ def nextState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
     stateMap.set updated .reg_next_pc (wordOfNat 0)
   else normalNextState inputs state updated
 
-inductive Rule | registered | nextPc | comparison | writeback
-deriving Enumeration
-
 namespace RegisteredRule
 inductive Output | reg_pc | reg_op1 | reg_op2 | reg_sh deriving Enumeration
 end RegisteredRule
@@ -523,16 +539,12 @@ def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   readsInputs := .all inputMap
   target := fun inputs state => nextState (inputsOfValues inputs) state
 
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
+module_cycle_contract cycleContract for ports where
   state := stateMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule
-    | .registered => registeredRule
-    | .nextPc => nextPcRule
-    | .comparison => comparisonRule
-    | .writeback => writebackRule
-  stateRule := stateRule
-  outputCoverage := by rfl
+  output_rule registered := registeredRule
+  output_rule nextPc := nextPcRule
+  output_rule comparison := comparisonRule
+  output_rule writeback := writebackRule
+  state_rule := stateRule
 
 end Silean.Examples.PicoRV.Datapath

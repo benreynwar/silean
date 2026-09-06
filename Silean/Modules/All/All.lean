@@ -246,12 +246,11 @@ theorem output_eq_true_iff_of_holds (width : Nat)
 def moduleStructure (width : Nat) : ModuleStructure (ports width) :=
   Composition.Reduction.moduleStructure andImplementation trueImplementation (tree width)
 
-/-- The reduction tree implementing `All` contains no blackboxes. -/
-private noncomputable def reductionImplementation (width : Nat) :=
+noncomputable def certification (width : Nat) :=
   Composition.Reduction.certification andImplementation trueImplementation (tree width)
 
 noncomputable def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=
-  Composition.Reduction.certified andImplementation trueImplementation (tree width)
+  (certification width).bundle
 
 @[simp] theorem certified_cycleContract (width : Nat) :
     (certified width).cycleContract = cycleContract width := rfl
@@ -270,9 +269,13 @@ def naming (width : Nat) : ModuleNaming (Modules.All.moduleStructure width) :=
     Modules.All.trueImplementation Primitive.and (Primitive.constant true)
     (Modules.All.tree width) |>.withKey ⟨"all", "bit", [.natural width]⟩
 
-def namedModule (width : Nat) : NamedModule where
-  ports := Modules.All.ports width
-  moduleStructure := Modules.All.moduleStructure width
-  naming := naming width
-
 end Silean.Modules.All.Naming
+
+namespace Silean.Modules.All
+
+@[reducible] def design (width : Nat) : Silean.Naming.NamedModule where
+  ports := ports width
+  moduleStructure := moduleStructure width
+  naming := Naming.naming width
+
+end Silean.Modules.All

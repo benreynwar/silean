@@ -1,7 +1,7 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.BitwiseOr
-import Silean.Modules.Mask
+import Silean.Modules.BitwiseOr.BitwiseOr
+import Silean.Modules.Mask.Mask
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.NotPrimitive
 

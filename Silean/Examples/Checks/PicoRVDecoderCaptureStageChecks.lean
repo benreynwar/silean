@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Examples.PicoRV.Decoder
+import Silean.Examples.PicoRV.DecoderCertified
 
 namespace Silean.Examples.Checks.PicoRVDecoderCaptureStageChecks
 

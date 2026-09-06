@@ -2,8 +2,8 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Composition.SignalAdapterImplementation
-import Silean.Modules.BinaryToOneHot
-import Silean.Modules.CombMuxTree
+import Silean.Modules.BinaryToOneHot.BinaryToOneHot
+import Silean.Modules.CombMuxTree.CombMuxTree
 import Silean.Modules.EnabledRegister.EnabledRegisterCertified
 import Silean.Modules.RegisterBank.RegisterBank
 import Silean.Primitives.And

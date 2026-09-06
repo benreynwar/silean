@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.CombMuxTree
+import Silean.Modules.CombMuxTree.CombMuxTree
 import Silean.Composition.SignalLogic
 
 namespace Silean.Examples.Checks.CombMuxTree
@@ -84,7 +84,7 @@ private def renders (element : SignalType) (width : Nat)
 #guard renders .bit 1 ["public module comb_mux_tree_recursive_bit_1",
   "inst split_values", "inst select_lower", "inst select_upper", "inst mux"]
 #guard renders .bit 2 ["public module comb_mux_tree_recursive_bit_2",
-  "vector_split_structural_bit_2_2", "comb_mux_tree_recursive_bit_1"]
+  "VectorSplit_bit_2_2", "comb_mux_tree_recursive_bit_1"]
 #guard renders .bit 3 ["public module comb_mux_tree_recursive_bit_3",
   "input values : UInt<1>[8]", "input index : UInt<1>[3]",
   "connect combine_index_lower.component_0, split_index.component_0",

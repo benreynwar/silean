@@ -1,8 +1,11 @@
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Examples.PicoRV.Memory
 
 namespace Silean.Examples.PicoRV.Control
 
 open Silean
+open Silean.Authoring
 
 attribute [local simp] SignalMap.set_other
 
@@ -21,19 +24,6 @@ abbrev TwoBits := Fin 2 → Bool
 abbrev FiveBits := Fin 5 → Bool
 abbrev EightBits := Fin 8 → Bool
 
-inductive Input
-  | resetn
-  | instr_jal | instr_jalr
-  | instr_lb | instr_lbu | instr_lh | instr_lhu | instr_lw
-  | instr_sb | instr_sh | instr_sw | instr_trap
-  | is_lui_auipc_jal | is_lb_lh_lw_lbu_lhu | is_slli_srli_srai
-  | is_jalr_addi_slti_sltiu_xori_ori_andi | is_sb_sh_sw | is_sll_srl_sra
-  | is_beq_bne_blt_bge_bltu_bgeu | is_lbu_lhu_lw
-  | decoded_rd
-  | reg_pc | reg_op1 | reg_sh | alu_out_0
-  | mem_done
-deriving Enumeration
-
 inductive Register
   | cpu_state
   | latched_store | latched_stalu | latched_branch
@@ -43,39 +33,6 @@ inductive Register
   | decoder_trigger | decoder_pseudo_trigger | trap
 deriving Enumeration
 
-abbrev Output := Sum PUnit Register
-
-instance : Enumeration Output := Enumeration.sum Enumeration.punit inferInstance
-
-namespace Output
-
-def cpuregs_write : Output := .inl .unit
-def cpu_state : Output := .inr .cpu_state
-def latched_store : Output := .inr .latched_store
-def latched_stalu : Output := .inr .latched_stalu
-def latched_branch : Output := .inr .latched_branch
-def latched_is_lu : Output := .inr .latched_is_lu
-def latched_is_lh : Output := .inr .latched_is_lh
-def latched_is_lb : Output := .inr .latched_is_lb
-def latched_rd : Output := .inr .latched_rd
-def mem_wordsize : Output := .inr .mem_wordsize
-def mem_do_prefetch : Output := .inr .mem_do_prefetch
-def mem_do_rinst : Output := .inr .mem_do_rinst
-def mem_do_rdata : Output := .inr .mem_do_rdata
-def mem_do_wdata : Output := .inr .mem_do_wdata
-def decoder_trigger : Output := .inr .decoder_trigger
-def decoder_pseudo_trigger : Output := .inr .decoder_pseudo_trigger
-def trap : Output := .inr .trap
-
-end Output
-
-def inputType : Input → SignalType
-  | .decoded_rd | .reg_sh => .vector 5 .bit
-  | .reg_pc | .reg_op1 => .vector 32 .bit
-  | _ => .bit
-
-@[reducible] def inputMap : SignalMap := EnumeratedMap.of Input inputType
-
 def registerType : Register → SignalType
   | .cpu_state => .vector 8 .bit
   | .latched_rd => .vector 5 .bit
@@ -84,12 +41,50 @@ def registerType : Register → SignalType
 
 @[reducible] def stateMap : SignalMap := EnumeratedMap.of Register registerType
 
-@[reducible] def outputMap : SignalMap :=
-  EnumeratedMap.of Output fun
-    | .inl .unit => .bit
-    | .inr name => registerType name
-
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
+module_ports ports where
+  input resetn : .bit,
+  input instr_jal : .bit,
+  input instr_jalr : .bit,
+  input instr_lb : .bit,
+  input instr_lbu : .bit,
+  input instr_lh : .bit,
+  input instr_lhu : .bit,
+  input instr_lw : .bit,
+  input instr_sb : .bit,
+  input instr_sh : .bit,
+  input instr_sw : .bit,
+  input instr_trap : .bit,
+  input is_lui_auipc_jal : .bit,
+  input is_lb_lh_lw_lbu_lhu : .bit,
+  input is_slli_srli_srai : .bit,
+  input is_jalr_addi_slti_sltiu_xori_ori_andi : .bit,
+  input is_sb_sh_sw : .bit,
+  input is_sll_srl_sra : .bit,
+  input is_beq_bne_blt_bge_bltu_bgeu : .bit,
+  input is_lbu_lhu_lw : .bit,
+  input decoded_rd : .vector 5 .bit,
+  input reg_pc : .vector 32 .bit,
+  input reg_op1 : .vector 32 .bit,
+  input reg_sh : .vector 5 .bit,
+  input alu_out_0 : .bit,
+  input mem_done : .bit,
+  output cpuregs_write : .bit,
+  output cpu_state : .vector 8 .bit,
+  output latched_store : .bit,
+  output latched_stalu : .bit,
+  output latched_branch : .bit,
+  output latched_is_lu : .bit,
+  output latched_is_lh : .bit,
+  output latched_is_lb : .bit,
+  output latched_rd : .vector 5 .bit,
+  output mem_wordsize : .vector 2 .bit,
+  output mem_do_prefetch : .bit,
+  output mem_do_rinst : .bit,
+  output mem_do_rdata : .bit,
+  output mem_do_wdata : .bit,
+  output decoder_trigger : .bit,
+  output decoder_pseudo_trigger : .bit,
+  output trap : .bit
 
 structure Inputs where
   resetn : Bool
@@ -205,8 +200,23 @@ def cpuregsWrite (state : stateMap.Values) : Bool :=
     ((state .latched_branch : Bool) || state .latched_store)
 
 def outputValues (state : stateMap.Values) : outputMap.Values
-  | .inl .unit => cpuregsWrite state
-  | .inr name => state name
+  | .cpuregs_write => cpuregsWrite state
+  | .cpu_state => state .cpu_state
+  | .latched_store => state .latched_store
+  | .latched_stalu => state .latched_stalu
+  | .latched_branch => state .latched_branch
+  | .latched_is_lu => state .latched_is_lu
+  | .latched_is_lh => state .latched_is_lh
+  | .latched_is_lb => state .latched_is_lb
+  | .latched_rd => state .latched_rd
+  | .mem_wordsize => state .mem_wordsize
+  | .mem_do_prefetch => state .mem_do_prefetch
+  | .mem_do_rinst => state .mem_do_rinst
+  | .mem_do_rdata => state .mem_do_rdata
+  | .mem_do_wdata => state .mem_do_wdata
+  | .decoder_trigger => state .decoder_trigger
+  | .decoder_pseudo_trigger => state .decoder_pseudo_trigger
+  | .trap => state .trap
 
 structure Transition where
   state : stateMap.Values
@@ -436,9 +446,6 @@ theorem commands_wellFormed_iff_memory (inputs : Inputs) (state : stateMap.Value
     · simp_all
     · by_cases wdata : (state .mem_do_wdata : Bool) = true <;> simp_all
 
-inductive Rule | outputs
-deriving Enumeration
-
 def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap where
   readsInputs := .empty inputMap
   writesOutputs := .all outputMap
@@ -448,13 +455,9 @@ def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   readsInputs := .all inputMap
   target inputs state := nextState (inputsOfValues inputs) state
 
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
+module_cycle_contract cycleContract for ports where
   state := stateMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule | .outputs => outputRule
-  stateRule := stateRule
-  outputCoverage := by
-    exact List.Perm.refl _
+  output_rule outputs := outputRule
+  state_rule := stateRule
 
 end Silean.Examples.PicoRV.Control

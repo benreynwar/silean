@@ -1,4 +1,6 @@
 import Silean.Examples.PicoRV.Decoder.DecoderCaptureStage
+import Silean.Modules.VectorSlice.VectorSliceCertified
+import Silean.Modules.EqualsConstant.EqualsConstantCertified
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
@@ -48,7 +50,7 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     implementing cycleContract where
   output
     | .outputs => [.stored => Modules.EnabledRegister.Rule.observe,
-      .storedOutputs => Modules.NamedTupleAdapterRule.apply,
+      .storedOutputs => Modules.NamedTupleSplitter.Rule.apply,
       .branch => Modules.EnabledResetRegister.Rule.observe]
   state := [.captureEnable => Primitives.AndRule.apply,
     .reset => Primitives.NotRule.apply,
@@ -57,10 +59,10 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     .zero => Primitives.ConstantRule.apply,
     {.opcodeLui, .opcodeAuipc, .opcodeJal, .opcodeJalr, .opcodeBranch,
       .opcodeLoad, .opcodeStore, .opcodeAluImm, .opcodeAluReg, .funct3Zero} =>
-      Modules.Equality.Rule.apply,
+      Modules.EqualsConstant.Rule.apply,
     .jalr => Primitives.AndRule.apply,
     .immediate => Modules.VectorLayout.Rule.apply,
-    .storedNext => Modules.NamedTupleAdapterRule.apply]
+    .storedNext => Modules.NamedTupleCombiner.Rule.apply]
 
 /-! ## Cycle certification -/
 
@@ -311,70 +313,70 @@ private theorem implements :
       matchesBits 7 0x37 (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x37) _ _ _).mp
-        (opcodeLuiEval.1 Modules.Equality.Rule.apply)
+        (opcodeLuiEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have opcodeAuipcValue : (proposal.2 .opcodeAuipc).outputs .result =
       matchesBits 7 0x17 (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x17) _ _ _).mp
-        (opcodeAuipcEval.1 Modules.Equality.Rule.apply)
+        (opcodeAuipcEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have opcodeJalValue : (proposal.2 .opcodeJal).outputs .result =
       matchesBits 7 0x6f (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x6f) _ _ _).mp
-        (opcodeJalEval.1 Modules.Equality.Rule.apply)
+        (opcodeJalEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have opcodeJalrValue : (proposal.2 .opcodeJalr).outputs .result =
       matchesBits 7 0x67 (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x67) _ _ _).mp
-        (opcodeJalrEval.1 Modules.Equality.Rule.apply)
+        (opcodeJalrEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have opcodeBranchValue : (proposal.2 .opcodeBranch).outputs .result =
       matchesBits 7 0x63 (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x63) _ _ _).mp
-        (opcodeBranchEval.1 Modules.Equality.Rule.apply)
+        (opcodeBranchEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have opcodeLoadValue : (proposal.2 .opcodeLoad).outputs .result =
       matchesBits 7 0x03 (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x03) _ _ _).mp
-        (opcodeLoadEval.1 Modules.Equality.Rule.apply)
+        (opcodeLoadEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have opcodeStoreValue : (proposal.2 .opcodeStore).outputs .result =
       matchesBits 7 0x23 (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x23) _ _ _).mp
-        (opcodeStoreEval.1 Modules.Equality.Rule.apply)
+        (opcodeStoreEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have opcodeAluImmValue : (proposal.2 .opcodeAluImm).outputs .result =
       matchesBits 7 0x13 (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x13) _ _ _).mp
-        (opcodeAluImmEval.1 Modules.Equality.Rule.apply)
+        (opcodeAluImmEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have opcodeAluRegValue : (proposal.2 .opcodeAluReg).outputs .result =
       matchesBits 7 0x33 (opcodeBits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 7 .bit) (bits 7 0x33) _ _ _).mp
-        (opcodeAluRegEval.1 Modules.Equality.Rule.apply)
+        (opcodeAluRegEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, opcodeValue, matchesBits] using equation
   have funct3ZeroValue : (proposal.2 .funct3Zero).outputs .result =
       matchesBits 3 0 (funct3Bits (inputs .mem_rdata_latched)) := by
     have equation := (Modules.EqualsConstant.outputRule_holds_iff
       (.vector 3 .bit) (bits 3 0) _ _ _).mp
-        (funct3ZeroEval.1 Modules.Equality.Rule.apply)
+        (funct3ZeroEval.1 Modules.EqualsConstant.Rule.apply)
     simpa [ProposedValues.childInputs_apply, body, wiring, context,
       EndpointContext.instanceOutput, SignalSource.value, funct3Value, matchesBits] using equation
   have jalrValue : (proposal.2 .jalr).outputs .output =
@@ -398,7 +400,7 @@ private theorem implements :
       captureData (valuesOf inputs) := by
     have valueEquation := (Modules.NamedTupleCombiner.outputRule_holds_iff
       storedMap _ _ _).mp
-      (storedNextEval.1 Modules.NamedTupleAdapterRule.apply)
+      (storedNextEval.1 Modules.NamedTupleCombiner.Rule.apply)
     normalize_child_hyp valueEquation unfolding body, wiring, context
     rw [valueEquation]
     rw [Modules.NamedTupleCombiner.combinedValue_eq_pack]
@@ -427,7 +429,7 @@ private theorem implements :
         (storedValue contractState) := by
     have equation := (Modules.NamedTupleSplitter.outputRule_holds_iff
       storedMap _ _ _).mp
-      (storedOutputsEval.1 Modules.NamedTupleAdapterRule.apply)
+      (storedOutputsEval.1 Modules.NamedTupleSplitter.Rule.apply)
     have inputsEqual : ProposedValues.childInputs body
         (fun name => (layerChildren name).moduleStructure) inputs proposal.2 .storedOutputs =
         (fun | .value => storedValue contractState) := by

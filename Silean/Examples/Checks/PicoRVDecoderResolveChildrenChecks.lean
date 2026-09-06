@@ -21,7 +21,9 @@ def immediateClass (word : Nat) : Inputs where
   is_alu_reg_imm := true
   is_alu_reg_reg := false
 
-def bit (inputs : Inputs) (output : Output) : Bool := outputValues inputs output
+def bit (inputs : Inputs) (output : Output) : Bool :=
+  cast (congrArg SignalType.Denote (output_signalType output))
+    (outputValues inputs output)
 
 -- ADDI x1, x2, 5 is an ordinary immediate operation and belongs to the
 -- non-shift immediate summary class.
@@ -123,7 +125,9 @@ def branchClassInputs : inputMap.Values :=
 def ecallInputs : inputMap.Values :=
   inputMap.set emptyInputs .instr_ecall_ebreak true
 
-def bit (inputs : Inputs) (output : Output) : Bool := outputValues inputs output
+def bit (inputs : Inputs) (output : Output) : Bool :=
+  cast (congrArg SignalType.Denote (output_signalType output))
+    (outputValues inputs output)
 
 -- Exact current flags make an instruction recognized and feed the summaries.
 example : bit (valuesOf addiInputs) .instr_trap = false := by decide

@@ -1,10 +1,13 @@
 import Silean.Foundation.BitVector
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 
 namespace Silean.Examples.PicoRV.Memory
 
 open Silean
+open Silean.Authoring
 
 attribute [local simp] SignalMap.set_other
 
@@ -21,38 +24,10 @@ abbrev Word := Fin 32 → Bool
 abbrev ByteMask := Fin 4 → Bool
 abbrev TwoBits := Fin 2 → Bool
 
-inductive Input
-  | resetn | trap
-  | mem_do_prefetch | mem_do_rinst | mem_do_rdata | mem_do_wdata
-  | next_pc | reg_op1 | reg_op2 | mem_wordsize
-  | mem_ready | mem_rdata
-deriving Enumeration
-
-inductive Output
-  | mem_valid | mem_instr | mem_addr | mem_wdata | mem_wstrb
-  | mem_la_read | mem_la_write | mem_la_addr | mem_la_wdata | mem_la_wstrb
-  | mem_done | mem_rdata_word | mem_rdata_latched
-  | mem_rdata_q
-deriving Enumeration
-
 inductive State
   | mem_state | mem_valid | mem_instr | mem_addr | mem_wdata | mem_wstrb
   | mem_rdata_q
 deriving Enumeration
-
-@[reducible] def inputMap : SignalMap :=
-  EnumeratedMap.of Input fun
-    | .next_pc | .reg_op1 | .reg_op2 | .mem_rdata => .vector 32 .bit
-    | .mem_wordsize => .vector 2 .bit
-    | _ => .bit
-
-def outputType : Output → SignalType
-  | .mem_addr | .mem_wdata | .mem_la_addr | .mem_la_wdata
-  | .mem_rdata_word | .mem_rdata_latched | .mem_rdata_q => .vector 32 .bit
-  | .mem_wstrb | .mem_la_wstrb => .vector 4 .bit
-  | _ => .bit
-
-@[reducible] def outputMap : SignalMap := EnumeratedMap.of Output outputType
 
 def stateType : State → SignalType
   | .mem_state => .vector 2 .bit
@@ -61,7 +36,34 @@ def stateType : State → SignalType
   | _ => .bit
 
 @[reducible] def stateMap : SignalMap := EnumeratedMap.of State stateType
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
+
+module_ports ports where
+  input resetn : .bit,
+  input trap : .bit,
+  input mem_do_prefetch : .bit,
+  input mem_do_rinst : .bit,
+  input mem_do_rdata : .bit,
+  input mem_do_wdata : .bit,
+  input next_pc : .vector 32 .bit,
+  input reg_op1 : .vector 32 .bit,
+  input reg_op2 : .vector 32 .bit,
+  input mem_wordsize : .vector 2 .bit,
+  input mem_ready : .bit,
+  input mem_rdata : .vector 32 .bit,
+  output mem_valid : .bit,
+  output mem_instr : .bit,
+  output mem_addr : .vector 32 .bit,
+  output mem_wdata : .vector 32 .bit,
+  output mem_wstrb : .vector 4 .bit,
+  output mem_la_read : .bit,
+  output mem_la_write : .bit,
+  output mem_la_addr : .vector 32 .bit,
+  output mem_la_wdata : .vector 32 .bit,
+  output mem_la_wstrb : .vector 4 .bit,
+  output mem_done : .bit,
+  output mem_rdata_word : .vector 32 .bit,
+  output mem_rdata_latched : .vector 32 .bit,
+  output mem_rdata_q : .vector 32 .bit
 
 structure Inputs where
   resetn : Bool
@@ -420,12 +422,6 @@ theorem prefetched_instruction_completes_without_transfer (inputs : Inputs)
     normalNextState, phase, stateNumber, laRead, laWrite, responseCaptured,
     prefetchedBits]
 
-inductive Rule
-  | registered
-  | memLaRead | memLaWrite | memLaAddr | memLaWdata | memLaWstrb
-  | memDone | memRdataWord | memRdataLatched | memRdataQ
-deriving Enumeration
-
 namespace RegisteredRule
 inductive Output | mem_valid | mem_instr | mem_addr | mem_wdata | mem_wstrb
 deriving Enumeration
@@ -649,22 +645,18 @@ def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   readsInputs := .all inputMap
   target := fun inputs state => nextState (inputsOfValues inputs) state
 
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
+module_cycle_contract cycleContract for ports where
   state := stateMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule
-    | .registered => registeredRule
-    | .memLaRead => memLaReadRule
-    | .memLaWrite => memLaWriteRule
-    | .memLaAddr => memLaAddrRule
-    | .memLaWdata => memLaWdataRule
-    | .memLaWstrb => memLaWstrbRule
-    | .memDone => memDoneRule
-    | .memRdataWord => memRdataWordRule
-    | .memRdataLatched => memRdataLatchedRule
-    | .memRdataQ => memRdataQRule
-  stateRule := stateRule
-  outputCoverage := by rfl
+  output_rule registered := registeredRule
+  output_rule memLaRead := memLaReadRule
+  output_rule memLaWrite := memLaWriteRule
+  output_rule memLaAddr := memLaAddrRule
+  output_rule memLaWdata := memLaWdataRule
+  output_rule memLaWstrb := memLaWstrbRule
+  output_rule memDone := memDoneRule
+  output_rule memRdataWord := memRdataWordRule
+  output_rule memRdataLatched := memRdataLatchedRule
+  output_rule memRdataQ := memRdataQRule
+  state_rule := stateRule
 
 end Silean.Examples.PicoRV.Memory

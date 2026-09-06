@@ -603,9 +603,19 @@ def naming (signalType : SignalType) (value : signalType.Denote) :
     ModuleNaming (Modules.Constant.moduleStructure signalType value) :=
   namingWith signalType value (.positional signalType)
 
-@[reducible] def namedModule (signalType : SignalType) (value : signalType.Denote) : NamedModule where
-  ports := Modules.Constant.ports signalType
-  moduleStructure := Modules.Constant.moduleStructure signalType value
-  naming := naming signalType value
-
 end Silean.Modules.Constant.Naming
+
+namespace Silean.Modules.Constant
+
+@[reducible] def designWith (signalType : SignalType) (value : signalType.Denote)
+    (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
+    Silean.Naming.NamedModule where
+  ports := ports signalType
+  moduleStructure := moduleStructure signalType value
+  naming := Naming.namingWith signalType value typeNaming
+
+@[reducible] def design (signalType : SignalType) (value : signalType.Denote) :
+    Silean.Naming.NamedModule :=
+  designWith signalType value (.positional signalType)
+
+end Silean.Modules.Constant

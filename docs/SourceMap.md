@@ -155,6 +155,17 @@ the hierarchy. Register-bank child identities are a private named inductive;
 their executable enumeration lists those constructors directly. A public
 closure theorem composes reusable closure laws from the generic leafwise
 hierarchy and child modules, so clients need not unfold those identities.
+
+Reusable modules have one directory each and a uniform public boundary:
+`moduleStructure`, `cycleContract`, `certification`, `certified`, and `design`.
+Ordinary fixed composites use the authoring declarations and place structural
+certification in a sibling `*Certified.lean` file. Recursive/generated modules
+(`Add`, `BinaryToOneHot`, `CombMuxTree`, `Constant`, `Equality`, `Increment`,
+`Mask`, and `Register`) keep their dependent construction in ordinary Lean.
+The reduction specializations (`All`, `Any`) and binary-leafwise
+specializations (`BitwiseAnd`, `BitwiseOr`, `BitwiseXor`) also remain direct
+ordinary-Lean instantiations of their generic `Composition/` machinery. These
+are intentional exceptions to fixed-module syntax, not alternate public APIs.
 The PicoRV32 decoder capture stage separates its readable hardware, exact cycle
 contract, and emission naming in `Examples/PicoRV/Decoder/DecoderCaptureStage.lean`
 from child schedules, state correspondence, and correctness proof in

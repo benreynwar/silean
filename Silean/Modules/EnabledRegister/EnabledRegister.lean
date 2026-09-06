@@ -1,7 +1,7 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Authoring.ModuleCycleContract
 import Silean.Modules.Mux.Mux
-import Silean.Modules.Register
+import Silean.Modules.Register.Register
 
 namespace Silean.Modules
 
@@ -24,7 +24,7 @@ module_design EnabledRegister (signalType : SignalType)
     -- Chooses between the new input and the stored value.
     selection := Modules.Mux.design signalType,
     -- Holds the selected value across cycles.
-    storage := Modules.Register.Naming.namedModule signalType }
+    storage := Modules.Register.design signalType }
   wiring {
     outputs {
       -- The stored value is exposed directly.

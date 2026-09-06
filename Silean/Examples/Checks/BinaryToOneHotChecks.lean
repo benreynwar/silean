@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.BinaryToOneHot
+import Silean.Modules.BinaryToOneHot.BinaryToOneHot
 
 namespace Silean.Examples.Checks.BinaryToOneHot
 

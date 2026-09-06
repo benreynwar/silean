@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Constant
+import Silean.Modules.Constant.Constant
 
 namespace Silean.Examples.Checks.Constant
 

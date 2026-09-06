@@ -1,6 +1,6 @@
 import Silean.FIRRTL
 import Silean.Foundation.BitVector
-import Silean.Modules.BitwiseXor
+import Silean.Modules.BitwiseXor.BitwiseXor
 
 namespace Silean.Examples.Checks.BitwiseXor
 

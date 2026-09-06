@@ -61,9 +61,9 @@ private def signedLessInputs : Alu.Values :=
 
 -- The closed renderer checks and accepts the concrete hierarchy.
 noncomputable example : RenderResult String :=
-  renderClosedCircuit Alu.Naming.naming
+  renderClosedCircuit Alu.naming
 
-#guard renderModuleKey Alu.Naming.naming.key = "picorv32_alu_structural"
+#guard renderModuleKey Alu.naming.key = "picorv32_alu"
 #guard Alu.Naming.ports.inputs.name .reg_op1 = "reg_op1"
 #guard Alu.Naming.ports.inputs.name .is_lui_auipc_jal_jalr_addi_add_sub =
   "is_lui_auipc_jal_jalr_addi_add_sub"

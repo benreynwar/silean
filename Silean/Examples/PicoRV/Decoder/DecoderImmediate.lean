@@ -1,4 +1,6 @@
 import Silean.Examples.PicoRV.Decoder.DecoderTypes
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Foundation.SignalLayout
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
@@ -6,6 +8,7 @@ import Silean.Contracts.Cycle.CycleEvaluation
 namespace Silean.Examples.PicoRV.Decoder.Immediate
 
 open Silean
+open Silean.Authoring
 open Silean.Examples.PicoRV.Decoder
 
 /-! Combinational immediate selection for the configured PicoRV32 decoder.
@@ -14,27 +17,19 @@ means that the resolve stage must retain its existing immediate. The hardware
 boundary exposes this as `valid` plus `value`; the value is zero when invalid
 and must not be consumed. Selection order matches the source `case (1'b1)`. -/
 
-inductive Input
-  | word | decoded_imm_j
-  | instr_jal | instr_lui | instr_auipc | instr_jalr
-  | is_lb_lh_lw_lbu_lhu | is_alu_reg_imm
-  | is_beq_bne_blt_bge_bltu_bgeu | is_sb_sh_sw
-deriving Enumeration
-
-inductive Output | valid | value
-deriving Enumeration
-
-def inputType : Input → SignalType
-  | .word | .decoded_imm_j => .vector 32 .bit
-  | _ => .bit
-
-def outputType : Output → SignalType
-  | .value => .vector 32 .bit
-  | .valid => .bit
-
-@[reducible] def inputMap : SignalMap := EnumeratedMap.of Input inputType
-@[reducible] def outputMap : SignalMap := EnumeratedMap.of Output outputType
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
+module_ports ports where
+  input word : .vector 32 .bit,
+  input decoded_imm_j : .vector 32 .bit,
+  input instr_jal : .bit,
+  input instr_lui : .bit,
+  input instr_auipc : .bit,
+  input instr_jalr : .bit,
+  input is_lb_lh_lw_lbu_lhu : .bit,
+  input is_alu_reg_imm : .bit,
+  input is_beq_bne_blt_bge_bltu_bgeu : .bit,
+  input is_sb_sh_sw : .bit,
+  output valid : .bit,
+  output value : .vector 32 .bit
 
 structure Inputs where
   word : Word
@@ -73,23 +68,17 @@ def outputValues (inputs : Inputs) : outputMap.Values
   | .valid => (evaluate inputs).isSome
   | .value => (evaluate inputs).getD (wordOfNat 0)
 
-inductive Rule | apply
-deriving Enumeration
-
 def outputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap where
   readsInputs := .all inputMap
   writesOutputs := .all outputMap
   target inputs _ := outputValues (valuesOf inputs)
 
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
+module_cycle_contract cycleContract for ports where
   state := emptySignalMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule | .apply => outputRule
-  stateRule := Contracts.Cycle.CycleStateRule.empty _
-  outputCoverage := by
-    change outputMap.labels.values.Perm outputMap.labels.values
-    rfl
+  output_rule apply := outputRule
+  state_rule where
+    reads := []
+    next := {}
 
 @[simp] theorem outputRule_reads (input : Input) :
     input ∈ outputRule.readsInputs.labels := by

@@ -1,12 +1,14 @@
-import Silean.Examples.PicoRV.Decoder.DecoderCaptureStageCertified
+import Silean.Examples.PicoRV.Decoder.DecoderCaptureStage
 import Silean.Examples.PicoRV.Decoder.DecoderResolveStage
-import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Contracts.Cycle.CycleBlackbox
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModuleDesign
+import Silean.Authoring.ModulePorts
 
 namespace Silean.Examples.PicoRV.Decoder
 
 open Silean
+open Silean.Authoring
 
 /-! Exact cycle contract for the two-stage registered instruction decoder in
 the selected RV32I PicoRV32 configuration. The first stage captures opcode
@@ -22,15 +24,60 @@ control region consumes that source signal; every captured instruction sets it
 to false. Most decoder registers are intentionally not reset by PicoRV32, so
 their pre-decode values remain unconstrained contract state. -/
 
-inductive Input
-  | resetn
-  | mem_do_rinst
-  | mem_done
-  | mem_rdata_latched
-  | decoder_trigger
-  | decoder_pseudo_trigger
-  | mem_rdata_q
-deriving Enumeration
+module_ports ports where
+  input resetn : .bit,
+  input mem_do_rinst : .bit,
+  input mem_done : .bit,
+  input mem_rdata_latched : .vector 32 .bit,
+  input decoder_trigger : .bit,
+  input decoder_pseudo_trigger : .bit,
+  input mem_rdata_q : .vector 32 .bit,
+  output instr_trap : .bit,
+  output instr_lui : .bit,
+  output instr_jal : .bit,
+  output instr_jalr : .bit,
+  output instr_beq : .bit,
+  output instr_bne : .bit,
+  output instr_bge : .bit,
+  output instr_bgeu : .bit,
+  output instr_lb : .bit,
+  output instr_lh : .bit,
+  output instr_lw : .bit,
+  output instr_lbu : .bit,
+  output instr_lhu : .bit,
+  output instr_sb : .bit,
+  output instr_sh : .bit,
+  output instr_sw : .bit,
+  output instr_xori : .bit,
+  output instr_ori : .bit,
+  output instr_andi : .bit,
+  output instr_slli : .bit,
+  output instr_srli : .bit,
+  output instr_srai : .bit,
+  output instr_sub : .bit,
+  output instr_sll : .bit,
+  output instr_xor : .bit,
+  output instr_srl : .bit,
+  output instr_sra : .bit,
+  output instr_or : .bit,
+  output instr_and : .bit,
+  output decoded_rd : .vector 5 .bit,
+  output decoded_rs1 : .vector 5 .bit,
+  output decoded_rs2 : .vector 5 .bit,
+  output decoded_imm : .vector 32 .bit,
+  output decoded_imm_j : .vector 32 .bit,
+  output is_lui_auipc_jal : .bit,
+  output is_lb_lh_lw_lbu_lhu : .bit,
+  output is_slli_srli_srai : .bit,
+  output is_jalr_addi_slti_sltiu_xori_ori_andi : .bit,
+  output is_sb_sh_sw : .bit,
+  output is_sll_srl_sra : .bit,
+  output is_lui_auipc_jal_jalr_addi_add_sub : .bit,
+  output is_slti_blt_slt : .bit,
+  output is_sltiu_bltu_sltu : .bit,
+  output is_beq_bne_blt_bge_bltu_bgeu : .bit,
+  output is_lbu_lhu_lw : .bit,
+  output is_compare : .bit
 
 inductive Register
   | instr_lui | instr_auipc | instr_jal | instr_jalr
@@ -51,45 +98,12 @@ inductive Register
   | is_lbu_lhu_lw | is_alu_reg_imm | is_alu_reg_reg | is_compare
 deriving Enumeration
 
-/-! Only signals read outside the decoder are ports. Other decode registers
-remain private state because they feed summary flags or `instr_trap` locally. -/
-inductive Output
-  | instr_trap
-  | instr_lui | instr_jal | instr_jalr
-  | instr_beq | instr_bne | instr_bge | instr_bgeu
-  | instr_lb | instr_lh | instr_lw | instr_lbu | instr_lhu
-  | instr_sb | instr_sh | instr_sw
-  | instr_xori | instr_ori | instr_andi
-  | instr_slli | instr_srli | instr_srai
-  | instr_sub | instr_sll | instr_xor | instr_srl | instr_sra | instr_or | instr_and
-  | decoded_rd | decoded_rs1 | decoded_rs2 | decoded_imm | decoded_imm_j
-  | is_lui_auipc_jal | is_lb_lh_lw_lbu_lhu | is_slli_srli_srai
-  | is_jalr_addi_slti_sltiu_xori_ori_andi | is_sb_sh_sw | is_sll_srl_sra
-  | is_lui_auipc_jal_jalr_addi_add_sub | is_slti_blt_slt
-  | is_sltiu_bltu_sltu | is_beq_bne_blt_bge_bltu_bgeu
-  | is_lbu_lhu_lw | is_compare
-deriving Enumeration
-
-@[reducible] def inputMap : SignalMap :=
-  EnumeratedMap.of Input fun
-    | .mem_rdata_latched | .mem_rdata_q => .vector 32 .bit
-    | _ => .bit
-
 def registerType : Register → SignalType
   | .decoded_rd | .decoded_rs1 | .decoded_rs2 => .vector 5 .bit
   | .decoded_imm | .decoded_imm_j => .vector 32 .bit
   | _ => .bit
 
 @[reducible] def stateMap : SignalMap := EnumeratedMap.of Register registerType
-
-def outputType : Output → SignalType
-  | .decoded_rd | .decoded_rs1 | .decoded_rs2 => .vector 5 .bit
-  | .decoded_imm | .decoded_imm_j => .vector 32 .bit
-  | _ => .bit
-
-@[reducible] def outputMap : SignalMap := EnumeratedMap.of Output outputType
-
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
 
 structure Inputs where
   resetn : Bool
@@ -433,9 +447,6 @@ def outputValues (state : stateMap.Values) : outputMap.Values
   | .is_lbu_lhu_lw => state .is_lbu_lhu_lw
   | .is_compare => state .is_compare
 
-inductive Rule | outputs
-deriving Enumeration
-
 def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap where
   readsInputs := .empty inputMap
   writesOutputs := .all outputMap
@@ -445,14 +456,10 @@ def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   readsInputs := .all inputMap
   target inputs state := nextState (valuesOf inputs) state
 
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
+module_cycle_contract cycleContract for ports where
   state := stateMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule | .outputs => outputRule
-  stateRule := stateRule
-  outputCoverage := by
-    exact List.Perm.refl _
+  output_rule outputs := outputRule
+  state_rule := stateRule
 
 @[simp] theorem outputRule_holds_iff
     (inputs : ports.inputs.Values) (state : stateMap.Values)
@@ -460,262 +467,94 @@ def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
     outputRule.Holds inputs state outputs ↔ outputs = outputValues state := by
   simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds]
 
-/-! ## Two-stage structural decomposition -/
-
-inductive Instance | capture | resolve
-deriving Enumeration
-
-@[reducible] def instancePorts : InstancePorts :=
-  EnumeratedMap.of Instance fun
-    | .capture => CaptureStage.ports
-    | .resolve => ResolveStage.ports
-
-@[reducible] def context : EndpointContext where
-  ports := ports
-  instancePorts := instancePorts
-
-def wiring : Wiring context.ports context.instancePorts where
-  moduleOutput := fun
-    | .instr_trap => context.instanceOutput .resolve .instr_trap
-    | .instr_lui => context.instanceOutput .capture .instr_lui
-    | .instr_jal => context.instanceOutput .capture .instr_jal
-    | .instr_jalr => context.instanceOutput .capture .instr_jalr
-    | .instr_beq => context.instanceOutput .resolve .instr_beq
-    | .instr_bne => context.instanceOutput .resolve .instr_bne
-    | .instr_bge => context.instanceOutput .resolve .instr_bge
-    | .instr_bgeu => context.instanceOutput .resolve .instr_bgeu
-    | .instr_lb => context.instanceOutput .resolve .instr_lb
-    | .instr_lh => context.instanceOutput .resolve .instr_lh
-    | .instr_lw => context.instanceOutput .resolve .instr_lw
-    | .instr_lbu => context.instanceOutput .resolve .instr_lbu
-    | .instr_lhu => context.instanceOutput .resolve .instr_lhu
-    | .instr_sb => context.instanceOutput .resolve .instr_sb
-    | .instr_sh => context.instanceOutput .resolve .instr_sh
-    | .instr_sw => context.instanceOutput .resolve .instr_sw
-    | .instr_xori => context.instanceOutput .resolve .instr_xori
-    | .instr_ori => context.instanceOutput .resolve .instr_ori
-    | .instr_andi => context.instanceOutput .resolve .instr_andi
-    | .instr_slli => context.instanceOutput .resolve .instr_slli
-    | .instr_srli => context.instanceOutput .resolve .instr_srli
-    | .instr_srai => context.instanceOutput .resolve .instr_srai
-    | .instr_sub => context.instanceOutput .resolve .instr_sub
-    | .instr_sll => context.instanceOutput .resolve .instr_sll
-    | .instr_xor => context.instanceOutput .resolve .instr_xor
-    | .instr_srl => context.instanceOutput .resolve .instr_srl
-    | .instr_sra => context.instanceOutput .resolve .instr_sra
-    | .instr_or => context.instanceOutput .resolve .instr_or
-    | .instr_and => context.instanceOutput .resolve .instr_and
-    | .decoded_rd => context.instanceOutput .capture .decoded_rd
-    | .decoded_rs1 => context.instanceOutput .capture .decoded_rs1
-    | .decoded_rs2 => context.instanceOutput .capture .decoded_rs2
-    | .decoded_imm => context.instanceOutput .resolve .decoded_imm
-    | .decoded_imm_j => context.instanceOutput .capture .decoded_imm_j
-    | .is_lui_auipc_jal => context.instanceOutput .resolve .is_lui_auipc_jal
-    | .is_lb_lh_lw_lbu_lhu => context.instanceOutput .capture .is_lb_lh_lw_lbu_lhu
-    | .is_slli_srli_srai => context.instanceOutput .resolve .is_slli_srli_srai
-    | .is_jalr_addi_slti_sltiu_xori_ori_andi =>
-        context.instanceOutput .resolve .is_jalr_addi_slti_sltiu_xori_ori_andi
-    | .is_sb_sh_sw => context.instanceOutput .capture .is_sb_sh_sw
-    | .is_sll_srl_sra => context.instanceOutput .resolve .is_sll_srl_sra
-    | .is_lui_auipc_jal_jalr_addi_add_sub =>
-        context.instanceOutput .resolve .is_lui_auipc_jal_jalr_addi_add_sub
-    | .is_slti_blt_slt => context.instanceOutput .resolve .is_slti_blt_slt
-    | .is_sltiu_bltu_sltu => context.instanceOutput .resolve .is_sltiu_bltu_sltu
-    | .is_beq_bne_blt_bge_bltu_bgeu =>
-        context.instanceOutput .capture .is_beq_bne_blt_bge_bltu_bgeu
-    | .is_lbu_lhu_lw => context.instanceOutput .resolve .is_lbu_lhu_lw
-    | .is_compare => context.instanceOutput .resolve .is_compare
-  instanceInput := fun
-    | .capture, .resetn => context.moduleInput .resetn
-    | .capture, .mem_do_rinst => context.moduleInput .mem_do_rinst
-    | .capture, .mem_done => context.moduleInput .mem_done
-    | .capture, .mem_rdata_latched => context.moduleInput .mem_rdata_latched
-    | .resolve, .resetn => context.moduleInput .resetn
-    | .resolve, .decoder_trigger => context.moduleInput .decoder_trigger
-    | .resolve, .decoder_pseudo_trigger => context.moduleInput .decoder_pseudo_trigger
-    | .resolve, .mem_rdata_q => context.moduleInput .mem_rdata_q
-    | .resolve, .instr_lui => context.instanceOutput .capture .instr_lui
-    | .resolve, .instr_auipc => context.instanceOutput .capture .instr_auipc
-    | .resolve, .instr_jal => context.instanceOutput .capture .instr_jal
-    | .resolve, .instr_jalr => context.instanceOutput .capture .instr_jalr
-    | .resolve, .decoded_imm_j => context.instanceOutput .capture .decoded_imm_j
-    | .resolve, .is_beq_bne_blt_bge_bltu_bgeu =>
-        context.instanceOutput .capture .is_beq_bne_blt_bge_bltu_bgeu
-    | .resolve, .is_lb_lh_lw_lbu_lhu =>
-        context.instanceOutput .capture .is_lb_lh_lw_lbu_lhu
-    | .resolve, .is_sb_sh_sw => context.instanceOutput .capture .is_sb_sh_sw
-    | .resolve, .is_alu_reg_imm => context.instanceOutput .capture .is_alu_reg_imm
-    | .resolve, .is_alu_reg_reg => context.instanceOutput .capture .is_alu_reg_reg
-
-@[reducible] def body : ModuleBody := ⟨context, wiring⟩
-
-@[reducible] def childContracts : Contracts.Cycle.ChildCycleContracts body
-  | .capture => CaptureStage.cycleContract
-  | .resolve => ResolveStage.cycleContract
-
-@[reducible] def structuralChildren :
-    (child : instancePorts.Name) → ModuleStructure (instancePorts.ports child)
-  | .capture => CaptureStage.moduleStructure
-  | .resolve => ResolveStage.cycleContract.blackboxStructure
-
-def moduleStructure : ModuleStructure ports := .composite body structuralChildren
-
-@[reducible] noncomputable def certifiedChildren :
-    Contracts.Cycle.Certification.Layer.ChildStructures body childContracts
-  | .capture => CaptureStage.certified.certifiedStructure
-  | .resolve => ResolveStage.cycleContract.blackboxCertified.certifiedStructure
-
-namespace LayerCertification
-
-open Silean.Contracts.Cycle.Certification.Layer
-
-private abbrev captureRule : RuleOccurrence body childContracts :=
-  ⟨.capture, .outputs⟩
-
-private abbrev resolveRule : RuleOccurrence body childContracts :=
-  ⟨.resolve, .outputs⟩
-
-
-def scheduleOrders :
-    ScheduleDerivation.RuleScheduleOrders body childContracts cycleContract where
-  output := fun | .outputs => [captureRule, resolveRule]
-  state := [captureRule, resolveRule]
-
-def derivedRuleSchedules :
-    ScheduleDerivation.DerivedRuleSchedules body childContracts cycleContract := by
-  derive_rule_schedules scheduleOrders
-
-abbrev ruleSchedules := derivedRuleSchedules.schedules
-
-theorem coversChildren : ruleSchedules.CoversChildren :=
-  derivedRuleSchedules.coversChildren
-
-section Certification
-
-variable (layerChildren : ChildStructures body childContracts)
-
-private def stateCorresponds (contractState : cycleContract.state.Values)
-    (structuralState :
-      (Contracts.Cycle.Certification.Layer.moduleStructure body layerChildren).State) : Prop :=
-  (layerChildren .capture).certification.stateCorresponds
-      (captureState contractState) (structuralState .capture) ∧
-    (layerChildren .resolve).certification.stateCorresponds
-      (resolveState contractState) (structuralState .resolve)
-
-private theorem hasCorrespondingState
-    (structuralState :
-      (Contracts.Cycle.Certification.Layer.moduleStructure body layerChildren).State) :
-    ∃ contractState, stateCorresponds layerChildren contractState structuralState := by
-  rcases (layerChildren .capture).certification.hasCorrespondingState
-      (structuralState .capture) with ⟨capture, captureCorresponds⟩
-  rcases (layerChildren .resolve).certification.hasCorrespondingState
-      (structuralState .resolve) with ⟨resolve, resolveCorresponds⟩
-  refine ⟨mergeState capture resolve, ?_⟩
-  exact ⟨by simpa using captureCorresponds, by simpa using resolveCorresponds⟩
-
-private theorem implements :
-    Contracts.Cycle.Implements
-      (Contracts.Cycle.Certification.Layer.moduleStructure body layerChildren)
-      cycleContract (stateCorresponds layerChildren) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
-  have captureMatches := childSolutionMatchesContract layerChildren inputs
-    structuralState proposal satisfies .capture (captureState contractState) corresponds.1
-  have resolveMatches := childSolutionMatchesContract layerChildren inputs
-    structuralState proposal satisfies .resolve (resolveState contractState) corresponds.2
-  have captureOutputs : (proposal.2 .capture).outputs = captureState contractState :=
-    (CaptureStage.outputRule_holds_iff _ _ _).mp
-      (captureMatches.1.1 CaptureStage.Rule.outputs)
-  have resolveOutputs : (proposal.2 .resolve).outputs =
-      ResolveStage.outputValues (resolveInputs (valuesOf inputs)
-        (captureState contractState)) (resolveState contractState) := by
-    have held := (ResolveStage.outputRule_holds_iff _ _ _).mp
-      (resolveMatches.1.1 ResolveStage.Rule.outputs)
-    simpa [ResolveStage.valuesOf, resolveInputs, valuesOf,
-      ProposedValues.childInputs_apply, body, wiring, context, instancePorts,
-      EndpointContext.moduleInput, EndpointContext.instanceOutput,
-      SignalSource.value, captureOutputs] using held
-  have captureNext :
-      (childContracts .capture).stateRule.apply
-          (ProposedValues.childInputs body
-            (fun child => (layerChildren child).moduleStructure)
-            inputs proposal.2 .capture) (captureState contractState) =
-        CaptureStage.nextState (captureInputs (valuesOf inputs))
-          (captureState contractState) := by
-    rfl
-  have resolveNext :
-      (childContracts .resolve).stateRule.apply
-          (ProposedValues.childInputs body
-            (fun child => (layerChildren child).moduleStructure)
-            inputs proposal.2 .resolve) (resolveState contractState) =
-        ResolveStage.nextState
-          (resolveInputs (valuesOf inputs) (captureState contractState))
-          (resolveState contractState) := by
-    change ResolveStage.nextState
-      (resolveInputs (valuesOf inputs) (proposal.2 .capture).outputs)
-        (resolveState contractState) = _
-    rw [captureOutputs]
-  let next := nextState (valuesOf inputs) contractState
-  refine ⟨next, ?_, ?_⟩
-  · constructor
-    · intro rule
-      cases rule
-      rw [outputRule_holds_iff]
-      funext output
-      have boundary : proposal.outputs output =
-          (wiring.moduleOutput output).value inputs
-            (fun child => (proposal.2 child).outputs) := by
-        simpa [ProposedValues.outputs, ProposedValues.boundaryOutputsSatisfy] using
-          satisfies.1 output
-      cases output <;>
-        simp only [wiring, context, EndpointContext.instanceOutput,
-          SignalSource.value] at boundary <;>
-        rw [boundary] <;>
-        first
-        | exact (congrFun captureOutputs _).trans rfl
-        | exact (congrFun resolveOutputs _).trans rfl
-    · change next = nextState (valuesOf inputs) contractState
-      rfl
-  · constructor
-    · change (layerChildren .capture).certification.stateCorresponds
-        (captureState next) (proposal.2 .capture).nextState
-      rw [show captureState next =
-          CaptureStage.nextState (captureInputs (valuesOf inputs))
-            (captureState contractState) by simp [next, nextState]]
-      rw [← captureNext]
-      exact captureMatches.2
-    · change (layerChildren .resolve).certification.stateCorresponds
-        (resolveState next) (proposal.2 .resolve).nextState
-      rw [show resolveState next = ResolveStage.nextState
-          (resolveInputs (valuesOf inputs) (captureState contractState))
-          (resolveState contractState) by simp [next, nextState]]
-      rw [← resolveNext]
-      exact resolveMatches.2
-
-end Certification
-
-end LayerCertification
-
-noncomputable opaque certifiedLayer :
-    Contracts.Cycle.ModuleCycleCertifiedLayer body childContracts cycleContract :=
-  LayerCertification.ruleSchedules.certifiedLayer
-    LayerCertification.coversChildren LayerCertification.stateCorresponds
-    LayerCertification.hasCorrespondingState LayerCertification.implements
-
-noncomputable opaque certification :
-    Contracts.Cycle.ModuleCycleCertification moduleStructure cycleContract :=
-  certifiedLayer.certifyComposite structuralChildren certifiedChildren (by
-    intro child
-    cases child <;> rfl)
-
-/-- The decoder hierarchy certified against its cycle contract. The capture
-stage is concrete; the resolve stage remains an explicit blackbox. -/
-noncomputable def certified : Contracts.Cycle.ModuleCycleCertified ports :=
-  certification.bundle
-
-@[simp] theorem certified_moduleStructure :
-    certified.moduleStructure = moduleStructure := rfl
-
-@[simp] theorem certified_cycleContract :
-    certified.cycleContract = cycleContract := rfl
-
 end Silean.Examples.PicoRV.Decoder
+
+namespace Silean.Examples.PicoRV
+
+open Silean
+open Silean.Authoring
+
+/-! ## Two-stage structural decomposition
+
+The capture stage is concrete. The resolve stage remains an explicit contract
+blackbox at this boundary until its structural-equivalence proof is complete. -/
+
+module_design Decoder where
+  boundary (Decoder.ports) (naming := Decoder.Naming.ports)
+  instances {
+    capture := Decoder.CaptureStage.design,
+    resolve := Decoder.ResolveStage.cycleContract.blackboxDesign
+      "PicoRVDecoderResolve" Decoder.ResolveStage.Naming.ports }
+  wiring {
+  outputs {
+    .instr_trap := resolve.instr_trap,
+    .instr_lui := capture.instr_lui,
+    .instr_jal := capture.instr_jal,
+    .instr_jalr := capture.instr_jalr,
+    .instr_beq := resolve.instr_beq,
+    .instr_bne := resolve.instr_bne,
+    .instr_bge := resolve.instr_bge,
+    .instr_bgeu := resolve.instr_bgeu,
+    .instr_lb := resolve.instr_lb,
+    .instr_lh := resolve.instr_lh,
+    .instr_lw := resolve.instr_lw,
+    .instr_lbu := resolve.instr_lbu,
+    .instr_lhu := resolve.instr_lhu,
+    .instr_sb := resolve.instr_sb,
+    .instr_sh := resolve.instr_sh,
+    .instr_sw := resolve.instr_sw,
+    .instr_xori := resolve.instr_xori,
+    .instr_ori := resolve.instr_ori,
+    .instr_andi := resolve.instr_andi,
+    .instr_slli := resolve.instr_slli,
+    .instr_srli := resolve.instr_srli,
+    .instr_srai := resolve.instr_srai,
+    .instr_sub := resolve.instr_sub,
+    .instr_sll := resolve.instr_sll,
+    .instr_xor := resolve.instr_xor,
+    .instr_srl := resolve.instr_srl,
+    .instr_sra := resolve.instr_sra,
+    .instr_or := resolve.instr_or,
+    .instr_and := resolve.instr_and,
+    .decoded_rd := capture.decoded_rd,
+    .decoded_rs1 := capture.decoded_rs1,
+    .decoded_rs2 := capture.decoded_rs2,
+    .decoded_imm := resolve.decoded_imm,
+    .decoded_imm_j := capture.decoded_imm_j,
+    .is_lui_auipc_jal := resolve.is_lui_auipc_jal,
+    .is_lb_lh_lw_lbu_lhu := capture.is_lb_lh_lw_lbu_lhu,
+    .is_slli_srli_srai := resolve.is_slli_srli_srai,
+    .is_jalr_addi_slti_sltiu_xori_ori_andi :=
+      resolve.is_jalr_addi_slti_sltiu_xori_ori_andi,
+    .is_sb_sh_sw := capture.is_sb_sh_sw,
+    .is_sll_srl_sra := resolve.is_sll_srl_sra,
+    .is_lui_auipc_jal_jalr_addi_add_sub :=
+      resolve.is_lui_auipc_jal_jalr_addi_add_sub,
+    .is_slti_blt_slt := resolve.is_slti_blt_slt,
+    .is_sltiu_bltu_sltu := resolve.is_sltiu_bltu_sltu,
+    .is_beq_bne_blt_bge_bltu_bgeu := capture.is_beq_bne_blt_bge_bltu_bgeu,
+    .is_lbu_lhu_lw := resolve.is_lbu_lhu_lw,
+    .is_compare := resolve.is_compare }
+  instance (.capture) {
+    .resetn := input.resetn,
+    .mem_do_rinst := input.mem_do_rinst,
+    .mem_done := input.mem_done,
+    .mem_rdata_latched := input.mem_rdata_latched }
+  instance (.resolve) {
+    .resetn := input.resetn,
+    .decoder_trigger := input.decoder_trigger,
+    .decoder_pseudo_trigger := input.decoder_pseudo_trigger,
+    .mem_rdata_q := input.mem_rdata_q,
+    .instr_lui := capture.instr_lui,
+    .instr_auipc := capture.instr_auipc,
+    .instr_jal := capture.instr_jal,
+    .instr_jalr := capture.instr_jalr,
+    .decoded_imm_j := capture.decoded_imm_j,
+    .is_beq_bne_blt_bge_bltu_bgeu := capture.is_beq_bne_blt_bge_bltu_bgeu,
+    .is_lb_lh_lw_lbu_lhu := capture.is_lb_lh_lw_lbu_lhu,
+    .is_sb_sh_sw := capture.is_sb_sh_sw,
+    .is_alu_reg_imm := capture.is_alu_reg_imm,
+    .is_alu_reg_reg := capture.is_alu_reg_reg }
+  }
+
+end Silean.Examples.PicoRV

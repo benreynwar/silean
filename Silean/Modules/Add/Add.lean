@@ -1,7 +1,7 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Foundation.BitVector
-import Silean.Modules.Constant
+import Silean.Modules.Constant.Constant
 import Silean.Modules.FullAdder.FullAdderCertified
 import Silean.Modules.VectorConcat.VectorConcatCertified
 import Silean.Naming.SignalAdapterNaming
@@ -755,16 +755,13 @@ def naming : (width : Nat) → ModuleNaming (Modules.Add.moduleStructure width)
           | .highBit => Silean.Naming.SignalAdapter.combiner Modules.Add.highCombiner
           | .concat => VectorConcat.naming .bit width 1)
 
-def namedModule (width : Nat) : NamedModule where
-  ports := Modules.Add.ports width
-  moduleStructure := Modules.Add.moduleStructure width
-  naming := naming width
-
 end Silean.Modules.Add.Naming
 
 namespace Silean.Modules.Add
 
-@[reducible] def design (width : Nat) : Silean.Naming.NamedModule :=
-  Naming.namedModule width
+@[reducible] def design (width : Nat) : Silean.Naming.NamedModule where
+  ports := ports width
+  moduleStructure := moduleStructure width
+  naming := Naming.naming width
 
 end Silean.Modules.Add

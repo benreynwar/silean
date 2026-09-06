@@ -1,9 +1,9 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
-import Silean.Modules.BinaryToOneHot
+import Silean.Modules.BinaryToOneHot.BinaryToOneHot
 import Silean.Modules.Mux.Mux
 import Silean.Modules.Mux.MuxCertified
-import Silean.Modules.VectorSplit
+import Silean.Modules.VectorSplit.VectorSplitCertified
 import Silean.Naming.SignalAdapterNaming
 
 namespace Silean.Modules.CombMuxTree
@@ -621,7 +621,7 @@ def namingWith (element : SignalType) : (indexWidth : Nat) →
           | .upper => "select_upper"
           | .mux => "mux")
         (fun
-          | .valuesSplit => VectorSplit.Naming.namingWith element
+          | .valuesSplit => VectorSplit.namingWith element
               (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
               elementNaming
           | .indexSplit => Silean.Naming.SignalAdapter.splitter
@@ -635,13 +635,19 @@ def naming (element : SignalType) (indexWidth : Nat) :
     ModuleNaming (Modules.CombMuxTree.moduleStructure element indexWidth) :=
   namingWith element indexWidth (.positional element)
 
-@[reducible] def namedModuleWith (element : SignalType) (indexWidth : Nat)
-    (elementNaming : SignalTypeNaming element) : NamedModule where
-  ports := Modules.CombMuxTree.ports element indexWidth
-  moduleStructure := Modules.CombMuxTree.moduleStructure element indexWidth
-  naming := namingWith element indexWidth elementNaming
-
-@[reducible] def namedModule (element : SignalType) (indexWidth : Nat) : NamedModule :=
-  namedModuleWith element indexWidth (.positional element)
-
 end Silean.Modules.CombMuxTree.Naming
+
+namespace Silean.Modules.CombMuxTree
+
+@[reducible] def designWith (element : SignalType) (indexWidth : Nat)
+    (elementNaming : Silean.Naming.SignalTypeNaming element) :
+    Silean.Naming.NamedModule where
+  ports := ports element indexWidth
+  moduleStructure := moduleStructure element indexWidth
+  naming := Naming.namingWith element indexWidth elementNaming
+
+@[reducible] def design (element : SignalType) (indexWidth : Nat) :
+    Silean.Naming.NamedModule :=
+  designWith element indexWidth (.positional element)
+
+end Silean.Modules.CombMuxTree

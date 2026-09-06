@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EqualsConstant
+import Silean.Modules.EqualsConstant.EqualsConstantCertified
 
 namespace Silean.Examples.Checks.EqualsConstant
 
@@ -38,11 +38,11 @@ example (inputs : (Modules.EqualsConstant.ports signalType).inputs.Values)
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
-#guard match renderCircuit (Modules.EqualsConstant.Naming.naming threeBits five) with
+#guard match renderCircuit (Modules.EqualsConstant.naming threeBits five) with
   | .error _ => false
-  | .ok text => ["public module equals_constant_structural",
+  | .ok text => ["public module EqualsConstant",
       "input value : UInt<1>[3]", "output result : UInt<1>",
-      "inst constant", "inst equality",
-      "connect equality.right, constant.value"].all (contains text)
+      "inst constantValue", "inst equality",
+      "connect equality.right, constantValue.value"].all (contains text)
 
 end Silean.Examples.Checks.EqualsConstant

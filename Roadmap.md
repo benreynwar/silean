@@ -32,6 +32,9 @@ The repository currently has:
   uniqueness without defining circuit meaning;
 - proof-producing schedule tactics that derive kernel-checked schedules and
   child-rule coverage from an explicit, module-specific rule order;
+- concise authoring declarations for ordinary fixed ports, structures,
+  contracts, schedules, and certification assembly, with recursive and
+  generated designs deliberately retaining ordinary Lean;
 - parametric certified layers whose proofs use child contracts rather than
   child implementations;
 - reset-synchronized trace contracts with ternary output expectations;
@@ -173,7 +176,7 @@ certification relies only on the child's public output theorem. This replaces
 the bespoke word splitter, immediate combiner, per-bit wiring, and five-way
 per-index proof without exposing the generic child's implementation.
 
-### Improve the module-authoring surface
+### Improve the module-authoring surface (completed)
 
 The repository now contains enough varied modules to distinguish genuinely
 repeated authoring patterns from one-off conveniences, while it is still small
@@ -371,6 +374,76 @@ Proceed in stages:
    construction, schedule, naming, and bundle assembly have been removed.
    Recursive `Increment` and `Add` remain ordinary Lean internally, but expose
    the same public design and certification boundaries when used as children.
+   The latest reusable-module pass moved the remaining flat files into
+   per-module directories and migrated fixed composites `EqualsConstant`,
+   `VectorSlice`, and `VectorSplit`. They now use `module_design`, keep their
+   natural cycle contracts in the design file, and isolate certification in
+   `*Certified.lean`. Recursive or generated modules `Add`, `BinaryToOneHot`,
+   `CombMuxTree`, `Constant`, `Equality`, `Increment`, `Mask`, and `Register`
+   deliberately retain ordinary Lean: their child families are selected by
+   recursion over widths or signal shapes, so a fixed declaration would hide
+   rather than clarify the construction. `All`, `Any`, `BitwiseAnd`,
+   `BitwiseOr`, and `BitwiseXor` are thin specializations of generic
+   constructions in `Composition/` and have no module-specific child wiring
+   for the fixed-module syntax to improve. These modules nevertheless expose
+   the same public `moduleStructure`, `cycleContract`, `certification`,
+   `certified`, and `design` boundary. The old flat module paths and
+   `Naming.namedModule` constructors have been removed rather than retained as
+   compatibility APIs.
+
+7. **Finish the migration across the whole authored design tree.** The flat-file
+   pass was not a completion audit. `NamedTupleCombiner` and
+   `NamedTupleSplitter` are now migrated fixed, single-child modules: their
+   design, contract, schedule, and certification declarations generate the
+   mechanical layer, while their explicit Lean lemmas explain only the
+   label-to-position casts at the named boundary. This migration added a
+   generic symbolic-output path to schedule derivation, so an `all` output group
+   over an abstract `SignalMap` no longer requires a handwritten schedule. The
+   contract declaration also accepts an explicit output-coverage proof for a
+   dependent existing rule when coverage is propositionally, but not
+   definitionally, immediate. The PicoRV inventory has now been audited by
+   authoring concern rather than treating macro adoption as all-or-nothing:
+   - `DecoderCaptureStage` is the one complete PicoRV example of the full
+     declaration chain.
+   - `Alu` and `Regs` are now complete contrasting migration cases. Their main
+     files contain the natural behavior, cycle contract, and readable concrete
+     hierarchy; their `*Certified.lean` files contain child certifications,
+     derived schedules, state correspondence, and structural-equivalence
+     proofs. The ALU exercises a large combinational graph and the register
+     file exercises a stateful indexed child. Both use generated default port
+     and instance names except for their externally meaningful PicoRV module
+     names. Focused contract/certification checks pass, and both emitted FIRRTL
+     hierarchies are accepted by `firtool`.
+   - the decoder hierarchy now completes the next PicoRV authoring pass. Its
+     instruction-match, immediate, instruction-summary, resolve-stage, and
+     parent contracts use the port and cycle-contract declarations. The
+     resolve-stage concrete layer uses `module_design`; its three unresolved
+     combinational children remain explicit contract blackboxes, and its
+     output/state orders are checked by `module_rule_schedules`. The two-stage
+     parent is likewise a concise authored design with proof construction in
+     `DecoderCertified.lean`. Its capture child is concrete while its resolve
+     child deliberately remains a contract blackbox, preserving the existing
+     verification boundary until the resolve-stage equivalence proof exists.
+   - `Control`, `Datapath`, and `Memory` now use the port and cycle-contract
+     declarations while retaining their natural ordinary Lean transition and
+     rule definitions. The top-level `PicoRV` shell uses `module_design` to
+     show its five children and source-faithful wiring directly. All five
+     children remain explicit contract blackboxes, so this authoring change
+     does not strengthen its verification boundary. Because the shell has no
+     parent behavioral contract yet, the generic `module_complete_schedule`
+     declaration checks its contract-independent all-child-rule order rather
+     than manufacturing an artificial cycle contract. Design and schedule
+     proofs remain separated between `PicoRV.lean` and `PicoRVSchedule.lean`.
+
+   Apply `module_design` to fixed concrete child layers, the cycle-contract
+   declaration where it makes the natural behavioral statement clearer, and
+   the schedule/certification declarations to fixed certified layers. Do not
+   force derived behavioral abstractions such as FIFO cycle composition, or
+   recursive/programmatically generated hierarchies, through fixed syntax.
+   Remove the superseded handwritten assembly only after each migrated file has
+   focused checks. This migration is complete: the inventory has an explicit
+   migrated-or-intentionally-ordinary decision, its focused checks pass, and
+   the full Lean regression target passes.
 
 At every stage, inspect the expanded declarations and reject syntax that hides
 the hardware or the meaningful behavioral proof. Compare the migrated module
@@ -381,6 +454,12 @@ module is emitted. Commit the infrastructure and successful pilots before the
 broad migration so that the design decision remains reviewable.
 
 ### Replace PicoRV32 child blackboxes
+
+The whole-tree authoring audit in step 7 above is complete. Ordinary fixed
+modules now use the readable declaration form, while recursive, generated,
+and generic-composition definitions retain ordinary Lean intentionally. The
+next development phase can therefore replace PicoRV32 blackboxes without
+carrying an unfinished authoring migration alongside that work.
 
 Implement and certify the remaining direct children against their existing
 contracts, one source-faithful subsystem at a time:
@@ -395,9 +474,10 @@ The decoder now has natural contracts for its 14-register capture stage and
 45-register resolve stage. The capture stage has a closed certified structure,
 and the certified parent uses it while retaining only the resolve stage as an
 explicit blackbox. The resolve stage's private combinational instruction-match,
-immediate, and summary boundaries now have natural zero-state cycle contracts
-and focused checks. Next, implement and certify the resolve stage using those
-contracts; its update logic must preserve the verified pre-edge dependencies
+immediate, and summary boundaries have natural zero-state cycle contracts and
+focused checks. Its concrete structural layer and checked schedules now use
+those contracts as blackbox children. Next, prove that layer implements the
+resolve-stage contract; its update logic must preserve the verified pre-edge dependencies
 and reset priority described in [docs/PicoRV32Plan.md](docs/PicoRV32Plan.md).
 
 Reusable `VectorSlice` and `EqualsConstant` modules now provide the recurring

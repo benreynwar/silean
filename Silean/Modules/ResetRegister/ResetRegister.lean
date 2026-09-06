@@ -1,8 +1,8 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Constant
+import Silean.Modules.Constant.Constant
 import Silean.Modules.Mux.Mux
-import Silean.Modules.Register
+import Silean.Modules.Register.Register
 
 namespace Silean.Modules
 
@@ -30,11 +30,11 @@ module_design ResetRegister (signalType : SignalType)
     (naming := ResetRegister.Naming.ports signalType)
   instances {
     -- Produces the value loaded during reset.
-    resetValue := Modules.Constant.Naming.namedModule signalType resetValue,
+    resetValue := Modules.Constant.design signalType resetValue,
     -- Chooses between the ordinary input and reset value.
     selection := Modules.Mux.design signalType,
     -- Holds the selected value across cycles.
-    storage := Modules.Register.Naming.namedModule signalType }
+    storage := Modules.Register.design signalType }
   wiring {
     outputs {
       .value := storage.output }

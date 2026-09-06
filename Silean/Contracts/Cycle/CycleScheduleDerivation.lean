@@ -1130,9 +1130,18 @@ private def buildOutputBoundary
     (body childContracts inputAvailable decideInput available outputs : Expr)
     (concreteProviders : List ConcreteProvider)
     (familyProviders : List FamilyProvider) : MetaM Expr := do
-  let outputLabels ← exprList outputs
   let outputType := (← whnf (← inferType outputs)).getAppArgs[0]!
   let wiring ← mkAppM ``ModuleBody.wiring #[body]
+  let outputLabels? ← try pure (some (← exprList outputs)) catch _ => pure none
+  if outputLabels?.isNone then
+    return ← withLocalDeclD `output outputType fun output => do
+      let memberType ← mkAppM ``List.Mem #[output, outputs]
+      withLocalDeclD `member memberType fun member => do
+        let source ← mkAppM ``Wiring.moduleOutput #[wiring, output]
+        let proof ← proveSourceAvailable body childContracts inputAvailable decideInput
+          available source concreteProviders familyProviders "symbolic required output"
+        mkLambdaFVars #[output, member] proof
+  let outputLabels := outputLabels?.get!
   let valueFunction ← withLocalDeclD `output outputType fun output => do
     let source ← mkAppM ``Wiring.moduleOutput #[wiring, output]
     let property ← mkSourceAvailableExpr body childContracts

@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Any
+import Silean.Modules.Any.Any
 
 namespace Silean.Examples.Checks.Any
 

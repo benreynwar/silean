@@ -1,4 +1,6 @@
 import Silean.Examples.PicoRV.Decoder.DecoderTypes
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Foundation.SignalLayout
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
@@ -6,6 +8,7 @@ import Silean.Contracts.Cycle.CycleEvaluation
 namespace Silean.Examples.PicoRV.Decoder.InstructionMatch
 
 open Silean
+open Silean.Authoring
 open Silean.Examples.PicoRV.Decoder
 
 /-! Exact combinational instruction matching for the configured RV32I subset.
@@ -13,31 +16,52 @@ It refines the five broad opcode classes captured on the preceding cycle using
 the current instruction's `funct3` and `funct7` fields. It contains no trigger,
 register, reset, or update-priority behavior. -/
 
-inductive Input
-  | word | instr_jalr
-  | is_beq_bne_blt_bge_bltu_bgeu | is_lb_lh_lw_lbu_lhu | is_sb_sh_sw
-  | is_alu_reg_imm | is_alu_reg_reg
-deriving Enumeration
-
-inductive Output
-  | instr_beq | instr_bne | instr_blt | instr_bge | instr_bltu | instr_bgeu
-  | instr_lb | instr_lh | instr_lw | instr_lbu | instr_lhu
-  | instr_sb | instr_sh | instr_sw
-  | instr_addi | instr_slti | instr_sltiu | instr_xori | instr_ori | instr_andi
-  | instr_slli | instr_srli | instr_srai
-  | instr_add | instr_sub | instr_sll | instr_slt | instr_sltu
-  | instr_xor | instr_srl | instr_sra | instr_or | instr_and
-  | instr_ecall_ebreak | instr_fence
-  | is_slli_srli_srai | is_jalr_addi_slti_sltiu_xori_ori_andi | is_sll_srl_sra
-deriving Enumeration
-
-def inputType : Input → SignalType
-  | .word => .vector 32 .bit
-  | _ => .bit
-
-@[reducible] def inputMap : SignalMap := EnumeratedMap.of Input inputType
-@[reducible] def outputMap : SignalMap := EnumeratedMap.of Output fun _ => .bit
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
+module_ports ports where
+  input word : .vector 32 .bit,
+  input instr_jalr : .bit,
+  input is_beq_bne_blt_bge_bltu_bgeu : .bit,
+  input is_lb_lh_lw_lbu_lhu : .bit,
+  input is_sb_sh_sw : .bit,
+  input is_alu_reg_imm : .bit,
+  input is_alu_reg_reg : .bit,
+  output instr_beq : .bit,
+  output instr_bne : .bit,
+  output instr_blt : .bit,
+  output instr_bge : .bit,
+  output instr_bltu : .bit,
+  output instr_bgeu : .bit,
+  output instr_lb : .bit,
+  output instr_lh : .bit,
+  output instr_lw : .bit,
+  output instr_lbu : .bit,
+  output instr_lhu : .bit,
+  output instr_sb : .bit,
+  output instr_sh : .bit,
+  output instr_sw : .bit,
+  output instr_addi : .bit,
+  output instr_slti : .bit,
+  output instr_sltiu : .bit,
+  output instr_xori : .bit,
+  output instr_ori : .bit,
+  output instr_andi : .bit,
+  output instr_slli : .bit,
+  output instr_srli : .bit,
+  output instr_srai : .bit,
+  output instr_add : .bit,
+  output instr_sub : .bit,
+  output instr_sll : .bit,
+  output instr_slt : .bit,
+  output instr_sltu : .bit,
+  output instr_xor : .bit,
+  output instr_srl : .bit,
+  output instr_sra : .bit,
+  output instr_or : .bit,
+  output instr_and : .bit,
+  output instr_ecall_ebreak : .bit,
+  output instr_fence : .bit,
+  output is_slli_srli_srai : .bit,
+  output is_jalr_addi_slti_sltiu_xori_ori_andi : .bit,
+  output is_sll_srl_sra : .bit
 
 structure Inputs where
   word : Word
@@ -63,7 +87,7 @@ def matches3 (inputs : Inputs) (enabled : Bool) (code : Nat) : Bool :=
 def matches37 (inputs : Inputs) (enabled : Bool) (code3 code7 : Nat) : Bool :=
   enabled && decide (funct3 inputs.word = code3 ∧ funct7 inputs.word = code7)
 
-def outputValues (inputs : Inputs) : Output → Bool
+def outputValues (inputs : Inputs) : outputMap.Values
   | .instr_beq => matches3 inputs inputs.is_beq_bne_blt_bge_bltu_bgeu 0
   | .instr_bne => matches3 inputs inputs.is_beq_bne_blt_bge_bltu_bgeu 1
   | .instr_blt => matches3 inputs inputs.is_beq_bne_blt_bge_bltu_bgeu 4
@@ -113,23 +137,21 @@ def outputValues (inputs : Inputs) : Output → Bool
       decide (funct3 inputs.word = 5 ∧ funct7 inputs.word = 0),
       decide (funct3 inputs.word = 5 ∧ funct7 inputs.word = 0x20)]
 
-inductive Rule | apply
-deriving Enumeration
-
 def outputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap where
   readsInputs := .all inputMap
   writesOutputs := .all outputMap
   target inputs _ := outputValues (valuesOf inputs)
 
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
+module_cycle_contract cycleContract for ports where
   state := emptySignalMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule | .apply => outputRule
-  stateRule := Contracts.Cycle.CycleStateRule.empty _
-  outputCoverage := by
-    change outputMap.labels.values.Perm outputMap.labels.values
-    rfl
+  output_rule apply := outputRule
+  state_rule where
+    reads := []
+    next := {}
+
+@[simp] theorem output_signalType (output : Output) :
+    outputMap.signalType output = .bit := by
+  cases output <;> rfl
 
 @[simp] theorem outputRule_reads (input : Input) :
     input ∈ outputRule.readsInputs.labels := by

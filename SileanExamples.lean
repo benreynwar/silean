@@ -51,11 +51,11 @@ import Silean.Examples.Checks.FifoPointerControlChecks
 import Silean.Examples.Checks.EqualityChecks
 import Silean.Examples.Checks.FifoContractChecks
 import Silean.Examples.Checks.SerialDepthFifoChecks
-import Silean.Examples.PicoRV.Regs
+import Silean.Examples.PicoRV.RegsCertified
 import Silean.Examples.Checks.PicoRVRegsChecks
 import Silean.Examples.PicoRV.AluLaws
 import Silean.Examples.Checks.PicoRVAluChecks
-import Silean.Examples.PicoRV.Decoder
+import Silean.Examples.PicoRV.DecoderCertified
 import Silean.Examples.Checks.PicoRVDecoderChecks
 import Silean.Examples.Checks.PicoRVDecoderCaptureStageChecks
 import Silean.Examples.Checks.PicoRVDecoderResolveChildrenChecks

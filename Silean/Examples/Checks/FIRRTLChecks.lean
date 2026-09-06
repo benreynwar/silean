@@ -2,7 +2,7 @@ import Silean.FIRRTL
 import Silean.Naming.PrimitiveNaming
 import Silean.Modules.BitMux.BitMux
 import Silean.Modules.FullAdder.FullAdder
-import Silean.Modules.Register
+import Silean.Modules.Register.Register
 import Silean.Modules.Mux.Mux
 import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.RegisterBank.RegisterBank
@@ -79,7 +79,7 @@ module_design DifferentlyNamedFlat where
     input data (schema := NamedPair.schema) : namedPairType,
     output result (schema := NamedPair.schema) : namedPairType }
   instances {
-    storage := Modules.Register.Naming.namedModule namedPairType }
+    storage := Modules.Register.design namedPairType }
   wiring {
     outputs { .result := storage.output }
     instance (.storage) { .input := input.data }
@@ -90,7 +90,7 @@ module_design DifferentlyNamedNested where
     input data (schema := NestedPayload.schema) : nestedPayloadType,
     output result (schema := NestedPayload.schema) : nestedPayloadType }
   instances {
-    storage := Modules.Register.Naming.namedModule nestedPayloadType }
+    storage := Modules.Register.design nestedPayloadType }
   wiring {
     outputs { .result := storage.output }
     instance (.storage) { .input := input.data }
@@ -101,7 +101,7 @@ module_design DifferentlyNamedVectorElements where
     input data (schema := pairVectorSchema) : pairVectorType,
     output result (schema := pairVectorSchema) : pairVectorType }
   instances {
-    storage := Modules.Register.Naming.namedModule pairVectorType }
+    storage := Modules.Register.design pairVectorType }
   wiring {
     outputs { .result := storage.output }
     instance (.storage) { .input := input.data }
@@ -112,7 +112,7 @@ module_design SameNamedAggregate where
     input data (schema := NestedPayload.schema) : nestedPayloadType,
     output result (schema := NestedPayload.schema) : nestedPayloadType }
   instances {
-    storage := Modules.Register.Naming.namedModuleWith
+    storage := Modules.Register.designWith
       NestedPayload.schema }
   wiring {
     outputs { .result := storage.output }
@@ -190,7 +190,7 @@ module_design SameNamedAggregate where
 -- Named authored boundaries are thin wrappers around canonical positional
 -- tuple adapters, including recursively named aggregate fields.
 #guard containsAll (renderCircuit
-  (Modules.NamedTupleCombiner.Naming.design
+  (Modules.NamedTupleCombiner.designWith
     NestedPayload.signalMap NestedPayload.schema).naming)
   ["input tag : UInt<1>",
    "input contents : { valid : UInt<1>, payload : UInt<1> }",
@@ -198,7 +198,7 @@ module_design SameNamedAggregate where
    "inst adapter of combine_aggregate_t_bit_t_bit_bit_unit_unit"]
 
 #guard containsAll (renderCircuit
-  (Modules.NamedTupleSplitter.Naming.design
+  (Modules.NamedTupleSplitter.designWith
     NestedPayload.signalMap NestedPayload.schema).naming)
   ["input value : { tag : UInt<1>, contents : { valid : UInt<1>, payload : UInt<1> } }",
    "output tag : UInt<1>",

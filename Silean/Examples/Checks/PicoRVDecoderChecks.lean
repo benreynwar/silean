@@ -1,4 +1,5 @@
-import Silean.Examples.PicoRV.Decoder
+import Silean.Examples.PicoRV.DecoderCertified
+import Silean.FIRRTL
 
 namespace Silean.Examples.Checks.PicoRVDecoderChecks
 
@@ -82,5 +83,15 @@ example : ¬moduleStructure.HasNoBlackboxes := by
   intro closed
   simpa [structuralChildren, Contracts.Cycle.ModuleCycleContract.blackboxStructure,
     ModuleStructure.HasNoBlackboxes] using closed .resolve
+
+-- Intentional blackboxes emit as FIRRTL `extmodule`s, while closed emission
+-- remains unavailable until the resolve-stage equivalence proof is supplied.
+#guard match Silean.FIRRTL.renderCircuit naming with
+  | .ok _ => true
+  | .error _ => false
+
+#guard match Silean.FIRRTL.renderClosedCircuit naming with
+  | .ok _ => false
+  | .error _ => true
 
 end Silean.Examples.Checks.PicoRVDecoderChecks

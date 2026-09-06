@@ -1,6 +1,6 @@
 import Silean.FIRRTL
 import Silean.Foundation.BitVector
-import Silean.Modules.BitwiseAnd
+import Silean.Modules.BitwiseAnd.BitwiseAnd
 
 namespace Silean.Examples.Checks.BitwiseAnd
 

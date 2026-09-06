@@ -1,8 +1,8 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
 import Silean.Foundation.BitVector
-import Silean.Modules.Add
-import Silean.Modules.BitwiseXor
+import Silean.Modules.Add.Add
+import Silean.Modules.BitwiseXor.BitwiseXor
 import Silean.Naming.SignalAdapterNaming
 
 namespace Silean.Modules.AddSub

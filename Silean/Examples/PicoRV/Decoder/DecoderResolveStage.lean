@@ -1,26 +1,79 @@
 import Silean.Examples.PicoRV.Decoder.DecoderTypes
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 
 namespace Silean.Examples.PicoRV.Decoder.ResolveStage
 
 open Silean
+open Silean.Authoring
 open Silean.Examples.PicoRV.Decoder
 
 /-! The second registered decoder stage. It resolves broad capture-stage
 classes into exact instructions, constructs the non-J immediate, and maintains
 the registered summary flags with the source's pre-edge timing and priorities. -/
 
-inductive Input
-  | resetn | decoder_trigger | decoder_pseudo_trigger | mem_rdata_q
-  | instr_lui | instr_auipc | instr_jal | instr_jalr
-  | decoded_imm_j
-  | is_beq_bne_blt_bge_bltu_bgeu
-  | is_lb_lh_lw_lbu_lhu
-  | is_sb_sh_sw
-  | is_alu_reg_imm
-  | is_alu_reg_reg
-deriving Enumeration
+module_ports ports where
+  input resetn : .bit,
+  input decoder_trigger : .bit,
+  input decoder_pseudo_trigger : .bit,
+  input mem_rdata_q : .vector 32 .bit,
+  input instr_lui : .bit,
+  input instr_auipc : .bit,
+  input instr_jal : .bit,
+  input instr_jalr : .bit,
+  input decoded_imm_j : .vector 32 .bit,
+  input is_beq_bne_blt_bge_bltu_bgeu : .bit,
+  input is_lb_lh_lw_lbu_lhu : .bit,
+  input is_sb_sh_sw : .bit,
+  input is_alu_reg_imm : .bit,
+  input is_alu_reg_reg : .bit,
+  output instr_trap : .bit,
+  output instr_beq : .bit,
+  output instr_bne : .bit,
+  output instr_blt : .bit,
+  output instr_bge : .bit,
+  output instr_bltu : .bit,
+  output instr_bgeu : .bit,
+  output instr_lb : .bit,
+  output instr_lh : .bit,
+  output instr_lw : .bit,
+  output instr_lbu : .bit,
+  output instr_lhu : .bit,
+  output instr_sb : .bit,
+  output instr_sh : .bit,
+  output instr_sw : .bit,
+  output instr_addi : .bit,
+  output instr_slti : .bit,
+  output instr_sltiu : .bit,
+  output instr_xori : .bit,
+  output instr_ori : .bit,
+  output instr_andi : .bit,
+  output instr_slli : .bit,
+  output instr_srli : .bit,
+  output instr_srai : .bit,
+  output instr_add : .bit,
+  output instr_sub : .bit,
+  output instr_sll : .bit,
+  output instr_slt : .bit,
+  output instr_sltu : .bit,
+  output instr_xor : .bit,
+  output instr_srl : .bit,
+  output instr_sra : .bit,
+  output instr_or : .bit,
+  output instr_and : .bit,
+  output instr_fence : .bit,
+  output decoded_imm : .vector 32 .bit,
+  output is_lui_auipc_jal : .bit,
+  output is_slli_srli_srai : .bit,
+  output is_jalr_addi_slti_sltiu_xori_ori_andi : .bit,
+  output is_sll_srl_sra : .bit,
+  output is_lui_auipc_jal_jalr_addi_add_sub : .bit,
+  output is_slti_blt_slt : .bit,
+  output is_sltiu_bltu_sltu : .bit,
+  output is_lbu_lhu_lw : .bit,
+  output is_compare : .bit
 
 inductive Register
   | instr_beq | instr_bne | instr_blt | instr_bge | instr_bltu | instr_bgeu
@@ -43,47 +96,11 @@ inductive Register
   | is_compare
 deriving Enumeration
 
-inductive Output
-  | instr_trap
-  | instr_beq | instr_bne | instr_blt | instr_bge | instr_bltu | instr_bgeu
-  | instr_lb | instr_lh | instr_lw | instr_lbu | instr_lhu
-  | instr_sb | instr_sh | instr_sw
-  | instr_addi | instr_slti | instr_sltiu | instr_xori | instr_ori | instr_andi
-  | instr_slli | instr_srli | instr_srai
-  | instr_add | instr_sub | instr_sll | instr_slt | instr_sltu
-  | instr_xor | instr_srl | instr_sra | instr_or | instr_and
-  | instr_fence
-  | decoded_imm
-  | is_lui_auipc_jal
-  | is_slli_srli_srai
-  | is_jalr_addi_slti_sltiu_xori_ori_andi
-  | is_sll_srl_sra
-  | is_lui_auipc_jal_jalr_addi_add_sub
-  | is_slti_blt_slt
-  | is_sltiu_bltu_sltu
-  | is_lbu_lhu_lw
-  | is_compare
-deriving Enumeration
-
-def inputType : Input → SignalType
-  | .mem_rdata_q | .decoded_imm_j => .vector 32 .bit
-  | _ => .bit
-
-@[reducible] def inputMap : SignalMap := EnumeratedMap.of Input inputType
-
 def registerType : Register → SignalType
   | .decoded_imm => .vector 32 .bit
   | _ => .bit
 
 @[reducible] def stateMap : SignalMap := EnumeratedMap.of Register registerType
-
-def outputType : Output → SignalType
-  | .decoded_imm => .vector 32 .bit
-  | _ => .bit
-
-@[reducible] def outputMap : SignalMap := EnumeratedMap.of Output outputType
-
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
 
 structure Inputs where
   resetn : Bool
@@ -288,9 +305,6 @@ def outputValues (inputs : Inputs) (state : stateMap.Values) : outputMap.Values
   | .is_lbu_lhu_lw => state .is_lbu_lhu_lw
   | .is_compare => state .is_compare
 
-inductive Rule | outputs
-deriving Enumeration
-
 namespace OutputRule
 inductive Input | instr_lui | instr_auipc | instr_jal | instr_jalr
 deriving Enumeration
@@ -354,14 +368,10 @@ def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   rw [SignalGroup.all_labels]
   exact (inputMap.labels.locate input).mem
 
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
+module_cycle_contract cycleContract for ports where
   state := stateMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule | .outputs => outputRule
-  stateRule := stateRule
-  outputCoverage := by
-    exact List.Perm.refl _
+  output_rule outputs := outputRule
+  state_rule := stateRule
 
 @[simp] theorem outputRule_holds_iff
     (inputs : ports.inputs.Values) (state : stateMap.Values)

@@ -2,7 +2,7 @@ import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
-import Silean.Modules.Equality
+import Silean.Modules.Equality.Equality
 import Silean.Primitives
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Composition.SignalLogic

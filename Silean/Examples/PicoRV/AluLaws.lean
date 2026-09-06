@@ -1,4 +1,4 @@
-import Silean.Examples.PicoRV.Alu
+import Silean.Examples.PicoRV.AluCertified
 
 namespace Silean.Examples.PicoRV.Alu
 

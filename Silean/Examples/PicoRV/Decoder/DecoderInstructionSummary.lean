@@ -1,4 +1,6 @@
 import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatch
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Foundation.SignalLayout
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
@@ -6,6 +8,7 @@ import Silean.Contracts.Cycle.CycleEvaluation
 namespace Silean.Examples.PicoRV.Decoder.InstructionSummary
 
 open Silean
+open Silean.Authoring
 open Silean.Examples.PicoRV.Decoder
 
 /-! Combinational views of the decoder's current, pre-edge instruction flags.
@@ -14,29 +17,54 @@ these values. `instr_trap` is the configured (`CATCH_ILLINSN = 1`) continuous
 illegal-instruction result. Trigger gating and registers belong to the parent
 resolve stage, so this boundary deliberately has neither. -/
 
-inductive Input
-  | instr_lui | instr_auipc | instr_jal | instr_jalr
-  | is_beq_bne_blt_bge_bltu_bgeu
-  | instr_beq | instr_bne | instr_blt | instr_bge | instr_bltu | instr_bgeu
-  | instr_lb | instr_lh | instr_lw | instr_lbu | instr_lhu
-  | instr_sb | instr_sh | instr_sw
-  | instr_addi | instr_slti | instr_sltiu | instr_xori | instr_ori | instr_andi
-  | instr_slli | instr_srli | instr_srai
-  | instr_add | instr_sub | instr_sll | instr_slt | instr_sltu
-  | instr_xor | instr_srl | instr_sra | instr_or | instr_and
-  | instr_ecall_ebreak | instr_fence
-deriving Enumeration
-
-inductive Output
-  | instr_trap
-  | is_lui_auipc_jal
-  | is_lui_auipc_jal_jalr_addi_add_sub
-  | is_slti_blt_slt | is_sltiu_bltu_sltu | is_lbu_lhu_lw | is_compare
-deriving Enumeration
-
-@[reducible] def inputMap : SignalMap := EnumeratedMap.of Input fun _ => .bit
-@[reducible] def outputMap : SignalMap := EnumeratedMap.of Output fun _ => .bit
-@[reducible] def ports : ModulePorts := ⟨inputMap, outputMap⟩
+module_ports ports where
+  input instr_lui : .bit,
+  input instr_auipc : .bit,
+  input instr_jal : .bit,
+  input instr_jalr : .bit,
+  input is_beq_bne_blt_bge_bltu_bgeu : .bit,
+  input instr_beq : .bit,
+  input instr_bne : .bit,
+  input instr_blt : .bit,
+  input instr_bge : .bit,
+  input instr_bltu : .bit,
+  input instr_bgeu : .bit,
+  input instr_lb : .bit,
+  input instr_lh : .bit,
+  input instr_lw : .bit,
+  input instr_lbu : .bit,
+  input instr_lhu : .bit,
+  input instr_sb : .bit,
+  input instr_sh : .bit,
+  input instr_sw : .bit,
+  input instr_addi : .bit,
+  input instr_slti : .bit,
+  input instr_sltiu : .bit,
+  input instr_xori : .bit,
+  input instr_ori : .bit,
+  input instr_andi : .bit,
+  input instr_slli : .bit,
+  input instr_srli : .bit,
+  input instr_srai : .bit,
+  input instr_add : .bit,
+  input instr_sub : .bit,
+  input instr_sll : .bit,
+  input instr_slt : .bit,
+  input instr_sltu : .bit,
+  input instr_xor : .bit,
+  input instr_srl : .bit,
+  input instr_sra : .bit,
+  input instr_or : .bit,
+  input instr_and : .bit,
+  input instr_ecall_ebreak : .bit,
+  input instr_fence : .bit,
+  output instr_trap : .bit,
+  output is_lui_auipc_jal : .bit,
+  output is_lui_auipc_jal_jalr_addi_add_sub : .bit,
+  output is_slti_blt_slt : .bit,
+  output is_sltiu_bltu_sltu : .bit,
+  output is_lbu_lhu_lw : .bit,
+  output is_compare : .bit
 
 structure Inputs where
   instr_lui : Bool
@@ -98,7 +126,7 @@ def recognized (inputs : Inputs) : Bool := boolOr [
   inputs.matched .instr_and, inputs.matched .instr_ecall_ebreak,
   inputs.matched .instr_fence]
 
-def outputValues (inputs : Inputs) : Output → Bool
+def outputValues (inputs : Inputs) : outputMap.Values
   | .instr_trap => !(recognized inputs)
   | .is_lui_auipc_jal => boolOr [inputs.instr_lui, inputs.instr_auipc, inputs.instr_jal]
   | .is_lui_auipc_jal_jalr_addi_add_sub => boolOr [inputs.instr_lui,
@@ -113,9 +141,6 @@ def outputValues (inputs : Inputs) : Output → Bool
   | .is_compare => boolOr [inputs.is_beq_bne_blt_bge_bltu_bgeu,
       inputs.matched .instr_slti, inputs.matched .instr_slt,
       inputs.matched .instr_sltiu, inputs.matched .instr_sltu]
-
-inductive Rule | trap | summaries
-deriving Enumeration
 
 namespace TrapRule
 inductive Input
@@ -227,15 +252,17 @@ def summariesOutputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap w
     | .is_lbu_lhu_lw => outputValues (valuesOf inputs) .is_lbu_lhu_lw
     | .is_compare => outputValues (valuesOf inputs) .is_compare
 
-@[reducible] def cycleContract : Contracts.Cycle.ModuleCycleContract ports where
+module_cycle_contract cycleContract for ports where
   state := emptySignalMap
-  RuleName := Rule
-  ruleNames := inferInstance
-  outputRule
-    | .trap => trapOutputRule
-    | .summaries => summariesOutputRule
-  stateRule := Contracts.Cycle.CycleStateRule.empty _
-  outputCoverage := by rfl
+  output_rule trap := trapOutputRule
+  output_rule summaries := summariesOutputRule
+  state_rule where
+    reads := []
+    next := {}
+
+@[simp] theorem output_signalType (output : Output) :
+    outputMap.signalType output = .bit := by
+  cases output <;> rfl
 
 @[simp] theorem trapOutputRule_reads (input : Input) :
   input ∈ trapOutputRule.readsInputs.labels ↔

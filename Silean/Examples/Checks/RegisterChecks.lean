@@ -1,4 +1,4 @@
-import Silean.Modules.Register
+import Silean.Modules.Register.Register
 
 namespace Silean.Examples.Checks.Register
 

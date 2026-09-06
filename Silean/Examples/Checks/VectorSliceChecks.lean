@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.VectorSlice
+import Silean.Modules.VectorSlice.VectorSliceCertified
 
 namespace Silean.Examples.Checks.VectorSlice
 
@@ -44,9 +44,9 @@ example (inputs : (Modules.VectorSlice.ports element prefixWidth width suffixWid
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
-#guard match renderCircuit (Modules.VectorSlice.Naming.naming .bit 2 3 1) with
+#guard match renderCircuit (Modules.VectorSlice.naming .bit 2 3 1) with
   | .error _ => false
-  | .ok text => ["public module vector_slice_structural_bit_2_3_1",
+  | .ok text => ["public module VectorSlice_bit_2_3_1",
       "input value : UInt<1>[6]", "output result : UInt<1>[3]",
       "inst split", "inst combine",
       "connect combine.component_0, split.component_2"].all (contains text)

@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleImplementation
+import Silean.Naming.ModuleNaming
 
 namespace Silean.Contracts.Cycle
 
@@ -29,6 +30,16 @@ def ModuleCycleContract.blackboxBehavior
 def ModuleCycleContract.blackboxStructure
     (contract : ModuleCycleContract ports) : ModuleStructure ports :=
   .blackbox contract.blackboxBehavior
+
+/-- Give a cycle contract's structural blackbox the executable naming needed
+to use it as a child of `module_design`. The state names are internal emission
+metadata; the contract boundary keeps the supplied port naming. -/
+@[reducible] def ModuleCycleContract.blackboxDesign
+    (contract : ModuleCycleContract ports) (name : String)
+    (portsNaming : Naming.ModulePortsNaming ports) : Naming.NamedModule :=
+  ⟨ports, contract.blackboxStructure,
+    .blackbox ⟨name, "", []⟩ portsNaming
+      (Naming.SignalMapNaming.indexed contract.state "state")⟩
 
 def ModuleCycleContract.blackboxCertification
     (contract : ModuleCycleContract ports) :
