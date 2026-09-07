@@ -165,25 +165,6 @@ def nextEntries (addressWidth : Nat) (valid : Bool) (data : element.Denote)
     (writeAdvance readPointer writePointer valid)
     (Fifo.PointerControl.pointerAddress writePointer) data entries
 
-namespace ObserveRule
-inductive Input | inputValid | outputReady deriving Enumeration
-end ObserveRule
-
-@[reducible] private def observeInputs (element : SignalType) :
-    SignalGroup (inputMap element) :=
-  SignalGroup.fromLabels (inputMap element) ObserveRule.Input fun
-    | .inputValid => .inputValid
-    | .outputReady => .outputReady
-
-def outputRule (element : SignalType) (addressWidth : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports element) (stateMap element addressWidth) where
-  readsInputs := observeInputs element
-  writesOutputs := .all (outputMap element)
-  target _ state := fun
-    | .outputValid => outputValid (state .readPointer) (state .writePointer)
-    | .outputData => outputData addressWidth (state .readPointer) (state .entries)
-    | .inputReady => inputReady (state .readPointer) (state .writePointer)
-
 def stateRule (element : SignalType) (addressWidth : Nat) :
     Contracts.Cycle.CycleStateRule (ports element) (stateMap element addressWidth) where
   readsInputs := .all (inputMap element)
@@ -198,28 +179,21 @@ def stateRule (element : SignalType) (addressWidth : Nat) :
 module_cycle_contract cycleContract (element : SignalType) (addressWidth : Nat)
     for ports element where
   state := stateMap element addressWidth
-  output_rule observe := outputRule element addressWidth
+  -- Keep the two interface directions independently schedulable. In
+  -- particular, observing the forward channel must not require outputReady,
+  -- and observing inputReady must not require inputValid.
+  output_rule forward where
+    reads := []
+    writes := {
+      outputValid := outputValid (state .readPointer) (state .writePointer),
+      outputData := outputData addressWidth (state .readPointer) (state .entries) }
+  output_rule ready where
+    reads := []
+    writes := {
+      inputReady := inputReady (state .readPointer) (state .writePointer) }
   state_rule := stateRule element addressWidth
 
 /-! ## Contract-facing laws -/
-
-@[simp] theorem outputRule_holds_iff (element : SignalType) (addressWidth : Nat)
-    (inputs : (ports element).inputs.Values)
-    (state : (stateMap element addressWidth).Values)
-    (outputs : (ports element).outputs.Values) :
-    (outputRule element addressWidth).Holds inputs state outputs ↔
-      outputs .outputValid = outputValid (state .readPointer) (state .writePointer) ∧
-      outputs .outputData = outputData addressWidth (state .readPointer) (state .entries) ∧
-      outputs .inputReady = inputReady (state .readPointer) (state .writePointer) := by
-  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalGroup.all_matches]
-  constructor
-  · intro equal
-    exact ⟨congrFun equal .outputValid, congrFun equal .outputData,
-      congrFun equal .inputReady⟩
-  · rintro ⟨valid, data, ready⟩
-    funext output
-    cases output <;> assumption
 
 @[simp] theorem stateRule_apply_readPointer (element : SignalType)
     (addressWidth : Nat) (inputs : (ports element).inputs.Values)

@@ -28,8 +28,44 @@ module_child_certifications childContracts (addressWidth : Nat)
 module_rule_schedules derivedRuleSchedules (addressWidth : Nat)
     for body addressWidth with childContracts addressWidth
     implementing cycleContract addressWidth where
-  output | .apply =>
-    [.readSplit => Composition.SignalComponentRule.apply,
+  output
+    | .readAddress =>
+      [.readSplit => Composition.SignalComponentRule.apply,
+        .readAddress => Composition.SignalComponentRule.apply]
+    | .writeAddress =>
+      [.writeSplit => Composition.SignalComponentRule.apply,
+        .writeAddress => Composition.SignalComponentRule.apply]
+    | .inputReady =>
+      [.readSplit => Composition.SignalComponentRule.apply,
+        .writeSplit => Composition.SignalComponentRule.apply,
+        .readAddress => Composition.SignalComponentRule.apply,
+        .writeAddress => Composition.SignalComponentRule.apply,
+        .addressEquality => Equality.Rule.apply,
+        .wrapEquality => Primitives.EqRule.apply,
+        .wrapDifference => Primitives.NotRule.apply,
+        .fullGate => Primitives.AndRule.apply,
+        .readyInverter => Primitives.NotRule.apply]
+    | .outputValid =>
+      [.readSplit => Composition.SignalComponentRule.apply,
+        .writeSplit => Composition.SignalComponentRule.apply,
+        .readAddress => Composition.SignalComponentRule.apply,
+        .writeAddress => Composition.SignalComponentRule.apply,
+        .addressEquality => Equality.Rule.apply,
+        .wrapEquality => Primitives.EqRule.apply,
+        .emptyGate => Primitives.AndRule.apply,
+        .validInverter => Primitives.NotRule.apply]
+    | .readAdvance =>
+      [.readSplit => Composition.SignalComponentRule.apply,
+        .writeSplit => Composition.SignalComponentRule.apply,
+        .readAddress => Composition.SignalComponentRule.apply,
+        .writeAddress => Composition.SignalComponentRule.apply,
+        .addressEquality => Equality.Rule.apply,
+        .wrapEquality => Primitives.EqRule.apply,
+        .emptyGate => Primitives.AndRule.apply,
+        .validInverter => Primitives.NotRule.apply,
+        .readGate => Primitives.AndRule.apply]
+    | .writeAdvance =>
+      [.readSplit => Composition.SignalComponentRule.apply,
       .writeSplit => Composition.SignalComponentRule.apply,
       .readAddress => Composition.SignalComponentRule.apply,
       .writeAddress => Composition.SignalComponentRule.apply,
@@ -39,8 +75,6 @@ module_rule_schedules derivedRuleSchedules (addressWidth : Nat)
       .emptyGate => Primitives.AndRule.apply,
       .fullGate => Primitives.AndRule.apply,
       .readyInverter => Primitives.NotRule.apply,
-      .validInverter => Primitives.NotRule.apply,
-      .readGate => Primitives.AndRule.apply,
       .writeGate => Primitives.AndRule.apply]
   state := []
 
@@ -184,14 +218,18 @@ private theorem implements :
   constructor
   · intro rule
     cases rule
-    change (outputRule addressWidth).Holds inputs contractState outputs
-    rw [outputRule_holds_iff]
-    exact ⟨(boundary .readAddress).trans readAddressValue,
-      (boundary .writeAddress).trans writeAddressValue,
-      (boundary .inputReady).trans readyValue,
-      (boundary .outputValid).trans validValue,
-      (boundary .readAdvance).trans readValue,
-      (boundary .writeAdvance).trans writeValue⟩
+    · rw [readAddressRule_holds_iff]
+      exact (boundary .readAddress).trans readAddressValue
+    · rw [writeAddressRule_holds_iff]
+      exact (boundary .writeAddress).trans writeAddressValue
+    · rw [inputReadyRule_holds_iff]
+      exact (boundary .inputReady).trans readyValue
+    · rw [outputValidRule_holds_iff]
+      exact (boundary .outputValid).trans validValue
+    · rw [readAdvanceRule_holds_iff]
+      exact (boundary .readAdvance).trans readValue
+    · rw [writeAdvanceRule_holds_iff]
+      exact (boundary .writeAdvance).trans writeValue
   · rfl
 
 end LayerCertification

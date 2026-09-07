@@ -557,8 +557,12 @@ theorem evaluated_outputs (element : SignalType) (addressWidth : Nat)
   intro outputs
   have evaluates := (cycleContract element addressWidth).evaluate_evaluatesTo
     inputs state
-  exact (outputRule_holds_iff element addressWidth _ _ outputs).mp
-    (evaluates.1 .observe)
+  exact ⟨((forwardRule_holds_iff element addressWidth _ _ outputs).mp
+      (evaluates.1 .forward)).1,
+    ((forwardRule_holds_iff element addressWidth _ _ outputs).mp
+      (evaluates.1 .forward)).2,
+    (readyRule_holds_iff element addressWidth _ _ outputs).mp
+      (evaluates.1 .ready)⟩
 
 @[simp] theorem evaluated_next_readPointer (element : SignalType)
     (addressWidth : Nat) (state : ContractState element addressWidth)

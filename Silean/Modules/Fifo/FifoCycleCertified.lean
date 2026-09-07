@@ -33,13 +33,19 @@ module_rule_schedules derivedRuleSchedules (element : SignalType)
     with childContracts element addressWidth
     implementing cycleContract element addressWidth where
   output
-    | .observe => [.readCounter => EnabledResetCounter.Rule.observe,
+    | .forward => [.readCounter => EnabledResetCounter.Rule.observe,
       .writeCounter => EnabledResetCounter.Rule.observe,
-      .control => Fifo.PointerControl.Rule.apply,
+      .control => Fifo.PointerControl.Rule.outputValid,
+      .control => Fifo.PointerControl.Rule.readAddress,
       .storage => RegisterBank.Rule.read 0]
+    | .ready => [.readCounter => EnabledResetCounter.Rule.observe,
+      .writeCounter => EnabledResetCounter.Rule.observe,
+      .control => Fifo.PointerControl.Rule.inputReady]
   state := [.readCounter => EnabledResetCounter.Rule.observe,
     .writeCounter => EnabledResetCounter.Rule.observe,
-    .control => Fifo.PointerControl.Rule.apply]
+    .control => Fifo.PointerControl.Rule.readAdvance,
+    .control => Fifo.PointerControl.Rule.writeAdvance,
+    .control => Fifo.PointerControl.Rule.writeAddress]
 
 section LayerCertification
 
@@ -111,9 +117,6 @@ private theorem implements :
       contractState .writePointer :=
     (EnabledResetCounter.outputRule_holds_iff (addressWidth + 1) _ _ _).mp
       (writeEvaluates.1 EnabledResetCounter.Rule.observe)
-  have controlValues :=
-    (Fifo.PointerControl.outputRule_holds_iff addressWidth _ _ _).mp
-      (controlEvaluates.1 Fifo.PointerControl.Rule.apply)
   have controlInputRead : ProposedValues.childInputs (body element addressWidth)
       (fun child => (layerChildren child).moduleStructure)
       inputs proposal.2 .control .readPointer =
@@ -132,33 +135,43 @@ private theorem implements :
       inputs .outputReady := rfl
   have controlReadAddress : (proposal.2 .control).outputs .readAddress =
       Fifo.PointerControl.pointerAddress (contractState .readPointer) := by
-    rw [controlValues.1]
-    exact congrArg Fifo.PointerControl.pointerAddress readCurrent
+    have held := (Fifo.PointerControl.readAddressRule_holds_iff addressWidth _ _ _).mp
+      (controlEvaluates.1 Fifo.PointerControl.Rule.readAddress)
+    rw [held, controlInputRead, readCurrent]
   have controlWriteAddress : (proposal.2 .control).outputs .writeAddress =
       Fifo.PointerControl.pointerAddress (contractState .writePointer) := by
-    rw [controlValues.2.1]
-    exact congrArg Fifo.PointerControl.pointerAddress writeCurrent
+    have held := (Fifo.PointerControl.writeAddressRule_holds_iff addressWidth _ _ _).mp
+      (controlEvaluates.1 Fifo.PointerControl.Rule.writeAddress)
+    rw [held, controlInputWrite, writeCurrent]
   have controlReady : (proposal.2 .control).outputs .inputReady =
       inputReady (contractState .readPointer) (contractState .writePointer) := by
-    rw [controlValues.2.2.1]
+    have held := (Fifo.PointerControl.inputReadyRule_holds_iff addressWidth _ _ _).mp
+      (controlEvaluates.1 Fifo.PointerControl.Rule.inputReady)
+    rw [held]
     simp only [inputReady]
     rw [controlInputRead, controlInputWrite, readCurrent, writeCurrent]
   have controlValid : (proposal.2 .control).outputs .outputValid =
       outputValid (contractState .readPointer) (contractState .writePointer) := by
-    rw [controlValues.2.2.2.1]
+    have held := (Fifo.PointerControl.outputValidRule_holds_iff addressWidth _ _ _).mp
+      (controlEvaluates.1 Fifo.PointerControl.Rule.outputValid)
+    rw [held]
     simp only [outputValid]
     rw [controlInputRead, controlInputWrite, readCurrent, writeCurrent]
   have controlReadAdvance : (proposal.2 .control).outputs .readAdvance =
       readAdvance (contractState .readPointer) (contractState .writePointer)
         (inputs .outputReady) := by
-    rw [controlValues.2.2.2.2.1]
+    have held := (Fifo.PointerControl.readAdvanceRule_holds_iff addressWidth _ _ _).mp
+      (controlEvaluates.1 Fifo.PointerControl.Rule.readAdvance)
+    rw [held]
     simp only [readAdvance]
     rw [controlInputRead, controlInputWrite, controlOutputReady,
       readCurrent, writeCurrent]
   have controlWriteAdvance : (proposal.2 .control).outputs .writeAdvance =
       writeAdvance (contractState .readPointer) (contractState .writePointer)
         (inputs .inputValid) := by
-    rw [controlValues.2.2.2.2.2]
+    have held := (Fifo.PointerControl.writeAdvanceRule_holds_iff addressWidth _ _ _).mp
+      (controlEvaluates.1 Fifo.PointerControl.Rule.writeAdvance)
+    rw [held]
     simp only [writeAdvance]
     rw [controlInputRead, controlInputWrite, controlInputValid,
       readCurrent, writeCurrent]
@@ -180,10 +193,11 @@ private theorem implements :
   · constructor
     · intro rule
       cases rule
-      rw [outputRule_holds_iff]
-      exact ⟨(satisfies.1 .outputValid).trans controlValid,
-        (satisfies.1 .outputData).trans storageRead,
-        (satisfies.1 .inputReady).trans controlReady⟩
+      · rw [forwardRule_holds_iff]
+        exact ⟨(satisfies.1 .outputValid).trans controlValid,
+          (satisfies.1 .outputData).trans storageRead⟩
+      · rw [readyRule_holds_iff]
+        exact (satisfies.1 .inputReady).trans controlReady
     · rfl
   · refine ⟨?_, ?_, ?_⟩
     · change (layerChildren .readCounter).certification.stateCorresponds

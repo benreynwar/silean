@@ -16,6 +16,14 @@ def inputs (valid data ready reset : Bool) : (ports .bit).inputs.Values
   | .outputReady => ready
   | .reset => reset
 
+-- The registered FIFO exposes its two interface directions independently.
+-- Neither current-cycle output depends on a current-cycle handshake input.
+example : (forwardRule .bit 1).readsInputs.labels = [] := rfl
+example : (readyRule .bit 1).readsInputs.labels = [] := rfl
+example : (forwardRule .bit 1).writesOutputs.labels =
+    [.outputValid, .outputData] := rfl
+example : (readyRule .bit 1).writesOutputs.labels = [.inputReady] := rfl
+
 def state1 (read write : Fin 4) (entry0 entry1 : Bool) :
     (stateMap .bit 1).Values
   | .readPointer => pointer1 read

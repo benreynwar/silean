@@ -74,49 +74,32 @@ module_ports ports (addressWidth : Nat) where
   output readAdvance : .bit,
   output writeAdvance : .bit
 
-def outputRule (addressWidth : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports addressWidth) emptySignalMap where
-  readsInputs := .all (ports addressWidth).inputs
-  writesOutputs := .all (ports addressWidth).outputs
-  target inputs _ := fun
-    | .readAddress => pointerAddress (inputs .readPointer)
-    | .writeAddress => pointerAddress (inputs .writePointer)
-    | .inputReady => inputReady (inputs .readPointer) (inputs .writePointer)
-    | .outputValid => outputValid (inputs .readPointer) (inputs .writePointer)
-    | .readAdvance => readAdvance (inputs .readPointer) (inputs .writePointer)
-        (inputs .outputReady)
-    | .writeAdvance => writeAdvance (inputs .readPointer) (inputs .writePointer)
-        (inputs .inputValid)
-
 module_cycle_contract cycleContract (addressWidth : Nat) for ports addressWidth where
   state := emptySignalMap
-  output_rule apply := outputRule addressWidth
+  -- These outputs are separate rules because their FIFO parent consumes them
+  -- at different scheduling boundaries. This prevents a forward-path request
+  -- from acquiring the handshake inputs needed only by the state transition.
+  output_rule readAddress where
+    reads := [readPointer]
+    writes := { readAddress := pointerAddress readPointer }
+  output_rule writeAddress where
+    reads := [writePointer]
+    writes := { writeAddress := pointerAddress writePointer }
+  output_rule inputReady where
+    reads := [readPointer, writePointer]
+    writes := { inputReady := inputReady readPointer writePointer }
+  output_rule outputValid where
+    reads := [readPointer, writePointer]
+    writes := { outputValid := outputValid readPointer writePointer }
+  output_rule readAdvance where
+    reads := [readPointer, writePointer, outputReady]
+    writes := {
+      readAdvance := readAdvance readPointer writePointer outputReady }
+  output_rule writeAdvance where
+    reads := [readPointer, writePointer, inputValid]
+    writes := {
+      writeAdvance := writeAdvance readPointer writePointer inputValid }
   state_rule := Contracts.Cycle.CycleStateRule.empty _
-
-@[simp] theorem outputRule_holds_iff (addressWidth : Nat)
-    (inputs : (ports addressWidth).inputs.Values)
-    (state : emptySignalMap.Values)
-    (outputs : (ports addressWidth).outputs.Values) :
-    (outputRule addressWidth).Holds inputs state outputs ↔
-      outputs .readAddress = pointerAddress (inputs .readPointer) ∧
-      outputs .writeAddress = pointerAddress (inputs .writePointer) ∧
-      outputs .inputReady = inputReady (inputs .readPointer) (inputs .writePointer) ∧
-      outputs .outputValid = outputValid (inputs .readPointer) (inputs .writePointer) ∧
-      outputs .readAdvance = readAdvance (inputs .readPointer) (inputs .writePointer)
-        (inputs .outputReady) ∧
-      outputs .writeAdvance = writeAdvance (inputs .readPointer) (inputs .writePointer)
-        (inputs .inputValid) := by
-  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalGroup.all_matches]
-  constructor
-  · intro equal
-    exact ⟨congrFun equal .readAddress, congrFun equal .writeAddress,
-      congrFun equal .inputReady, congrFun equal .outputValid,
-      congrFun equal .readAdvance, congrFun equal .writeAdvance⟩
-  · rintro ⟨readAddress, writeAddress, inputReady, outputValid,
-      readAdvance, writeAdvance⟩
-    funext output
-    cases output <;> assumption
 
 theorem addressesEqual_eq_true_iff (readPointer writePointer : Pointer addressWidth) :
     addressesEqual readPointer writePointer = true ↔

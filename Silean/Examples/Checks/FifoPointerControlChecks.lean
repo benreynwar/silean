@@ -59,6 +59,13 @@ def inputs : (ports 2).inputs.Values
 
 def outputs := ((cycleContract 2).evaluate inputs SignalMap.emptyValues).1
 
+-- Parent-facing observations do not inherit the unrelated handshake inputs.
+example : (readAddressRule 2).readsInputs.labels = [.readPointer] := rfl
+example : (outputValidRule 2).readsInputs.labels =
+    [.readPointer, .writePointer] := rfl
+example : (inputReadyRule 2).readsInputs.labels =
+    [.readPointer, .writePointer] := rfl
+
 #guard outputs .readAddress 0
 #guard !(outputs .readAddress 1)
 #guard !(outputs .writeAddress 0)
@@ -68,8 +75,13 @@ def outputs := ((cycleContract 2).evaluate inputs SignalMap.emptyValues).1
 #guard outputs .readAdvance
 #guard outputs .writeAdvance
 
-example : (outputRule 2).Holds inputs SignalMap.emptyValues outputs := by
-  exact ((cycleContract 2).evaluate_evaluatesTo inputs SignalMap.emptyValues).1 .apply
+example : (readAddressRule 2).Holds inputs SignalMap.emptyValues outputs := by
+  exact ((cycleContract 2).evaluate_evaluatesTo inputs SignalMap.emptyValues).1
+    .readAddress
+
+example : (inputReadyRule 2).Holds inputs SignalMap.emptyValues outputs := by
+  exact ((cycleContract 2).evaluate_evaluatesTo inputs SignalMap.emptyValues).1
+    .inputReady
 
 -- At address width zero, the sole pointer bit is the wrap bit and the address
 -- value is the unique empty vector.
