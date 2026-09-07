@@ -142,6 +142,12 @@ def outputValues (inputs : Inputs) : outputMap.Values
       inputs.matched .instr_slti, inputs.matched .instr_slt,
       inputs.matched .instr_sltiu, inputs.matched .instr_sltu]
 
+/-- Read any instruction-summary output through its proved single-bit shape. -/
+def bitValue (inputs : Inputs) (output : Output) : Bool :=
+  Eq.mp (congrArg SignalType.Denote
+    (show outputMap.signalType output = .bit by cases output <;> rfl))
+    (outputValues inputs output)
+
 namespace TrapRule
 inductive Input
   | instr_lui | instr_auipc | instr_jal | instr_jalr
@@ -306,5 +312,34 @@ module_cycle_contract cycleContract for ports where
   · intro holds label
     cases label
     simpa [recognized_eq] using holds
+
+@[simp] theorem summariesOutputRule_holds_iff
+    (inputs : ports.inputs.Values) (state : emptySignalMap.Values)
+    (outputs : ports.outputs.Values) :
+    summariesOutputRule.Holds inputs state outputs ↔
+      ∀ output, output ≠ .instr_trap →
+        outputs output = outputValues (valuesOf inputs) output := by
+  simp only [summariesOutputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro holds output notTrap
+    cases output with
+    | instr_trap => contradiction
+    | is_lui_auipc_jal => exact holds .is_lui_auipc_jal
+    | is_lui_auipc_jal_jalr_addi_add_sub =>
+        exact holds .is_lui_auipc_jal_jalr_addi_add_sub
+    | is_slti_blt_slt => exact holds .is_slti_blt_slt
+    | is_sltiu_bltu_sltu => exact holds .is_sltiu_bltu_sltu
+    | is_lbu_lhu_lw => exact holds .is_lbu_lhu_lw
+    | is_compare => exact holds .is_compare
+  · intro holds output
+    cases output with
+    | is_lui_auipc_jal => exact holds _ (by intro impossible; contradiction)
+    | is_lui_auipc_jal_jalr_addi_add_sub =>
+        exact holds _ (by intro impossible; contradiction)
+    | is_slti_blt_slt => exact holds _ (by intro impossible; contradiction)
+    | is_sltiu_bltu_sltu => exact holds _ (by intro impossible; contradiction)
+    | is_lbu_lhu_lw => exact holds _ (by intro impossible; contradiction)
+    | is_compare => exact holds _ (by intro impossible; contradiction)
 
 end Silean.Examples.PicoRV.Decoder.InstructionSummary

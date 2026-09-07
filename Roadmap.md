@@ -422,8 +422,8 @@ Proceed in stages:
      output/state orders are checked by `module_rule_schedules`. The two-stage
      parent is likewise a concise authored design with proof construction in
      `DecoderCertified.lean`. Its capture child is concrete while its resolve
-     child deliberately remains a contract blackbox, preserving the existing
-     verification boundary until the resolve-stage equivalence proof exists.
+     child now uses its concrete certified structure. The resolve structure
+     retains only its three smaller combinational contract blackboxes.
    - `Control`, `Datapath`, and `Memory` now use the port and cycle-contract
      declarations while retaining their natural ordinary Lean transition and
      rule definitions. The top-level `PicoRV` shell uses `module_design` to
@@ -471,14 +471,14 @@ contracts, one source-faithful subsystem at a time:
 5. the top-level hierarchy with every blackbox replaced.
 
 The decoder now has natural contracts for its 14-register capture stage and
-45-register resolve stage. The capture stage has a closed certified structure,
-and the certified parent uses it while retaining only the resolve stage as an
-explicit blackbox. The resolve stage's private combinational instruction-match,
-immediate, and summary boundaries have natural zero-state cycle contracts and
-focused checks. Its concrete structural layer and checked schedules now use
-those contracts as blackbox children. Next, prove that layer implements the
-resolve-stage contract; its update logic must preserve the verified pre-edge dependencies
-and reset priority described in [docs/PicoRV32Plan.md](docs/PicoRV32Plan.md).
+45-register resolve stage. Both stages now have certified concrete structures,
+and the certified parent composes those certifications. The resolve stage's
+combinational instruction-match, immediate, and summary boundaries remain the
+only internal decoder blackboxes; they have natural zero-state cycle contracts
+and focused checks. Its equivalence proof preserves the verified pre-edge
+dependencies and reset priority described in
+[docs/PicoRV32Plan.md](docs/PicoRV32Plan.md). The next decoder work is to replace
+those three smaller blackboxes with concrete certified implementations.
 
 Reusable `VectorSlice` and `EqualsConstant` modules now provide the recurring
 field-extraction and fixed-pattern comparisons needed by decoder structures.

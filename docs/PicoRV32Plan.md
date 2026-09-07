@@ -101,7 +101,7 @@ combinational logic, not contract state.
 | --- | --- | --- | --- |
 | ALU | exact pure cycle behavior and public operation laws | complete and closed | nested future datapath child |
 | register file | exact read/write cycle behavior | complete and closed | blackbox boundary for now |
-| decoder | exact configured two-stage registered behavior | certified parent and closed capture stage; resolve not implemented | capture concrete, resolve blackbox |
+| decoder | exact configured two-stage registered behavior | certified parent with concrete capture and resolve stages; resolve retains three combinational child blackboxes | certified two-stage structure |
 | memory | exact configured request-state behavior and natural protocol views | not implemented | blackbox |
 | datapath | exact registered value-flow behavior | not implemented | blackbox |
 | control | exact configured sequencing behavior | not implemented | blackbox |
@@ -144,9 +144,9 @@ matching Verilog nonblocking assignments. The structure should retain the
 source one-hot signals; natural decode theorems can provide an instruction
 view and mutual-exclusion facts.
 
-The parent has this certified two-child hierarchy. Capture is concrete and
-resolve remains a blackbox whose contract is the only fact used by the parent
-proof. The planned internal resolve-stage hierarchy is:
+The parent has this certified two-child hierarchy. Both stages are concrete
+and certified. The resolve-stage proof uses only the contracts of its three
+remaining combinational blackbox children:
 
 ```text
 PicoRV32Decoder

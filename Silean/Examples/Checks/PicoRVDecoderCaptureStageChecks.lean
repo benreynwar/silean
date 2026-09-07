@@ -58,9 +58,9 @@ noncomputable example : RenderResult String :=
 #guard Naming.ports.inputs.name .mem_rdata_latched = "mem_rdata_latched"
 #guard Naming.ports.outputs.name .decoded_imm_j = "decoded_imm_j"
 
--- Only this child changed in the certified parent decoder.
+-- Both parent children now use their concrete structures.
 example : Silean.Examples.PicoRV.Decoder.structuralChildren .capture = moduleStructure := rfl
 example : Silean.Examples.PicoRV.Decoder.structuralChildren .resolve =
-    Silean.Examples.PicoRV.Decoder.ResolveStage.cycleContract.blackboxStructure := rfl
+    Silean.Examples.PicoRV.Decoder.ResolveStage.moduleStructure := rfl
 
 end Silean.Examples.Checks.PicoRVDecoderCaptureStageChecks

@@ -59,7 +59,7 @@ import Silean.Examples.PicoRV.DecoderCertified
 import Silean.Examples.Checks.PicoRVDecoderChecks
 import Silean.Examples.Checks.PicoRVDecoderCaptureStageChecks
 import Silean.Examples.Checks.PicoRVDecoderResolveChildrenChecks
-import Silean.Examples.PicoRV.Decoder.DecoderResolveStageSchedule
+import Silean.Examples.PicoRV.Decoder.DecoderResolveStageCertified
 import Silean.Examples.PicoRV.Memory
 import Silean.Examples.PicoRV.PicoRV
 import Silean.Examples.PicoRV.PicoRVSchedule

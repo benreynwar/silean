@@ -137,6 +137,12 @@ def outputValues (inputs : Inputs) : outputMap.Values
       decide (funct3 inputs.word = 5 ∧ funct7 inputs.word = 0),
       decide (funct3 inputs.word = 5 ∧ funct7 inputs.word = 0x20)]
 
+/-- Read any instruction-match output through its proved single-bit shape. -/
+def bitValue (inputs : Inputs) (output : Output) : Bool :=
+  Eq.mp (congrArg SignalType.Denote
+    (show outputMap.signalType output = .bit by cases output <;> rfl))
+    (outputValues inputs output)
+
 def outputRule : Contracts.Cycle.CycleOutputRule ports emptySignalMap where
   readsInputs := .all inputMap
   writesOutputs := .all outputMap

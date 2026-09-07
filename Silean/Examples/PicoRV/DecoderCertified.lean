@@ -1,5 +1,6 @@
 import Silean.Examples.PicoRV.Decoder
 import Silean.Examples.PicoRV.Decoder.DecoderCaptureStageCertified
+import Silean.Examples.PicoRV.Decoder.DecoderResolveStageCertified
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
@@ -10,14 +11,13 @@ open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
 
-/-! The parent proof uses the capture stage's concrete certification and the
-resolve stage's contract blackbox certification. Consequently the public
-decoder remains certified at exactly the same verification boundary as before
-the authoring migration. -/
+/-! The parent proof composes the concrete certifications of both registered
+decoder stages. The resolve stage itself depends only on the public contracts
+of its three smaller combinational blackbox children. -/
 
 module_child_certifications childContracts for body where
   capture := CaptureStage.certification,
-  resolve := ResolveStage.cycleContract.blackboxCertification
+  resolve := ResolveStage.certification
 
 module_rule_schedules derivedRuleSchedules for body with childContracts
     implementing cycleContract where
@@ -140,7 +140,6 @@ module_cycle_certification certification for moduleStructure via body
   stateCoverage := hasCorrespondingState,
   implements := implements
 
-/- The generated `certified` bundle contains the concrete capture stage and
-the resolve stage's explicit contract blackbox. -/
+/- The generated `certified` bundle contains both concrete registered stages. -/
 
 end Silean.Examples.PicoRV.Decoder

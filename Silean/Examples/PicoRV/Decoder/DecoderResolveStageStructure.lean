@@ -30,43 +30,29 @@ The three combinational decoder children remain explicit blackboxes at this
 stage. Their public contracts, rather than their future implementations, are
 the only facts used by this parent. -/
 
-private def resetMatchRegisters : List Register := [
-  .instr_beq, .instr_bne, .instr_blt, .instr_bge, .instr_bltu, .instr_bgeu,
-  .instr_addi, .instr_slti, .instr_sltiu, .instr_xori, .instr_ori, .instr_andi,
-  .instr_add, .instr_sub, .instr_sll, .instr_slt, .instr_sltu, .instr_xor,
-  .instr_srl, .instr_sra, .instr_or, .instr_and, .instr_fence]
+def resetMatchRegister (index : Fin 23) : Register :=
+  match index.val with
+  | 0 => .instr_beq | 1 => .instr_bne | 2 => .instr_blt | 3 => .instr_bge
+  | 4 => .instr_bltu | 5 => .instr_bgeu | 6 => .instr_addi | 7 => .instr_slti
+  | 8 => .instr_sltiu | 9 => .instr_xori | 10 => .instr_ori | 11 => .instr_andi
+  | 12 => .instr_add | 13 => .instr_sub | 14 => .instr_sll | 15 => .instr_slt
+  | 16 => .instr_sltu | 17 => .instr_xor | 18 => .instr_srl | 19 => .instr_sra
+  | 20 => .instr_or | 21 => .instr_and | _ => .instr_fence
 
-private def retainedMatchRegisters : List Register := [
-  .instr_lb, .instr_lh, .instr_lw, .instr_lbu, .instr_lhu,
-  .instr_sb, .instr_sh, .instr_sw,
-  .instr_slli, .instr_srli, .instr_srai, .instr_ecall_ebreak,
-  .is_slli_srli_srai, .is_jalr_addi_slti_sltiu_xori_ori_andi,
-  .is_sll_srl_sra]
+def retainedMatchRegister (index : Fin 15) : Register :=
+  match index.val with
+  | 0 => .instr_lb | 1 => .instr_lh | 2 => .instr_lw | 3 => .instr_lbu
+  | 4 => .instr_lhu | 5 => .instr_sb | 6 => .instr_sh | 7 => .instr_sw
+  | 8 => .instr_slli | 9 => .instr_srli | 10 => .instr_srai
+  | 11 => .instr_ecall_ebreak | 12 => .is_slli_srli_srai
+  | 13 => .is_jalr_addi_slti_sltiu_xori_ori_andi | _ => .is_sll_srl_sra
 
-private def ordinarySummaryRegisters : List Register := [
-  .is_lui_auipc_jal, .is_slti_blt_slt, .is_sltiu_bltu_sltu, .is_lbu_lhu_lw]
+def ordinarySummaryRegister (index : Fin 4) : Register :=
+  match index.val with
+  | 0 => .is_lui_auipc_jal | 1 => .is_slti_blt_slt
+  | 2 => .is_sltiu_bltu_sltu | _ => .is_lbu_lhu_lw
 
-@[simp] private theorem resetMatchRegisters_length : resetMatchRegisters.length = 23 := rfl
-@[simp] private theorem retainedMatchRegisters_length : retainedMatchRegisters.length = 15 := rfl
-@[simp] private theorem ordinarySummaryRegisters_length : ordinarySummaryRegisters.length = 4 := rfl
-
-private def resetMatchRegister (index : Fin 23) : Register :=
-  resetMatchRegisters[index]
-
-private def retainedMatchRegister (index : Fin 15) : Register :=
-  retainedMatchRegisters[index]
-
-private def ordinarySummaryRegister (index : Fin 4) : Register :=
-  ordinarySummaryRegisters[index]
-
-def resetMatchType : SignalType := .vector 23 .bit
-def retainedMatchType : SignalType := .vector 15 .bit
-def ordinarySummaryType : SignalType := .vector 4 .bit
-def immediateType : SignalType := .vector 32 .bit
-
-def falseResetMatches : resetMatchType.Denote := fun _ => false
-
-private def matchOutput : Register → InstructionMatch.Output
+def matchOutput : Register → InstructionMatch.Output
   | .instr_beq => .instr_beq | .instr_bne => .instr_bne
   | .instr_blt => .instr_blt | .instr_bge => .instr_bge
   | .instr_bltu => .instr_bltu | .instr_bgeu => .instr_bgeu
@@ -94,7 +80,7 @@ private def matchOutput : Register → InstructionMatch.Output
       .is_sltiu_bltu_sltu | .is_lbu_lhu_lw | .is_compare =>
       .instr_fence -- unreachable for the two match-register groups
 
-private def summaryOutput : Register → InstructionSummary.Output
+def summaryOutput : Register → InstructionSummary.Output
   | .is_lui_auipc_jal => .is_lui_auipc_jal
   | .is_lui_auipc_jal_jalr_addi_add_sub => .is_lui_auipc_jal_jalr_addi_add_sub
   | .is_slti_blt_slt => .is_slti_blt_slt
@@ -102,6 +88,13 @@ private def summaryOutput : Register → InstructionSummary.Output
   | .is_lbu_lhu_lw => .is_lbu_lhu_lw
   | .is_compare => .is_compare
   | _ => .instr_trap -- unreachable for summary registers
+
+def resetMatchType : SignalType := .vector 23 .bit
+def retainedMatchType : SignalType := .vector 15 .bit
+def ordinarySummaryType : SignalType := .vector 4 .bit
+def immediateType : SignalType := .vector 32 .bit
+
+def falseResetMatches : resetMatchType.Denote := fun _ => false
 
 def resetMatchCombiner : Composition.SignalCombiner := .vector 23 .bit
 def retainedMatchCombiner : Composition.SignalCombiner := .vector 15 .bit
@@ -313,3 +306,122 @@ module_design ResolveStage where
   }
 
 end Silean.Examples.PicoRV.Decoder
+
+namespace Silean.Examples.PicoRV.Decoder.ResolveStage
+
+open Silean
+
+/-- The values exposed at the resolve-stage boundary, separated from the
+mechanical `SignalSource` representation used by `wiring`. -/
+def boundaryValues
+    (childOutputs : (child : Instance) → (instancePorts.ports child).outputs.Values) :
+    outputMap.Values
+  | .instr_trap => childOutputs .instructionSummary .instr_trap
+  | .instr_beq => childOutputs .resetMatchOutputs 0
+  | .instr_bne => childOutputs .resetMatchOutputs 1
+  | .instr_blt => childOutputs .resetMatchOutputs 2
+  | .instr_bge => childOutputs .resetMatchOutputs 3
+  | .instr_bltu => childOutputs .resetMatchOutputs 4
+  | .instr_bgeu => childOutputs .resetMatchOutputs 5
+  | .instr_lb => childOutputs .retainedMatchOutputs 0
+  | .instr_lh => childOutputs .retainedMatchOutputs 1
+  | .instr_lw => childOutputs .retainedMatchOutputs 2
+  | .instr_lbu => childOutputs .retainedMatchOutputs 3
+  | .instr_lhu => childOutputs .retainedMatchOutputs 4
+  | .instr_sb => childOutputs .retainedMatchOutputs 5
+  | .instr_sh => childOutputs .retainedMatchOutputs 6
+  | .instr_sw => childOutputs .retainedMatchOutputs 7
+  | .instr_addi => childOutputs .resetMatchOutputs 6
+  | .instr_slti => childOutputs .resetMatchOutputs 7
+  | .instr_sltiu => childOutputs .resetMatchOutputs 8
+  | .instr_xori => childOutputs .resetMatchOutputs 9
+  | .instr_ori => childOutputs .resetMatchOutputs 10
+  | .instr_andi => childOutputs .resetMatchOutputs 11
+  | .instr_slli => childOutputs .retainedMatchOutputs 8
+  | .instr_srli => childOutputs .retainedMatchOutputs 9
+  | .instr_srai => childOutputs .retainedMatchOutputs 10
+  | .instr_add => childOutputs .resetMatchOutputs 12
+  | .instr_sub => childOutputs .resetMatchOutputs 13
+  | .instr_sll => childOutputs .resetMatchOutputs 14
+  | .instr_slt => childOutputs .resetMatchOutputs 15
+  | .instr_sltu => childOutputs .resetMatchOutputs 16
+  | .instr_xor => childOutputs .resetMatchOutputs 17
+  | .instr_srl => childOutputs .resetMatchOutputs 18
+  | .instr_sra => childOutputs .resetMatchOutputs 19
+  | .instr_or => childOutputs .resetMatchOutputs 20
+  | .instr_and => childOutputs .resetMatchOutputs 21
+  | .instr_fence => childOutputs .resetMatchOutputs 22
+  | .decoded_imm => childOutputs .immediateStorage .q
+  | .is_lui_auipc_jal => childOutputs .ordinarySummaryOutputs 0
+  | .is_slli_srli_srai => childOutputs .retainedMatchOutputs 12
+  | .is_jalr_addi_slti_sltiu_xori_ori_andi => childOutputs .retainedMatchOutputs 13
+  | .is_sll_srl_sra => childOutputs .retainedMatchOutputs 14
+  | .is_lui_auipc_jal_jalr_addi_add_sub => childOutputs .addSubSummaryStorage .output
+  | .is_slti_blt_slt => childOutputs .ordinarySummaryOutputs 1
+  | .is_sltiu_bltu_sltu => childOutputs .ordinarySummaryOutputs 2
+  | .is_lbu_lhu_lw => childOutputs .ordinarySummaryOutputs 3
+  | .is_compare => childOutputs .compareStorage .value
+
+@[simp] theorem moduleOutput_value
+    (inputs : inputMap.Values)
+    (childOutputs : (child : Instance) → (instancePorts.ports child).outputs.Values)
+    (output : Output) :
+    (wiring.moduleOutput output).value inputs childOutputs =
+      boundaryValues childOutputs output := by
+  cases output <;> rfl
+
+/-- The instruction-summary child's inputs, in ordinary values rather than
+the `SignalSource` form used by the authored wiring. -/
+def instructionSummaryInputs (inputs : inputMap.Values)
+    (childOutputs : (child : Instance) → (instancePorts.ports child).outputs.Values) :
+    InstructionSummary.inputMap.Values
+  | .instr_lui => inputs .instr_lui
+  | .instr_auipc => inputs .instr_auipc
+  | .instr_jal => inputs .instr_jal
+  | .instr_jalr => inputs .instr_jalr
+  | .is_beq_bne_blt_bge_bltu_bgeu => inputs .is_beq_bne_blt_bge_bltu_bgeu
+  | .instr_beq => childOutputs .resetMatchOutputs 0
+  | .instr_bne => childOutputs .resetMatchOutputs 1
+  | .instr_blt => childOutputs .resetMatchOutputs 2
+  | .instr_bge => childOutputs .resetMatchOutputs 3
+  | .instr_bltu => childOutputs .resetMatchOutputs 4
+  | .instr_bgeu => childOutputs .resetMatchOutputs 5
+  | .instr_lb => childOutputs .retainedMatchOutputs 0
+  | .instr_lh => childOutputs .retainedMatchOutputs 1
+  | .instr_lw => childOutputs .retainedMatchOutputs 2
+  | .instr_lbu => childOutputs .retainedMatchOutputs 3
+  | .instr_lhu => childOutputs .retainedMatchOutputs 4
+  | .instr_sb => childOutputs .retainedMatchOutputs 5
+  | .instr_sh => childOutputs .retainedMatchOutputs 6
+  | .instr_sw => childOutputs .retainedMatchOutputs 7
+  | .instr_addi => childOutputs .resetMatchOutputs 6
+  | .instr_slti => childOutputs .resetMatchOutputs 7
+  | .instr_sltiu => childOutputs .resetMatchOutputs 8
+  | .instr_xori => childOutputs .resetMatchOutputs 9
+  | .instr_ori => childOutputs .resetMatchOutputs 10
+  | .instr_andi => childOutputs .resetMatchOutputs 11
+  | .instr_slli => childOutputs .retainedMatchOutputs 8
+  | .instr_srli => childOutputs .retainedMatchOutputs 9
+  | .instr_srai => childOutputs .retainedMatchOutputs 10
+  | .instr_add => childOutputs .resetMatchOutputs 12
+  | .instr_sub => childOutputs .resetMatchOutputs 13
+  | .instr_sll => childOutputs .resetMatchOutputs 14
+  | .instr_slt => childOutputs .resetMatchOutputs 15
+  | .instr_sltu => childOutputs .resetMatchOutputs 16
+  | .instr_xor => childOutputs .resetMatchOutputs 17
+  | .instr_srl => childOutputs .resetMatchOutputs 18
+  | .instr_sra => childOutputs .resetMatchOutputs 19
+  | .instr_or => childOutputs .resetMatchOutputs 20
+  | .instr_and => childOutputs .resetMatchOutputs 21
+  | .instr_ecall_ebreak => childOutputs .retainedMatchOutputs 11
+  | .instr_fence => childOutputs .resetMatchOutputs 22
+
+@[simp] theorem instructionSummaryInput_value
+    (inputs : inputMap.Values)
+    (childOutputs : (child : Instance) → (instancePorts.ports child).outputs.Values)
+    (input : InstructionSummary.Input) :
+    (wiring.instanceInput .instructionSummary input).value inputs childOutputs =
+      instructionSummaryInputs inputs childOutputs input := by
+  cases input <;> rfl
+
+end Silean.Examples.PicoRV.Decoder.ResolveStage

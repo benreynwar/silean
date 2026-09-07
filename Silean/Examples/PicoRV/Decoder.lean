@@ -1,6 +1,5 @@
 import Silean.Examples.PicoRV.Decoder.DecoderCaptureStage
-import Silean.Examples.PicoRV.Decoder.DecoderResolveStage
-import Silean.Contracts.Cycle.CycleBlackbox
+import Silean.Examples.PicoRV.Decoder.DecoderResolveStageStructure
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
 import Silean.Authoring.ModulePorts
@@ -476,15 +475,14 @@ open Silean.Authoring
 
 /-! ## Two-stage structural decomposition
 
-The capture stage is concrete. The resolve stage remains an explicit contract
-blackbox at this boundary until its structural-equivalence proof is complete. -/
+Both registered stages have concrete structural implementations. The resolve
+stage retains three smaller combinational contract blackboxes internally. -/
 
 module_design Decoder where
   boundary (Decoder.ports) (naming := Decoder.Naming.ports)
   instances {
     capture := Decoder.CaptureStage.design,
-    resolve := Decoder.ResolveStage.cycleContract.blackboxDesign
-      "PicoRVDecoderResolve" Decoder.ResolveStage.Naming.ports }
+    resolve := Decoder.ResolveStage.design }
   wiring {
   outputs {
     .instr_trap := resolve.instr_trap,

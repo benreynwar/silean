@@ -76,16 +76,26 @@ example : (resolvedAddi .instr_addi : Bool) = true := by rfl
 
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports := certified
 
--- The capture stage is concrete; the unresolved second stage is the only
--- remaining blackbox in the decoder hierarchy.
+example : ResolveStage.structuralChildren .instructionMatch =
+    InstructionMatch.cycleContract.blackboxStructure := rfl
+example : ResolveStage.structuralChildren .immediate =
+    Immediate.cycleContract.blackboxStructure := rfl
+example : ResolveStage.structuralChildren .instructionSummary =
+    InstructionSummary.cycleContract.blackboxStructure := rfl
+
+-- The two registered stages are concrete. The resolve stage deliberately
+-- retains its three smaller combinational contract blackboxes.
 example : ¬moduleStructure.HasNoBlackboxes := by
   simp only [moduleStructure, ModuleStructure.HasNoBlackboxes]
   intro closed
-  simpa [structuralChildren, Contracts.Cycle.ModuleCycleContract.blackboxStructure,
-    ModuleStructure.HasNoBlackboxes] using closed .resolve
+  have resolveClosed := closed .resolve
+  simpa [structuralChildren, ResolveStage.moduleStructure,
+    ResolveStage.structuralChildren,
+    Contracts.Cycle.ModuleCycleContract.blackboxStructure,
+    ModuleStructure.HasNoBlackboxes] using resolveClosed .instructionMatch
 
--- Intentional blackboxes emit as FIRRTL `extmodule`s, while closed emission
--- remains unavailable until the resolve-stage equivalence proof is supplied.
+-- Intentional combinational blackboxes emit as FIRRTL `extmodule`s, so closed
+-- emission remains unavailable until those children receive implementations.
 #guard match Silean.FIRRTL.renderCircuit naming with
   | .ok _ => true
   | .error _ => false

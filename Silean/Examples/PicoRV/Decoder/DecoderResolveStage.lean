@@ -1,4 +1,7 @@
 import Silean.Examples.PicoRV.Decoder.DecoderTypes
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatch
+import Silean.Examples.PicoRV.Decoder.DecoderImmediate
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummary
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModulePorts
 import Silean.Contracts.Cycle.CycleContract
@@ -134,127 +137,133 @@ def valuesOf (inputs : inputMap.Values) : Inputs where
   is_alu_reg_imm := inputs .is_alu_reg_imm
   is_alu_reg_reg := inputs .is_alu_reg_reg
 
-def summarized (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
-  let state := stateMap.set state .is_lui_auipc_jal
-    (boolOr [inputs.instr_lui, inputs.instr_auipc, inputs.instr_jal])
-  let state := stateMap.set state .is_lui_auipc_jal_jalr_addi_add_sub
-    (boolOr [inputs.instr_lui, inputs.instr_auipc, inputs.instr_jal,
-      inputs.instr_jalr, state .instr_addi, state .instr_add, state .instr_sub])
-  let state := stateMap.set state .is_slti_blt_slt
-    (boolOr [state .instr_slti, state .instr_blt, state .instr_slt])
-  let state := stateMap.set state .is_sltiu_bltu_sltu
-    (boolOr [state .instr_sltiu, state .instr_bltu, state .instr_sltu])
-  let state := stateMap.set state .is_lbu_lhu_lw
-    (boolOr [state .instr_lbu, state .instr_lhu, state .instr_lw])
-  stateMap.set state .is_compare
-    (boolOr [inputs.is_beq_bne_blt_bge_bltu_bgeu,
-      state .instr_slti, state .instr_slt, state .instr_sltiu, state .instr_sltu])
+def matchInputs (inputs : Inputs) : InstructionMatch.Inputs where
+  word := inputs.mem_rdata_q
+  instr_jalr := inputs.instr_jalr
+  is_beq_bne_blt_bge_bltu_bgeu := inputs.is_beq_bne_blt_bge_bltu_bgeu
+  is_lb_lh_lw_lbu_lhu := inputs.is_lb_lh_lw_lbu_lhu
+  is_sb_sh_sw := inputs.is_sb_sh_sw
+  is_alu_reg_imm := inputs.is_alu_reg_imm
+  is_alu_reg_reg := inputs.is_alu_reg_reg
+
+def immediateInputs (inputs : Inputs) : Immediate.Inputs where
+  word := inputs.mem_rdata_q
+  decoded_imm_j := inputs.decoded_imm_j
+  instr_jal := inputs.instr_jal
+  instr_lui := inputs.instr_lui
+  instr_auipc := inputs.instr_auipc
+  instr_jalr := inputs.instr_jalr
+  is_lb_lh_lw_lbu_lhu := inputs.is_lb_lh_lw_lbu_lhu
+  is_alu_reg_imm := inputs.is_alu_reg_imm
+  is_beq_bne_blt_bge_bltu_bgeu := inputs.is_beq_bne_blt_bge_bltu_bgeu
+  is_sb_sh_sw := inputs.is_sb_sh_sw
+
+def summaryInputs (inputs : Inputs) (state : stateMap.Values) :
+    InstructionSummary.Inputs where
+  instr_lui := inputs.instr_lui
+  instr_auipc := inputs.instr_auipc
+  instr_jal := inputs.instr_jal
+  instr_jalr := inputs.instr_jalr
+  is_beq_bne_blt_bge_bltu_bgeu := inputs.is_beq_bne_blt_bge_bltu_bgeu
+  matched
+    | .instr_beq => state .instr_beq | .instr_bne => state .instr_bne
+    | .instr_blt => state .instr_blt | .instr_bge => state .instr_bge
+    | .instr_bltu => state .instr_bltu | .instr_bgeu => state .instr_bgeu
+    | .instr_lb => state .instr_lb | .instr_lh => state .instr_lh
+    | .instr_lw => state .instr_lw | .instr_lbu => state .instr_lbu
+    | .instr_lhu => state .instr_lhu
+    | .instr_sb => state .instr_sb | .instr_sh => state .instr_sh
+    | .instr_sw => state .instr_sw
+    | .instr_addi => state .instr_addi | .instr_slti => state .instr_slti
+    | .instr_sltiu => state .instr_sltiu | .instr_xori => state .instr_xori
+    | .instr_ori => state .instr_ori | .instr_andi => state .instr_andi
+    | .instr_slli => state .instr_slli | .instr_srli => state .instr_srli
+    | .instr_srai => state .instr_srai
+    | .instr_add => state .instr_add | .instr_sub => state .instr_sub
+    | .instr_sll => state .instr_sll | .instr_slt => state .instr_slt
+    | .instr_sltu => state .instr_sltu | .instr_xor => state .instr_xor
+    | .instr_srl => state .instr_srl | .instr_sra => state .instr_sra
+    | .instr_or => state .instr_or | .instr_and => state .instr_and
+    | .instr_ecall_ebreak => state .instr_ecall_ebreak
+    | .instr_fence => state .instr_fence
+    | .is_slli_srli_srai | .is_jalr_addi_slti_sltiu_xori_ori_andi
+    | .is_sll_srl_sra => false
+
+def summarized (inputs : Inputs) (state : stateMap.Values) : stateMap.Values
+  | .is_lui_auipc_jal =>
+      InstructionSummary.outputValues (summaryInputs inputs state) .is_lui_auipc_jal
+  | .is_lui_auipc_jal_jalr_addi_add_sub =>
+      InstructionSummary.outputValues (summaryInputs inputs state)
+        .is_lui_auipc_jal_jalr_addi_add_sub
+  | .is_slti_blt_slt =>
+      InstructionSummary.outputValues (summaryInputs inputs state) .is_slti_blt_slt
+  | .is_sltiu_bltu_sltu =>
+      InstructionSummary.outputValues (summaryInputs inputs state) .is_sltiu_bltu_sltu
+  | .is_lbu_lhu_lw =>
+      InstructionSummary.outputValues (summaryInputs inputs state) .is_lbu_lhu_lw
+  | .is_compare =>
+      InstructionSummary.outputValues (summaryInputs inputs state) .is_compare
+  | register => state register
 
 def decoded (inputs : Inputs) (current updated : stateMap.Values) : stateMap.Values :=
   if !(inputs.decoder_trigger && !inputs.decoder_pseudo_trigger) then updated else
-  let word := inputs.mem_rdata_q
-  let branch := inputs.is_beq_bne_blt_bge_bltu_bgeu
-  let load := inputs.is_lb_lh_lw_lbu_lhu
-  let store := inputs.is_sb_sh_sw
-  let imm := inputs.is_alu_reg_imm
-  let reg := inputs.is_alu_reg_reg
-  let state := updated
-  let state := stateMap.set state .instr_beq (branch && decide (funct3 word = 0))
-  let state := stateMap.set state .instr_bne (branch && decide (funct3 word = 1))
-  let state := stateMap.set state .instr_blt (branch && decide (funct3 word = 4))
-  let state := stateMap.set state .instr_bge (branch && decide (funct3 word = 5))
-  let state := stateMap.set state .instr_bltu (branch && decide (funct3 word = 6))
-  let state := stateMap.set state .instr_bgeu (branch && decide (funct3 word = 7))
-  let state := stateMap.set state .instr_lb (load && decide (funct3 word = 0))
-  let state := stateMap.set state .instr_lh (load && decide (funct3 word = 1))
-  let state := stateMap.set state .instr_lw (load && decide (funct3 word = 2))
-  let state := stateMap.set state .instr_lbu (load && decide (funct3 word = 4))
-  let state := stateMap.set state .instr_lhu (load && decide (funct3 word = 5))
-  let state := stateMap.set state .instr_sb (store && decide (funct3 word = 0))
-  let state := stateMap.set state .instr_sh (store && decide (funct3 word = 1))
-  let state := stateMap.set state .instr_sw (store && decide (funct3 word = 2))
-  let state := stateMap.set state .instr_addi (imm && decide (funct3 word = 0))
-  let state := stateMap.set state .instr_slti (imm && decide (funct3 word = 2))
-  let state := stateMap.set state .instr_sltiu (imm && decide (funct3 word = 3))
-  let state := stateMap.set state .instr_xori (imm && decide (funct3 word = 4))
-  let state := stateMap.set state .instr_ori (imm && decide (funct3 word = 6))
-  let state := stateMap.set state .instr_andi (imm && decide (funct3 word = 7))
-  let state := stateMap.set state .instr_slli
-    (imm && decide (funct3 word = 1 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_srli
-    (imm && decide (funct3 word = 5 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_srai
-    (imm && decide (funct3 word = 5 ∧ funct7 word = 0x20))
-  let state := stateMap.set state .instr_add
-    (reg && decide (funct3 word = 0 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_sub
-    (reg && decide (funct3 word = 0 ∧ funct7 word = 0x20))
-  let state := stateMap.set state .instr_sll
-    (reg && decide (funct3 word = 1 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_slt
-    (reg && decide (funct3 word = 2 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_sltu
-    (reg && decide (funct3 word = 3 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_xor
-    (reg && decide (funct3 word = 4 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_srl
-    (reg && decide (funct3 word = 5 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_sra
-    (reg && decide (funct3 word = 5 ∧ funct7 word = 0x20))
-  let state := stateMap.set state .instr_or
-    (reg && decide (funct3 word = 6 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_and
-    (reg && decide (funct3 word = 7 ∧ funct7 word = 0))
-  let state := stateMap.set state .instr_ecall_ebreak
-    (decide (opcode word = 0x73 ∧ field word 21 11 = 0 ∧ field word 7 13 = 0))
-  let state := stateMap.set state .instr_fence
-    (decide (opcode word = 0x0f ∧ funct3 word = 0))
-  let state := stateMap.set state .is_slli_srli_srai
-    (imm && decide ((funct3 word = 1 ∧ funct7 word = 0) ∨
-      (funct3 word = 5 ∧ (funct7 word = 0 ∨ funct7 word = 0x20))))
-  let state := stateMap.set state .is_jalr_addi_slti_sltiu_xori_ori_andi
-    (inputs.instr_jalr || (imm && decide (funct3 word = 0 ∨ funct3 word = 2 ∨
-      funct3 word = 3 ∨ funct3 word = 4 ∨ funct3 word = 6 ∨ funct3 word = 7)))
-  let state := stateMap.set state .is_sll_srl_sra
-    (reg && decide ((funct3 word = 1 ∧ funct7 word = 0) ∨
-      (funct3 word = 5 ∧ (funct7 word = 0 ∨ funct7 word = 0x20))))
-  let state := stateMap.set state .is_lui_auipc_jal_jalr_addi_add_sub false
-  let state := stateMap.set state .is_compare false
-  let decodedImm :=
-    if inputs.instr_jal then inputs.decoded_imm_j
-    else if inputs.instr_lui || inputs.instr_auipc then immediateU word
-    else if inputs.instr_jalr || load || imm then immediateI word
-    else if branch then immediateB word
-    else if store then immediateS word
-    else current .decoded_imm
-  stateMap.set state .decoded_imm decodedImm
+  fun
+  | .instr_beq => InstructionMatch.outputValues (matchInputs inputs) .instr_beq
+  | .instr_bne => InstructionMatch.outputValues (matchInputs inputs) .instr_bne
+  | .instr_blt => InstructionMatch.outputValues (matchInputs inputs) .instr_blt
+  | .instr_bge => InstructionMatch.outputValues (matchInputs inputs) .instr_bge
+  | .instr_bltu => InstructionMatch.outputValues (matchInputs inputs) .instr_bltu
+  | .instr_bgeu => InstructionMatch.outputValues (matchInputs inputs) .instr_bgeu
+  | .instr_lb => InstructionMatch.outputValues (matchInputs inputs) .instr_lb
+  | .instr_lh => InstructionMatch.outputValues (matchInputs inputs) .instr_lh
+  | .instr_lw => InstructionMatch.outputValues (matchInputs inputs) .instr_lw
+  | .instr_lbu => InstructionMatch.outputValues (matchInputs inputs) .instr_lbu
+  | .instr_lhu => InstructionMatch.outputValues (matchInputs inputs) .instr_lhu
+  | .instr_sb => InstructionMatch.outputValues (matchInputs inputs) .instr_sb
+  | .instr_sh => InstructionMatch.outputValues (matchInputs inputs) .instr_sh
+  | .instr_sw => InstructionMatch.outputValues (matchInputs inputs) .instr_sw
+  | .instr_addi => InstructionMatch.outputValues (matchInputs inputs) .instr_addi
+  | .instr_slti => InstructionMatch.outputValues (matchInputs inputs) .instr_slti
+  | .instr_sltiu => InstructionMatch.outputValues (matchInputs inputs) .instr_sltiu
+  | .instr_xori => InstructionMatch.outputValues (matchInputs inputs) .instr_xori
+  | .instr_ori => InstructionMatch.outputValues (matchInputs inputs) .instr_ori
+  | .instr_andi => InstructionMatch.outputValues (matchInputs inputs) .instr_andi
+  | .instr_slli => InstructionMatch.outputValues (matchInputs inputs) .instr_slli
+  | .instr_srli => InstructionMatch.outputValues (matchInputs inputs) .instr_srli
+  | .instr_srai => InstructionMatch.outputValues (matchInputs inputs) .instr_srai
+  | .instr_add => InstructionMatch.outputValues (matchInputs inputs) .instr_add
+  | .instr_sub => InstructionMatch.outputValues (matchInputs inputs) .instr_sub
+  | .instr_sll => InstructionMatch.outputValues (matchInputs inputs) .instr_sll
+  | .instr_slt => InstructionMatch.outputValues (matchInputs inputs) .instr_slt
+  | .instr_sltu => InstructionMatch.outputValues (matchInputs inputs) .instr_sltu
+  | .instr_xor => InstructionMatch.outputValues (matchInputs inputs) .instr_xor
+  | .instr_srl => InstructionMatch.outputValues (matchInputs inputs) .instr_srl
+  | .instr_sra => InstructionMatch.outputValues (matchInputs inputs) .instr_sra
+  | .instr_or => InstructionMatch.outputValues (matchInputs inputs) .instr_or
+  | .instr_and => InstructionMatch.outputValues (matchInputs inputs) .instr_and
+  | .instr_ecall_ebreak =>
+      InstructionMatch.outputValues (matchInputs inputs) .instr_ecall_ebreak
+  | .instr_fence => InstructionMatch.outputValues (matchInputs inputs) .instr_fence
+  | .is_slli_srli_srai =>
+      InstructionMatch.outputValues (matchInputs inputs) .is_slli_srli_srai
+  | .is_jalr_addi_slti_sltiu_xori_ori_andi =>
+      InstructionMatch.outputValues (matchInputs inputs)
+        .is_jalr_addi_slti_sltiu_xori_ori_andi
+  | .is_sll_srl_sra =>
+      InstructionMatch.outputValues (matchInputs inputs) .is_sll_srl_sra
+  | .is_lui_auipc_jal_jalr_addi_add_sub | .is_compare => false
+  | .decoded_imm =>
+      (Immediate.evaluate (immediateInputs inputs)).getD (current .decoded_imm)
+  | register => updated register
 
 def resetApplied (resetn : Bool) (state : stateMap.Values) : stateMap.Values :=
-  if resetn then state else
-  let state := stateMap.set state .is_compare false
-  let state := stateMap.set state .instr_beq false
-  let state := stateMap.set state .instr_bne false
-  let state := stateMap.set state .instr_blt false
-  let state := stateMap.set state .instr_bge false
-  let state := stateMap.set state .instr_bltu false
-  let state := stateMap.set state .instr_bgeu false
-  let state := stateMap.set state .instr_addi false
-  let state := stateMap.set state .instr_slti false
-  let state := stateMap.set state .instr_sltiu false
-  let state := stateMap.set state .instr_xori false
-  let state := stateMap.set state .instr_ori false
-  let state := stateMap.set state .instr_andi false
-  let state := stateMap.set state .instr_add false
-  let state := stateMap.set state .instr_sub false
-  let state := stateMap.set state .instr_sll false
-  let state := stateMap.set state .instr_slt false
-  let state := stateMap.set state .instr_sltu false
-  let state := stateMap.set state .instr_xor false
-  let state := stateMap.set state .instr_srl false
-  let state := stateMap.set state .instr_sra false
-  let state := stateMap.set state .instr_or false
-  let state := stateMap.set state .instr_and false
-  stateMap.set state .instr_fence false
+  if resetn then state else fun
+  | .instr_beq | .instr_bne | .instr_blt | .instr_bge | .instr_bltu
+  | .instr_bgeu | .instr_addi | .instr_slti | .instr_sltiu | .instr_xori
+  | .instr_ori | .instr_andi | .instr_add | .instr_sub | .instr_sll
+  | .instr_slt | .instr_sltu | .instr_xor | .instr_srl | .instr_sra
+  | .instr_or | .instr_and | .instr_fence | .is_compare => false
+  | register => state register
 
 def nextState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
   resetApplied inputs.resetn (decoded inputs state (summarized inputs state))
