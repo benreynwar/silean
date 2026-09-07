@@ -2,11 +2,19 @@ namespace Silean
 
 /-! Constructive positions and finite executable enumerations. -/
 
+/-! ## List indices -/
+
 /-- A computational path to `value` in a list. Unlike ordinary membership in
 `Prop`, it records a position that can drive dependent lookup. -/
 inductive ListIndex {α : Type u} (value : α) : List α → Type u
   | head : ListIndex value (value :: rest)
   | tail : ListIndex value rest → ListIndex value (other :: rest)
+
+/-- `"data"` occurs after one other element in this list. -/
+example : ListIndex "data" ["enable", "data"] := .tail .head
+
+/-- The first element is represented directly by `head`. -/
+example : ListIndex "enable" ["enable", "data"] := .head
 
 namespace ListIndex
 
@@ -85,6 +93,16 @@ theorem get_eq {α : Type u} {value : α} {values : List α}
   | head => rfl
   | tail _ induction => exact induction
 
+/-- The witness can be used as a bounded index and retrieves the value named
+in its type. -/
+example :
+    let index : ListIndex "data" ["enable", "data"] := .tail .head
+    index.toFin.val = 1 := rfl
+
+example :
+    let index : ListIndex "data" ["enable", "data"] := .tail .head
+    ["enable", "data"][index.toFin] = "data" := rfl
+
 theorem get_map_eq {α : Type u} {β : Type v}
     {value : α} {values : List α} (index : ListIndex value values)
     (transform : α → β) :
@@ -112,12 +130,23 @@ theorem eq_of_nodup {α : Type u} {value : α} {values : List α}
 
 end ListIndex
 
+/-! ## Dependent lists -/
+
 /-- Values corresponding to a list of keys, where the value type may depend on
 the key. A `ListIndex` selects a key and permits lookup at its `Value key` type. -/
 inductive DependentList {α : Type u} (Value : α → Type v) : List α → Type (max u v)
   | nil : DependentList Value []
   | cons (head : Value key) (tail : DependentList Value keys) :
       DependentList Value (key :: keys)
+
+/-- This list contains a `Nat` at key `false` and a `String` at key `true`. -/
+example : DependentList (fun
+    | false => Nat
+    | true => String) [false, true] :=
+  .cons 32 (.cons "ready" .nil)
+
+/-- The empty key list carries no values. -/
+example : DependentList (fun _ : Bool => Nat) [] := .nil
 
 namespace DependentList
 
@@ -126,6 +155,23 @@ def get {α : Type u} {Value : α → Type v} {keys : List α}
     ListIndex key keys → Value key
   | .head => match values with | .cons head _ => head
   | .tail index => match values with | .cons _ tail => tail.get index
+
+/-- Lookup returns the type selected by the key. -/
+example :
+    let Value : Bool → Type := fun
+      | false => Nat
+      | true => String
+    let values : DependentList Value [false, true] :=
+      .cons 32 (.cons "ready" .nil)
+    values.get (.head : ListIndex false [false, true]) = 32 := rfl
+
+example :
+    let Value : Bool → Type := fun
+      | false => Nat
+      | true => String
+    let values : DependentList Value [false, true] :=
+      .cons 32 (.cons "ready" .nil)
+    values.get (.tail .head : ListIndex true [false, true]) = "ready" := rfl
 
 theorem exists_of_forall_exists {α : Type u} {Value : α → Type v}
     (Property : (key : α) → Value key → Prop)
@@ -144,6 +190,8 @@ theorem exists_of_forall_exists {α : Type u} {Value : α → Type v}
       | tail index => exact tailProperty selected index
 
 end DependentList
+
+/-! ## Supporting list theorems -/
 
 namespace List
 
@@ -214,6 +262,8 @@ theorem finRange_nodup : ∀ width, (List.finRange width).Nodup
 
 end List
 
+/-! ## Enumerations -/
+
 /-- An ordered list containing every value of `α` exactly once. In practice,
 this turns finite symbolic types, especially inductive label types, into lists
 that can be traversed and indexed. `locate` constructively witnesses that no
@@ -223,12 +273,35 @@ class Enumeration (α : Type u) where
   nodup : values.Nodup
   locate : (value : α) → ListIndex value values
 
+/- The supporting declarations are private: they exist only to make the
+examples compile and cannot be used as library API. -/
+
+private inductive ExamplePort
+  | enable
+  | data
+
+@[reducible] private def examplePorts : Enumeration ExamplePort where
+  values := [.enable, .data]
+  nodup := by simp
+  locate
+    | .enable => .head
+    | .data => .tail .head
+
+/-- A hand-written enumeration fixes the traversal order and provides the
+position of every value. Most label types use `deriving Enumeration` from the
+downstream `DeriveEnumeration` module instead. -/
+example : examplePorts.values = [.enable, .data] := rfl
+
+example : (examplePorts.locate .data).toFin.val = 1 := rfl
+
 namespace Enumeration
 
 @[reducible] def fin (width : Nat) : Enumeration (Fin width) where
   values := List.finRange width
   nodup := List.finRange_nodup width
   locate := ListIndex.finRange
+
+example : (Enumeration.fin 3).values = [0, 1, 2] := rfl
 
 @[reducible] def punit : Enumeration PUnit where
   values := [.unit]
@@ -253,6 +326,9 @@ namespace Enumeration
   locate
     | .inl value => (left.locate value).map Sum.inl |>.appendRight _
     | .inr value => (right.locate value).map Sum.inr |>.prependMany _
+
+example : (Enumeration.sum examplePorts (Enumeration.fin 2)).values =
+    [.inl .enable, .inl .data, .inr 0, .inr 1] := rfl
 
 /-- Transport an executable enumeration across a pair of mutually inverse
 functions. The source order is preserved exactly. -/
@@ -300,6 +376,8 @@ theorem exists_pi {Value : α → Type v}
 
 end Enumeration
 
+/-! ## Enumerated maps -/
+
 /-- A mapping that bundles its key type with a complete traversal order.
 This allows structures to carry an otherwise-hidden finite key type while
 still providing a value for, and permitting iteration over, every key. -/
@@ -314,8 +392,23 @@ structure EnumeratedMap (Value : Type v) where
   keys := inferInstance
   value := value
 
+/- The private map below is checked documentation, not part of the public API. -/
+
+private local instance : Enumeration ExamplePort := examplePorts
+
+@[reducible] private def exampleWidths : EnumeratedMap Nat :=
+  EnumeratedMap.of ExamplePort fun
+    | .enable => 1
+    | .data => 32
+
+example : exampleWidths.value .enable = 1 := rfl
+
+example : exampleWidths.value .data = 32 := rfl
+
 def EnumeratedMap.orderedValues (map : EnumeratedMap Value) : List Value :=
   map.keys.values.map map.value
+
+example : exampleWidths.orderedValues = [1, 32] := rfl
 
 theorem EnumeratedMap.orderedValues_length (map : EnumeratedMap Value) :
     map.orderedValues.length = map.keys.values.length := by
@@ -328,5 +421,7 @@ def EnumeratedMap.ordinal (map : EnumeratedMap Value) (key : map.Key) :
 theorem EnumeratedMap.value_at_ordinal (map : EnumeratedMap Value)
     (key : map.Key) : map.orderedValues[map.ordinal key] = map.value key := by
   exact (map.keys.locate key).get_map_eq map.value
+
+example : exampleWidths.orderedValues[exampleWidths.ordinal .data] = 32 := rfl
 
 end Silean

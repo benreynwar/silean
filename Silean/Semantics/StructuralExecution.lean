@@ -1,5 +1,5 @@
 import Silean.Semantics.StructuralDependency
-import Silean.Foundation.Execution
+import Silean.Semantics.Trace
 
 namespace Silean
 
@@ -22,7 +22,7 @@ def ModuleStructure.Transition (module : ModuleStructure ports)
     proposal.outputs = outputs ∧ proposal.nextState = nextState
 
 abbrev ModuleStructure.Executes (module : ModuleStructure ports) :=
-  Execution.Trace module.Transition
+  Trace module.Transition
 
 def ModuleStructure.HasSolution (module : ModuleStructure ports) : Prop :=
   ∀ inputs currentState,
@@ -71,12 +71,12 @@ theorem Executes.length_eq
     {inputs : List ports.inputs.Values} {outputs : List ports.outputs.Values}
     (execution : module.Executes initialState inputs outputs finalState) :
     outputs.length = inputs.length :=
-  Execution.Trace.length_eq execution
+  Trace.length_eq execution
 
 theorem Executes.nil_iff
     {module : ModuleStructure ports} {initialState finalState : module.State} :
     module.Executes initialState [] [] finalState ↔ finalState = initialState :=
-  Execution.Trace.nil_iff
+  Trace.nil_iff
 
 theorem Executes.cons_iff
     {module : ModuleStructure ports} {initialState finalState : module.State}
@@ -86,14 +86,14 @@ theorem Executes.cons_iff
       ∃ nextState,
         module.Transition input initialState output nextState ∧
         module.Executes nextState inputs outputs finalState :=
-  Execution.Trace.cons_iff
+  Trace.cons_iff
 
 theorem Executes.single_iff
     {module : ModuleStructure ports} {initialState finalState : module.State}
     {input : ports.inputs.Values} {output : ports.outputs.Values} :
     module.Executes initialState [input] [output] finalState ↔
       module.Transition input initialState output finalState :=
-  Execution.Trace.single_iff
+  Trace.single_iff
 
 theorem Executes.append
     {module : ModuleStructure ports}
@@ -104,7 +104,7 @@ theorem Executes.append
     (right : module.Executes middleState rightInputs rightOutputs finalState) :
     module.Executes initialState (leftInputs ++ rightInputs)
       (leftOutputs ++ rightOutputs) finalState :=
-  Execution.Trace.append left right
+  Trace.append left right
 
 theorem Executes.split
     {module : ModuleStructure ports}
@@ -117,7 +117,7 @@ theorem Executes.split
     ∃ middleState,
       module.Executes initialState leftInputs leftOutputs middleState ∧
       module.Executes middleState rightInputs rightOutputs finalState :=
-  Execution.Trace.split execution lengths
+  Trace.split execution lengths
 
 theorem executes_append_iff
     {module : ModuleStructure ports}
@@ -130,7 +130,7 @@ theorem executes_append_iff
       ∃ middleState,
         module.Executes initialState leftInputs leftOutputs middleState ∧
         module.Executes middleState rightInputs rightOutputs finalState :=
-  Execution.Trace.append_iff lengths
+  Trace.append_iff lengths
 
 theorem HasSolution.transition_exists
     {module : ModuleStructure ports} (available : module.HasSolution)

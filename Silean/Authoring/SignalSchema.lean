@@ -4,10 +4,18 @@ namespace Silean.Authoring
 
 open Silean Silean.Naming
 
-/-! A schema is only the hierarchical naming metadata for a signal shape.
-The shape itself is its type index, so schemas do not add another structural
-representation and never enter hardware structures or proofs. Named tuple
-declarations additionally generate typed field labels and a `SignalMap`. -/
+/-! # Aggregate signal naming schemas
+
+A `SignalSchema` gives hierarchical emission names to the components of a
+`SignalType`. The signal shape remains its type index, so a schema adds no
+second structural representation and never enters hardware semantics or
+proofs. It is an authoring name for `SignalTypeNaming`, with constructors that
+make nested schema declarations read naturally.
+
+Schemas are consumed by `signal_schema`, by the `(schema := ...)` modifier on
+module ports, and ultimately by emitters that must preserve meaningful names
+inside tuples and vectors.
+-/
 
 abbrev SignalSchema (signalType : SignalType) := SignalTypeNaming signalType
 

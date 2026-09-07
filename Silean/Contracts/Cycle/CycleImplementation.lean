@@ -82,8 +82,8 @@ end ModuleCycleCertified
 
 /-- Contracts required at the named child boundaries of one structural layer. -/
 abbrev ChildCycleContracts (body : ModuleBody) :=
-  (name : body.context.instancePorts.Name) →
-    ModuleCycleContract (body.context.instancePorts.ports name)
+  (name : body.instancePorts.Name) →
+    ModuleCycleContract (body.instancePorts.ports name)
 
 namespace Certification.Layer
 
@@ -92,7 +92,7 @@ contracts. This is the implementation information supplied only when a
 certified layer is instantiated. -/
 abbrev ChildStructures (body : ModuleBody)
     (childContracts : ChildCycleContracts body) :=
-  (name : body.context.instancePorts.Name) →
+  (name : body.instancePorts.Name) →
     ModuleCycleCertifiedStructure (childContracts name)
 
 /-- The concrete composite hierarchy obtained by placing certified child
@@ -100,7 +100,7 @@ structures behind a structural layer. -/
 abbrev moduleStructure (body : ModuleBody)
     {childContracts : ChildCycleContracts body}
     (children : ChildStructures body childContracts) :
-    ModuleStructure body.context.ports :=
+    ModuleStructure body.ports :=
   .composite body fun name => (children name).moduleStructure
 
 end Certification.Layer
@@ -112,7 +112,7 @@ the declared boundary contracts produce a parent hierarchy certified against
 structure ModuleCycleCertifiedLayer
     (body : ModuleBody)
     (childContracts : ChildCycleContracts body)
-    (cycleContract : ModuleCycleContract body.context.ports) where
+    (cycleContract : ModuleCycleContract body.ports) where
   certify : (children : Certification.Layer.ChildStructures body childContracts) →
     ModuleCycleCertification (Certification.Layer.moduleStructure body children)
       cycleContract
@@ -134,8 +134,8 @@ layer and matching certified children. This keeps the routine dependent
 transport out of individual module files. -/
 noncomputable def certifyComposite
     (layer : ModuleCycleCertifiedLayer body childContracts cycleContract)
-    (structuralChildren : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name))
+    (structuralChildren : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name))
     (children : Certification.Layer.ChildStructures body childContracts)
     (structureMatches : ∀ name,
       (children name).moduleStructure = structuralChildren name) :

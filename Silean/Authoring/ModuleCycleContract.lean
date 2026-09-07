@@ -2,8 +2,24 @@ import Silean.Contracts.Cycle.CycleEvaluation
 
 namespace Silean.Authoring
 
+/-! # One-cycle contract authoring
+
+`module_cycle_contract` declares the exact boundary behavior expected from one
+cycle of a module. Output rules state which inputs they read and which outputs
+they determine; the state rule gives the complete next behavioral state. The
+command generates the rule-name enumeration, individual rule definitions, and
+the assembled `ModuleCycleContract`.
+
+A contract is intentionally independent of any `ModuleStructure`: it says what
+a module does, not how it is built. Structural schedules and implementation
+proofs appear only during certification, allowing a contract to describe
+different implementations or a black-box child boundary.
+-/
+
 open Lean Elab Command
 open Lean.Parser.Term
+
+/-! ## Command syntax -/
 
 declare_syntax_cat moduleCycleContractParam
 syntax "(" ident " : " term ")" : moduleCycleContractParam
@@ -43,6 +59,8 @@ rule-name enumeration and contract assembly.
 syntax (name := moduleCycleContract)
   "module_cycle_contract " ident moduleCycleContractParam* " for " term
     " where " ident " := " term moduleCycleContractItem* : command
+
+/-! ## Elaboration -/
 
 private structure ModuleParam where
   binder : TSyntax ``Parser.Term.bracketedBinder

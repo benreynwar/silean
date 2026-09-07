@@ -2,8 +2,24 @@ import Silean.Authoring.ModuleInstances
 
 namespace Silean.Authoring
 
+/-! # Structural wiring authoring
+
+`module_wiring` connects a previously declared module boundary and child
+instance set. It generates the typed `Wiring`, the resulting `ModuleBody`, and
+the composite `ModuleStructure`. Every parent output and child input receives
+exactly one `SignalSource`; Lean's types ensure that each source has the signal
+type required by its destination.
+
+The declaration records simultaneous connections, not an evaluation order.
+Dependency schedules used to prove existence and uniqueness are declared later
+and do not change the wiring's meaning. `module_design` normally invokes this
+lower-level command after `module_instances`.
+-/
+
 open Lean Elab Command
 open Lean.Parser.Term
+
+/-! ## Command syntax -/
 
 declare_syntax_cat moduleWiringParam
 syntax "(" ident " : " term ")" : moduleWiringParam
@@ -33,6 +49,8 @@ command generates the conventional ordinary `wiring`,
 syntax (name := moduleWiring)
   "module_wiring " ident moduleWiringParam* " for " term " where "
     moduleWireGroup* : command
+
+/-! ## Elaboration -/
 
 private structure ModuleParam where
   binder : TSyntax ``Lean.Parser.Term.bracketedBinder

@@ -3,8 +3,24 @@ import Silean.Contracts.Cycle.CycleImplementation
 
 namespace Silean.Authoring
 
+/-! # Associating certified child modules
+
+`module_child_certifications` is the first proof-side step for a composite
+design. For every child named by a `ModuleBody`, it records a
+`ModuleCycleCertification`. The certification's dependent type determines both
+the child's boundary contract and its concrete structure.
+
+The command generates the family of child contracts, the corresponding
+certified child structures, and a theorem that those structures are exactly
+the children selected earlier by `module_instances` or `module_design`. These
+declarations are then consumed by rule scheduling and final cycle
+certification; they do not alter the design-side hierarchy.
+-/
+
 open Lean Elab Command Meta
 open Lean.Parser.Term
+
+/-! ## Command syntax -/
 
 declare_syntax_cat moduleChildCertificationParam
 syntax "(" ident " : " term ")" : moduleChildCertificationParam
@@ -25,6 +41,8 @@ structures are exactly those selected by the design-side `module_instances`.
 syntax (name := moduleChildCertifications)
   "module_child_certifications " ident moduleChildCertificationParam*
     " for " term " where " moduleChildCertificationEntry,* : command
+
+/-! ## Elaboration -/
 
 private structure ModuleParam where
   binder : TSyntax ``Parser.Term.bracketedBinder
@@ -141,14 +159,14 @@ elab_rules : command
     elabCommand <| ← `(
       @[reducible] private noncomputable def $certifiedChildrenName
           $binders:bracketedBinder*
-          (child : ($body).context.instancePorts.Name) :
+          (child : ($body).instancePorts.Name) :
           Silean.Contracts.Cycle.ModuleCycleCertifiedStructure
             ($childContractsName $arguments:term* child) :=
         match child with $certifiedAlternatives:matchAlt*
     )
     elabCommand <| ← `(
       private theorem $structuresMatchName $binders:bracketedBinder*
-          (child : ($body).context.instancePorts.Name) :
+          (child : ($body).instancePorts.Name) :
           ($certifiedChildrenName $arguments:term* child).moduleStructure =
             $structuralChildrenName $arguments:term* child := by
         cases child <;> rfl

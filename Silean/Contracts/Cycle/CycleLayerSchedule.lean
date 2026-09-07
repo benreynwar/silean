@@ -13,7 +13,7 @@ certified children separately. -/
 
 structure RuleOccurrence (body : ModuleBody)
     (childContracts : ChildCycleContracts body) where
-  child : body.context.instancePorts.Name
+  child : body.instancePorts.Name
   rule : (childContracts child).RuleName
 
 namespace RuleOccurrence
@@ -22,8 +22,8 @@ namespace RuleOccurrence
   intro left right
   rcases left with ⟨leftChild, leftRule⟩
   rcases right with ⟨rightChild, rightRule⟩
-  letI : DecidableEq body.context.instancePorts.Name :=
-    body.context.instancePorts.names.decidableEq
+  letI : DecidableEq body.instancePorts.Name :=
+    body.instancePorts.names.decidableEq
   if childEqual : leftChild = rightChild then
     subst rightChild
     letI : DecidableEq (childContracts leftChild).RuleName :=
@@ -37,11 +37,11 @@ namespace RuleOccurrence
     exact isFalse fun equal => childEqual (by injection equal)
 
 def writes (occurrence : RuleOccurrence body childContracts) :
-    List (body.context.instancePorts.ports occurrence.child).outputs.Label :=
+    List (body.instancePorts.ports occurrence.child).outputs.Label :=
   ((childContracts occurrence.child).outputRule occurrence.rule).writesOutputs.labels
 
 def reads (occurrence : RuleOccurrence body childContracts) :
-    List (body.context.instancePorts.ports occurrence.child).inputs.Label :=
+    List (body.instancePorts.ports occurrence.child).inputs.Label :=
   ((childContracts occurrence.child).outputRule occurrence.rule).readsInputs.labels
 
 end RuleOccurrence
@@ -56,24 +56,24 @@ def CoversAllRules (body : ModuleBody) (childContracts : ChildCycleContracts bod
 
 def outputAvailable
     (available : Availability body childContracts)
-    (child : body.context.instancePorts.Name)
-    (output : (body.context.instancePorts.ports child).outputs.Label) : Prop :=
+    (child : body.instancePorts.Name)
+    (output : (body.instancePorts.ports child).outputs.Label) : Prop :=
   ∃ rule, RuleOccurrence.mk child rule ∈ available ∧
     output ∈ (RuleOccurrence.mk child rule : RuleOccurrence body childContracts).writes
 
 def sourceAvailable
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts)
-    (source : SignalSource body.context.ports body.context.instancePorts signalType) : Prop :=
+    (source : SignalSource body.ports body.instancePorts signalType) : Prop :=
   match source with
   | .moduleInput input => inputAvailable input
   | .instanceOutput child output => outputAvailable available child output
 
 @[simp] theorem sourceAvailable_castType
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts)
     (equal : sourceType = targetType)
-    (source : SignalSource body.context.ports body.context.instancePorts sourceType) :
+    (source : SignalSource body.ports body.instancePorts sourceType) :
     sourceAvailable inputAvailable available
         (SignalSource.castType equal source) ↔
       sourceAvailable inputAvailable available source := by
@@ -81,28 +81,28 @@ def sourceAvailable
   rfl
 
 @[simp] theorem sourceAvailable_moduleInput
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts)
-    (input : body.context.ports.inputs.Label) :
+    (input : body.ports.inputs.Label) :
     sourceAvailable inputAvailable available (.moduleInput input) =
       inputAvailable input := rfl
 
 @[simp] theorem sourceAvailable_instanceOutput
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts)
-    (child : body.context.instancePorts.Name)
-    (output : (body.context.instancePorts.ports child).outputs.Label) :
+    (child : body.instancePorts.Name)
+    (output : (body.instancePorts.ports child).outputs.Label) :
     sourceAvailable inputAvailable available (.instanceOutput child output) =
       outputAvailable available child output := rfl
 
 /-- Witness that an output is available by naming a previously called rule
 that writes it. -/
 theorem sourceAvailable_of_instanceOutput
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
-    {child : body.context.instancePorts.Name}
+    {child : body.instancePorts.Name}
     {rule : (childContracts child).RuleName}
-    {output : (body.context.instancePorts.ports child).outputs.Label}
+    {output : (body.instancePorts.ports child).outputs.Label}
     (called : RuleOccurrence.mk child rule ∈ available)
     (written : output ∈
       (RuleOccurrence.mk child rule : RuleOccurrence body childContracts).writes) :
@@ -112,8 +112,8 @@ theorem sourceAvailable_of_instanceOutput
 theorem outputAvailable_of_covers
     {available : Availability body childContracts}
     (covers : CoversAllRules body childContracts available)
-    (child : body.context.instancePorts.Name)
-    (output : (body.context.instancePorts.ports child).outputs.Label) :
+    (child : body.instancePorts.Name)
+    (output : (body.instancePorts.ports child).outputs.Label) :
     outputAvailable available child output := by
   have written := (childContracts child).output_is_written output
   rw [ModuleCycleContract.writtenOutputs] at written
@@ -123,18 +123,18 @@ theorem outputAvailable_of_covers
 theorem sourceAvailable_of_covers
     {available : Availability body childContracts}
     (covers : CoversAllRules body childContracts available)
-    (source : SignalSource body.context.ports body.context.instancePorts signalType) :
+    (source : SignalSource body.ports body.instancePorts signalType) :
     sourceAvailable (fun _ => True) available source := by
   cases source with
   | moduleInput _ => trivial
   | instanceOutput child output => exact outputAvailable_of_covers covers child output
 
 theorem sourceAvailable_mono
-    {leftInputs rightInputs : body.context.ports.inputs.Label → Prop}
+    {leftInputs rightInputs : body.ports.inputs.Label → Prop}
     {left right : Availability body childContracts}
     (inputsMono : ∀ input, leftInputs input → rightInputs input)
     (availableMono : ∀ occurrence, occurrence ∈ left → occurrence ∈ right)
-    {source : SignalSource body.context.ports body.context.instancePorts signalType}
+    {source : SignalSource body.ports body.instancePorts signalType}
     (available : sourceAvailable leftInputs left source) :
     sourceAvailable rightInputs right source := by
   cases source with
@@ -144,7 +144,7 @@ theorem sourceAvailable_mono
       exact ⟨rule, availableMono _ called, written⟩
 
 inductive Schedule (body : ModuleBody) (childContracts : ChildCycleContracts body)
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (Finish : Availability body childContracts → Prop) :
     Availability body childContracts → Type 1
   | done {available} (finished : Finish available) :
@@ -163,7 +163,7 @@ namespace Schedule
 
 def finalAvailability
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts} :
     Schedule body childContracts inputAvailable Finish initial →
@@ -173,7 +173,7 @@ def finalAvailability
 
 @[simp] theorem finalAvailability_done
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {available : Availability body childContracts}
     (finished : Finish available) :
@@ -182,7 +182,7 @@ def finalAvailability
 
 @[simp] theorem finalAvailability_call
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {available : Availability body childContracts}
     (occurrence : RuleOccurrence body childContracts)
@@ -197,7 +197,7 @@ def finalAvailability
 
 noncomputable def append
     {body : ModuleBody} {children : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {FirstFinish SecondFinish : Availability body children → Prop}
     {initial : Availability body children}
     (first : Schedule body children inputAvailable FirstFinish initial)
@@ -211,7 +211,7 @@ noncomputable def append
 
 @[simp] theorem finalAvailability_append
     {body : ModuleBody} {children : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {FirstFinish SecondFinish : Availability body children → Prop}
     {initial : Availability body children}
     (first : Schedule body children inputAvailable FirstFinish initial)
@@ -229,7 +229,7 @@ irrelevant. -/
 
 private noncomputable def callFamilyFrom
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Index : Type} (occurrence : Index → RuleOccurrence body childContracts)
     (injective : Function.Injective occurrence)
     (initial : Availability body childContracts)
@@ -288,7 +288,7 @@ termination_by remaining.length
 
 noncomputable def callFamilyAfter
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     (initial : Availability body childContracts)
     {Index : Type} (indices : Enumeration Index)
     (occurrence : Index → RuleOccurrence body childContracts)
@@ -317,7 +317,7 @@ noncomputable def callFamilyAfter
 
 noncomputable def callFamily
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Index : Type} (indices : Enumeration Index)
     (occurrence : Index → RuleOccurrence body childContracts)
     (injective : Function.Injective occurrence)
@@ -341,7 +341,7 @@ noncomputable def callFamily
 
 theorem finished
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial) :
@@ -352,7 +352,7 @@ theorem finished
 
 @[simp] theorem mem_finalAvailability_callFamilyAfter_iff
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     (initial : Availability body childContracts)
     {Index : Type} (indices : Enumeration Index)
     (occurrence : Index → RuleOccurrence body childContracts)
@@ -377,7 +377,7 @@ theorem finished
 /-- Change only the final obligation of a schedule. -/
 noncomputable def mapFinish
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {FirstFinish SecondFinish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable FirstFinish initial)
@@ -393,7 +393,7 @@ actual final availability. Unlike `mapFinish`, this does not require an
 implication that holds at every intermediate availability. -/
 noncomputable def replaceFinish
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {FirstFinish SecondFinish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable FirstFinish initial)
@@ -407,15 +407,15 @@ noncomputable def replaceFinish
 end Schedule
 
 def BoundaryReady (body : ModuleBody) (childContracts : ChildCycleContracts body)
-    (outputs : List body.context.ports.outputs.Label)
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (outputs : List body.ports.outputs.Label)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts) : Prop :=
   ∀ output, output ∈ outputs →
     sourceAvailable inputAvailable available (body.wiring.moduleOutput output)
 
 abbrev OutputSchedule (body : ModuleBody)
     (childContracts : ChildCycleContracts body)
-    (contract : ModuleCycleContract body.context.ports)
+    (contract : ModuleCycleContract body.ports)
     (name : contract.RuleName) :=
   let rule := contract.outputRule name
   Schedule body childContracts
@@ -438,7 +438,7 @@ abbrev StateSchedule (body : ModuleBody)
 
 structure RuleSchedules (body : ModuleBody)
     (childContracts : ChildCycleContracts body)
-    (contract : ModuleCycleContract body.context.ports) where
+    (contract : ModuleCycleContract body.ports) where
   output : ∀ name, OutputSchedule body childContracts contract name
   state : StateSchedule body childContracts
 

@@ -1,5 +1,5 @@
 import Silean.Interfaces.ValidReady
-import Silean.Foundation.Execution
+import Silean.Semantics.Trace
 import Silean.Semantics.StructuralExecution
 
 namespace Silean.Contracts.Fifo
@@ -89,10 +89,10 @@ def OrdinaryCycleMatches (contract : FifoContract ports payloadTypes)
       contract.outputTransfer inputs outputs ++ nextQueue.1
 
 abbrev OrdinaryTraceMatches (contract : FifoContract ports payloadTypes) :=
-  Execution.Trace contract.OrdinaryCycleMatches
+  Trace contract.OrdinaryCycleMatches
 
 abbrev TraceMatches (contract : FifoContract ports payloadTypes) :=
-  Execution.Trace contract.CycleMatches
+  Trace contract.CycleMatches
 
 def Accepts (contract : FifoContract ports payloadTypes)
     (inputs : List ports.inputs.Values) (outputs : List ports.outputs.Values) : Prop :=
@@ -152,7 +152,7 @@ theorem TraceMatches.append
     (right : contract.TraceMatches middle rightInputs rightOutputs final) :
     contract.TraceMatches initial (leftInputs ++ rightInputs)
       (leftOutputs ++ rightOutputs) final :=
-  Execution.Trace.append left right
+  Trace.append left right
 
 theorem TraceMatches.split
     {contract : FifoContract ports payloadTypes}
@@ -164,7 +164,7 @@ theorem TraceMatches.split
     (lengths : leftOutputs.length = leftInputs.length) :
     ∃ middle, contract.TraceMatches initial leftInputs leftOutputs middle ∧
       contract.TraceMatches middle rightInputs rightOutputs final :=
-  Execution.Trace.split trace lengths
+  Trace.split trace lengths
 
 theorem TraceMatches.after_reset
     {contract : FifoContract ports payloadTypes}

@@ -1,6 +1,6 @@
-import Silean.Foundation.Execution
+import Silean.Semantics.Trace
 import Silean.Foundation.ModulePorts
-import Silean.Foundation.SignalExpectation
+import Silean.Contracts.SignalExpectation
 
 namespace Silean.Contracts.Reset
 
@@ -56,7 +56,7 @@ inductive CycleMatches (contract : ModuleResetContract ports) :
         (some (contract.step input state).2)
 
 abbrev TraceMatches (contract : ModuleResetContract ports) :=
-  Execution.Trace contract.CycleMatches
+  Trace contract.CycleMatches
 
 def Accepts (contract : ModuleResetContract ports)
     (inputs : List ports.inputs.Values) (outputs : List ports.outputs.Values) : Prop :=
@@ -118,12 +118,12 @@ theorem TraceMatches.length_eq
     {outputs : List ports.outputs.Values}
     (trace : contract.TraceMatches initial inputs outputs final) :
     outputs.length = inputs.length :=
-  Execution.Trace.length_eq trace
+  Trace.length_eq trace
 
 @[simp] theorem TraceMatches.nil_iff
     {contract : ModuleResetContract ports} {initial final : contract.Synchronization} :
     contract.TraceMatches initial [] [] final ↔ final = initial :=
-  Execution.Trace.nil_iff
+  Trace.nil_iff
 
 theorem TraceMatches.cons_iff
     {contract : ModuleResetContract ports}
@@ -134,7 +134,7 @@ theorem TraceMatches.cons_iff
       ∃ next,
         contract.CycleMatches input initial output next ∧
         contract.TraceMatches next inputs outputs final :=
-  Execution.Trace.cons_iff
+  Trace.cons_iff
 
 theorem TraceMatches.append
     {contract : ModuleResetContract ports}
@@ -145,7 +145,7 @@ theorem TraceMatches.append
     (right : contract.TraceMatches middle rightInputs rightOutputs final) :
     contract.TraceMatches initial (leftInputs ++ rightInputs)
       (leftOutputs ++ rightOutputs) final :=
-  Execution.Trace.append left right
+  Trace.append left right
 
 theorem TraceMatches.split
     {contract : ModuleResetContract ports}
@@ -158,7 +158,7 @@ theorem TraceMatches.split
     ∃ middle,
       contract.TraceMatches initial leftInputs leftOutputs middle ∧
       contract.TraceMatches middle rightInputs rightOutputs final :=
-  Execution.Trace.split trace lengths
+  Trace.split trace lengths
 
 theorem TraceMatches.append_iff
     {contract : ModuleResetContract ports}
@@ -171,7 +171,7 @@ theorem TraceMatches.append_iff
       ∃ middle,
         contract.TraceMatches initial leftInputs leftOutputs middle ∧
         contract.TraceMatches middle rightInputs rightOutputs final :=
-  Execution.Trace.append_iff lengths
+  Trace.append_iff lengths
 
 @[simp] theorem TraceMatches.cons_reset_iff
     {contract : ModuleResetContract ports} {initial final : contract.Synchronization}
@@ -241,7 +241,7 @@ theorem TraceMatches.before_first_reset
   | [], _ :: _, lengths, _ => by simp at lengths
   | _ :: _, [], lengths, _ => by simp at lengths
   | input :: inputs, output :: outputs, lengths, ordinary => by
-      apply Execution.Trace.cons input output
+      apply Trace.cons input output
       · exact .beforeReset (ordinary input (by simp))
       · apply TraceMatches.before_first_reset contract
         · simpa using lengths

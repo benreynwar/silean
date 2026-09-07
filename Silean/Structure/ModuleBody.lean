@@ -55,8 +55,10 @@ inductive SignalSink (ports : ModulePorts) (instancePorts : InstancePorts) :
       SignalSink ports instancePorts
         ((instancePorts.ports name).inputs.signalType port)
 
-/-- The parent boundary and named child interfaces used by endpoints and
-wiring. -/
+/-- The shared typing environment for `SignalSource`, `SignalSink`, and
+`Wiring`. It pairs the parent boundary with the named child interfaces so
+endpoint constructors can infer both dependent parameters from one value. It
+carries no additional invariant or hardware behavior. -/
 structure EndpointContext where
   /-- Input and output ports of the parent module. -/
   ports : ModulePorts
@@ -113,5 +115,13 @@ structure ModuleBody where
   context : EndpointContext
   /-- Driver chosen for every parent output and child input. -/
   wiring : Wiring context.ports context.instancePorts
+
+/-- The parent module boundary, forwarded from the body's endpoint context. -/
+abbrev ModuleBody.ports (body : ModuleBody) : ModulePorts :=
+  body.context.ports
+
+/-- The named child interfaces, forwarded from the body's endpoint context. -/
+abbrev ModuleBody.instancePorts (body : ModuleBody) : InstancePorts :=
+  body.context.instancePorts
 
 end Silean

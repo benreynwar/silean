@@ -3,8 +3,22 @@ import Silean.Foundation.DeriveEnumeration
 
 namespace Silean.Authoring
 
+/-! # Named aggregate signal authoring
+
+`signal_schema` declares a reusable named tuple of signals. From a list of
+named component schemas it generates the field label type and enumeration, the
+corresponding `SignalMap` and tuple `SignalType`, typed access to each field's
+schema, and the aggregate `SignalSchema` used for emission naming.
+
+This keeps a logical aggregate's shape, field labels, and emitted hierarchy in
+one declaration. The generated signal type can be used anywhere an ordinary
+`SignalType` is expected; the schema is needed only where names matter.
+-/
+
 open Lean Elab Command
 open Lean.Parser.Term
+
+/-! ## Command syntax -/
 
 declare_syntax_cat signalSchemaParam
 syntax "(" ident " : " term ")" : signalSchemaParam
@@ -20,6 +34,8 @@ schema, and the aggregate naming tree. -/
 syntax (name := signalSchema)
   "signal_schema " ident signalSchemaParam* " where "
     signalSchemaField,* : command
+
+/-! ## Elaboration -/
 
 private structure SchemaParam where
   binder : TSyntax ``Parser.Term.bracketedBinder

@@ -3,13 +3,68 @@ import Silean.Foundation.SignalGroup
 
 namespace Silean
 
-/-! Shared machinery for viewing vectors and tuples as their immediate
-components.  The public structural components that use this machinery are
-closed to those two aggregate forms. -/
+/-!
+# Signal layouts
+
+Module interfaces use `SignalMap` because named labels make wiring readable and
+type-safe. Hardware structure, however, often needs to traverse an aggregate by
+position: a vector has numbered elements and a tuple has ordered fields. This
+file connects those two representations without erasing the type of any
+component.
+
+There are two main conversions:
+
+* `SignalTypes.get` and `SignalTypes.assemble` convert between a tuple value and
+  a dependent function over its field positions.
+* `SignalMap.pack` and `SignalMap.unpack` convert between named
+  `SignalMap.Values` and the map's canonical positional tuple.
+
+`SignalSelection.valueAt` and `labelAt` relate a positional field back to the
+selected parent label. `Composition/SignalAdapter.lean`,
+`Modules/NamedTupleAdapter/NamedTupleAdapter.lean`, and
+`Modules/TupleField/TupleField.lean` use this machinery to split, combine, and
+address aggregate hardware signals.
+-/
+
+/-! ## Positional tuple fields -/
 
 inductive SignalTypes.Position : SignalTypes → Type
   | head : Position (.cons head tail)
   | tail : Position tail → Position (.cons head tail)
+
+/- The supporting declarations are private: they exist only to make the
+examples compile and cannot be used as library API. -/
+
+@[reducible] private def exampleFields : SignalTypes :=
+  .ofList [.bit, .vector 2 .bit]
+
+/-- Positions are type-safe paths into a tuple's field list. These are the only
+two positions that can be constructed for `exampleFields`. -/
+example : SignalTypes.Position exampleFields := .head
+
+example : SignalTypes.Position exampleFields := .tail .head
+
+private inductive ExampleSignal
+  | valid
+  | payload
+deriving Enumeration
+
+@[reducible] private def exampleSignals : SignalMap :=
+  EnumeratedMap.of ExampleSignal fun
+    | .valid => .bit
+    | .payload => .vector 2 .bit
+
+@[reducible] private def examplePayload : (SignalType.vector 2 .bit).Denote
+  | ⟨0, _⟩ => true
+  | ⟨1, _⟩ => false
+
+@[reducible] private def exampleValues : exampleSignals.Values
+  | .valid => true
+  | .payload => examplePayload
+
+@[reducible] private def exampleSelection :
+    SignalSelection exampleSignals exampleFields :=
+  exampleSignals.selectionFrom [.valid, .payload]
 
 namespace SignalTypes
 
@@ -20,6 +75,12 @@ def Position.ordinal : Position fields → Nat
 def typeAt : (fields : SignalTypes) → Position fields → SignalType
   | .cons head _, .head => head
   | .cons _ tail, .tail position => typeAt tail position
+
+/-- The position determines the result type: the first field is a bit and the
+second is a two-bit vector. -/
+example : exampleFields.typeAt .head = .bit := rfl
+
+example : exampleFields.typeAt (.tail .head) = .vector 2 .bit := rfl
 
 theorem complexity_typeAt_lt : ∀ (fields : SignalTypes) (position : Position fields),
     (typeAt fields position).complexity < fields.complexity + 1
@@ -50,10 +111,21 @@ theorem complexity_typeAt_lt : ∀ (fields : SignalTypes) (position : Position f
   keys := positions fields
   value := typeAt fields
 
+/-- `componentMap` exposes those positions as typed signal labels, which is the
+form used by structural tuple splitters. -/
+example : exampleFields.componentMap.signalType (.tail .head) =
+    .vector 2 .bit := rfl
+
 def get : (fields : SignalTypes) → fields.Denote →
     (position : Position fields) → (typeAt fields position).Denote
   | .cons _ _, (head, _), .head => head
   | .cons _ tail, (_, rest), .tail position => get tail rest position
+
+/-- The same position selects a value whose Lean type is determined by
+`typeAt`. -/
+example : exampleFields.get (true, (examplePayload, ())) .head = true := rfl
+
+example : exampleFields.get (true, (examplePayload, ())) (.tail .head) 1 = false := rfl
 
 def assemble : (fields : SignalTypes) →
     ((position : Position fields) → (typeAt fields position).Denote) →
@@ -61,6 +133,10 @@ def assemble : (fields : SignalTypes) →
   | .nil, _ => ()
   | .cons _ tail, values =>
       (values .head, assemble tail fun position => values (.tail position))
+
+example : exampleFields.assemble
+    (exampleFields.get (true, (examplePayload, ()))) =
+      (true, (examplePayload, ())) := rfl
 
 theorem get_assemble : ∀ (fields : SignalTypes)
     (values : (position : Position fields) → (typeAt fields position).Denote),
@@ -92,6 +168,8 @@ theorem get_injective (fields : SignalTypes) : Function.Injective fields.get := 
 
 end SignalTypes
 
+/-! ## Selected signal layouts -/
+
 namespace SignalSelection
 
 /-- Retrieve a label-indexed dependent value at a positional selection field.
@@ -103,6 +181,10 @@ def valueAt (selection : SignalSelection signals types)
   := fun position => match selection, position with
     | .cons label _, .head => values label
     | .cons _ tail, .tail position => tail.valueAt values position
+
+/-- Positional selection fields retrieve the correspondingly typed named
+value. -/
+example : exampleSelection.valueAt exampleValues (.tail .head) 1 = false := rfl
 
 theorem valueAt_map (selection : SignalSelection signals types)
     {source : SignalType → Type u} {target : SignalType → Type v}
@@ -138,12 +220,15 @@ theorem assemble_valueAt (selection : SignalSelection signals types)
       | head => rfl
       | tail position => exact induction position
 
-/-- Parent label occupying a positional selection field. This supports the
-temporary migration of rules whose targets are still naturally positional. -/
+/-- Parent label occupying a positional selection field. This connects
+labelled signal maps to positional aggregate adapters. -/
 def labelAt : (selection : SignalSelection signals types) →
     SignalTypes.Position types → signals.Label
   | .cons label _, .head => label
   | .cons _ tail, .tail position => tail.labelAt position
+
+/-- The second positional field came from the named `payload` signal. -/
+example : exampleSelection.labelAt (.tail .head) = .payload := rfl
 
 @[simp] theorem signalType_labelAt :
     (selection : SignalSelection signals types) →
@@ -181,6 +266,8 @@ theorem project_set_of_not_mem (selection : SignalSelection signals types)
 
 end SignalSelection
 
+/-! ## Vector layouts -/
+
 namespace SignalType
 
 @[reducible] def vectorComponents (length : Nat) (element : SignalType) : SignalMap :=
@@ -189,7 +276,12 @@ namespace SignalType
     keys := Enumeration.fin length
     value := fun _ => element }
 
+/-- Vector components are named by their numeric positions. -/
+example : (SignalType.vectorComponents 3 .bit).labels.values = [0, 1, 2] := rfl
+
 end SignalType
+
+/-! ## Named tuple layouts -/
 
 namespace SignalMap
 
@@ -198,6 +290,8 @@ canonical label order. Names remain in the map; only the represented signal
 type is positional. -/
 @[reducible] def tupleFields (signals : SignalMap) : SignalTypes :=
   .ofList signals.types
+
+example : exampleSignals.tupleFields = exampleFields := rfl
 
 private def positionOfIndex (signals : SignalMap) :
     {labels : List signals.Label} → {label : signals.Label} →
@@ -211,6 +305,8 @@ def tuplePosition (signals : SignalMap) (label : signals.Label) :
     SignalTypes.Position signals.tupleFields :=
   signals.positionOfIndex (signals.labels.locate label)
 
+example : (exampleSignals.tuplePosition .payload).ordinal = 1 := rfl
+
 private theorem typeAt_positionOfIndex (signals : SignalMap) :
     {labels : List signals.Label} → {label : signals.Label} →
       (index : ListIndex label labels) →
@@ -223,12 +319,6 @@ theorem typeAt_tuplePosition (signals : SignalMap) (label : signals.Label) :
     SignalTypes.typeAt signals.tupleFields (signals.tuplePosition label) =
       signals.signalType label :=
   signals.typeAt_positionOfIndex (signals.labels.locate label)
-
-def selectionFrom (signals : SignalMap) :
-    (labels : List signals.Label) →
-      SignalSelection signals (.ofList (labels.map signals.signalType))
-  | [] => .nil
-  | label :: rest => .cons label (selectionFrom signals rest)
 
 def allSelection (signals : SignalMap) :
     SignalSelection signals signals.tupleFields :=
@@ -258,6 +348,10 @@ def pack (signals : SignalMap) (values : signals.Values) :
     signals.tupleType.Denote :=
   signals.allSelection.project values
 
+/-- Packing follows the signal map's canonical label order. -/
+example : exampleSignals.pack exampleValues =
+    (true, (examplePayload, ())) := rfl
+
 @[simp] theorem selectionFrom_labels (signals : SignalMap) :
     ∀ labels, (selectionFrom signals labels).labels = labels
   | [] => rfl
@@ -279,6 +373,8 @@ def unpackFrom (signals : SignalMap) :
 def unpack (signals : SignalMap) :
     signals.tupleType.Denote → signals.Values :=
   unpackFrom signals signals.labels.values
+
+example : exampleSignals.unpack (false, (examplePayload, ())) .valid = false := rfl
 
 private theorem project_unpackFrom (signals : SignalMap) :
     ∀ (labels : List signals.Label) (_nodup : labels.Nodup)

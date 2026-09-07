@@ -374,7 +374,7 @@ omit gate in
 section AggregateLayerCertification
 
 variable (splitter : Composition.SignalSplitter)
-  (layerChildren : (child : (aggregateBody splitter).context.instancePorts.Name) →
+  (layerChildren : (child : (aggregateBody splitter).instancePorts.Name) →
     Contracts.Cycle.ModuleCycleCertifiedStructure
       (aggregateChildContracts splitter child))
 
@@ -393,7 +393,7 @@ private theorem aggregateImplements :
       (aggregateStateCorresponds splitter layerChildren) := by
   intro inputs contractState structuralState proposal corresponds satisfies
   have childStateSubsingleton
-      (child : (aggregateBody splitter).context.instancePorts.Name) :
+      (child : (aggregateBody splitter).instancePorts.Name) :
       Subsingleton
         ((aggregateChildContracts splitter child).state.Values) := by
     cases child with
@@ -407,7 +407,7 @@ private theorem aggregateImplements :
         cases output
         change Subsingleton emptySignalMap.Values
         infer_instance
-  have childMatch (child : (aggregateBody splitter).context.instancePorts.Name) := by
+  have childMatch (child : (aggregateBody splitter).instancePorts.Name) := by
     letI := childStateSubsingleton child
     exact Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
       layerChildren inputs structuralState
@@ -517,7 +517,7 @@ noncomputable opaque aggregateCertifiedLayer
     (splitter : Composition.SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component)) :
-    (child : (aggregateBody splitter).context.instancePorts.Name) →
+    (child : (aggregateBody splitter).instancePorts.Name) →
       Contracts.Cycle.ModuleCycleCertifiedStructure
         (aggregateChildContracts splitter child)
   | .splitter _ =>

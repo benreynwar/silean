@@ -33,9 +33,9 @@ inductive ModuleStructure : ModulePorts → Type 1
   /-- One level of child interfaces and wiring, together with a structural
   implementation for every child instance. -/
   | composite (body : ModuleBody)
-      (childStructure : (name : body.context.instancePorts.Name) →
-        ModuleStructure (body.context.instancePorts.ports name)) :
-      ModuleStructure body.context.ports
+      (childStructure : (name : body.instancePorts.Name) →
+        ModuleStructure (body.instancePorts.ports name)) :
+      ModuleStructure body.ports
 
 /-! Structural state is obtained from the complete module definition. A
 composite branch is labelled by its instance names and recursively contains
@@ -49,8 +49,8 @@ def ModuleStructure.structuralState (module : ModuleStructure ports) : Structura
   | .combiner _ => .leaf emptySignalMap
   | .composite body childStructure =>
       .children
-        { Key := body.context.instancePorts.Name
-          keys := body.context.instancePorts.names
+        { Key := body.instancePorts.Name
+          keys := body.instancePorts.names
           value := fun name => (childStructure name).structuralState }
 
 namespace ModuleStructure
@@ -72,7 +72,7 @@ def hasNoBlackboxes : ModuleStructure ports → Bool
   | .splitter _ => true
   | .combiner _ => true
   | .composite body children =>
-      body.context.instancePorts.names.values.all fun name =>
+      body.instancePorts.names.values.all fun name =>
         (children name).hasNoBlackboxes
 
 @[simp] theorem hasNoBlackboxes_eq_true_iff
@@ -87,7 +87,7 @@ def hasNoBlackboxes : ModuleStructure ports → Bool
       · intro every name
         apply (induction name).mp
         exact every name (ListIndex.get_eq
-          (body.context.instancePorts.names.locate name) ▸ List.get_mem _ _)
+          (body.instancePorts.names.locate name) ▸ List.get_mem _ _)
       · intro every name member
         exact (induction name).mpr (every name)
 
@@ -116,25 +116,25 @@ instance instDecidableHasNoBlackboxes (module : ModuleStructure ports) :
 
 @[simp] theorem hasNoBlackboxes_composite_iff
     (body : ModuleBody)
-    (children : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name)) :
+    (children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)) :
     (ModuleStructure.composite body children).HasNoBlackboxes ↔
       ∀ name, (children name).HasNoBlackboxes :=
   Iff.rfl
 
 theorem HasNoBlackboxes.child
     {body : ModuleBody}
-    {children : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name)}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
     (closed : (ModuleStructure.composite body children).HasNoBlackboxes)
-    (name : body.context.instancePorts.Name) :
+    (name : body.instancePorts.Name) :
     (children name).HasNoBlackboxes :=
   closed name
 
 theorem HasNoBlackboxes.composite
     {body : ModuleBody}
-    {children : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name)}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
     (childrenClosed : ∀ name, (children name).HasNoBlackboxes) :
     (ModuleStructure.composite body children).HasNoBlackboxes :=
   childrenClosed
@@ -168,8 +168,8 @@ theorem combiner (combiner : Composition.SignalCombiner) :
 children. -/
 theorem composite
     {body : ModuleBody}
-    {children : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name)}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
     (childrenCertified : ∀ name, NoBlackboxesCertified (children name)) :
     NoBlackboxesCertified (.composite body children) := by
   constructor

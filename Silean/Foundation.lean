@@ -4,10 +4,16 @@ import Silean.Foundation.Enumeration
 import Silean.Foundation.SignalMap
 import Silean.Foundation.SignalLayout
 import Silean.Foundation.SignalGroup
-import Silean.Foundation.SignalExpectation
 import Silean.Foundation.SignalSelection
 import Silean.Foundation.ModulePorts
 import Silean.Foundation.StructuralState
 import Silean.Foundation.BitVector
-import Silean.Foundation.CircularBuffer
-import Silean.Foundation.Execution
+
+/-! # Foundational hardware types
+
+This aggregate exports the name-independent vocabulary used throughout
+Silean: signal shapes and values, finite symbolic labels, typed signal maps and
+selections, module boundaries, structural state shapes, and bit-vector
+utilities. These definitions describe data and interfaces; they do not define
+module hierarchy, circuit behavior, or proof schedules.
+-/

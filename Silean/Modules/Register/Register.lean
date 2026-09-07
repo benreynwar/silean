@@ -195,7 +195,7 @@ private theorem aggregateCoversChildren (splitter : Composition.SignalSplitter) 
 section AggregateLayerCertification
 
 variable (splitter : Composition.SignalSplitter)
-  (layerChildren : (child : (aggregateBody splitter).context.instancePorts.Name) →
+  (layerChildren : (child : (aggregateBody splitter).instancePorts.Name) →
     Contracts.Cycle.ModuleCycleCertifiedStructure
       (aggregateChildContracts splitter child))
 
@@ -414,7 +414,7 @@ private noncomputable opaque aggregateCertifiedLayer (splitter : Composition.Sig
     (splitter : Composition.SignalSplitter)
     (components : (component : splitter.ports.outputs.Label) →
       Implementation (splitter.ports.outputs.signalType component)) :
-    (child : (aggregateBody splitter).context.instancePorts.Name) →
+    (child : (aggregateBody splitter).instancePorts.Name) →
       Contracts.Cycle.ModuleCycleCertifiedStructure
         (aggregateChildContracts splitter child)
   | .splitter _ => ⟨.splitter splitter, splitter.certified.certification⟩

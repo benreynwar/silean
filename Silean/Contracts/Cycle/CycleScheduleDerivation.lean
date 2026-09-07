@@ -17,7 +17,7 @@ does not repeat the graph search.
 /-- Explicit child-rule orders for every rule of one parent contract. -/
 structure RuleScheduleOrders (body : ModuleBody)
     (childContracts : ChildCycleContracts body)
-    (contract : ModuleCycleContract body.context.ports) where
+    (contract : ModuleCycleContract body.ports) where
   output : ∀ _name : contract.RuleName, List (RuleOccurrence body childContracts)
   state : List (RuleOccurrence body childContracts)
 
@@ -25,7 +25,7 @@ structure RuleScheduleOrders (body : ModuleBody)
 coverage proof. -/
 structure DerivedRuleSchedules (body : ModuleBody)
     (childContracts : ChildCycleContracts body)
-    (contract : ModuleCycleContract body.context.ports) where
+    (contract : ModuleCycleContract body.ports) where
   schedules : RuleSchedules body childContracts contract
   coversChildren : schedules.CoversChildren
 
@@ -38,7 +38,7 @@ structure DerivedCompleteSchedule (body : ModuleBody)
 
 def outputSchedulesFromCertificates
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {contract : ModuleCycleContract body.context.ports}
+    {contract : ModuleCycleContract body.ports}
     (certificates : DependentList (fun name =>
       OutputSchedule body childContracts contract name) contract.ruleNames.values) :
     ∀ name, OutputSchedule body childContracts contract name :=
@@ -46,7 +46,7 @@ def outputSchedulesFromCertificates
 
 theorem outputSchedulesFromCertificates_eq_get
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {contract : ModuleCycleContract body.context.ports}
+    {contract : ModuleCycleContract body.ports}
     (certificates : DependentList (fun name =>
       OutputSchedule body childContracts contract name) contract.ruleNames.values)
     (name : contract.RuleName)
@@ -58,7 +58,7 @@ theorem outputSchedulesFromCertificates_eq_get
 
 theorem outputSchedulesFromCertificates_mem_finalAvailability
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {contract : ModuleCycleContract body.context.ports}
+    {contract : ModuleCycleContract body.ports}
     (certificates : DependentList (fun name =>
       OutputSchedule body childContracts contract name) contract.ruleNames.values)
     (name : contract.RuleName)
@@ -72,7 +72,7 @@ theorem outputSchedulesFromCertificates_mem_finalAvailability
 
 theorem coversChildren_of_certificates
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {contract : ModuleCycleContract body.context.ports}
+    {contract : ModuleCycleContract body.ports}
     (schedules : RuleSchedules body childContracts contract)
     (certificates : DependentList (fun child =>
       DependentList (fun rule => PLift
@@ -80,17 +80,17 @@ theorem coversChildren_of_certificates
           ∃ name, RuleOccurrence.mk child rule ∈
             (schedules.output name).finalAvailability))
         (childContracts child).ruleNames.values)
-      body.context.instancePorts.names.values) :
+      body.instancePorts.names.values) :
     schedules.CoversChildren := by
   intro child rule
-  exact (certificates.get (body.context.instancePorts.names.locate child) |>.get
+  exact (certificates.get (body.instancePorts.names.locate child) |>.get
     ((childContracts child).ruleNames.locate rule)).down
 
 /-- Compact numeric identity for a dependent child-rule occurrence. -/
 def occurrenceKey
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     (occurrence : RuleOccurrence body childContracts) : Nat × Nat :=
-  ((body.context.instancePorts.names.ordinal occurrence.child).val,
+  ((body.instancePorts.names.ordinal occurrence.child).val,
     ((childContracts occurrence.child).ruleNames.ordinal occurrence.rule).val)
 
 private theorem key_mem_of_occurrence_mem
@@ -106,7 +106,7 @@ required by `Schedule.call`.  The tactic constructs this dependent list one
 read at a time, keeping kernel reduction local to a single wiring endpoint. -/
 theorem readsAvailable_of_certificates
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts)
     (occurrence : RuleOccurrence body childContracts)
     (certificates : DependentList (fun input => PLift
@@ -116,24 +116,24 @@ theorem readsAvailable_of_certificates
       sourceAvailable inputAvailable available
         (body.wiring.instanceInput occurrence.child input) := by
   letI : DecidableEq
-      (body.context.instancePorts.ports occurrence.child).inputs.Label :=
-    (body.context.instancePorts.ports occurrence.child).inputs.labels.decidableEq
+      (body.instancePorts.ports occurrence.child).inputs.Label :=
+    (body.instancePorts.ports occurrence.child).inputs.labels.decidableEq
   intro input member
   exact (certificates.get (ListIndex.ofMem member)).down
 
 def moduleInputReadyBool
     {body : ModuleBody}
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (decideInput : ∀ input, Decidable (inputAvailable input))
-    (input : body.context.ports.inputs.Label) : Bool :=
+    (input : body.ports.inputs.Label) : Bool :=
   @decide (inputAvailable input) (decideInput input)
 
 theorem moduleInputAvailable_of_bool_eq_true
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (decideInput : ∀ input, Decidable (inputAvailable input))
     (available : Availability body childContracts)
-    (input : body.context.ports.inputs.Label)
+    (input : body.ports.inputs.Label)
     (ready : moduleInputReadyBool inputAvailable decideInput input = true) :
     sourceAvailable inputAvailable available (.moduleInput input) :=
   @of_decide_eq_true _ (decideInput input) ready
@@ -153,10 +153,10 @@ written by that rule. This supports symbolically sized output families without
 enumerating their labels during elaboration. -/
 theorem output_written_by_only_rule
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (child : body.context.instancePorts.Name)
+    (child : body.instancePorts.Name)
     (rule : (childContracts child).RuleName)
     (only : (childContracts child).ruleNames.values = [rule])
-    (output : (body.context.instancePorts.ports child).outputs.Label) :
+    (output : (body.instancePorts.ports child).outputs.Label) :
     output ∈ (RuleOccurrence.mk child rule :
       RuleOccurrence body childContracts).writes := by
   have written := (childContracts child).output_is_written output
@@ -167,13 +167,13 @@ theorem output_written_by_only_rule
 branches. Generated wiring for symbolic `Fin` ranges commonly has this form. -/
 theorem sourceAvailable_decidable_rec
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
     {signalType : SignalType} {condition : Prop}
-    (whenFalse : ¬condition → SignalSource body.context.ports
-      body.context.instancePorts signalType)
-    (whenTrue : condition → SignalSource body.context.ports
-      body.context.instancePorts signalType)
+    (whenFalse : ¬condition → SignalSource body.ports
+      body.instancePorts signalType)
+    (whenTrue : condition → SignalSource body.ports
+      body.instancePorts signalType)
     (decision : Decidable condition)
     (falseAvailable : ∀ proof, sourceAvailable inputAvailable available
       (whenFalse proof))
@@ -181,8 +181,8 @@ theorem sourceAvailable_decidable_rec
       (whenTrue proof)) :
     sourceAvailable inputAvailable available
       (@Decidable.rec condition
-        (fun _ => SignalSource body.context.ports
-          body.context.instancePorts signalType)
+        (fun _ => SignalSource body.ports
+          body.instancePorts signalType)
         whenFalse whenTrue decision) := by
   cases decision with
   | isFalse proof => exact falseAvailable proof
@@ -211,7 +211,7 @@ def childFreshBool
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     (available : Availability body childContracts)
     (occurrence : RuleOccurrence body childContracts) : Bool :=
-  letI := body.context.instancePorts.names.decidableEq
+  letI := body.instancePorts.names.decidableEq
   decide (occurrence.child ∉ available.map RuleOccurrence.child)
 
 theorem child_fresh_of_bool_eq_true
@@ -220,7 +220,7 @@ theorem child_fresh_of_bool_eq_true
     (occurrence : RuleOccurrence body childContracts)
     (fresh : childFreshBool available occurrence = true) :
     occurrence.child ∉ available.map RuleOccurrence.child := by
-  letI := body.context.instancePorts.names.decidableEq
+  letI := body.instancePorts.names.decidableEq
   have fresh' : decide
       (occurrence.child ∉ available.map RuleOccurrence.child) = true := by
     simpa [childFreshBool] using fresh
@@ -239,7 +239,7 @@ theorem fresh_of_child_bool_eq_true
 def childrenDifferentBool
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     (left right : RuleOccurrence body childContracts) : Bool :=
-  letI := body.context.instancePorts.names.decidableEq
+  letI := body.instancePorts.names.decidableEq
   decide (left.child ≠ right.child)
 
 theorem children_different_of_bool_eq_true
@@ -247,13 +247,13 @@ theorem children_different_of_bool_eq_true
     (left right : RuleOccurrence body childContracts)
     (different : childrenDifferentBool left right = true) :
     left.child ≠ right.child := by
-  letI := body.context.instancePorts.names.decidableEq
+  letI := body.instancePorts.names.decidableEq
   apply of_decide_eq_true
   simpa [childrenDifferentBool] using different
 
 theorem fresh_after_family_of_child_disjoint
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     (initial : Availability body childContracts)
     {Index : Type} (indices : Enumeration Index)
     (occurrence : Index → RuleOccurrence body childContracts)
@@ -276,7 +276,7 @@ theorem fresh_after_family_of_child_disjoint
 
 theorem fresh_after_family
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     (initial : Availability body childContracts)
     {Index : Type} (indices : Enumeration Index)
     (occurrence : Index → RuleOccurrence body childContracts)
@@ -313,15 +313,15 @@ theorem fresh_cons_of_child_disjoint
 boundary without searching the scheduled rules again. -/
 theorem boundaryReady_of_certificates
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (outputs : List body.context.ports.outputs.Label)
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (outputs : List body.ports.outputs.Label)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts)
     (certificates : DependentList (fun output => PLift
       (sourceAvailable inputAvailable available
         (body.wiring.moduleOutput output))) outputs) :
     BoundaryReady body childContracts outputs inputAvailable available := by
-  letI : DecidableEq body.context.ports.outputs.Label :=
-    body.context.ports.outputs.labels.decidableEq
+  letI : DecidableEq body.ports.outputs.Label :=
+    body.ports.outputs.labels.decidableEq
   intro output member
   exact (certificates.get (ListIndex.ofMem member)).down
 
@@ -335,13 +335,13 @@ theorem stateBoundaryReady_of_certificates
         (sourceAvailable (fun _ => True) available
           (body.wiring.instanceInput child input)))
         (childContracts child).stateRule.readsInputs.labels)
-      body.context.instancePorts.names.values) :
+      body.instancePorts.names.values) :
     ChildrenStateInputsReady body childContracts available := by
   intro child input member
-  let inputs := certificates.get (body.context.instancePorts.names.locate child)
+  let inputs := certificates.get (body.instancePorts.names.locate child)
   letI : DecidableEq
-      (body.context.instancePorts.ports child).inputs.Label :=
-    (body.context.instancePorts.ports child).inputs.labels.decidableEq
+      (body.instancePorts.ports child).inputs.Label :=
+    (body.instancePorts.ports child).inputs.labels.decidableEq
   exact (inputs.get (ListIndex.ofMem member)).down
 
 end Silean.Contracts.Cycle.Certification.Layer.ScheduleDerivation
@@ -736,8 +736,7 @@ private def findProviderMembership (occurrence available : Expr) : MetaM Expr :=
   throwError "scheduled rules do not contain child rule:{indentExpr occurrence}"
 
 private def mkInputDecidableEq (body : Expr) : MetaM Expr := do
-  let context ← mkAppM ``ModuleBody.context #[body]
-  let ports ← mkAppM ``EndpointContext.ports #[context]
+  let ports ← mkAppM ``ModuleBody.ports #[body]
   let inputs ← mkAppM ``ModulePorts.inputs #[ports]
   let labels ← mkAppM ``EnumeratedMap.keys #[inputs]
   mkAppM ``Enumeration.decidableEq #[labels]
@@ -1305,8 +1304,7 @@ private def buildStateBoundary
           directRemaining := directRemaining ++ [goal]
   if directRemaining.isEmpty then
     return ← instantiateMVars directGoal
-  let context ← mkAppM ``ModuleBody.context #[body]
-  let instancePorts ← mkAppM ``EndpointContext.instancePorts #[context]
+  let instancePorts ← mkAppM ``ModuleBody.instancePorts #[body]
   let names ← mkAppM ``EnumeratedMap.keys #[instancePorts]
   let childType := (← whnf (← inferType names)).getAppArgs[0]!
   let children := mkAppN (mkConst ``Enumeration.values [.zero]) #[childType, names]
@@ -1577,9 +1575,8 @@ private def ruleNamesList (contract : Expr) : MetaM (Expr × Expr × List Expr) 
   pure (nameType, values, ← exprList values)
 
 private def childNamesList (body : Expr) : MetaM (Expr × Expr × List Expr) := do
-  let context ← mkAppM ``ModuleBody.context #[body]
-  let ports ← mkAppM ``EndpointContext.instancePorts #[context]
-  let names ← mkAppM ``EnumeratedMap.keys #[ports]
+  let instancePorts ← mkAppM ``ModuleBody.instancePorts #[body]
+  let names ← mkAppM ``EnumeratedMap.keys #[instancePorts]
   let nameType := (← whnf (← inferType names)).getAppArgs[0]!
   let values := mkAppN (mkConst ``Enumeration.values [.zero]) #[nameType, names]
   pure (nameType, values, ← exprList values)

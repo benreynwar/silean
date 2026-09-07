@@ -5,7 +5,21 @@ import Silean.Authoring.SignalSchema
 
 namespace Silean.Authoring
 
+/-! # Module boundary authoring
+
+`module_ports` is the low-level command for declaring a typed module boundary.
+From one list of input and output ports it generates the label types, their
+`SignalMap`s, the resulting `ModulePorts`, and the corresponding emission
+naming. It is useful directly for boundaries shared by several definitions;
+`module_design` also invokes it for an inline `ports` section.
+
+This command describes only the boundary's shape and names. It does not declare
+child instances, wiring, behavior, or correctness evidence.
+-/
+
 open Lean Elab Command
+
+/-! ## Command syntax -/
 
 declare_syntax_cat modulePortsParam
 syntax "(" ident " : " term ")" : modulePortsParam
@@ -36,6 +50,8 @@ represented by `NoSignal` and `emptySignalMap`.
 syntax (name := modulePorts)
   "module_ports " ident modulePortsParam* (modulePortsNamingClause)?
     " where " modulePortEntry,* : command
+
+/-! ## Elaboration -/
 
 open Lean.Parser.Term
 

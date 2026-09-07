@@ -70,20 +70,20 @@ example : contract.TraceMatches none
     [output true false, output true true, output false false, output true true,
       output false false, output false true]
     (some []) := by
-  refine Execution.Trace.cons _ _ (.beforeReset rfl) ?_
-  refine Execution.Trace.cons _ _ (.reset rfl) ?_
-  refine Execution.Trace.cons _ _ (.ordinary rfl ?_) ?_
+  refine Trace.cons _ _ (.beforeReset rfl) ?_
+  refine Trace.cons _ _ (.reset rfl) ?_
+  refine Trace.cons _ _ (.ordinary rfl ?_) ?_
   · intro name
     cases name <;> change BitExpectation.Matches _ _ <;>
       simp [contract, output, BitExpectation.exact,
         BitExpectation.Matches]
-  refine Execution.Trace.cons _ _ (.ordinary rfl ?_) ?_
+  refine Trace.cons _ _ (.ordinary rfl ?_) ?_
   · intro name
     cases name <;> change BitExpectation.Matches _ _ <;>
       simp [contract, output, BitExpectation.exact,
         BitExpectation.Matches]
-  refine Execution.Trace.cons _ _ (.reset rfl) ?_
-  refine Execution.Trace.cons _ _ (.ordinary rfl ?_) ?_
+  refine Trace.cons _ _ (.reset rfl) ?_
+  refine Trace.cons _ _ (.ordinary rfl ?_) ?_
   · intro name
     cases name <;> change BitExpectation.Matches _ _ <;>
       simp [contract, output, BitExpectation.exact,

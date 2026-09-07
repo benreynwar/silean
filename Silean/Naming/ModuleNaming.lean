@@ -150,12 +150,12 @@ inductive ModuleNaming : {ports : ModulePorts} → ModuleStructure ports → Typ
       (key : ModuleKey) (ports : ModulePortsNaming combiner.ports) :
       ModuleNaming (.combiner combiner)
   | composite {body : ModuleBody}
-      {children : (name : body.context.instancePorts.Name) →
-        ModuleStructure (body.context.instancePorts.ports name)}
+      {children : (name : body.instancePorts.Name) →
+        ModuleStructure (body.instancePorts.ports name)}
       (key : ModuleKey)
-      (ports : ModulePortsNaming body.context.ports)
-      (instanceName : body.context.instancePorts.Name → SourceName)
-      (childNaming : (name : body.context.instancePorts.Name) →
+      (ports : ModulePortsNaming body.ports)
+      (instanceName : body.instancePorts.Name → SourceName)
+      (childNaming : (name : body.instancePorts.Name) →
         ModuleNaming (children name)) :
       ModuleNaming (.composite body children)
 

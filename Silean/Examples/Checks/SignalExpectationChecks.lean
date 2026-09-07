@@ -1,4 +1,4 @@
-import Silean.Foundation.SignalExpectation
+import Silean.Contracts.SignalExpectation
 import Silean.Foundation.DeriveEnumeration
 
 namespace Silean.Examples.Checks.SignalExpectation

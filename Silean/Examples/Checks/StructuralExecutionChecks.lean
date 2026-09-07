@@ -27,7 +27,7 @@ example : notModule.Transition (notInputs false) emptyState
 
 example : notModule.Executes emptyState [notInputs false, notInputs true]
     [notOutputs true, notOutputs false] emptyState := by
-  apply Execution.Trace.cons (notInputs false) (notOutputs true)
+  apply Trace.cons (notInputs false) (notOutputs true)
   · refine ModuleStructure.transition_of_solution (proposal := ProposedValues.primitive
       (notOutputs true) emptyState) ?_
     change Primitives.not.IsSolution (notInputs false) emptyState emptyState
@@ -77,7 +77,7 @@ theorem registerHasSolution : registerModule.HasSolution := by
 example : registerModule.Executes (registerState false)
     [registerInputs true, registerInputs false]
     [registerOutputs false, registerOutputs true] (registerState false) := by
-  apply Execution.Trace.cons (registerInputs true) (registerOutputs false)
+  apply Trace.cons (registerInputs true) (registerOutputs false)
   · exact ModuleStructure.transition_of_solution (registerSolution false true)
   · change registerModule.Executes (registerState true) [registerInputs false]
       [registerOutputs true] (registerState false)

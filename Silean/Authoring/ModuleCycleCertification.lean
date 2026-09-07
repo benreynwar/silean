@@ -2,8 +2,26 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 
 namespace Silean.Authoring
 
+/-! # Assembling cycle certification
+
+`module_cycle_certification` is the final proof-side authoring step for a
+composite module. It combines certified children, validated rule schedules, a
+state-correspondence relation, its coverage proof, and a module-specific
+implementation proof. From these ingredients it generates a reusable
+`ModuleCycleCertifiedLayer`, the certification of the chosen concrete
+structure, and the public certified module bundle.
+
+The command packages evidence rather than inventing it: the behavioral
+implementation proof and state correspondence remain explicit Lean
+definitions supplied by the module author. Existence and uniqueness of the
+structural solution are obtained generically from the checked schedules and
+the child certifications.
+-/
+
 open Lean Elab Command
 open Lean.Parser.Term
+
+/-! ## Command syntax -/
 
 declare_syntax_cat moduleCycleCertificationParam
 syntax "(" ident " : " term ")" : moduleCycleCertificationParam
@@ -18,6 +36,8 @@ syntax (name := moduleCycleCertification)
     "module_cycle_certification " ident moduleCycleCertificationParam*
     " for " term " via " term " with " term " implementing " term " where "
     moduleCycleCertificationItem,* : command
+
+/-! ## Elaboration -/
 
 private structure CertificationParam where
   binder : TSyntax ``Parser.Term.bracketedBinder

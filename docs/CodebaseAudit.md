@@ -261,8 +261,10 @@ mentioned above” does not mean “not reviewed.”
   `DeriveEnumeration` form a coherent dependent, labelled signal foundation.
   `ListIndex`, `DependentList`, and `EnumeratedMap` have broad real use and are
   not wheel-reinventing cruft in this context.
-- `BitVector`, `CircularBuffer`, `Execution`, and `SignalExpectation` are
-  focused reusable semantic utilities with current consumers.
+- `BitVector` is the shared LSB-first arithmetic interpretation used throughout
+  the hardware library. Generic execution traces live under `Semantics`,
+  partial expected values under `Contracts`, and FIFO-only circular-buffer
+  arithmetic beside the FIFO implementation rather than in the foundation.
 - `ModulePorts` is the single, appropriately small labelled boundary type.
 - `StructuralState` is tiny but justified: it is the recursively derived state
   shape shared by structural semantics and certifications.

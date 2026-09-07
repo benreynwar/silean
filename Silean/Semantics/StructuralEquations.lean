@@ -16,7 +16,10 @@ the dependency and certification layers. -/
 abbrev ModuleStructure.State (module : ModuleStructure ports) :=
   module.structuralState.Values
 
-/-! Primitive equations define leaf meaning independently of contracts. -/
+/-! ## Leaf equations
+
+Primitive and adapter equations define leaf meaning independently of contracts.
+-/
 
 def Primitive.OutputsSatisfy (primitive : Primitive)
     (inputs : primitive.ports.inputs.Values)
@@ -46,7 +49,9 @@ def Composition.SignalCombiner.IsSolution (combiner : Composition.SignalCombiner
     (outputs : combiner.ports.outputs.Values) : Prop :=
   outputs = combiner.outputValues inputs
 
-/-! A proposal stores one stable output interface at every module occurrence.
+/-! ## Proposed values
+
+A proposal stores one stable output interface at every module occurrence.
 Only primitive leaves additionally propose local next state. Composite child
 inputs, child current states, and composite next state are derived. -/
 
@@ -63,8 +68,8 @@ def ProposedValues {ports : ModulePorts} (module : ModuleStructure ports) : Type
   | .splitter splitter => splitter.ports.outputs.Values
   | .combiner combiner => combiner.ports.outputs.Values
   | .composite body childStructure =>
-      body.context.ports.outputs.Values ×
-        ((name : body.context.instancePorts.Name) → ProposedValues (childStructure name))
+      body.ports.outputs.Values ×
+        ((name : body.instancePorts.Name) → ProposedValues (childStructure name))
 termination_by structural module
 
 namespace ProposedValues
@@ -92,10 +97,10 @@ def combiner {combiner : Composition.SignalCombiner}
   outputs
 
 def composite {body : ModuleBody}
-    {childStructure : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name)}
-    (outputs : body.context.ports.outputs.Values)
-    (children : (name : body.context.instancePorts.Name) →
+    {childStructure : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (outputs : body.ports.outputs.Values)
+    (children : (name : body.instancePorts.Name) →
       ProposedValues (childStructure name)) :
     ProposedValues (ModuleStructure.composite body childStructure) :=
   ⟨outputs, children⟩
@@ -126,6 +131,14 @@ def nextState {ports : ModulePorts} {module : ModuleStructure ports}
 
 end ProposedValues
 
+/-! ## Signal and wiring evaluation
+
+`SignalSource` and `Wiring` describe connections structurally in `ModuleBody`.
+The definitions here interpret those connections: a source is read from either
+a module input or a child output, and a child's input values are assembled by
+evaluating the sources selected for its ports.
+-/
+
 def SignalSource.value (source : SignalSource ports instancePorts signalType)
     (inputs : ports.inputs.Values)
     (childOutputs : (name : instancePorts.Name) →
@@ -154,16 +167,24 @@ values, and the composite wiring. -/
     (name : instancePorts.Name) : (instancePorts.ports name).inputs.Values :=
   fun port => (wiring.instanceInput name port).value inputs childOutputs
 
+/-! ## Recursive structural solutions
+
+The remaining definitions connect composite boundary wiring with the solution
+relations of its children. A composite is a solution exactly when its proposed
+outputs agree with its wiring and every child is recursively a solution for the
+input and state assigned to it.
+-/
+
 namespace ProposedValues
 
 def childInputs (body : ModuleBody)
-    (childStructure : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name))
-    (inputs : body.context.ports.inputs.Values)
-    (children : (name : body.context.instancePorts.Name) →
+    (childStructure : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name))
+    (inputs : body.ports.inputs.Values)
+    (children : (name : body.instancePorts.Name) →
       ProposedValues (childStructure name))
-    (name : body.context.instancePorts.Name) :
-    (body.context.instancePorts.ports name).inputs.Values :=
+    (name : body.instancePorts.Name) :
+    (body.instancePorts.ports name).inputs.Values :=
   body.wiring.childInputValues inputs
     (fun childName => (children childName).outputs) name
 
@@ -171,23 +192,23 @@ def childInputs (body : ModuleBody)
 source.  Keeping this application form available prevents proofs from having to
 unfold the complete wiring table merely to normalize one port. -/
 theorem childInputs_apply (body : ModuleBody)
-    (childStructure : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name))
-    (inputs : body.context.ports.inputs.Values)
-    (children : (name : body.context.instancePorts.Name) →
+    (childStructure : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name))
+    (inputs : body.ports.inputs.Values)
+    (children : (name : body.instancePorts.Name) →
       ProposedValues (childStructure name))
-    (name : body.context.instancePorts.Name)
-    (port : (body.context.instancePorts.ports name).inputs.Label) :
+    (name : body.instancePorts.Name)
+    (port : (body.instancePorts.ports name).inputs.Label) :
     childInputs body childStructure inputs children name port =
       (body.wiring.instanceInput name port).value inputs
         (fun childName => (children childName).outputs) := rfl
 
 def boundaryOutputsSatisfy (body : ModuleBody)
-    (childStructure : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name))
-    (inputs : body.context.ports.inputs.Values)
-    (outputs : body.context.ports.outputs.Values)
-    (children : (name : body.context.instancePorts.Name) →
+    (childStructure : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name))
+    (inputs : body.ports.inputs.Values)
+    (outputs : body.ports.outputs.Values)
+    (children : (name : body.instancePorts.Name) →
       ProposedValues (childStructure name)) : Prop :=
   -- Every parent output equals the value at its wired source.
   ∀ port, outputs port =
@@ -198,10 +219,10 @@ def boundaryOutputsSatisfy (body : ModuleBody)
 The parent boundary values are not additional proof data: they are read
 directly from the sources selected by the wiring. -/
 def compositeFromChildren (body : ModuleBody)
-    (childStructure : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name))
-    (inputs : body.context.ports.inputs.Values)
-    (children : (name : body.context.instancePorts.Name) →
+    (childStructure : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name))
+    (inputs : body.ports.inputs.Values)
+    (children : (name : body.instancePorts.Name) →
       ProposedValues (childStructure name)) :
     ProposedValues (ModuleStructure.composite body childStructure) :=
   ProposedValues.composite
@@ -241,11 +262,11 @@ def ModuleStructure.IsSolution {ports : ModulePorts} (module : ModuleStructure p
 /-- Consistent immediate-child solutions assemble into a solution of the
 composite. This is the generic final step of structural-existence proofs. -/
 theorem ProposedValues.compositeFromChildren_isSolution (body : ModuleBody)
-    (childStructure : (name : body.context.instancePorts.Name) →
-      ModuleStructure (body.context.instancePorts.ports name))
-    (inputs : body.context.ports.inputs.Values)
+    (childStructure : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name))
+    (inputs : body.ports.inputs.Values)
     (currentState : (ModuleStructure.composite body childStructure).State)
-    (children : (name : body.context.instancePorts.Name) →
+    (children : (name : body.instancePorts.Name) →
       ProposedValues (childStructure name))
     (childrenSatisfy : ∀ name,
       (childStructure name).IsSolution

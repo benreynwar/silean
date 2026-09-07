@@ -2,8 +2,24 @@ import Silean.Authoring.ModuleWiring
 
 namespace Silean.Authoring
 
+/-! # Composite module authoring
+
+`module_design` is the main design-side command for composite hardware. A
+single declaration combines a new or existing boundary, concrete child
+modules, typed wiring, and recursive emission naming. It expands through the
+lower-level `module_ports`, `module_instances`, and `module_wiring` commands
+and then packages the result as a `Naming.NamedModule`.
+
+The generated `ModuleStructure` is deliberately independent of behavioral
+contracts and certification proofs. Those are authored separately so the same
+structure can be studied, emitted, or certified without making its meaning
+depend on the authoring procedure.
+-/
+
 open Lean Elab Command
 open Lean.Parser.Term
+
+/-! ## Command syntax -/
 
 declare_syntax_cat moduleDesignHeader
 syntax "(" ident " : " term ")" : moduleDesignHeader
@@ -47,6 +63,8 @@ syntax (name := moduleDesign)
   "module_design " ident moduleDesignHeader*
     (modulePortsNamingClause)? " where "
     moduleDesignPorts moduleDesignInstances moduleDesignWiring : command
+
+/-! ## Elaboration -/
 
 private structure ModuleParam where
   name : TSyntax `ident

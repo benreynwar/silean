@@ -2,8 +2,26 @@ import Silean.Contracts.Cycle.CycleScheduleDerivation
 
 namespace Silean.Authoring
 
+/-! # Structural rule schedule authoring
+
+These commands provide readable dependency orders for the rules of a
+composite's certified children. The elaborator derives and checks the formal
+schedule, including whether each rule is called only after its required inputs
+are available. Together with certified children, a complete schedule is
+evidence that the simultaneous structural equations can be solved and have at
+most one solution.
+
+The schedule is proof machinery, not circuit semantics and not data stored in
+`ModuleStructure`. `module_rule_schedules` supplies the output and state
+schedules needed to certify a parent cycle contract. The less common
+`module_complete_schedule` proves contract-independent structural
+evaluability by explicitly covering every child rule.
+-/
+
 open Lean Elab Command
 open Lean.Parser.Term
+
+/-! ## Command syntax -/
 
 declare_syntax_cat moduleRuleScheduleParam
 syntax "(" ident " : " term ")" : moduleRuleScheduleParam
@@ -35,6 +53,8 @@ behavioral contract. -/
 syntax (name := moduleCompleteSchedule)
     "module_complete_schedule " ident moduleRuleScheduleParam*
     " for " term " with " term " := " moduleRuleOrder : command
+
+/-! ## Elaboration -/
 
 private structure ScheduleParam where
   binder : TSyntax ``Parser.Term.bracketedBinder

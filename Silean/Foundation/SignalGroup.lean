@@ -2,17 +2,58 @@ import Silean.Foundation.SignalMap
 
 namespace Silean
 
-/-! A label-preserving view of a group of signals inside a larger signal map. -/
+/-!
+# Signal groups
+
+A module operation commonly reads or writes only part of a `SignalMap`. Passing
+the complete map would not record which signals the operation actually depends
+on or owns. A `SignalGroup` describes that smaller named interface together
+with a type-preserving embedding back into the parent map.
+
+Unlike a `SignalSelection`, which projects selected values into a positional
+tuple, a group retains its own label type and projects values into another
+`SignalMap.Values`. Its labels may therefore be renamed to describe their role
+inside the group. A group can also write its values back into the parent while
+leaving signals outside the group unchanged.
+
+Cycle contracts use groups for rule read and write sets in
+`Contracts/Cycle/CycleContract.lean`. Cycle evaluation projects the declared
+inputs and merges declared outputs through the operations in this file.
+-/
 
 /-- A named signal map embedded type-correctly into a parent signal map. Values
 projected through a group retain the group's labels; the ordered embedded
 labels are the dependency information used by schedules. Contracts separately
-require output groups not to contain duplicate parent labels. -/
+require output groups not to contain duplicate parent labels.
+
+The `.{0}` annotations restrict signal labels to ordinary types in `Type 0`.
+Hardware port and rule labels are small inductive types, so higher universes
+would add complexity without providing useful expressiveness here. -/
 structure SignalGroup (parent : SignalMap.{0}) where
   signals : SignalMap.{0}
   embed : signals.Label → parent.Label
   preservesType : ∀ label,
     signals.signalType label = parent.signalType (embed label)
+
+/- The supporting declarations are private: they exist only to make the
+examples compile and cannot be used as library API. -/
+
+private inductive ExampleParentSignal
+  | request
+  | data
+  | error
+deriving Enumeration
+
+@[reducible] private def exampleParent : SignalMap :=
+  EnumeratedMap.of ExampleParentSignal fun
+    | .request => .bit
+    | .data => .vector 8 .bit
+    | .error => .bit
+
+private inductive ExampleControlSignal
+  | start
+  | failed
+deriving Enumeration
 
 namespace SignalGroup
 
@@ -25,9 +66,22 @@ without repeating any `SignalType` information or proving type equalities. -/
   embed := embed
   preservesType := fun _ => rfl
 
+@[reducible] private def exampleControl : SignalGroup exampleParent :=
+  SignalGroup.fromLabels exampleParent ExampleControlSignal fun
+    | .start => ExampleParentSignal.request
+    | .failed => ExampleParentSignal.error
+
+/-- A group's labels can describe local roles while embedding differently
+named signals from the parent map. Their signal types are inherited. -/
+example : exampleControl.signals.labels.values = [.start, .failed] := rfl
+
+example : exampleControl.signals.signalType .start = .bit := rfl
+
 /-- The parent labels selected by the group, in the group's canonical order. -/
 def labels (group : SignalGroup parent) : List parent.Label :=
   group.signals.labels.values.map group.embed
+
+example : exampleControl.labels = [.request, .error] := rfl
 
 private def castForward {left right : SignalType} (equal : left = right) :
     left.Denote → right.Denote := by
@@ -61,6 +115,17 @@ def project (group : SignalGroup parent) (values : parent.Values) :
     group.signals.Values := fun label =>
   group.projectedValue label (values (group.embed label))
 
+@[reducible] private def exampleParentValues : exampleParent.Values
+  | .request => true
+  | .data => fun _ => true
+  | .error => false
+
+/-- Projection retains the group's labels and retrieves their corresponding
+parent values. -/
+example : exampleControl.project exampleParentValues .start = true := rfl
+
+example : exampleControl.project exampleParentValues .failed = false := rfl
+
 @[simp] theorem fromLabels_project_apply (parent : SignalMap) (Label : Type)
     [Enumeration Label] (embed : Label → parent.Label)
     (values : parent.Values) (label : Label) :
@@ -88,6 +153,9 @@ private theorem projectedValue_injective (group : SignalGroup parent)
 def Matches (group : SignalGroup parent) (parentValues : parent.Values)
     (selectedValues : group.signals.Values) : Prop :=
   group.project parentValues = selectedValues
+
+example : exampleControl.Matches exampleParentValues
+    (exampleControl.project exampleParentValues) := rfl
 
 @[simp] theorem matches_project (group : SignalGroup parent)
     (values : parent.Values) : group.Matches values (group.project values) := rfl
@@ -118,6 +186,20 @@ private def writeLabels (group : SignalGroup parent)
 def write (group : SignalGroup parent) (original : parent.Values)
     (selected : group.signals.Values) : parent.Values :=
   group.writeLabels group.signals.labels.values original selected
+
+@[reducible] private def exampleControlValues : exampleControl.signals.Values
+  | .start => false
+  | .failed => true
+
+/-- Writing a group updates its embedded parent labels. -/
+example : exampleControl.write exampleParentValues exampleControlValues
+    .request = false := by
+  rfl
+
+/-- Signals outside the group retain their original values. -/
+example : exampleControl.write exampleParentValues exampleControlValues
+    .data 0 = true := by
+  rfl
 
 private theorem writeLabels_eq_of_not_mem (group : SignalGroup parent)
     (remaining : List group.signals.Label) (original : parent.Values)

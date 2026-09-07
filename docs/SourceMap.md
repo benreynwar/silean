@@ -52,13 +52,12 @@ identify a source without requiring its full path.
 | `Foundation/SignalType.lean` | Bit, vector, and tuple shapes and their Lean values |
 | `Foundation/Enumeration.lean` | Stable finite identity enumeration and dependent maps |
 | `Foundation/SignalMap.lean` | Symbolically labelled typed signal collections and values |
-| `Foundation/SignalExpectation.lean` | Recursive zero/one/don't-care expectations and matching for signal values and labelled maps |
 | `Foundation/SignalSelection.lean` | Typed ordered subsets of signal maps |
+| `Foundation/SignalGroup.lean` | Label-preserving typed views of signals inside a larger signal map |
+| `Foundation/SignalLayout.lean` | Positions, packing, unpacking, and immediate-component access for aggregate signals |
 | `Foundation/ModulePorts.lean` | Connectivity-only input and output maps |
 | `Foundation/StructuralState.lean` | Primitive-local and recursively labelled state shapes |
 | `Foundation/BitVector.lean` | LSB-first finite bit-vector arithmetic and indexing laws |
-| `Foundation/CircularBuffer.lean` | Generic modular distance, indexed traversal, and functional-write laws |
-| `Foundation/Execution.lean` | Contract-independent deterministic runs and relational finite traces |
 | `Foundation/DeriveEnumeration.lean` | Derivation support for finite symbolic label enumerations |
 | `Structure/Primitive.lean` | Open primitive leaf descriptions, equations, state, and dependencies |
 | `Structure/ModuleBody.lean` | One uninstantiated structural layer: child boundaries, typed endpoints, and total wiring |
@@ -98,9 +97,11 @@ field-selection cycle contract.
 
 | Source | Responsibility |
 | --- | --- |
+| `Semantics/Trace.lean` | Generic relational finite traces and their composition laws |
 | `Semantics/StructuralEquations.lean` | `ProposedValues`, order-independent structural solutions, and generic assembly of a composite solution from consistent child solutions |
 | `Semantics/StructuralDependency.lean` | Semantic dependency rules and at-most-one solutions |
 | `Semantics/StructuralExecution.lean` | Contract-independent one-cycle transitions and finite relational executions |
+| `Contracts/SignalExpectation.lean` | Recursive zero/one/don't-care expectations and matching for signal values and labelled maps |
 | `Contracts/Cycle/CycleContract.lean` | Rule-local output behavior and explicit-input state transitions |
 | `Contracts/Cycle/CycleEvaluation.lean` | Deterministic cycle-contract application and relational laws |
 | `Contracts/Cycle/CycleImplementation.lean` | State correspondence, refinement, certified structures, and parametric certified layers |
@@ -218,8 +219,8 @@ that the structure implements that cycle contract. `FifoCertified.lean` then
 proves the separate latency-independent FIFO contract.
 `FifoProperties` gives this cycle contract its logical queue interpretation and
 proves the reachable occupancy invariant, empty/full boundaries, and exact
-ordinary-cycle enqueue/dequeue behavior. Generic circular-buffer arithmetic
-lives in `Foundation/CircularBuffer.lean`. `Contracts.Fifo.FifoCertified` uses those facts to
+ordinary-cycle enqueue/dequeue behavior. FIFO-local circular-buffer arithmetic
+lives in `Modules/Fifo/CircularBuffer.lean`. `Contracts.Fifo.FifoCertified` uses those facts to
 prove the pointer structure satisfies the shared `Contracts/Fifo/FifoContract.lean`
 boundary contract; it does not inspect structural children.
 The serial FIFO family uses `Interfaces.Fifo`, the shared resettable boundary.

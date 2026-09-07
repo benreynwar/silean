@@ -3,8 +3,25 @@ import Silean.Structure.ModuleBody
 
 namespace Silean.Authoring
 
+/-! # Child instance authoring
+
+`module_instances` declares the concrete children placed inside one structural
+layer. It generates the child-name type and enumeration, each child's ports,
+the layer's `EndpointContext`, the selected child `ModuleStructure`s, and their
+emission names. Fixed children and indexed child families use the same
+dependent `InstancePorts` representation.
+
+This is the design-side half of hierarchy construction: it chooses actual
+child structures but says nothing about their behavioral contracts or proofs.
+`module_design` normally invokes this command, while
+`module_child_certifications` later associates those same children with
+certification evidence.
+-/
+
 open Lean Elab Command Meta
 open Lean.Parser.Term
+
+/-! ## Command syntax -/
 
 declare_syntax_cat moduleInstanceModifier
 syntax "(" ident " := " term ")" : moduleInstanceModifier
@@ -28,6 +45,8 @@ An indexed entry supplies its index type and executable enumeration.
 syntax (name := moduleInstances)
   "module_instances " ident moduleInstancesParam* " for " term " where "
     moduleInstanceEntry,* : command
+
+/-! ## Elaboration -/
 
 private structure FamilyDecl where
   index : TSyntax `ident

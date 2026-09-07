@@ -9,12 +9,12 @@ The result depends only on the declared contract and supplied certification,
 not on any schedule or definition internal to the child. -/
 theorem childSolutionMatchesContract
     (children : ChildStructures body childContracts)
-    (inputs : body.context.ports.inputs.Values)
+    (inputs : body.ports.inputs.Values)
     (structuralState : (moduleStructure body children).State)
     (proposal : ProposedValues (moduleStructure body children))
     (satisfies : (moduleStructure body children).IsSolution
       inputs structuralState proposal)
-    (child : body.context.instancePorts.Name)
+    (child : body.instancePorts.Name)
     (contractState : (childContracts child).state.Values)
     (corresponds : (children child).certification.stateCorresponds contractState
       (structuralState child)) :
@@ -49,12 +49,12 @@ theorem childSolutionMatchesContract
 automatically, so a parent can use the public child contract directly. -/
 theorem childSolutionMatchesContract_of_subsingletonState
     (children : ChildStructures body childContracts)
-    (inputs : body.context.ports.inputs.Values)
+    (inputs : body.ports.inputs.Values)
     (structuralState : (moduleStructure body children).State)
     (proposal : ProposedValues (moduleStructure body children))
     (satisfies : (moduleStructure body children).IsSolution
       inputs structuralState proposal)
-    (child : body.context.instancePorts.Name)
+    (child : body.instancePorts.Name)
     [Subsingleton (childContracts child).state.Values]
     (contractState : (childContracts child).state.Values) :
     (childContracts child).EvaluatesTo
@@ -88,12 +88,12 @@ unique state value for each child; the helper handles correspondence coverage
 and returns a dependent family of contract evaluations. -/
 theorem childSolutionsMatchContracts_of_subsingletonState
     (children : ChildStructures body childContracts)
-    (inputs : body.context.ports.inputs.Values)
+    (inputs : body.ports.inputs.Values)
     (structuralState : (moduleStructure body children).State)
     (proposal : ProposedValues (moduleStructure body children))
     (satisfies : (moduleStructure body children).IsSolution
       inputs structuralState proposal)
-    (contractStates : (child : body.context.instancePorts.Name) →
+    (contractStates : (child : body.instancePorts.Name) →
       (childContracts child).state.Values)
     (stateSubsingleton : ∀ child,
       Subsingleton (childContracts child).state.Values) :
@@ -139,7 +139,7 @@ module-specific behavioral evidence. -/
 noncomputable def RuleSchedules.certifiedLayer
     {body : ModuleBody}
     {childContracts : ChildCycleContracts body}
-    {cycleContract : ModuleCycleContract body.context.ports}
+    {cycleContract : ModuleCycleContract body.ports}
     (schedules : RuleSchedules body childContracts cycleContract)
     (covers : schedules.CoversChildren)
     (stateCorresponds :

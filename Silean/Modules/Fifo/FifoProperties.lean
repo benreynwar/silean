@@ -1,4 +1,4 @@
-import Silean.Foundation.CircularBuffer
+import Silean.Modules.Fifo.CircularBuffer
 import Silean.Modules.Fifo.Fifo
 
 namespace Silean.Modules.Fifo.Properties

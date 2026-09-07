@@ -10,7 +10,7 @@ contracts already named by the layer. -/
 
 def ChildOutputsAgree {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
     (available : Availability body childContracts)
-    (left right : (name : body.context.instancePorts.Name) →
+    (left right : (name : body.instancePorts.Name) →
       ProposedValues (children name).moduleStructure) : Prop :=
   ∀ occurrence, occurrence ∈ available →
     ∀ output, output ∈ occurrence.writes →
@@ -20,14 +20,14 @@ def ChildOutputsAgree {body : ModuleBody} {childContracts : ChildCycleContracts 
 theorem sourceValue_eq_of_available
     {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
     {available : Availability body childContracts}
-    {left right : (name : body.context.instancePorts.Name) →
+    {left right : (name : body.instancePorts.Name) →
       ProposedValues (children name).moduleStructure}
     (agree : ChildOutputsAgree available left right)
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
-    (leftInputs rightInputs : body.context.ports.inputs.Values)
+    (inputAvailable : body.ports.inputs.Label → Prop)
+    (leftInputs rightInputs : body.ports.inputs.Values)
     (inputsAgree : ∀ input, inputAvailable input →
       leftInputs input = rightInputs input)
-    (source : SignalSource body.context.ports body.context.instancePorts signalType)
+    (source : SignalSource body.ports body.instancePorts signalType)
     (availableSource : sourceAvailable inputAvailable available source) :
     source.value leftInputs (fun name => (left name).outputs) =
       source.value rightInputs (fun name => (right name).outputs) := by
@@ -41,15 +41,15 @@ namespace Schedule
 
 theorem finishAgreement
     {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial)
-    (leftInputs rightInputs : body.context.ports.inputs.Values)
+    (leftInputs rightInputs : body.ports.inputs.Values)
     (rootInputsAgree : ∀ input, inputAvailable input →
       leftInputs input = rightInputs input)
     (currentState : (moduleStructure body children).State)
-    (left right : (name : body.context.instancePorts.Name) →
+    (left right : (name : body.instancePorts.Name) →
       ProposedValues (children name).moduleStructure)
     (leftSatisfies : ∀ name, (children name).moduleStructure.IsSolution
       (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
@@ -92,7 +92,7 @@ theorem finishAgreement
 
 structure ReplayResult {body : ModuleBody}
     {childContracts : ChildCycleContracts body}
-    (inputAvailable : body.context.ports.inputs.Label → Prop)
+    (inputAvailable : body.ports.inputs.Label → Prop)
     (initial : Availability body childContracts)
     (sourceFinal : Availability body childContracts)
     (SourceFinish : Availability body childContracts → Prop) where
@@ -109,7 +109,7 @@ previously available occurrence remains covered. -/
 
 noncomputable def replay {body : ModuleBody}
     {childContracts : ChildCycleContracts body}
-    {sourceInputs targetInputs : body.context.ports.inputs.Label → Prop}
+    {sourceInputs targetInputs : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {sourceInitial targetInitial : Availability body childContracts}
     (schedule : Schedule body childContracts sourceInputs Finish sourceInitial)
@@ -157,9 +157,9 @@ output rules determine every internal source needed by the next-state rules. -/
 theorem childStateInputs_eq
     {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
     (schedule : StateSchedule body childContracts)
-    (inputs : body.context.ports.inputs.Values)
+    (inputs : body.ports.inputs.Values)
     (currentState : (moduleStructure body children).State)
-    (left right : (name : body.context.instancePorts.Name) →
+    (left right : (name : body.instancePorts.Name) →
       ProposedValues (children name).moduleStructure)
     (leftSatisfies : ∀ name, (children name).moduleStructure.IsSolution
       (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
@@ -169,7 +169,7 @@ theorem childStateInputs_eq
       (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
         inputs right name)
       (currentState name) (right name))
-    (child : body.context.instancePorts.Name) :
+    (child : body.instancePorts.Name) :
     let selection := (childContracts child).stateRule.readsInputs
     selection.project
         (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
@@ -194,9 +194,9 @@ any two structural solutions with the same parent inputs and current state. -/
 theorem childStateRuleApply_eq
     {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
     (schedule : StateSchedule body childContracts)
-    (inputs : body.context.ports.inputs.Values)
+    (inputs : body.ports.inputs.Values)
     (currentState : (moduleStructure body children).State)
-    (left right : (name : body.context.instancePorts.Name) →
+    (left right : (name : body.instancePorts.Name) →
       ProposedValues (children name).moduleStructure)
     (leftSatisfies : ∀ name, (children name).moduleStructure.IsSolution
       (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
@@ -206,7 +206,7 @@ theorem childStateRuleApply_eq
       (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
         inputs right name)
       (currentState name) (right name))
-    (child : body.context.instancePorts.Name)
+    (child : body.instancePorts.Name)
     (contractState : (childContracts child).state.Values) :
     (childContracts child).stateRule.apply
         (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
@@ -228,7 +228,7 @@ parent behavioral contract; contracts are needed only when certifying what the
 parent means, not when checking that its wiring is acyclic. -/
 theorem Schedule.hasAtMostOneSolution
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     (schedule : Schedule body childContracts inputAvailable Finish [])
     (children : ChildStructures body childContracts)
@@ -290,7 +290,7 @@ def Combined.empty (body : ModuleBody)
 
 noncomputable def Combined.add
     (combined : Combined body childContracts)
-    {sourceInputs : body.context.ports.inputs.Label → Prop}
+    {sourceInputs : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     (next : Schedule body childContracts sourceInputs Finish [])
     (inputsAvailable : ∀ input, sourceInputs input → True) :
@@ -301,7 +301,7 @@ noncomputable def Combined.add
 
 theorem Combined.add_preserves
     (combined : Combined body childContracts)
-    {sourceInputs : body.context.ports.inputs.Label → Prop}
+    {sourceInputs : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     (next : Schedule body childContracts sourceInputs Finish [])
     (inputsAvailable : ∀ input, sourceInputs input → True)
@@ -319,7 +319,7 @@ theorem Combined.add_preserves
 
 theorem Combined.add_includes
     (combined : Combined body childContracts)
-    {sourceInputs : body.context.ports.inputs.Label → Prop}
+    {sourceInputs : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     (next : Schedule body childContracts sourceInputs Finish [])
     (inputsAvailable : ∀ input, sourceInputs input → True)

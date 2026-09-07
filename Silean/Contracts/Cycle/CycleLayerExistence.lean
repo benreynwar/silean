@@ -20,7 +20,7 @@ the occurrence's declared writes carry meaningful values; using a complete map
 keeps later typed lookup independent of the rule's existential shape. -/
 abbrev RuleOccurrence.Values {body : ModuleBody} {childContracts : ChildCycleContracts body}
     (occurrence : RuleOccurrence body childContracts) :=
-  (body.context.instancePorts.ports occurrence.child).outputs.Values
+  (body.instancePorts.ports occurrence.child).outputs.Values
 
 /-- Values corresponding position-for-position to scheduled occurrences. -/
 abbrev Availability.Values {body : ModuleBody} {childContracts : ChildCycleContracts body}
@@ -62,11 +62,11 @@ theorem get_cons_of_ne {body : ModuleBody} {childContracts : ChildCycleContracts
 theorem get_output_eq_of_both_write
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {available : Availability body childContracts} (values : available.Values)
-    (child : body.context.instancePorts.Name)
+    (child : body.instancePorts.Name)
     {left right : (childContracts child).RuleName}
     (leftMem : Layer.RuleOccurrence.mk child left ∈ available)
     (rightMem : Layer.RuleOccurrence.mk child right ∈ available)
-    (output : (body.context.instancePorts.ports child).outputs.Label)
+    (output : (body.instancePorts.ports child).outputs.Label)
     (leftWrites : output ∈
       (Layer.RuleOccurrence.mk child left : RuleOccurrence body childContracts).writes)
     (rightWrites : output ∈
@@ -84,8 +84,8 @@ child rule. -/
 noncomputable def childOutputs {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {available : Availability body childContracts} (values : available.Values)
     (covers : CoversAllRules body childContracts available) :
-    (child : body.context.instancePorts.Name) →
-      (body.context.instancePorts.ports child).outputs.Values :=
+    (child : body.instancePorts.Name) →
+      (body.instancePorts.ports child).outputs.Values :=
   fun child output =>
     let availableOutput := outputAvailable_of_covers covers child output
     let rule := Classical.choose availableOutput
@@ -95,11 +95,11 @@ noncomputable def childOutputs {body : ModuleBody} {childContracts : ChildCycleC
 /-- Read a structurally wired source from root inputs and the values produced
 by earlier rule calls. -/
 noncomputable def sourceValue {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
     (values : available.Values)
-    (inputs : body.context.ports.inputs.Values)
-    (source : SignalSource body.context.ports body.context.instancePorts signalType)
+    (inputs : body.ports.inputs.Values)
+    (source : SignalSource body.ports body.instancePorts signalType)
     (isAvailable : sourceAvailable inputAvailable available source) :
     signalType.Denote := by
   cases source with
@@ -111,11 +111,11 @@ noncomputable def sourceValue {body : ModuleBody} {childContracts : ChildCycleCo
 
 theorem sourceValue_eq_childOutputs
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
     (values : available.Values) (covers : CoversAllRules body childContracts available)
-    (inputs : body.context.ports.inputs.Values)
-    (source : SignalSource body.context.ports body.context.instancePorts signalType)
+    (inputs : body.ports.inputs.Values)
+    (source : SignalSource body.ports body.instancePorts signalType)
     (isAvailable : sourceAvailable inputAvailable available source) :
     values.sourceValue inputs source isAvailable =
       source.value inputs (values.childOutputs covers) := by
@@ -132,11 +132,11 @@ theorem sourceValue_eq_childOutputs
 
 theorem sourceValue_instanceOutput_eq
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
-    (values : available.Values) (inputs : body.context.ports.inputs.Values)
-    (child : body.context.instancePorts.Name)
-    (output : (body.context.instancePorts.ports child).outputs.Label)
+    (values : available.Values) (inputs : body.ports.inputs.Values)
+    (child : body.instancePorts.Name)
+    (output : (body.instancePorts.ports child).outputs.Label)
     (isAvailable : sourceAvailable inputAvailable available
       (SignalSource.instanceOutput child output))
     (rule : (childContracts child).RuleName)
@@ -154,10 +154,10 @@ theorem childOutputs_eq_get_of_write
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {available : Availability body childContracts} (values : available.Values)
     (covers : CoversAllRules body childContracts available)
-    (child : body.context.instancePorts.Name)
+    (child : body.instancePorts.Name)
     (rule : (childContracts child).RuleName)
     (called : Layer.RuleOccurrence.mk child rule ∈ available)
-    (output : (body.context.instancePorts.ports child).outputs.Label)
+    (output : (body.instancePorts.ports child).outputs.Label)
     (written : output ∈
       (Layer.RuleOccurrence.mk child rule : RuleOccurrence body childContracts).writes) :
     values.childOutputs covers child output =
@@ -173,35 +173,35 @@ end Availability.Values
 namespace RuleOccurrence
 
 noncomputable def inputValues {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
     (occurrence : RuleOccurrence body childContracts)
     (readsAvailable : ∀ input, input ∈ occurrence.reads →
       sourceAvailable inputAvailable available
         (body.wiring.instanceInput occurrence.child input))
     (values : available.Values)
-    (inputs : body.context.ports.inputs.Values) :
-    (body.context.instancePorts.ports occurrence.child).inputs.Values :=
+    (inputs : body.ports.inputs.Values) :
+    (body.instancePorts.ports occurrence.child).inputs.Values :=
   letI : DecidableEq
-      (body.context.instancePorts.ports occurrence.child).inputs.Label :=
-    (body.context.instancePorts.ports occurrence.child).inputs.labels.decidableEq
+      (body.instancePorts.ports occurrence.child).inputs.Label :=
+    (body.instancePorts.ports occurrence.child).inputs.labels.decidableEq
   fun input =>
     if member : input ∈ occurrence.reads then
       values.sourceValue inputs (body.wiring.instanceInput occurrence.child input)
         (readsAvailable input member)
     else
-      (body.context.instancePorts.ports occurrence.child).inputs.defaultValues input
+      (body.instancePorts.ports occurrence.child).inputs.defaultValues input
 
 theorem inputValues_eq_sourceValue
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
     (occurrence : RuleOccurrence body childContracts)
     (readsAvailable : ∀ input, input ∈ occurrence.reads →
       sourceAvailable inputAvailable available
         (body.wiring.instanceInput occurrence.child input))
-    (values : available.Values) (inputs : body.context.ports.inputs.Values)
-    (input : (body.context.instancePorts.ports occurrence.child).inputs.Label)
+    (values : available.Values) (inputs : body.ports.inputs.Values)
+    (input : (body.instancePorts.ports occurrence.child).inputs.Label)
     (member : input ∈ occurrence.reads) :
     occurrence.inputValues readsAvailable values inputs input =
       values.sourceValue inputs (body.wiring.instanceInput occurrence.child input)
@@ -216,32 +216,32 @@ theorem inputValues_eq_sourceValue
 this point in the schedule. Unread child inputs receive defaults and cannot
 affect the selected rule target. -/
 noncomputable def evaluate {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
     (occurrence : RuleOccurrence body childContracts)
     (readsAvailable : ∀ input, input ∈ occurrence.reads →
       sourceAvailable inputAvailable available
         (body.wiring.instanceInput occurrence.child input))
     (values : available.Values)
-    (inputs : body.context.ports.inputs.Values)
+    (inputs : body.ports.inputs.Values)
     (contractState : (childContracts occurrence.child).state.Values) :
     occurrence.Values :=
   let rule := (childContracts occurrence.child).outputRule occurrence.rule
   rule.writesOutputs.write
-    (body.context.instancePorts.ports occurrence.child).outputs.defaultValues
+    (body.instancePorts.ports occurrence.child).outputs.defaultValues
     (rule.target
       (rule.readsInputs.project
         (occurrence.inputValues readsAvailable values inputs)) contractState)
 
 theorem evaluate_holds {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
     (occurrence : RuleOccurrence body childContracts)
     (readsAvailable : ∀ input, input ∈ occurrence.reads →
       sourceAvailable inputAvailable available
         (body.wiring.instanceInput occurrence.child input))
     (values : available.Values)
-    (inputs : body.context.ports.inputs.Values)
+    (inputs : body.ports.inputs.Values)
     (contractState : (childContracts occurrence.child).state.Values) :
     ((childContracts occurrence.child).outputRule occurrence.rule).Holds
       (occurrence.inputValues readsAvailable values inputs) contractState
@@ -256,7 +256,7 @@ namespace Schedule
 
 theorem initial_mem_final
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial)
@@ -272,12 +272,12 @@ indexed by the schedule's final availability, so every later lookup carries
 evidence that the producing call occurred. -/
 noncomputable def evaluateRules
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial)
-    (inputs : body.context.ports.inputs.Values)
-    (contractState : (child : body.context.instancePorts.Name) →
+    (inputs : body.ports.inputs.Values)
+    (contractState : (child : body.instancePorts.Name) →
       (childContracts child).state.Values)
     (initialValues : initial.Values) : schedule.finalAvailability.Values :=
   match schedule with
@@ -289,12 +289,12 @@ noncomputable def evaluateRules
 
 theorem evaluateRules_get_initial
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial)
-    (inputs : body.context.ports.inputs.Values)
-    (contractState : (child : body.context.instancePorts.Name) →
+    (inputs : body.ports.inputs.Values)
+    (contractState : (child : body.instancePorts.Name) →
       (childContracts child).state.Values)
     (initialValues : initial.Values)
     (occurrence : RuleOccurrence body childContracts) (member : occurrence ∈ initial) :
@@ -320,15 +320,15 @@ theorem evaluateRules_get_initial
 
 theorem evaluateRules_sourceValue_initial
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial)
-    (inputs : body.context.ports.inputs.Values)
-    (contractState : (child : body.context.instancePorts.Name) →
+    (inputs : body.ports.inputs.Values)
+    (contractState : (child : body.instancePorts.Name) →
       (childContracts child).state.Values)
     (initialValues : initial.Values)
-    (source : SignalSource body.context.ports body.context.instancePorts signalType)
+    (source : SignalSource body.ports body.instancePorts signalType)
     (isAvailable : sourceAvailable inputAvailable initial source) :
     initialValues.sourceValue inputs source isAvailable =
       (Schedule.evaluateRules schedule inputs contractState initialValues).sourceValue inputs source
@@ -353,12 +353,12 @@ theorem evaluateRules_sourceValue_initial
 and child-output environment produced by the complete schedule. -/
 theorem evaluateRules_new_rule_holds
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial)
-    (inputs : body.context.ports.inputs.Values)
-    (contractState : (child : body.context.instancePorts.Name) →
+    (inputs : body.ports.inputs.Values)
+    (contractState : (child : body.instancePorts.Name) →
       (childContracts child).state.Values)
     (initialValues : initial.Values)
     (covers : CoversAllRules body childContracts schedule.finalAvailability)
@@ -438,11 +438,11 @@ theorem evaluateRules_new_rule_holds
 
 theorem evaluateRules_outputRulesHold
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     (schedule : Schedule body childContracts inputAvailable Finish [])
-    (inputs : body.context.ports.inputs.Values)
-    (contractState : (child : body.context.instancePorts.Name) →
+    (inputs : body.ports.inputs.Values)
+    (contractState : (child : body.instancePorts.Name) →
       (childContracts child).state.Values)
     (covers : CoversAllRules body childContracts schedule.finalAvailability) :
     let finalValues := Schedule.evaluateRules schedule inputs contractState .nil
@@ -462,7 +462,7 @@ both acyclicity and evaluability without defining structural meaning by order. -
 theorem hasSolution
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     (children : ChildStructures body childContracts)
-    {inputAvailable : body.context.ports.inputs.Label → Prop}
+    {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     (schedule : Schedule body childContracts inputAvailable Finish [])
     (covers : CoversAllRules body childContracts schedule.finalAvailability) :
@@ -472,7 +472,7 @@ theorem hasSolution
     (children child).certification.stateCorresponds contractState (structuralState child)
   have stateAvailable : ∀ child, ∃ contractState, StateProperty child contractState :=
     fun child => (children child).certification.hasCorrespondingState (structuralState child)
-  rcases body.context.instancePorts.names.exists_pi StateProperty stateAvailable with
+  rcases body.instancePorts.names.exists_pi StateProperty stateAvailable with
     ⟨contractState, stateCorresponds⟩
   let finalValues := Schedule.evaluateRules schedule inputs contractState .nil
   let childOutputValues := finalValues.childOutputs covers
@@ -485,7 +485,7 @@ theorem hasSolution
     fun child => (children child).certification.hasStructuralResult
       (body.wiring.childInputValues inputs childOutputValues child)
       (structuralState child)
-  rcases body.context.instancePorts.names.exists_pi ProposalProperty
+  rcases body.instancePorts.names.exists_pi ProposalProperty
       proposalsAvailable with ⟨childProposals, childrenSatisfy⟩
   have childOutputsEqual : ∀ child,
       (childProposals child).outputs = childOutputValues child := by
@@ -525,7 +525,7 @@ namespace RuleSchedules
 child rule, provide structural existence as well as uniqueness. -/
 theorem hasSolution
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {contract : ModuleCycleContract body.context.ports}
+    {contract : ModuleCycleContract body.ports}
     (schedules : RuleSchedules body childContracts contract)
     (covers : schedules.CoversChildren)
     (children : ChildStructures body childContracts) :
