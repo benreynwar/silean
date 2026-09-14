@@ -96,4 +96,16 @@ theorem toNat_injective (width : Nat) : Function.Injective (toNat width) := by
             simp [bit]
           simp [toNat, ofNat, induction, bit, quotient, Nat.add_comm]
 
+/-- Reading a bit after interpreting a fixed-width vector as a natural number
+recovers the original bit. -/
+theorem testBit_toNat (width : Nat) (bits : Fin width → Bool)
+    (index : Fin width) :
+    (toNat width bits).testBit index.val = bits index := by
+  have bound := toNat_lt_cardinality width bits
+  rw [cardinality_eq_pow] at bound
+  have recovered : ofNat width (toNat width bits) = bits := by
+    apply toNat_injective width
+    rw [toNat_ofNat, cardinality_eq_pow, Nat.mod_eq_of_lt bound]
+  exact congrFun recovered index
+
 end Silean.BitVector

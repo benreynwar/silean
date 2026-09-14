@@ -1,5 +1,6 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModulePorts
+import Silean.Authoring.SignalSchemaDeclaration
 import Silean.Examples.PicoRV.Memory
 
 namespace Silean.Examples.PicoRV.Control
@@ -24,22 +25,35 @@ abbrev TwoBits := Fin 2 → Bool
 abbrev FiveBits := Fin 5 → Bool
 abbrev EightBits := Fin 8 → Bool
 
-inductive Register
-  | cpu_state
-  | latched_store | latched_stalu | latched_branch
-  | latched_is_lu | latched_is_lh | latched_is_lb | latched_rd
-  | mem_wordsize
-  | mem_do_prefetch | mem_do_rinst | mem_do_rdata | mem_do_wdata
-  | decoder_trigger | decoder_pseudo_trigger | trap
-deriving Enumeration
+/-! ## Control-state hardware layout
 
-def registerType : Register → SignalType
-  | .cpu_state => .vector 8 .bit
-  | .latched_rd => .vector 5 .bit
-  | .mem_wordsize => .vector 2 .bit
-  | _ => .bit
+The cycle contract and the structural implementation share this named tuple.
+Its field order follows the source-level control registers and its schema keeps
+those names when the aggregate is packed, stored, muxed, or emitted. -/
 
-@[reducible] def stateMap : SignalMap := EnumeratedMap.of Register registerType
+signal_schema ControlState where
+  cpu_state : SignalSchema.vector 8 SignalSchema.bit,
+  latched_store : SignalSchema.bit,
+  latched_stalu : SignalSchema.bit,
+  latched_branch : SignalSchema.bit,
+  latched_is_lu : SignalSchema.bit,
+  latched_is_lh : SignalSchema.bit,
+  latched_is_lb : SignalSchema.bit,
+  latched_rd : SignalSchema.vector 5 SignalSchema.bit,
+  mem_wordsize : SignalSchema.vector 2 SignalSchema.bit,
+  mem_do_prefetch : SignalSchema.bit,
+  mem_do_rinst : SignalSchema.bit,
+  mem_do_rdata : SignalSchema.bit,
+  mem_do_wdata : SignalSchema.bit,
+  decoder_trigger : SignalSchema.bit,
+  decoder_pseudo_trigger : SignalSchema.bit,
+  trap : SignalSchema.bit
+
+abbrev Register := ControlState.Field
+
+@[reducible] def stateMap : SignalMap := ControlState.signalMap
+
+@[reducible] def stateType : SignalType := stateMap.tupleType
 
 module_ports ports where
   input resetn : .bit,
@@ -114,6 +128,119 @@ structure Inputs where
   alu_out_0 : Bool
   mem_done : Bool
 
+/-! `ControlInputs` is the structural representation shared by the
+combinational Control children. A child may inspect only part of this tuple,
+but carrying the common named boundary keeps its contract stated directly in
+terms of `Inputs` and makes parent composition readable. -/
+
+signal_schema ControlInputs where
+  resetn : SignalSchema.bit,
+  instr_jal : SignalSchema.bit,
+  instr_jalr : SignalSchema.bit,
+  instr_lb : SignalSchema.bit,
+  instr_lbu : SignalSchema.bit,
+  instr_lh : SignalSchema.bit,
+  instr_lhu : SignalSchema.bit,
+  instr_lw : SignalSchema.bit,
+  instr_sb : SignalSchema.bit,
+  instr_sh : SignalSchema.bit,
+  instr_sw : SignalSchema.bit,
+  instr_trap : SignalSchema.bit,
+  is_lui_auipc_jal : SignalSchema.bit,
+  is_lb_lh_lw_lbu_lhu : SignalSchema.bit,
+  is_slli_srli_srai : SignalSchema.bit,
+  is_jalr_addi_slti_sltiu_xori_ori_andi : SignalSchema.bit,
+  is_sb_sh_sw : SignalSchema.bit,
+  is_sll_srl_sra : SignalSchema.bit,
+  is_beq_bne_blt_bge_bltu_bgeu : SignalSchema.bit,
+  is_lbu_lhu_lw : SignalSchema.bit,
+  decoded_rd : SignalSchema.vector 5 SignalSchema.bit,
+  reg_pc : SignalSchema.vector 32 SignalSchema.bit,
+  reg_op1 : SignalSchema.vector 32 SignalSchema.bit,
+  reg_sh : SignalSchema.vector 5 SignalSchema.bit,
+  alu_out_0 : SignalSchema.bit,
+  mem_done : SignalSchema.bit
+
+@[reducible] def inputsType : SignalType := ControlInputs.signalMap.tupleType
+
+def Inputs.toValues (inputs : Inputs) : ControlInputs.signalMap.Values
+  | .resetn => inputs.resetn
+  | .instr_jal => inputs.instr_jal
+  | .instr_jalr => inputs.instr_jalr
+  | .instr_lb => inputs.instr_lb
+  | .instr_lbu => inputs.instr_lbu
+  | .instr_lh => inputs.instr_lh
+  | .instr_lhu => inputs.instr_lhu
+  | .instr_lw => inputs.instr_lw
+  | .instr_sb => inputs.instr_sb
+  | .instr_sh => inputs.instr_sh
+  | .instr_sw => inputs.instr_sw
+  | .instr_trap => inputs.instr_trap
+  | .is_lui_auipc_jal => inputs.is_lui_auipc_jal
+  | .is_lb_lh_lw_lbu_lhu => inputs.is_lb_lh_lw_lbu_lhu
+  | .is_slli_srli_srai => inputs.is_slli_srli_srai
+  | .is_jalr_addi_slti_sltiu_xori_ori_andi =>
+      inputs.is_jalr_addi_slti_sltiu_xori_ori_andi
+  | .is_sb_sh_sw => inputs.is_sb_sh_sw
+  | .is_sll_srl_sra => inputs.is_sll_srl_sra
+  | .is_beq_bne_blt_bge_bltu_bgeu => inputs.is_beq_bne_blt_bge_bltu_bgeu
+  | .is_lbu_lhu_lw => inputs.is_lbu_lhu_lw
+  | .decoded_rd => inputs.decoded_rd
+  | .reg_pc => inputs.reg_pc
+  | .reg_op1 => inputs.reg_op1
+  | .reg_sh => inputs.reg_sh
+  | .alu_out_0 => inputs.alu_out_0
+  | .mem_done => inputs.mem_done
+
+def Inputs.pack (inputs : Inputs) : inputsType.Denote :=
+  ControlInputs.signalMap.pack inputs.toValues
+
+def Inputs.unpack (value : inputsType.Denote) : Inputs :=
+  let fields := ControlInputs.signalMap.unpack value
+  { resetn := fields .resetn
+    instr_jal := fields .instr_jal
+    instr_jalr := fields .instr_jalr
+    instr_lb := fields .instr_lb
+    instr_lbu := fields .instr_lbu
+    instr_lh := fields .instr_lh
+    instr_lhu := fields .instr_lhu
+    instr_lw := fields .instr_lw
+    instr_sb := fields .instr_sb
+    instr_sh := fields .instr_sh
+    instr_sw := fields .instr_sw
+    instr_trap := fields .instr_trap
+    is_lui_auipc_jal := fields .is_lui_auipc_jal
+    is_lb_lh_lw_lbu_lhu := fields .is_lb_lh_lw_lbu_lhu
+    is_slli_srli_srai := fields .is_slli_srli_srai
+    is_jalr_addi_slti_sltiu_xori_ori_andi :=
+      fields .is_jalr_addi_slti_sltiu_xori_ori_andi
+    is_sb_sh_sw := fields .is_sb_sh_sw
+    is_sll_srl_sra := fields .is_sll_srl_sra
+    is_beq_bne_blt_bge_bltu_bgeu := fields .is_beq_bne_blt_bge_bltu_bgeu
+    is_lbu_lhu_lw := fields .is_lbu_lhu_lw
+    decoded_rd := fields .decoded_rd
+    reg_pc := fields .reg_pc
+    reg_op1 := fields .reg_op1
+    reg_sh := fields .reg_sh
+    alu_out_0 := fields .alu_out_0
+    mem_done := fields .mem_done }
+
+@[simp] theorem Inputs.unpack_pack (inputs : Inputs) :
+    Inputs.unpack inputs.pack = inputs := by
+  cases inputs
+  simp [Inputs.unpack, Inputs.pack, Inputs.toValues]
+
+@[simp] theorem Inputs.pack_unpack (value : inputsType.Denote) :
+    (Inputs.unpack value).pack = value := by
+  change (Inputs.unpack value).pack = value
+  calc
+    (Inputs.unpack value).pack =
+        ControlInputs.signalMap.pack (ControlInputs.signalMap.unpack value) := by
+      apply congrArg (ControlInputs.signalMap.pack)
+      funext field
+      cases field <;> simp [Inputs.unpack, Inputs.toValues]
+    _ = value := ControlInputs.signalMap.pack_unpack value
+
 def inputsOfValues (values : inputMap.Values) : Inputs where
   resetn := values .resetn
   instr_jal := values .instr_jal
@@ -177,6 +304,11 @@ def inputValues (inputs : Inputs) : inputMap.Values
   cases inputs
   rfl
 
+@[simp] theorem inputValues_inputsOfValues (values : inputMap.Values) :
+    inputValues (inputsOfValues values) = values := by
+  funext input
+  cases input <;> rfl
+
 def wordOfNat (value : Nat) : Word := fun index => value.testBit index.val
 def twoBitsOfNat (value : Nat) : TwoBits := fun index => value.testBit index.val
 def fiveBitsOfNat (value : Nat) : FiveBits := fun index => value.testBit index.val
@@ -223,6 +355,50 @@ structure Transition where
   setRinst : Bool := false
   setRdata : Bool := false
   setWdata : Bool := false
+
+/-! `TransitionValue` is the structural representation of `Transition`. The
+nested state schema preserves all source register names while the three intent
+bits remain visibly separate from the proposed state. -/
+
+signal_schema TransitionValue where
+  state : ControlState.schema,
+  setRinst : SignalSchema.bit,
+  setRdata : SignalSchema.bit,
+  setWdata : SignalSchema.bit
+
+@[reducible] def transitionType : SignalType := TransitionValue.signalMap.tupleType
+
+def Transition.toValues (transition : Transition) : TransitionValue.signalMap.Values
+  | .state => stateMap.pack transition.state
+  | .setRinst => transition.setRinst
+  | .setRdata => transition.setRdata
+  | .setWdata => transition.setWdata
+
+def Transition.pack (transition : Transition) : transitionType.Denote :=
+  TransitionValue.signalMap.pack transition.toValues
+
+def Transition.unpack (value : transitionType.Denote) : Transition :=
+  let fields := TransitionValue.signalMap.unpack value
+  { state := stateMap.unpack (fields .state)
+    setRinst := fields .setRinst
+    setRdata := fields .setRdata
+    setWdata := fields .setWdata }
+
+@[simp] theorem Transition.unpack_pack (transition : Transition) :
+    Transition.unpack transition.pack = transition := by
+  cases transition
+  simp [Transition.unpack, Transition.pack, Transition.toValues]
+
+@[simp] theorem Transition.pack_unpack (value : transitionType.Denote) :
+    (Transition.unpack value).pack = value := by
+  change (Transition.unpack value).pack = value
+  calc
+    (Transition.unpack value).pack =
+        TransitionValue.signalMap.pack (TransitionValue.signalMap.unpack value) := by
+      apply congrArg (TransitionValue.signalMap.pack)
+      funext field
+      cases field <;> simp [Transition.unpack, Transition.toValues]
+    _ = value := TransitionValue.signalMap.pack_unpack value
 
 def simpleTransition (state : stateMap.Values) : Transition :=
   { state := state }
@@ -271,9 +447,7 @@ def loadRs1Transition (inputs : Inputs) (updated : stateMap.Values) : Transition
     simpleTransition (stateMap.set updated .cpu_state (stateBits cpuStateExec))
 
 def loadRs2Transition (inputs : Inputs) (updated : stateMap.Values) : Transition :=
-  if inputs.instr_trap then
-    simpleTransition (stateMap.set updated .cpu_state (stateBits cpuStateTrap))
-  else if inputs.is_sb_sh_sw then
+  if inputs.is_sb_sh_sw then
     let updated := stateMap.set updated .mem_do_rinst true
     simpleTransition (stateMap.set updated .cpu_state (stateBits cpuStateStmem))
   else if inputs.is_sll_srl_sra then
@@ -386,18 +560,37 @@ def dataMisaligned (inputs : Inputs) (state : stateMap.Values) : Bool :=
 def instructionMisaligned (inputs : Inputs) (state : stateMap.Values) : Bool :=
   (state .mem_do_rinst : Bool) && decide (BitVector.toNat 32 inputs.reg_pc % 4 ≠ 0)
 
-def nextState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
+/-! The next-state calculation is named by source-level priority layer so the
+structural children can state natural contracts without restating fragments of
+`nextState`. These helpers do not introduce new behavior: their order is the
+order of the corresponding assignments in the configured Verilog block. -/
+
+def baselineState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
   let baseline := stateMap.set state .trap false
   let baseline := stateMap.set baseline .decoder_trigger
     ((state .mem_do_rinst : Bool) && inputs.mem_done)
-  let baseline := stateMap.set baseline .decoder_pseudo_trigger false
+  stateMap.set baseline .decoder_pseudo_trigger false
+
+def resetAndAlignmentTransition (inputs : Inputs) (state baseline : stateMap.Values)
+    (selected : Transition) : Transition :=
   let transition := if !inputs.resetn then resetTransition baseline
-    else phaseTransition inputs state baseline
-  let transition := if inputs.resetn &&
+    else selected
+  if inputs.resetn &&
       (dataMisaligned inputs state || instructionMisaligned inputs state) then
       { transition with state :=
           (stateMap.set transition.state .cpu_state (stateBits cpuStateTrap)) }
     else transition
+
+def transitionBeforeCommandFinish (inputs : Inputs)
+    (state : stateMap.Values) : Transition :=
+  let baseline := baselineState inputs state
+  let selected := phaseTransition inputs state baseline
+  resetAndAlignmentTransition inputs state baseline selected
+
+def nextState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
+  let baseline := baselineState inputs state
+  let selected := phaseTransition inputs state baseline
+  let transition := resetAndAlignmentTransition inputs state baseline selected
   finishCommands (!inputs.resetn || inputs.mem_done) transition
 
 structure Commands where
@@ -450,6 +643,12 @@ def outputRule : Contracts.Cycle.CycleOutputRule ports stateMap where
   readsInputs := .empty inputMap
   writesOutputs := .all outputMap
   target _ state := outputValues state
+
+@[simp] theorem outputRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    outputRule.Holds inputs state outputs ↔ outputs = outputValues state := by
+  simp [Contracts.Cycle.CycleOutputRule.Holds, outputRule,
+    SignalGroup.all_matches]
 
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   readsInputs := .all inputMap

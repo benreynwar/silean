@@ -19,6 +19,21 @@ POINTER_FIFO_DIR := $(BUILD_DIR)/pointer-fifo
 POINTER_FIFO_FIRRTL := $(POINTER_FIFO_DIR)/pointer_fifo.fir
 POINTER_FIFO_VERILOG := $(POINTER_FIFO_DIR)/pointer_fifo.sv
 POINTER_FIFO_SIM := $(POINTER_FIFO_DIR)/sim
+PICORV_CONTROL_DIR := $(BUILD_DIR)/picorv-control
+PICORV_CONTROL_FIRRTL := $(PICORV_CONTROL_DIR)/picorv32_control.fir
+PICORV_CONTROL_VERILOG := $(PICORV_CONTROL_DIR)/picorv32_control.sv
+PICORV_DATAPATH_DIR := $(BUILD_DIR)/picorv-datapath
+PICORV_DATAPATH_FIRRTL := $(PICORV_DATAPATH_DIR)/picorv32_datapath.fir
+PICORV_DATAPATH_VERILOG := $(PICORV_DATAPATH_DIR)/picorv32_datapath.sv
+PICORV_DATAPATH_SIM := $(PICORV_DATAPATH_DIR)/sim
+PICORV_MEMORY_DIR := $(BUILD_DIR)/picorv-memory
+PICORV_MEMORY_FIRRTL := $(PICORV_MEMORY_DIR)/PicoRVMemory.fir
+PICORV_MEMORY_VERILOG := $(PICORV_MEMORY_DIR)/PicoRVMemory.sv
+PICORV_MEMORY_SIM := $(PICORV_MEMORY_DIR)/sim
+PICORV_DIR := $(BUILD_DIR)/picorv
+PICORV_FIRRTL := $(PICORV_DIR)/PicoRV.fir
+PICORV_VERILOG := $(PICORV_DIR)/PicoRV.sv
+PICORV_SIM := $(PICORV_DIR)/sim
 
 LEAN_SOURCES := $(shell find Silean -type f -name '*.lean')
 LEAN_BUILD_INPUTS := $(LEAN_SOURCES) lakefile.lean lean-toolchain lake-manifest.json
@@ -28,7 +43,12 @@ CHECK_SOURCES := $(shell find Silean/Examples/Checks -type f -name '*Checks.lean
 	firrtl-structured-fifo verilog-structured-fifo test-structured-fifo test clean \
 	firrtl-register-bank verilog-register-bank test-register-bank \
 	firrtl-pointer-fifo verilog-pointer-fifo test-pointer-fifo \
-	firrtl-serial-fifo verilog-serial-fifo test-serial-fifo
+	firrtl-serial-fifo verilog-serial-fifo test-serial-fifo \
+	firrtl-picorv-control verilog-picorv-control \
+	firrtl-picorv-datapath verilog-picorv-datapath lint-picorv-datapath \
+	test-picorv-datapath firrtl-picorv-memory verilog-picorv-memory \
+	lint-picorv-memory test-picorv-memory firrtl-picorv verilog-picorv \
+	lint-picorv test-picorv
 
 all: test
 
@@ -37,7 +57,9 @@ firrtl-bit-register: $(BIT_REGISTER_FIRRTL)
 verilog-bit-register: $(BIT_REGISTER_VERILOG)
 
 test: check-example-imports test-bit-register test-structured-fifo test-serial-fifo \
-	test-register-bank test-pointer-fifo
+	test-register-bank test-pointer-fifo verilog-picorv-control \
+	lint-picorv-datapath test-picorv-datapath lint-picorv-memory \
+	test-picorv-memory lint-picorv test-picorv
 
 check-example-imports:
 	@status=0; \
@@ -86,6 +108,46 @@ firrtl-pointer-fifo: $(POINTER_FIFO_FIRRTL)
 
 verilog-pointer-fifo: $(POINTER_FIFO_VERILOG)
 
+firrtl-picorv-control: $(PICORV_CONTROL_FIRRTL)
+
+verilog-picorv-control: $(PICORV_CONTROL_VERILOG)
+
+firrtl-picorv-datapath: $(PICORV_DATAPATH_FIRRTL)
+
+verilog-picorv-datapath: $(PICORV_DATAPATH_VERILOG)
+
+lint-picorv-datapath: $(PICORV_DATAPATH_VERILOG)
+	verilator --lint-only --top-module picorv32_datapath $<
+
+test-picorv-datapath: $(PICORV_DATAPATH_VERILOG)
+	$(MAKE) --no-print-directory -C tests/picorv-datapath \
+		VERILOG_SOURCES=$(abspath $(PICORV_DATAPATH_VERILOG)) \
+		SIM_BUILD=$(abspath $(PICORV_DATAPATH_SIM))
+
+firrtl-picorv-memory: $(PICORV_MEMORY_FIRRTL)
+
+verilog-picorv-memory: $(PICORV_MEMORY_VERILOG)
+
+lint-picorv-memory: $(PICORV_MEMORY_VERILOG)
+	verilator --lint-only --top-module PicoRVMemory $<
+
+test-picorv-memory: $(PICORV_MEMORY_VERILOG)
+	$(MAKE) --no-print-directory -C tests/picorv-memory \
+		VERILOG_SOURCES=$(abspath $(PICORV_MEMORY_VERILOG)) \
+		SIM_BUILD=$(abspath $(PICORV_MEMORY_SIM))
+
+firrtl-picorv: $(PICORV_FIRRTL)
+
+verilog-picorv: $(PICORV_VERILOG)
+
+lint-picorv: $(PICORV_VERILOG)
+	verilator --lint-only --top-module PicoRV $<
+
+test-picorv: $(PICORV_VERILOG)
+	$(MAKE) --no-print-directory -C tests/picorv \
+		VERILOG_SOURCES=$(abspath $(PICORV_VERILOG)) \
+		SIM_BUILD=$(abspath $(PICORV_SIM))
+
 test-pointer-fifo: $(POINTER_FIFO_VERILOG)
 	$(MAKE) --no-print-directory -C tests/pointer-fifo \
 		VERILOG_SOURCES=$(abspath $(POINTER_FIFO_VERILOG)) \
@@ -126,6 +188,35 @@ $(POINTER_FIFO_FIRRTL): $(LEAN_BUILD_INPUTS)
 $(POINTER_FIFO_VERILOG): $(POINTER_FIFO_FIRRTL)
 	firtool --format=fir $< -o $@
 
+$(PICORV_CONTROL_FIRRTL): $(LEAN_BUILD_INPUTS)
+	mkdir -p $(@D)
+	lake exe emit-picorv-control --output $@
+
+$(PICORV_CONTROL_VERILOG): $(PICORV_CONTROL_FIRRTL)
+	firtool --format=fir $< -o $@
+
+$(PICORV_DATAPATH_FIRRTL): $(LEAN_BUILD_INPUTS)
+	mkdir -p $(@D)
+	lake exe emit-picorv-datapath --output $@
+
+$(PICORV_DATAPATH_VERILOG): $(PICORV_DATAPATH_FIRRTL)
+	firtool --format=fir --disable-all-randomization $< -o $@
+
+$(PICORV_MEMORY_FIRRTL): $(LEAN_BUILD_INPUTS)
+	mkdir -p $(@D)
+	lake exe emit-picorv-memory --output $@
+
+$(PICORV_MEMORY_VERILOG): $(PICORV_MEMORY_FIRRTL)
+	firtool --format=fir --disable-all-randomization $< -o $@
+
+$(PICORV_FIRRTL): $(LEAN_BUILD_INPUTS)
+	mkdir -p $(@D)
+	lake exe emit-picorv --output $@
+
+$(PICORV_VERILOG): $(PICORV_FIRRTL)
+	firtool --format=fir --disable-all-randomization $< -o $@
+
 clean:
 	rm -rf $(BIT_REGISTER_DIR) $(STRUCTURED_FIFO_DIR) $(REGISTER_BANK_DIR) \
-		$(POINTER_FIFO_DIR) $(SERIAL_FIFO_DIR)
+		$(POINTER_FIFO_DIR) $(SERIAL_FIFO_DIR) $(PICORV_CONTROL_DIR) \
+		$(PICORV_DATAPATH_DIR) $(PICORV_MEMORY_DIR) $(PICORV_DIR)

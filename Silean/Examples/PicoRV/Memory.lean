@@ -1,6 +1,7 @@
 import Silean.Foundation.BitVector
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModulePorts
+import Silean.Authoring.SignalSchemaDeclaration
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 
@@ -24,18 +25,39 @@ abbrev Word := Fin 32 → Bool
 abbrev ByteMask := Fin 4 → Bool
 abbrev TwoBits := Fin 2 → Bool
 
-inductive State
-  | mem_state | mem_valid | mem_instr | mem_addr | mem_wdata | mem_wstrb
-  | mem_rdata_q
-deriving Enumeration
+/-! The contract and structural implementation share named aggregates for the
+seven source-owned registers and the complete combinational input boundary. -/
 
-def stateType : State → SignalType
-  | .mem_state => .vector 2 .bit
-  | .mem_addr | .mem_wdata | .mem_rdata_q => .vector 32 .bit
-  | .mem_wstrb => .vector 4 .bit
-  | _ => .bit
+signal_schema MemoryState where
+  mem_state : SignalSchema.vector 2 SignalSchema.bit,
+  mem_valid : SignalSchema.bit,
+  mem_instr : SignalSchema.bit,
+  mem_addr : SignalSchema.vector 32 SignalSchema.bit,
+  mem_wdata : SignalSchema.vector 32 SignalSchema.bit,
+  mem_wstrb : SignalSchema.vector 4 SignalSchema.bit,
+  mem_rdata_q : SignalSchema.vector 32 SignalSchema.bit
 
-@[reducible] def stateMap : SignalMap := EnumeratedMap.of State stateType
+abbrev State := MemoryState.Field
+
+@[reducible] def stateMap : SignalMap := MemoryState.signalMap
+
+@[reducible] def stateType : SignalType := stateMap.tupleType
+
+signal_schema MemoryInputs where
+  resetn : SignalSchema.bit,
+  trap : SignalSchema.bit,
+  mem_do_prefetch : SignalSchema.bit,
+  mem_do_rinst : SignalSchema.bit,
+  mem_do_rdata : SignalSchema.bit,
+  mem_do_wdata : SignalSchema.bit,
+  next_pc : SignalSchema.vector 32 SignalSchema.bit,
+  reg_op1 : SignalSchema.vector 32 SignalSchema.bit,
+  reg_op2 : SignalSchema.vector 32 SignalSchema.bit,
+  mem_wordsize : SignalSchema.vector 2 SignalSchema.bit,
+  mem_ready : SignalSchema.bit,
+  mem_rdata : SignalSchema.vector 32 SignalSchema.bit
+
+@[reducible] def inputsType : SignalType := MemoryInputs.signalMap.tupleType
 
 module_ports ports where
   input resetn : .bit,
@@ -78,6 +100,54 @@ structure Inputs where
   mem_wordsize : TwoBits
   mem_ready : Bool
   mem_rdata : Word
+
+def Inputs.toValues (inputs : Inputs) : MemoryInputs.signalMap.Values
+  | .resetn => inputs.resetn
+  | .trap => inputs.trap
+  | .mem_do_prefetch => inputs.mem_do_prefetch
+  | .mem_do_rinst => inputs.mem_do_rinst
+  | .mem_do_rdata => inputs.mem_do_rdata
+  | .mem_do_wdata => inputs.mem_do_wdata
+  | .next_pc => inputs.next_pc
+  | .reg_op1 => inputs.reg_op1
+  | .reg_op2 => inputs.reg_op2
+  | .mem_wordsize => inputs.mem_wordsize
+  | .mem_ready => inputs.mem_ready
+  | .mem_rdata => inputs.mem_rdata
+
+def Inputs.pack (inputs : Inputs) : inputsType.Denote :=
+  MemoryInputs.signalMap.pack inputs.toValues
+
+def Inputs.unpack (value : inputsType.Denote) : Inputs :=
+  let fields := MemoryInputs.signalMap.unpack value
+  { resetn := fields .resetn
+    trap := fields .trap
+    mem_do_prefetch := fields .mem_do_prefetch
+    mem_do_rinst := fields .mem_do_rinst
+    mem_do_rdata := fields .mem_do_rdata
+    mem_do_wdata := fields .mem_do_wdata
+    next_pc := fields .next_pc
+    reg_op1 := fields .reg_op1
+    reg_op2 := fields .reg_op2
+    mem_wordsize := fields .mem_wordsize
+    mem_ready := fields .mem_ready
+    mem_rdata := fields .mem_rdata }
+
+@[simp] theorem Inputs.unpack_pack (inputs : Inputs) :
+    Inputs.unpack inputs.pack = inputs := by
+  cases inputs
+  simp [Inputs.unpack, Inputs.pack, Inputs.toValues]
+
+@[simp] theorem Inputs.pack_unpack (value : inputsType.Denote) :
+    (Inputs.unpack value).pack = value := by
+  change (Inputs.unpack value).pack = value
+  calc
+    (Inputs.unpack value).pack =
+        MemoryInputs.signalMap.pack (MemoryInputs.signalMap.unpack value) := by
+      apply congrArg MemoryInputs.signalMap.pack
+      funext field
+      cases field <;> simp [Inputs.unpack, Inputs.toValues]
+    _ = value := MemoryInputs.signalMap.pack_unpack value
 
 def inputsOfValues (values : inputMap.Values) : Inputs where
   resetn := values .resetn
@@ -124,15 +194,19 @@ def stateOfNat (value : Nat) : TwoBits := fun index => value.testBit index.val
 def wordSize (inputs : Inputs) : Nat := BitVector.toNat 2 inputs.mem_wordsize
 def stateNumber (state : stateMap.Values) : Nat := BitVector.toNat 2 (state .mem_state)
 
-def aligned (word : Word) : Word := wordOfNat (BitVector.toNat 32 word / 4 * 4)
+def aligned (word : Word) : Word := fun index =>
+  if index.val < 2 then false else word index
+
+def lowAddressBits (word : Word) : TwoBits := fun index =>
+  word ⟨index.val, by omega⟩
 
 def lowByte (word : Word) : Nat := BitVector.toNat 32 word % 256
 def lowHalf (word : Word) : Nat := BitVector.toNat 32 word % 65536
 
 def formattedWriteDataFrom (wordsize : TwoBits) (regOp2 : Word) : Word :=
   match BitVector.toNat 2 wordsize with
-  | 1 => wordOfNat (lowHalf regOp2 * 65537)
-  | 2 => wordOfNat (lowByte regOp2 * 0x01010101)
+  | 1 => fun index => regOp2 ⟨index.val % 16, by omega⟩
+  | 2 => fun index => regOp2 ⟨index.val % 8, by omega⟩
   | _ => regOp2
 
 def formattedWriteData (inputs : Inputs) : Word :=
@@ -141,17 +215,29 @@ def formattedWriteData (inputs : Inputs) : Word :=
 def formattedWriteMaskFrom (wordsize : TwoBits) (regOp1 : Word) : ByteMask :=
   match BitVector.toNat 2 wordsize with
   | 1 => if regOp1 1 then maskOfNat 0xc else maskOfNat 0x3
-  | 2 => maskOfNat (2 ^ (BitVector.toNat 32 regOp1 % 4))
+  | 2 => fun index => decide
+      (index.val = BitVector.toNat 2 (lowAddressBits regOp1))
   | _ => maskOfNat 0xf
 
 def formattedWriteMask (inputs : Inputs) : ByteMask :=
   formattedWriteMaskFrom inputs.mem_wordsize inputs.reg_op1
 
 def formattedReadDataFrom (wordsize : TwoBits) (regOp1 memRdata : Word) : Word :=
-  let value := BitVector.toNat 32 memRdata
   match BitVector.toNat 2 wordsize with
-  | 1 => wordOfNat ((value / (if regOp1 1 then 65536 else 1)) % 65536)
-  | 2 => wordOfNat ((value / 2 ^ (8 * (BitVector.toNat 32 regOp1 % 4))) % 256)
+  | 1 => fun index =>
+      if low : index.val < 16 then
+        memRdata ⟨index.val + if regOp1 1 then 16 else 0, by
+          cases high : regOp1 1 <;> simp <;> omega⟩
+      else false
+  | 2 =>
+      let byte := BitVector.toNat 2 (lowAddressBits regOp1)
+      fun index =>
+        if low : index.val < 8 then
+          memRdata ⟨index.val + 8 * byte, by
+            have bound := BitVector.toNat_lt_cardinality 2 (lowAddressBits regOp1)
+            simp [BitVector.cardinality] at bound
+            omega⟩
+        else false
   | _ => memRdata
 
 def formattedReadData (inputs : Inputs) : Word :=
@@ -232,10 +318,10 @@ def responseCaptured (inputs : Inputs) (state : stateMap.Values) : stateMap.Valu
   if !memXfer inputs state then state else
   stateMap.set state .mem_rdata_q inputs.mem_rdata
 
-def normalNextState (inputs : Inputs) (current updated : stateMap.Values) : stateMap.Values :=
+def lookaheadCaptured (inputs : Inputs) (current updated : stateMap.Values) :
+    stateMap.Values :=
   let laRead := memLaRead inputs current
   let laWrite := memLaWrite inputs current
-  let xfer := memXfer inputs current
   let updated := if laRead || laWrite then
       let updated := stateMap.set updated .mem_addr (memLaAddr inputs)
       stateMap.set updated .mem_wstrb
@@ -244,44 +330,63 @@ def normalNextState (inputs : Inputs) (current updated : stateMap.Values) : stat
   let updated := if laWrite then
       stateMap.set updated .mem_wdata (formattedWriteData inputs)
     else updated
-  match stateNumber current with
-  | 0 =>
-      let updated := if inputs.mem_do_prefetch || inputs.mem_do_rinst || inputs.mem_do_rdata then
-          let updated := stateMap.set updated .mem_valid true
-          let updated := stateMap.set updated .mem_instr
-            (inputs.mem_do_prefetch || inputs.mem_do_rinst)
-          let updated := stateMap.set updated .mem_wstrb (maskOfNat 0)
-          stateMap.set updated .mem_state (stateOfNat 1)
-        else updated
-      if inputs.mem_do_wdata then
-        let updated := stateMap.set updated .mem_valid true
-        let updated := stateMap.set updated .mem_instr false
-        stateMap.set updated .mem_state (stateOfNat 2)
-      else updated
-  | 1 =>
-      if xfer then
-        let updated := stateMap.set updated .mem_valid false
-        stateMap.set updated .mem_state
-          (stateOfNat (if inputs.mem_do_rinst || inputs.mem_do_rdata then 0 else 3))
-      else updated
-  | 2 =>
-      if xfer then
-        let updated := stateMap.set updated .mem_valid false
-        stateMap.set updated .mem_state (stateOfNat 0)
-      else updated
-  | _ =>
-      if inputs.mem_do_rinst then stateMap.set updated .mem_state (stateOfNat 0)
-      else updated
+  updated
 
-def nextState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
-  let updated := responseCaptured inputs state
+def idleNextState (inputs : Inputs) (updated : stateMap.Values) : stateMap.Values :=
+  let updated := if inputs.mem_do_prefetch || inputs.mem_do_rinst || inputs.mem_do_rdata then
+      let updated := stateMap.set updated .mem_valid true
+      let updated := stateMap.set updated .mem_instr
+        (inputs.mem_do_prefetch || inputs.mem_do_rinst)
+      let updated := stateMap.set updated .mem_wstrb (maskOfNat 0)
+      stateMap.set updated .mem_state (stateOfNat 1)
+    else updated
+  if inputs.mem_do_wdata then
+    let updated := stateMap.set updated .mem_valid true
+    let updated := stateMap.set updated .mem_instr false
+    stateMap.set updated .mem_state (stateOfNat 2)
+  else updated
+
+def readNextState (inputs : Inputs) (current updated : stateMap.Values) :
+    stateMap.Values :=
+  if memXfer inputs current then
+    let updated := stateMap.set updated .mem_valid false
+    stateMap.set updated .mem_state
+      (stateOfNat (if inputs.mem_do_rinst || inputs.mem_do_rdata then 0 else 3))
+  else updated
+
+def writeNextState (inputs : Inputs) (current updated : stateMap.Values) :
+    stateMap.Values :=
+  if memXfer inputs current then
+    let updated := stateMap.set updated .mem_valid false
+    stateMap.set updated .mem_state (stateOfNat 0)
+  else updated
+
+def prefetchedNextState (inputs : Inputs) (updated : stateMap.Values) :
+    stateMap.Values :=
+  if inputs.mem_do_rinst then stateMap.set updated .mem_state (stateOfNat 0)
+  else updated
+
+def normalNextState (inputs : Inputs) (current updated : stateMap.Values) : stateMap.Values :=
+  let updated := lookaheadCaptured inputs current updated
+  match stateNumber current with
+  | 0 => idleNextState inputs updated
+  | 1 => readNextState inputs current updated
+  | 2 => writeNextState inputs current updated
+  | _ => prefetchedNextState inputs updated
+
+def resetTrapApplied (inputs : Inputs) (captured normal : stateMap.Values) :
+    stateMap.Values :=
   if !inputs.resetn || inputs.trap then
     let updated := if !inputs.resetn then
-        stateMap.set updated .mem_state (stateOfNat 0)
-      else updated
+        stateMap.set captured .mem_state (stateOfNat 0)
+      else captured
     if !inputs.resetn || inputs.mem_ready then stateMap.set updated .mem_valid false
     else updated
-  else normalNextState inputs state updated
+  else normal
+
+def nextState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
+  let captured := responseCaptured inputs state
+  resetTrapApplied inputs captured (normalNextState inputs state captured)
 
 /-! Data reads and writes are exclusive with every other command. PicoRV32
 does intentionally assert `mem_do_prefetch` and `mem_do_rinst` together when a
@@ -352,7 +457,8 @@ theorem request_stable_while_stalled (inputs : Inputs) (state : stateMap.Values)
     rcases requestState with requestState | requestState <;>
       simp [memLaWrite, resetn, requestState]
   rcases requestState with requestState | requestState <;>
-    simp [nextState, resetn, notTrap, normalNextState, requestState, xfer,
+    simp [nextState, resetn, notTrap, resetTrapApplied, normalNextState,
+      lookaheadCaptured, readNextState, writeNextState, requestState, xfer,
       laRead, laWrite, responseCaptured, active, request?]
 
 theorem no_completion_while_stalled (inputs : Inputs) (state : stateMap.Values)
@@ -384,7 +490,8 @@ theorem completed_read_or_write_returns_idle (inputs : Inputs)
       simp [memLaRead, resetn, requestState]
     have laWrite : memLaWrite inputs state = false := by
       simp [memLaWrite, resetn, requestState]
-    simp [nextState, resetn, notTrap, normalNextState, stateNumber, requestBits,
+    simp [nextState, resetn, notTrap, resetTrapApplied, normalNextState,
+      lookaheadCaptured, readNextState, writeNextState, stateNumber, requestBits,
       transfer, laRead, laWrite, responseCaptured, phase, command]
 
 theorem prefetch_transfer_waits_for_instruction_command (inputs : Inputs)
@@ -403,8 +510,9 @@ theorem prefetch_transfer_waits_for_instruction_command (inputs : Inputs)
   have laWrite : memLaWrite inputs state = false := by
     simp [memLaWrite, resetn, notIdle]
   simp [memDone, resetn, transfer, notInstruction, notData, notWrite,
-    nextState, notTrap, normalNextState, phase, stateNumber, laRead, laWrite,
-    responseCaptured, readBits]
+    nextState, notTrap, resetTrapApplied, normalNextState, lookaheadCaptured,
+    readNextState, phase, stateNumber, laRead, laWrite, responseCaptured,
+    readBits]
 
 theorem prefetched_instruction_completes_without_transfer (inputs : Inputs)
     (state : stateMap.Values) (resetn : inputs.resetn = true)
@@ -419,8 +527,8 @@ theorem prefetched_instruction_completes_without_transfer (inputs : Inputs)
   have laWrite : memLaWrite inputs state = false := by
     simp [memLaWrite, resetn, notIdle]
   simp [memDone, resetn, instruction, noTransfer, nextState, notTrap,
-    normalNextState, phase, stateNumber, laRead, laWrite, responseCaptured,
-    prefetchedBits]
+    resetTrapApplied, normalNextState, lookaheadCaptured, prefetchedNextState,
+    phase, stateNumber, laRead, laWrite, responseCaptured, prefetchedBits]
 
 namespace RegisteredRule
 inductive Output | mem_valid | mem_instr | mem_addr | mem_wdata | mem_wstrb
@@ -640,6 +748,128 @@ def memRdataQRule : Contracts.Cycle.CycleOutputRule ports stateMap where
   readsInputs := .empty inputMap
   writesOutputs := memRdataQOutputs
   target _ state := fun | .mem_rdata_q => state .mem_rdata_q
+
+@[simp] theorem registeredRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    registeredRule.Holds inputs state outputs ↔
+      outputs .mem_valid = state .mem_valid ∧
+      outputs .mem_instr = state .mem_instr ∧
+      outputs .mem_addr = state .mem_addr ∧
+      outputs .mem_wdata = state .mem_wdata ∧
+      outputs .mem_wstrb = state .mem_wstrb := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, registeredRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every
+    exact ⟨every .mem_valid, every .mem_instr, every .mem_addr,
+      every .mem_wdata, every .mem_wstrb⟩
+  · rintro ⟨valid, instr, addr, wdata, wstrb⟩ output
+    cases output
+    · exact valid
+    · exact instr
+    · exact addr
+    · exact wdata
+    · exact wstrb
+
+@[simp] theorem memLaReadRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memLaReadRule.Holds inputs state outputs ↔
+      outputs .mem_la_read = memLaReadFrom (inputs .resetn)
+        (inputs .mem_do_prefetch) (inputs .mem_do_rinst)
+        (inputs .mem_do_rdata) state := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memLaReadRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_la_read
+  · intro equal output; cases output; exact equal
+
+@[simp] theorem memLaWriteRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memLaWriteRule.Holds inputs state outputs ↔
+      outputs .mem_la_write = memLaWriteFrom (inputs .resetn)
+        (inputs .mem_do_wdata) state := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memLaWriteRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_la_write
+  · intro equal output; cases output; exact equal
+
+@[simp] theorem memLaAddrRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memLaAddrRule.Holds inputs state outputs ↔
+      outputs .mem_la_addr = memLaAddrFrom (inputs .mem_do_prefetch)
+        (inputs .mem_do_rinst) (inputs .next_pc) (inputs .reg_op1) := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memLaAddrRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_la_addr
+  · intro equal output; cases output; exact equal
+
+@[simp] theorem memLaWdataRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memLaWdataRule.Holds inputs state outputs ↔
+      outputs .mem_la_wdata = formattedWriteDataFrom
+        (inputs .mem_wordsize) (inputs .reg_op2) := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memLaWdataRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_la_wdata
+  · intro equal output; cases output; exact equal
+
+@[simp] theorem memLaWstrbRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memLaWstrbRule.Holds inputs state outputs ↔
+      outputs .mem_la_wstrb = formattedWriteMaskFrom
+        (inputs .mem_wordsize) (inputs .reg_op1) := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memLaWstrbRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_la_wstrb
+  · intro equal output; cases output; exact equal
+
+@[simp] theorem memDoneRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memDoneRule.Holds inputs state outputs ↔
+      outputs .mem_done = memDoneFrom (inputs .resetn)
+        (inputs .mem_do_rinst) (inputs .mem_do_rdata)
+        (inputs .mem_do_wdata) (inputs .mem_ready) state := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memDoneRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_done
+  · intro equal output; cases output; exact equal
+
+@[simp] theorem memRdataWordRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memRdataWordRule.Holds inputs state outputs ↔
+      outputs .mem_rdata_word = formattedReadDataFrom
+        (inputs .mem_wordsize) (inputs .reg_op1) (inputs .mem_rdata) := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memRdataWordRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_rdata_word
+  · intro equal output; cases output; exact equal
+
+@[simp] theorem memRdataLatchedRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memRdataLatchedRule.Holds inputs state outputs ↔
+      outputs .mem_rdata_latched = memRdataLatchedFrom
+        (inputs .mem_ready) (inputs .mem_rdata) state := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memRdataLatchedRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_rdata_latched
+  · intro equal output; cases output; exact equal
+
+@[simp] theorem memRdataQRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    memRdataQRule.Holds inputs state outputs ↔
+      outputs .mem_rdata_q = state .mem_rdata_q := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, memRdataQRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every; exact every .mem_rdata_q
+  · intro equal output; cases output; exact equal
 
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   readsInputs := .all inputMap

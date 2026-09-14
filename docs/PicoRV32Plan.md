@@ -99,18 +99,19 @@ combinational logic, not contract state.
 
 | Boundary | Contract | Concrete certified structure | Top-level use |
 | --- | --- | --- | --- |
-| ALU | exact pure cycle behavior and public operation laws | complete and closed | nested future datapath child |
-| register file | exact read/write cycle behavior | complete and closed | blackbox boundary for now |
-| decoder | exact configured two-stage registered behavior | certified parent with concrete capture and resolve stages; resolve retains three combinational child blackboxes | certified two-stage structure |
-| memory | exact configured request-state behavior and natural protocol views | not implemented | blackbox |
-| datapath | exact registered value-flow behavior | not implemented | blackbox |
-| control | exact configured sequencing behavior | not implemented | blackbox |
-| top level | no processor-level contract yet | typed wiring around five blackboxes | current staging structure |
+| ALU | exact pure cycle behavior and public operation laws | complete and closed | concrete nested datapath child |
+| register file | exact read/write cycle behavior | complete and closed | concrete certified child |
+| decoder | exact configured two-stage registered behavior | complete and closed, including match, immediate, and summary children | concrete certified child |
+| memory | exact configured request-state behavior and natural protocol views | complete and closed standalone registered structure | concrete certified child |
+| datapath | exact registered value-flow behavior | complete and closed standalone registered structure | concrete certified child |
+| control | exact configured sequencing behavior | complete and closed standalone registered structure, including a closed certified next-state hierarchy | concrete certified child |
+| top level | structural composition of the five child contracts | complete and recursively closed, with existence and uniqueness of structural solutions | all five direct children are concrete and certified |
 
 `Examples/PicoRV/PicoRV.lean` is the authoritative port map and wiring. It has
 exactly the five direct children above. `PicoRVSchedule.lean` contains a
 complete child-rule schedule and proves the simultaneous top-level equations
-have at most one solution. This is a checked composition boundary, not a CPU
+have exactly one solution. `PicoRVTopChecks.lean` recursively verifies that no
+behavioral leaves remain. This is a checked composition boundary, not a CPU
 correctness result.
 
 ## Child contracts and implementation plan
@@ -140,21 +141,20 @@ The decoder contract preserves two independently enabled registered stages.
 Capture records opcode classes, register indices, and jump immediate from a
 completed instruction read. Resolve records detailed instruction flags and
 the remaining immediate. Simultaneous enables read the same pre-edge state,
-matching Verilog nonblocking assignments. The structure should retain the
+matching Verilog nonblocking assignments. The structure retains the
 source one-hot signals; natural decode theorems can provide an instruction
 view and mutual-exclusion facts.
 
-The parent has this certified two-child hierarchy. Both stages are concrete
-and certified. The resolve-stage proof uses only the contracts of its three
-remaining combinational blackbox children:
+The parent has this certified two-child hierarchy. Both stages and all three
+resolve-stage children are concrete, certified, and recursively closed:
 
 ```text
 PicoRV32Decoder
 |- capture : DecoderCaptureStage
 `- resolve : DecoderResolveStage
-   |- match     : DecoderInstructionMatch
-   |- immediate : DecoderImmediate
-   `- summary   : DecoderInstructionSummary
+   |- match     : DecoderInstructionMatch (concrete and closed)
+   |- immediate : DecoderImmediate (concrete and closed)
+   `- summary   : DecoderInstructionSummary (concrete and closed)
 ```
 
 `DecoderCaptureStage` owns 14 registers: the four directly recognized
@@ -167,9 +167,10 @@ Boolean gates, signal adapters, and registers. The generated FIRRTL hierarchy
 is closed and lowers successfully through CIRCT.
 
 `DecoderResolveStage` owns 45 registered second-stage results. The
-ECALL/EBREAK predicate is retained as private state because it contributes to
-the source's current recognized-instruction view but is not consumed as a
-separate top-level decoder output.
+ECALL/EBREAK predicate is retained as private state because the source decodes
+it explicitly. It is deliberately omitted from the recognized-instruction OR,
+causing ECALL and EBREAK to enter the configured trap path, and is not consumed
+as a separate top-level decoder output.
 `DecoderInstructionMatch` takes only the instruction word, the five captured
 opcode classes, and captured JALR. It produces the 35 configured exact
 instruction predicates (including ECALL/EBREAK and FENCE) and the three
@@ -181,7 +182,9 @@ captured classes that select J/I/B/S/U formats. Its natural Lean behavior is
 `Option Word`; its ports expose that as `valid` and `value`. An invalid
 selection tells the resolve stage to retain `decoded_imm`, rather than assigning
 a fabricated value for the source don't-care case. Its priority is J, U, I, B,
-then S, matching the source `case (1'b1)`.
+then S, matching the source `case (1'b1)`. Its concrete certified structure
+uses four bit-vector layouts, OR gates, a zero constant, and five priority
+muxes. Its complete hierarchy is proven to contain no blackboxes.
 
 `DecoderInstructionSummary` takes the current pre-edge exact instruction flags,
 the four captured direct flags, and the broad branch class. It produces the six
@@ -219,14 +222,23 @@ The control proof must establish that discipline. Formatting claims assume
 the live word-size encodings 0, 1, or 2; the two-state contract totalizes the
 source don't-care encoding 3.
 
+The source audit, proposed aggregate-register hierarchy, natural proof
+argument, priority details, and verification coverage are recorded in
+[`PicoRVMemoryPlan.md`](PicoRVMemoryPlan.md). The transition hierarchy is
+implemented before the simpler formatting logic because reset/trap response
+capture and delayed prefetch completion carry the greatest semantic risk.
+
 ### Datapath
 
 The datapath owns PC, operands, iterative shift state, result state, and the
 captured ALU result. Its contract has separate rules for current registered
-values, next PC, comparison, and writeback so unrelated inputs do not create
-false combinational dependencies. The structure should contain the certified
-ALU and implement effective addresses, load formatting, result capture, and
-the configured four-then-one iterative shift.
+values, next PC, comparison, and writeback. Comparison inherits the certified
+ALU's bundled selector dependency, which is coarser than its Boolean result
+alone but compatible with the parent schedule. The closed structure contains
+the certified ALU and implements effective addresses, load formatting, result capture, and
+the configured four-then-one iterative shift. The source audit, implemented
+hierarchy, universal proof argument, and verification coverage are recorded in
+[`PicoRVDatapathPlan.md`](PicoRVDatapathPlan.md).
 
 ### Control
 
@@ -235,6 +247,10 @@ writeback metadata, and trap. Its contract covers fetch, operand collection,
 execute/branch, iterative shift, load/store, illegal or misaligned trap, and
 request completion. The structure should remain close to the source state
 machine rather than replacing it with a newly invented controller protocol.
+The proposed semantic decomposition, module hierarchy, and correctness
+argument are recorded in [`PicoRVControlPlan.md`](PicoRVControlPlan.md). That
+document is the review record for the completed standalone structure and its
+completed top-level integration. Reachability work remains separate.
 
 ## Same-cycle dependency discipline
 
@@ -256,7 +272,7 @@ producer and verifies its signal shape.
 
 ## Verification stages
 
-### 1. Close the structure
+### 1. Close the structure (complete)
 
 Implement and certify decoder, memory, datapath, and control against their
 existing contracts. Replace each top-level blackbox with its certified

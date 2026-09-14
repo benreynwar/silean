@@ -1,14 +1,13 @@
 import Silean.Examples.PicoRV.Decoder.DecoderResolveStage
-import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatch
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatchStructure
 import Silean.Examples.PicoRV.Decoder.DecoderImmediate
-import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummary
-import Silean.Contracts.Cycle.CycleBlackbox
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummaryStructure
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.EnabledResetRegister.EnabledResetRegister
 import Silean.Modules.Register.Register
 import Silean.Modules.ResetRegister.ResetRegister
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxStructure
 import Silean.Modules.Constant.Constant
 import Silean.Primitives.Not
 import Silean.Naming.PrimitiveNaming
@@ -26,9 +25,9 @@ The 45 logical contract registers are grouped into six aggregate storage
 instances. This grouping is structural only; the public contract retains the
 source Verilog's individual state names and update behavior.
 
-The three combinational decoder children remain explicit blackboxes at this
-stage. Their public contracts, rather than their future implementations, are
-the only facts used by this parent. -/
+Instruction matching, immediate decoding, and instruction summaries are all
+concrete children. This parent composes them through their public cycle
+contracts. -/
 
 def resetMatchRegister (index : Fin 23) : Register :=
   match index.val with
@@ -115,12 +114,9 @@ module_design ResolveStage where
     pseudoInverter := Primitives.notDesign,
     triggerEnable := Primitives.andDesign,
     resetInverter := Primitives.notDesign,
-    instructionMatch := InstructionMatch.cycleContract.blackboxDesign
-      "PicoRVDecoderInstructionMatch" InstructionMatch.Naming.ports,
-    immediate := Immediate.cycleContract.blackboxDesign
-      "PicoRVDecoderImmediate" Immediate.Naming.ports,
-    instructionSummary := InstructionSummary.cycleContract.blackboxDesign
-      "PicoRVDecoderInstructionSummary" InstructionSummary.Naming.ports,
+    instructionMatch := InstructionMatch.Structure.design,
+    immediate := Immediate.design,
+    instructionSummary := InstructionSummary.Structure.design,
     resetMatchNext := Naming.SignalAdapter.combinerDesign (.vector 23 .bit),
     retainedMatchNext := Naming.SignalAdapter.combinerDesign (.vector 15 .bit),
     ordinarySummaryNext := Naming.SignalAdapter.combinerDesign (.vector 4 .bit),

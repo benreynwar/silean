@@ -14,8 +14,10 @@ open Silean.Examples.PicoRV.Decoder
 /-! Combinational views of the decoder's current, pre-edge instruction flags.
 The six registered summaries in `picorv32.v` are computed every cycle from
 these values. `instr_trap` is the configured (`CATCH_ILLINSN = 1`) continuous
-illegal-instruction result. Trigger gating and registers belong to the parent
-resolve stage, so this boundary deliberately has neither. -/
+trap result. Its recognized-instruction OR deliberately excludes the separately
+decoded ECALL/EBREAK flag, matching the source path that treats those system
+instructions like unsupported instructions. Trigger gating and registers
+belong to the parent resolve stage, so this boundary deliberately has neither. -/
 
 module_ports ports where
   input instr_lui : .bit,
@@ -123,8 +125,7 @@ def recognized (inputs : Inputs) : Bool := boolOr [
   inputs.matched .instr_slt, inputs.matched .instr_sltu,
   inputs.matched .instr_xor, inputs.matched .instr_srl,
   inputs.matched .instr_sra, inputs.matched .instr_or,
-  inputs.matched .instr_and, inputs.matched .instr_ecall_ebreak,
-  inputs.matched .instr_fence]
+  inputs.matched .instr_and, inputs.matched .instr_fence]
 
 def outputValues (inputs : Inputs) : outputMap.Values
   | .instr_trap => !(recognized inputs)

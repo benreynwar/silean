@@ -7,16 +7,16 @@ namespace Silean.Examples.PicoRV.PicoRV
 open Silean Silean.Contracts.Cycle.Certification
 open Silean.Authoring
 
-/-! The schedule witnesses below establish a topological order for the
-blackbox contracts. They are proof inputs, not execution order stored in the
-module structure. -/
+/-! The schedule witnesses below establish a topological order for the child
+contracts. They are proof inputs, not execution order stored in the module
+structure. -/
 
 module_child_certifications childContracts for body where
-  control := Control.cycleContract.blackboxCertification,
-  datapath := Datapath.cycleContract.blackboxCertification,
-  mem := Memory.cycleContract.blackboxCertification,
-  decoder := Decoder.cycleContract.blackboxCertification,
-  cpuregs := Regs.cycleContract.blackboxCertification
+  control := Control.certification,
+  datapath := Datapath.certification,
+  mem := Memory.certification,
+  decoder := Decoder.certification,
+  cpuregs := Regs.certification
 
 /-! Invoke every child rule in dependency order. The generic declaration
 checks both state readiness and complete child-rule coverage. -/
@@ -66,5 +66,20 @@ theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution := by
   rw [← childrenEqual]
   exact allRulesSchedule.hasAtMostOneSolution certifiedChildren
     (fun _ => trivial) allRulesSchedule.finished
+
+theorem hasSolution : moduleStructure.HasSolution := by
+  unfold moduleStructure
+  have childrenEqual :
+      (fun child => (certifiedChildren child).moduleStructure) = structuralChildren := by
+    funext child
+    exact certifiedChildren_moduleStructure child
+  rw [← childrenEqual]
+  exact allRulesSchedule.hasSolution certifiedChildren allRulesSchedule.finished
+
+theorem hasExactlyOneSolution : moduleStructure.HasExactlyOneSolution :=
+  ⟨hasSolution, hasAtMostOneSolution⟩
+
+theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
+  native_decide
 
 end Silean.Examples.PicoRV.PicoRV

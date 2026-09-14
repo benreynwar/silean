@@ -24,6 +24,13 @@ def secondOperandStore := nextState { idleInputs with is_sb_sh_sw := true }
 example : phase secondOperandStore = cpuStateStmem := by decide
 example : (secondOperandStore .mem_do_rinst : Bool) = true := by rfl
 
+-- With PCPI disabled, the Verilog has no illegal-instruction branch in
+-- ld_rs2. The phase is unreachable in the dual-port configuration, but the
+-- total contract still specifies its arbitrary-state behavior exactly.
+def secondOperandTrapIgnored := nextState { idleInputs with instr_trap := true }
+  (stateIn cpuStateLdRs2)
+example : phase secondOperandTrapIgnored = cpuStateExec := by decide
+
 def immediateState := nextState
   { idleInputs with is_jalr_addi_slti_sltiu_xori_ori_andi := true }
   (commandState cpuStateLdRs1 true false false false)

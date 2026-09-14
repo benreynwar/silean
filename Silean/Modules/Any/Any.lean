@@ -71,6 +71,14 @@ def some : (width : Nat) →
   | width + 1, values =>
       orOperation (values 0) (some width fun index => values index.succ)
 
+@[simp] theorem some_zero (values : Fin 0 → SignalType.bit.Denote) :
+    some 0 values = false := rfl
+
+@[simp] theorem some_succ (width : Nat)
+    (values : Fin (width + 1) → SignalType.bit.Denote) :
+    some (width + 1) values =
+      (values 0 || some width fun index => values index.succ) := rfl
+
 theorem some_eq_false_iff : ∀ (width : Nat)
     (values : Fin width → SignalType.bit.Denote),
     some width values = falseValue ↔ ∀ index, values index = falseValue
@@ -259,6 +267,31 @@ def outputRule (width : Nat) :=
   rw [Composition.Reduction.outputRule_holds_iff]
   rw [fold_eq_some]
 
+/-- The public-width form of `outputRule_holds_iff`. This avoids exposing the
+internal balanced tree's leaf-index type to clients of `Any`. -/
+theorem outputRule_holds_iff_width (width : Nat)
+    (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
+    (outputs : (ports width).outputs.Values) :
+    (outputRule width).Holds inputs state outputs ↔
+      outputs .output = some width (fun index => inputs (input width index)) := by
+  rw [outputRule_holds_iff]
+  have reduced : some (tree width).leafCount
+      (fun index => inputs (.leaf index)) =
+      some width (fun index => inputs (input width index)) := by
+    apply Bool.eq_iff_iff.mpr
+    constructor
+    · intro isTrue
+      rcases (some_eq_true_iff _ _).mp isTrue with ⟨index, value⟩
+      apply (some_eq_true_iff _ _).mpr
+      exact ⟨widthIndex width index, by rw [input_widthIndex]; exact value⟩
+    · intro isTrue
+      rcases (some_eq_true_iff _ _).mp isTrue with ⟨index, value⟩
+      let internal : Fin (tree width).leafCount :=
+        ⟨index.val, by simp [tree, Composition.Reduction.balancedTree, index.isLt]⟩
+      apply (some_eq_true_iff _ _).mpr
+      exact ⟨internal, by simpa [input, internal] using value⟩
+  rw [reduced]
+
 theorem output_eq_true_iff_of_holds (width : Nat)
     (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
     (outputs : (ports width).outputs.Values)
@@ -284,7 +317,9 @@ theorem output_eq_true_iff_of_holds (width : Nat)
 def moduleStructure (width : Nat) : ModuleStructure (ports width) :=
   Composition.Reduction.moduleStructure orImplementation falseImplementation (tree width)
 
-noncomputable def certification (width : Nat) :=
+noncomputable def certification (width : Nat) :
+    Contracts.Cycle.ModuleCycleCertification
+      (moduleStructure width) (cycleContract width) :=
   Composition.Reduction.certification orImplementation falseImplementation (tree width)
 
 noncomputable def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=

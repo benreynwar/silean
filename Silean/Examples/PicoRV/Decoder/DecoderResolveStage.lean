@@ -278,7 +278,7 @@ def recognized (inputs : Inputs) (state : stateMap.Values) : Bool := boolOr [
   state .instr_slli, state .instr_srli, state .instr_srai, state .instr_add,
   state .instr_sub, state .instr_sll, state .instr_slt, state .instr_sltu,
   state .instr_xor, state .instr_srl, state .instr_sra, state .instr_or,
-  state .instr_and, state .instr_ecall_ebreak, state .instr_fence]
+  state .instr_and, state .instr_fence]
 
 def outputValues (inputs : Inputs) (state : stateMap.Values) : outputMap.Values
   | .instr_trap => !(recognized inputs state)

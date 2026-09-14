@@ -278,8 +278,9 @@ make test
 ```
 
 This emits configured designs as FIRRTL, lowers them to SystemVerilog with
-CIRCT `firtool`, compiles them with Verilator, and runs their cocotb tests. The
-generated files and simulator builds are placed under `build/`.
+CIRCT `firtool`, lints or compiles them with an available HDL simulator, and
+runs their cocotb tests. The generated files and simulator builds are placed
+under `build/`.
 
 Individual hardware regressions can be run with:
 
@@ -289,6 +290,26 @@ make test-structured-fifo
 make test-serial-fifo
 make test-register-bank
 make test-pointer-fifo
+make test-picorv-datapath
+make test-picorv-memory
+make test-picorv
+```
+
+The closed PicoRV32 hierarchy and its standalone Control, Datapath, and Memory
+subsystems can be emitted and lowered independently:
+
+```sh
+make firrtl-picorv-control
+make verilog-picorv-control
+make firrtl-picorv-datapath
+make verilog-picorv-datapath
+make lint-picorv-datapath
+make firrtl-picorv-memory
+make verilog-picorv-memory
+make lint-picorv-memory
+make firrtl-picorv
+make verilog-picorv
+make lint-picorv
 ```
 
 The corresponding `firrtl-*` and `verilog-*` targets stop after emission or

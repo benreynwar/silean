@@ -108,6 +108,7 @@ def datapathSource : P.Datapath.Input → SourcePort
   | .decoder_trigger => .control .decoder_trigger
   | .instr_lui => .decoder .instr_lui
   | .instr_jal => .decoder .instr_jal
+  | .instr_trap => .decoder .instr_trap
   | .instr_sub => .decoder .instr_sub
   | .instr_beq => .decoder .instr_beq
   | .instr_bne => .decoder .instr_bne

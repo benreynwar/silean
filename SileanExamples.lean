@@ -72,8 +72,14 @@ import Silean.Examples.Checks.PicoRVDatapathMemoryChecks
 import Silean.Examples.Checks.PicoRVDatapathShiftChecks
 import Silean.Examples.Checks.PicoRVDatapathArithmeticShiftChecks
 import Silean.Examples.Checks.PicoRVDatapathOutputChecks
+import Silean.Examples.Checks.PicoRVDatapathStandaloneChecks
 import Silean.Examples.PicoRV.Control
+import Silean.Examples.PicoRV.Control.ControlCommandFinishCertified
 import Silean.Examples.Checks.PicoRVControlFetchChecks
 import Silean.Examples.Checks.PicoRVControlExecuteChecks
 import Silean.Examples.Checks.PicoRVControlMemoryChecks
 import Silean.Examples.Checks.PicoRVControlContractChecks
+import Silean.Examples.Checks.PicoRVControlCommandFinishChecks
+import Silean.Examples.Checks.PicoRVControlPhaseTransitionChecks
+import Silean.Examples.Checks.PicoRVControlNextChecks
+import Silean.Examples.Checks.PicoRVControlStandaloneChecks

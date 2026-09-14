@@ -1,5 +1,6 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModulePorts
+import Silean.Authoring.SignalSchemaDeclaration
 import Silean.Examples.PicoRV.Alu
 
 namespace Silean.Examples.PicoRV.Datapath
@@ -24,15 +25,78 @@ abbrev Word := Fin 32 → Bool
 abbrev FiveBits := Fin 5 → Bool
 abbrev EightBits := Fin 8 → Bool
 
-inductive State
-  | reg_pc | reg_next_pc | reg_op1 | reg_op2 | reg_out | reg_sh | alu_out_q
-deriving Enumeration
+/-! The contract and structural implementation share a named aggregate for
+the seven source datapath registers. -/
 
-def stateType : State → SignalType
-  | .reg_sh => .vector 5 .bit
-  | _ => .vector 32 .bit
+signal_schema DatapathState where
+  reg_pc : SignalSchema.vector 32 SignalSchema.bit,
+  reg_next_pc : SignalSchema.vector 32 SignalSchema.bit,
+  reg_op1 : SignalSchema.vector 32 SignalSchema.bit,
+  reg_op2 : SignalSchema.vector 32 SignalSchema.bit,
+  reg_out : SignalSchema.vector 32 SignalSchema.bit,
+  reg_sh : SignalSchema.vector 5 SignalSchema.bit,
+  alu_out_q : SignalSchema.vector 32 SignalSchema.bit
 
-@[reducible] def stateMap : SignalMap := EnumeratedMap.of State stateType
+abbrev State := DatapathState.Field
+
+@[reducible] def stateMap : SignalMap := DatapathState.signalMap
+
+@[reducible] def stateType : SignalType := stateMap.tupleType
+
+/-! The combinational children use one shared named input aggregate. Carrying
+the complete boundary keeps their contracts stated directly in terms of
+`Inputs`; individual children still inspect only their relevant fields. -/
+
+signal_schema DatapathInputs where
+  resetn : SignalSchema.bit,
+  cpu_state : SignalSchema.vector 8 SignalSchema.bit,
+  latched_store : SignalSchema.bit,
+  latched_stalu : SignalSchema.bit,
+  latched_branch : SignalSchema.bit,
+  latched_is_lu : SignalSchema.bit,
+  latched_is_lh : SignalSchema.bit,
+  latched_is_lb : SignalSchema.bit,
+  mem_do_prefetch : SignalSchema.bit,
+  mem_do_rdata : SignalSchema.bit,
+  mem_do_wdata : SignalSchema.bit,
+  decoder_trigger : SignalSchema.bit,
+  instr_lui : SignalSchema.bit,
+  instr_jal : SignalSchema.bit,
+  instr_trap : SignalSchema.bit,
+  instr_sub : SignalSchema.bit,
+  instr_beq : SignalSchema.bit,
+  instr_bne : SignalSchema.bit,
+  instr_bge : SignalSchema.bit,
+  instr_bgeu : SignalSchema.bit,
+  instr_xori : SignalSchema.bit,
+  instr_xor : SignalSchema.bit,
+  instr_ori : SignalSchema.bit,
+  instr_or : SignalSchema.bit,
+  instr_andi : SignalSchema.bit,
+  instr_and : SignalSchema.bit,
+  instr_slli : SignalSchema.bit,
+  instr_srli : SignalSchema.bit,
+  instr_srai : SignalSchema.bit,
+  instr_sll : SignalSchema.bit,
+  instr_srl : SignalSchema.bit,
+  instr_sra : SignalSchema.bit,
+  is_lui_auipc_jal : SignalSchema.bit,
+  is_lb_lh_lw_lbu_lhu : SignalSchema.bit,
+  is_slli_srli_srai : SignalSchema.bit,
+  is_jalr_addi_slti_sltiu_xori_ori_andi : SignalSchema.bit,
+  is_lui_auipc_jal_jalr_addi_add_sub : SignalSchema.bit,
+  is_slti_blt_slt : SignalSchema.bit,
+  is_sltiu_bltu_sltu : SignalSchema.bit,
+  is_compare : SignalSchema.bit,
+  decoded_imm : SignalSchema.vector 32 SignalSchema.bit,
+  decoded_imm_j : SignalSchema.vector 32 SignalSchema.bit,
+  decoded_rs2 : SignalSchema.vector 5 SignalSchema.bit,
+  cpuregs_rs1 : SignalSchema.vector 32 SignalSchema.bit,
+  cpuregs_rs2 : SignalSchema.vector 32 SignalSchema.bit,
+  mem_done : SignalSchema.bit,
+  mem_rdata_word : SignalSchema.vector 32 SignalSchema.bit
+
+@[reducible] def inputsType : SignalType := DatapathInputs.signalMap.tupleType
 
 module_ports ports where
   input resetn : .bit,
@@ -49,6 +113,7 @@ module_ports ports where
   input decoder_trigger : .bit,
   input instr_lui : .bit,
   input instr_jal : .bit,
+  input instr_trap : .bit,
   input instr_sub : .bit,
   input instr_beq : .bit,
   input instr_bne : .bit,
@@ -104,6 +169,7 @@ structure Inputs where
   decoder_trigger : Bool
   instr_lui : Bool
   instr_jal : Bool
+  instr_trap : Bool
   instr_sub : Bool
   instr_beq : Bool
   instr_bne : Bool
@@ -137,6 +203,128 @@ structure Inputs where
   mem_done : Bool
   mem_rdata_word : Word
 
+def Inputs.toValues (inputs : Inputs) : DatapathInputs.signalMap.Values
+  | .resetn => inputs.resetn
+  | .cpu_state => inputs.cpu_state
+  | .latched_store => inputs.latched_store
+  | .latched_stalu => inputs.latched_stalu
+  | .latched_branch => inputs.latched_branch
+  | .latched_is_lu => inputs.latched_is_lu
+  | .latched_is_lh => inputs.latched_is_lh
+  | .latched_is_lb => inputs.latched_is_lb
+  | .mem_do_prefetch => inputs.mem_do_prefetch
+  | .mem_do_rdata => inputs.mem_do_rdata
+  | .mem_do_wdata => inputs.mem_do_wdata
+  | .decoder_trigger => inputs.decoder_trigger
+  | .instr_lui => inputs.instr_lui
+  | .instr_jal => inputs.instr_jal
+  | .instr_trap => inputs.instr_trap
+  | .instr_sub => inputs.instr_sub
+  | .instr_beq => inputs.instr_beq
+  | .instr_bne => inputs.instr_bne
+  | .instr_bge => inputs.instr_bge
+  | .instr_bgeu => inputs.instr_bgeu
+  | .instr_xori => inputs.instr_xori
+  | .instr_xor => inputs.instr_xor
+  | .instr_ori => inputs.instr_ori
+  | .instr_or => inputs.instr_or
+  | .instr_andi => inputs.instr_andi
+  | .instr_and => inputs.instr_and
+  | .instr_slli => inputs.instr_slli
+  | .instr_srli => inputs.instr_srli
+  | .instr_srai => inputs.instr_srai
+  | .instr_sll => inputs.instr_sll
+  | .instr_srl => inputs.instr_srl
+  | .instr_sra => inputs.instr_sra
+  | .is_lui_auipc_jal => inputs.is_lui_auipc_jal
+  | .is_lb_lh_lw_lbu_lhu => inputs.is_lb_lh_lw_lbu_lhu
+  | .is_slli_srli_srai => inputs.is_slli_srli_srai
+  | .is_jalr_addi_slti_sltiu_xori_ori_andi =>
+      inputs.is_jalr_addi_slti_sltiu_xori_ori_andi
+  | .is_lui_auipc_jal_jalr_addi_add_sub =>
+      inputs.is_lui_auipc_jal_jalr_addi_add_sub
+  | .is_slti_blt_slt => inputs.is_slti_blt_slt
+  | .is_sltiu_bltu_sltu => inputs.is_sltiu_bltu_sltu
+  | .is_compare => inputs.is_compare
+  | .decoded_imm => inputs.decoded_imm
+  | .decoded_imm_j => inputs.decoded_imm_j
+  | .decoded_rs2 => inputs.decoded_rs2
+  | .cpuregs_rs1 => inputs.cpuregs_rs1
+  | .cpuregs_rs2 => inputs.cpuregs_rs2
+  | .mem_done => inputs.mem_done
+  | .mem_rdata_word => inputs.mem_rdata_word
+
+def Inputs.pack (inputs : Inputs) : inputsType.Denote :=
+  DatapathInputs.signalMap.pack inputs.toValues
+
+def Inputs.unpack (value : inputsType.Denote) : Inputs :=
+  let fields := DatapathInputs.signalMap.unpack value
+  { resetn := fields .resetn
+    cpu_state := fields .cpu_state
+    latched_store := fields .latched_store
+    latched_stalu := fields .latched_stalu
+    latched_branch := fields .latched_branch
+    latched_is_lu := fields .latched_is_lu
+    latched_is_lh := fields .latched_is_lh
+    latched_is_lb := fields .latched_is_lb
+    mem_do_prefetch := fields .mem_do_prefetch
+    mem_do_rdata := fields .mem_do_rdata
+    mem_do_wdata := fields .mem_do_wdata
+    decoder_trigger := fields .decoder_trigger
+    instr_lui := fields .instr_lui
+    instr_jal := fields .instr_jal
+    instr_trap := fields .instr_trap
+    instr_sub := fields .instr_sub
+    instr_beq := fields .instr_beq
+    instr_bne := fields .instr_bne
+    instr_bge := fields .instr_bge
+    instr_bgeu := fields .instr_bgeu
+    instr_xori := fields .instr_xori
+    instr_xor := fields .instr_xor
+    instr_ori := fields .instr_ori
+    instr_or := fields .instr_or
+    instr_andi := fields .instr_andi
+    instr_and := fields .instr_and
+    instr_slli := fields .instr_slli
+    instr_srli := fields .instr_srli
+    instr_srai := fields .instr_srai
+    instr_sll := fields .instr_sll
+    instr_srl := fields .instr_srl
+    instr_sra := fields .instr_sra
+    is_lui_auipc_jal := fields .is_lui_auipc_jal
+    is_lb_lh_lw_lbu_lhu := fields .is_lb_lh_lw_lbu_lhu
+    is_slli_srli_srai := fields .is_slli_srli_srai
+    is_jalr_addi_slti_sltiu_xori_ori_andi :=
+      fields .is_jalr_addi_slti_sltiu_xori_ori_andi
+    is_lui_auipc_jal_jalr_addi_add_sub :=
+      fields .is_lui_auipc_jal_jalr_addi_add_sub
+    is_slti_blt_slt := fields .is_slti_blt_slt
+    is_sltiu_bltu_sltu := fields .is_sltiu_bltu_sltu
+    is_compare := fields .is_compare
+    decoded_imm := fields .decoded_imm
+    decoded_imm_j := fields .decoded_imm_j
+    decoded_rs2 := fields .decoded_rs2
+    cpuregs_rs1 := fields .cpuregs_rs1
+    cpuregs_rs2 := fields .cpuregs_rs2
+    mem_done := fields .mem_done
+    mem_rdata_word := fields .mem_rdata_word }
+
+@[simp] theorem Inputs.unpack_pack (inputs : Inputs) :
+    Inputs.unpack inputs.pack = inputs := by
+  cases inputs
+  simp [Inputs.unpack, Inputs.pack, Inputs.toValues]
+
+@[simp] theorem Inputs.pack_unpack (value : inputsType.Denote) :
+    (Inputs.unpack value).pack = value := by
+  change (Inputs.unpack value).pack = value
+  calc
+    (Inputs.unpack value).pack =
+        DatapathInputs.signalMap.pack (DatapathInputs.signalMap.unpack value) := by
+      apply congrArg DatapathInputs.signalMap.pack
+      funext field
+      cases field <;> simp [Inputs.unpack, Inputs.toValues]
+    _ = value := DatapathInputs.signalMap.pack_unpack value
+
 def inputsOfValues (values : inputMap.Values) : Inputs where
   resetn := values .resetn
   cpu_state := values .cpu_state
@@ -152,6 +340,7 @@ def inputsOfValues (values : inputMap.Values) : Inputs where
   decoder_trigger := values .decoder_trigger
   instr_lui := values .instr_lui
   instr_jal := values .instr_jal
+  instr_trap := values .instr_trap
   instr_sub := values .instr_sub
   instr_beq := values .instr_beq
   instr_bne := values .instr_bne
@@ -202,6 +391,7 @@ def inputValues (inputs : Inputs) : inputMap.Values
   | .decoder_trigger => inputs.decoder_trigger
   | .instr_lui => inputs.instr_lui
   | .instr_jal => inputs.instr_jal
+  | .instr_trap => inputs.instr_trap
   | .instr_sub => inputs.instr_sub
   | .instr_beq => inputs.instr_beq
   | .instr_bne => inputs.instr_bne
@@ -263,26 +453,30 @@ def addWords (left right : Word) : Word :=
   wordOfNat (BitVector.toNat 32 left + BitVector.toNat 32 right)
 
 def clearLowBit (word : Word) : Word :=
-  wordOfNat (BitVector.toNat 32 word / 2 * 2)
+  fun index => if index.val = 0 then false else word index
 
 def signExtended16 (word : Word) : Word :=
-  let value := BitVector.toNat 32 word % 65536
-  wordOfNat (if value < 0x8000 then value else value + 0xffff0000)
+  fun index =>
+    if low : index.val < 16 then word index else word ⟨15, by omega⟩
 
 def signExtended8 (word : Word) : Word :=
-  let value := BitVector.toNat 32 word % 256
-  wordOfNat (if value < 0x80 then value else value + 0xffffff00)
+  fun index =>
+    if low : index.val < 8 then word index else word ⟨7, by omega⟩
 
 def shiftLeft (word : Word) (amount : Nat) : Word :=
-  wordOfNat (BitVector.toNat 32 word * 2 ^ amount)
+  fun index =>
+    if low : index.val < amount then false
+    else word ⟨index.val - amount, by omega⟩
 
 def shiftRightLogical (word : Word) (amount : Nat) : Word :=
-  wordOfNat (BitVector.toNat 32 word / 2 ^ amount)
+  fun index =>
+    if high : index.val + amount < 32 then word ⟨index.val + amount, high⟩
+    else false
 
 def shiftRightArithmetic (word : Word) (amount : Nat) : Word :=
-  let shifted := BitVector.toNat 32 word / 2 ^ amount
-  if word 31 then wordOfNat (shifted + (2 ^ 32 - 2 ^ (32 - amount)))
-  else wordOfNat shifted
+  fun index =>
+    if high : index.val + amount < 32 then word ⟨index.val + amount, high⟩
+    else word ⟨31, by omega⟩
 
 def shiftedValue (inputs : Inputs) (word : Word) (amount : Nat) : Word :=
   if inputs.instr_slli || inputs.instr_sll then shiftLeft word amount
@@ -358,7 +552,8 @@ def fetchNextState (inputs : Inputs) (current updated : stateMap.Values) : state
   else updated
 
 def loadRs1NextState (inputs : Inputs) (current updated : stateMap.Values) : stateMap.Values :=
-  if inputs.is_lui_auipc_jal then
+  if inputs.instr_trap then updated
+  else if inputs.is_lui_auipc_jal then
     let updated := stateMap.set updated .reg_op1
       (if inputs.instr_lui then wordOfNat 0 else current .reg_pc)
     stateMap.set updated .reg_op2 inputs.decoded_imm
@@ -401,26 +596,40 @@ def memoryNextState (isLoad : Bool) (inputs : Inputs)
     stateMap.set updated .reg_out (loadResult inputs)
   else updated
 
+def loadRs2NextState (inputs : Inputs) (updated : stateMap.Values) : stateMap.Values :=
+  let updated := stateMap.set updated .reg_op2 inputs.cpuregs_rs2
+  stateMap.set updated .reg_sh (lowFiveBits inputs.cpuregs_rs2)
+
+def executeNextState (inputs : Inputs) (current updated : stateMap.Values) :
+    stateMap.Values :=
+  stateMap.set updated .reg_out (addWords (current .reg_pc) inputs.decoded_imm)
+
 def normalNextState (inputs : Inputs) (current updated : stateMap.Values) : stateMap.Values :=
   let phase := stateNumber inputs
   if phase = cpuStateFetch then fetchNextState inputs current updated
   else if phase = cpuStateLdRs1 then loadRs1NextState inputs current updated
-  else if phase = cpuStateLdRs2 then
-    let updated := stateMap.set updated .reg_op2 inputs.cpuregs_rs2
-    stateMap.set updated .reg_sh (lowFiveBits inputs.cpuregs_rs2)
-  else if phase = cpuStateExec then
-    stateMap.set updated .reg_out (addWords (current .reg_pc) inputs.decoded_imm)
+  else if phase = cpuStateLdRs2 then loadRs2NextState inputs updated
+  else if phase = cpuStateExec then executeNextState inputs current updated
   else if phase = cpuStateShift then shiftNextState inputs current updated
   else if phase = cpuStateStmem then memoryNextState false inputs current updated
   else if phase = cpuStateLdmem then memoryNextState true inputs current updated
   else updated
 
+def baselineState (aluOut : Word) (state : stateMap.Values) : stateMap.Values :=
+  stateMap.set state .alu_out_q aluOut
+
+def resetApplied (resetn : Bool) (state : stateMap.Values) : stateMap.Values :=
+  if resetn then state else
+    let state := stateMap.set state .reg_pc (wordOfNat 0)
+    stateMap.set state .reg_next_pc (wordOfNat 0)
+
+def nextStateFromAlu (inputs : Inputs) (state : stateMap.Values)
+    (aluOut : Word) : stateMap.Values :=
+  resetApplied inputs.resetn
+    (normalNextState inputs state (baselineState aluOut state))
+
 def nextState (inputs : Inputs) (state : stateMap.Values) : stateMap.Values :=
-  let updated := stateMap.set state .alu_out_q (aluResult inputs state)
-  if !inputs.resetn then
-    let updated := stateMap.set updated .reg_pc (wordOfNat 0)
-    stateMap.set updated .reg_next_pc (wordOfNat 0)
-  else normalNextState inputs state updated
+  nextStateFromAlu inputs state (aluResult inputs state)
 
 namespace RegisteredRule
 inductive Output | reg_pc | reg_op1 | reg_op2 | reg_sh deriving Enumeration
@@ -433,8 +642,10 @@ end NextPcRule
 
 namespace ComparisonRule
 inductive Input
-  | instr_beq | instr_bne | instr_bge | instr_bgeu
+  | instr_sub | instr_beq | instr_bne | instr_bge | instr_bgeu
   | is_slti_blt_slt | is_sltiu_bltu_sltu
+  | is_lui_auipc_jal_jalr_addi_add_sub | is_compare
+  | instr_xori | instr_xor | instr_ori | instr_or | instr_andi | instr_and
 deriving Enumeration
 inductive Output | alu_out_0 deriving Enumeration
 end ComparisonRule
@@ -463,12 +674,22 @@ end WritebackRule
 
 @[reducible] private def comparisonInputs : SignalGroup inputMap :=
   SignalGroup.fromLabels inputMap ComparisonRule.Input fun
+    | .instr_sub => .instr_sub
     | .instr_beq => .instr_beq
     | .instr_bne => .instr_bne
     | .instr_bge => .instr_bge
     | .instr_bgeu => .instr_bgeu
     | .is_slti_blt_slt => .is_slti_blt_slt
     | .is_sltiu_bltu_sltu => .is_sltiu_bltu_sltu
+    | .is_lui_auipc_jal_jalr_addi_add_sub =>
+        .is_lui_auipc_jal_jalr_addi_add_sub
+    | .is_compare => .is_compare
+    | .instr_xori => .instr_xori
+    | .instr_xor => .instr_xor
+    | .instr_ori => .instr_ori
+    | .instr_or => .instr_or
+    | .instr_andi => .instr_andi
+    | .instr_and => .instr_and
 
 @[reducible] private def comparisonOutputs : SignalGroup outputMap :=
   SignalGroup.fromLabels outputMap ComparisonRule.Output fun
@@ -508,21 +729,22 @@ def comparisonRule : Contracts.Cycle.CycleOutputRule ports stateMap where
       let aluInputs : Alu.Values := {
       reg_op1 := state .reg_op1
       reg_op2 := state .reg_op2
-      instr_sub := false
+      instr_sub := inputs .instr_sub
       instr_beq := inputs .instr_beq
       instr_bne := inputs .instr_bne
       instr_bge := inputs .instr_bge
       instr_bgeu := inputs .instr_bgeu
       is_slti_blt_slt := inputs .is_slti_blt_slt
       is_sltiu_bltu_sltu := inputs .is_sltiu_bltu_sltu
-      is_lui_auipc_jal_jalr_addi_add_sub := false
-      is_compare := false
-      instr_xori := false
-      instr_xor := false
-      instr_ori := false
-      instr_or := false
-      instr_andi := false
-      instr_and := false
+      is_lui_auipc_jal_jalr_addi_add_sub :=
+        inputs .is_lui_auipc_jal_jalr_addi_add_sub
+      is_compare := inputs .is_compare
+      instr_xori := inputs .instr_xori
+      instr_xor := inputs .instr_xor
+      instr_ori := inputs .instr_ori
+      instr_or := inputs .instr_or
+      instr_andi := inputs .instr_andi
+      instr_and := inputs .instr_and
     }
       Alu.comparisonOutput aluInputs
 
@@ -538,6 +760,71 @@ def writebackRule : Contracts.Cycle.CycleOutputRule ports stateMap where
 def stateRule : Contracts.Cycle.CycleStateRule ports stateMap where
   readsInputs := .all inputMap
   target := fun inputs state => nextState (inputsOfValues inputs) state
+
+@[simp] theorem registeredRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    registeredRule.Holds inputs state outputs ↔
+      outputs .reg_pc = state .reg_pc ∧
+      outputs .reg_op1 = state .reg_op1 ∧
+      outputs .reg_op2 = state .reg_op2 ∧
+      outputs .reg_sh = state .reg_sh := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, registeredRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every
+    exact ⟨every .reg_pc, every .reg_op1, every .reg_op2, every .reg_sh⟩
+  · rintro ⟨pc, op1, op2, sh⟩ label
+    cases label
+    · exact pc
+    · exact op1
+    · exact op2
+    · exact sh
+
+@[simp] theorem nextPcRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    nextPcRule.Holds inputs state outputs ↔
+      outputs .next_pc = nextPcFrom (inputs .latched_store)
+        (inputs .latched_branch) state := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, nextPcRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every
+    exact every .next_pc
+  · intro equal label
+    cases label
+    exact equal
+
+@[simp] theorem comparisonRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    comparisonRule.Holds inputs state outputs ↔
+      outputs .alu_out_0 = aluComparison (inputsOfValues inputs) state := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, comparisonRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every
+    simpa [aluComparison, aluInputs, inputsOfValues, comparisonInputs,
+      Alu.aluOut0, Alu.evaluate, Alu.comparisonOutput,
+      Alu.sharedSignedLess, Alu.sharedUnsignedLess] using
+        every ComparisonRule.Output.alu_out_0
+  · intro equal output
+    cases output
+    simpa [aluComparison, aluInputs, inputsOfValues, comparisonInputs,
+      Alu.aluOut0, Alu.evaluate, Alu.comparisonOutput,
+      Alu.sharedSignedLess, Alu.sharedUnsignedLess] using equal
+
+@[simp] theorem writebackRule_holds_iff (inputs : inputMap.Values)
+    (state : stateMap.Values) (outputs : outputMap.Values) :
+    writebackRule.Holds inputs state outputs ↔
+      outputs .cpuregs_wrdata = writebackData (inputsOfValues inputs) state := by
+  simp only [Contracts.Cycle.CycleOutputRule.Holds, writebackRule,
+    SignalGroup.fromLabels_matches_iff]
+  constructor
+  · intro every
+    simpa [writebackData, stateNumber, inputsOfValues, writebackInputs] using
+      every WritebackRule.Output.cpuregs_wrdata
+  · intro equal output
+    cases output
+    simpa [writebackData, stateNumber, inputsOfValues, writebackInputs] using equal
 
 module_cycle_contract cycleContract for ports where
   state := stateMap

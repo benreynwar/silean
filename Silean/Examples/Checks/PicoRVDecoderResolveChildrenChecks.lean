@@ -1,7 +1,9 @@
-import Silean.Examples.PicoRV.Decoder.DecoderImmediate
-import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatch
-import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummary
+import Silean.Examples.PicoRV.Decoder.DecoderImmediateCertified
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatchCertified
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummaryCertified
 import Silean.Examples.PicoRV.Decoder.DecoderResolveStage
+import Silean.Examples.PicoRV.Decoder.DecoderResolveStageStructure
+import Silean.FIRRTL
 
 namespace Silean.Examples.Checks.PicoRVDecoderResolveChildrenChecks
 
@@ -57,6 +59,12 @@ example (input : Input) : input ∈ outputRule.readsInputs.labels := outputRule_
 example (output : Output) : output ∈ outputRule.writesOutputs.labels := outputRule_writes output
 example : cycleContract.state = emptySignalMap := rfl
 
+noncomputable example : Contracts.Cycle.ModuleCycleCertified ports :=
+  InstructionMatch.Structure.certified
+
+example : InstructionMatch.Structure.moduleStructure.HasNoBlackboxes :=
+  InstructionMatch.Structure.moduleStructure_hasNoBlackboxes
+
 end Match
 
 namespace ImmediateChecks
@@ -93,6 +101,7 @@ example : evaluatedNat { base 0x0020a423 with is_sb_sh_sw := true } =
 -- resolve parent can therefore hold its registered immediate.
 example : evaluate (base 0) = none := by decide
 example : valid (base 0) = false := by decide
+example : BitVector.toNat 32 (outputValues (base 0) .value) = 0 := by decide
 
 -- Source case order gives JAL priority if inconsistent selectors overlap.
 def overlapping : Inputs where
@@ -108,9 +117,32 @@ def overlapping : Inputs where
   is_sb_sh_sw := false
 example : evaluatedNat overlapping = some 12 := by decide
 
+-- The same priority remains visible below JAL: U wins over I, and B wins over
+-- S, even for deliberately inconsistent selector combinations.
+example : evaluatedNat { base 0x12345037 with
+    instr_lui := true, is_alu_reg_imm := true } = some 0x12345000 := by decide
+example : evaluatedNat { base 0xfe002e23 with
+    is_beq_bne_blt_bge_bltu_bgeu := true, is_sb_sh_sw := true } =
+      some 0xfffff7fc := by decide
+
 example (input : Input) : input ∈ outputRule.readsInputs.labels := outputRule_reads input
 example (output : Output) : output ∈ outputRule.writesOutputs.labels := outputRule_writes output
 example : cycleContract.state = emptySignalMap := rfl
+
+noncomputable example : Contracts.Cycle.ModuleCycleCertified ports := certified
+
+example : moduleStructure.HasNoBlackboxes := moduleStructure_hasNoBlackboxes
+
+-- The resolve stage owns this concrete implementation rather than an opaque
+-- copy of the same cycle contract.
+example : ResolveStage.structuralChildren .immediate = moduleStructure := rfl
+
+noncomputable example : FIRRTL.RenderResult String :=
+  FIRRTL.renderClosedCircuit naming
+
+#guard match FIRRTL.renderClosedCircuit naming with
+  | .ok _ => true
+  | .error _ => false
 
 end ImmediateChecks
 
@@ -143,9 +175,10 @@ example : bit (valuesOf emptyInputs) .instr_trap = true := by decide
 example : bit (valuesOf branchClassInputs) .is_compare = true := by decide
 example : bit (valuesOf branchClassInputs) .instr_trap = true := by decide
 
--- PicoRV32 classifies ECALL/EBREAK separately rather than as an unknown
--- instruction, so the continuous illegal-instruction result is low.
-example : bit (valuesOf ecallInputs) .instr_trap = false := by decide
+-- ECALL/EBREAK has a private exact-match flag, but the source deliberately
+-- omits that flag from the recognized-instruction OR so control takes the
+-- configured trap path.
+example : bit (valuesOf ecallInputs) .instr_trap = true := by decide
 
 example (input : Input) :
     input ∈ trapOutputRule.readsInputs.labels ↔
@@ -160,6 +193,12 @@ example (output : Output) :
     output ∈ summariesOutputRule.writesOutputs.labels ↔ output ≠ .instr_trap :=
   summariesOutputRule_writes output
 example : cycleContract.state = emptySignalMap := rfl
+
+noncomputable example : Contracts.Cycle.ModuleCycleCertified ports :=
+  InstructionSummary.Structure.certified
+
+example : InstructionSummary.Structure.moduleStructure.HasNoBlackboxes :=
+  InstructionSummary.Structure.moduleStructure_hasNoBlackboxes
 
 end SummaryChecks
 
@@ -184,13 +223,21 @@ def ecallInputs : ResolveStage.Inputs where
 def ecallState : ResolveStage.stateMap.Values :=
   ResolveStage.nextState ecallInputs ResolveStage.stateMap.defaultValues
 
+def ebreakInputs : ResolveStage.Inputs :=
+  { ecallInputs with mem_rdata_q := wordOfNat 0x00100073 }
+
+def ebreakState : ResolveStage.stateMap.Values :=
+  ResolveStage.nextState ebreakInputs ResolveStage.stateMap.defaultValues
+
 def ecallTrap : Bool := ResolveStage.outputValues ecallInputs ecallState .instr_trap
 
--- The previously omitted private predicate is now retained by the existing
--- resolve contract, keeping its recognized-instruction view aligned with the
--- configured Verilog and with the new child contracts.
+-- The private predicate is retained because it mirrors the source decoder,
+-- but it is deliberately omitted from the recognized-instruction OR. Thus
+-- ECALL/EBREAK follows the same trap entry used for illegal instructions.
 example : (ecallState .instr_ecall_ebreak : Bool) = true := by rfl
-example : ecallTrap = false := by rfl
+example : ecallTrap = true := by rfl
+example : (ebreakState .instr_ecall_ebreak : Bool) = true := by rfl
+example : ResolveStage.outputValues ebreakInputs ebreakState .instr_trap = true := by rfl
 
 end ExistingResolveContract
 

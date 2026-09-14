@@ -28,3 +28,15 @@ lean_exe «emit-bit-register-bank» where
 
 lean_exe «emit-picorv-decoder-capture» where
   root := `Silean.Emitters.PicoRVDecoderCapture
+
+lean_exe «emit-picorv-control» where
+  root := `Silean.Emitters.PicoRVControl
+
+lean_exe «emit-picorv-datapath» where
+  root := `Silean.Emitters.PicoRVDatapath
+
+lean_exe «emit-picorv-memory» where
+  root := `Silean.Emitters.PicoRVMemory
+
+lean_exe «emit-picorv» where
+  root := `Silean.Emitters.PicoRV

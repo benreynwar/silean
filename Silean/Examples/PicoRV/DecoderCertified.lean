@@ -12,8 +12,8 @@ open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
 
 /-! The parent proof composes the concrete certifications of both registered
-decoder stages. The resolve stage itself depends only on the public contracts
-of its three smaller combinational blackbox children. -/
+decoder stages. The resolve stage depends only on the public contracts of its
+three smaller, concrete combinational children. -/
 
 module_child_certifications childContracts for body where
   capture := CaptureStage.certification,
@@ -140,6 +140,7 @@ module_cycle_certification certification for moduleStructure via body
   stateCoverage := hasCorrespondingState,
   implements := implements
 
-/- The generated `certified` bundle contains both concrete registered stages. -/
+theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
+  native_decide
 
 end Silean.Examples.PicoRV.Decoder

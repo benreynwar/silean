@@ -21,6 +21,7 @@
               circt
               elan
               gnumake
+              iverilog
               python
               verilator
             ];

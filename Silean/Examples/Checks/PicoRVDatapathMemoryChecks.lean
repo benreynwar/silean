@@ -18,6 +18,29 @@ def startStoreInputs : Inputs :=
 def storeAddressState := nextState startStoreInputs (stateWith 0 0 0x2000 0 0 0 0)
 example : BitVector.toNat 32 (storeAddressState .reg_op1) = 0x2014 := by decide
 
+/-! Address formation happens exactly once. A pending prefetch stalls the
+memory phase, and an already-active read or write command retains the address
+instead of adding the immediate again. -/
+
+def stalledPrefetchInputs : Inputs :=
+  { startLoadInputs with mem_do_prefetch := true, mem_done := false }
+
+def activeLoadInputs : Inputs :=
+  { startLoadInputs with mem_do_rdata := true }
+
+def activeStoreInputs : Inputs :=
+  { startStoreInputs with mem_do_wdata := true }
+
+example : BitVector.toNat 32
+    ((nextState stalledPrefetchInputs (stateWith 0 0 0x1000 0 0 0 0)) .reg_op1) =
+      0x1000 := by decide
+example : BitVector.toNat 32
+    ((nextState activeLoadInputs (stateWith 0 0 0x100c 0 0 0 0)) .reg_op1) =
+      0x100c := by decide
+example : BitVector.toNat 32
+    ((nextState activeStoreInputs (stateWith 0 0 0x2014 0 0 0 0)) .reg_op1) =
+      0x2014 := by decide
+
 def finishSignedByteLoad : Inputs :=
   { idleInputs with
     cpu_state := stateBits cpuStateLdmem
@@ -46,6 +69,21 @@ def finishUnsignedLoad : Inputs :=
 
 example : BitVector.toNat 32
     ((nextState finishUnsignedLoad initialState) .reg_out) = 0x80 := by decide
+
+/-! The load formatter is total. Positive signed values remain positive, and
+if no width selector is latched the configured source writes zero. -/
+
+def finishPositiveSignedByte : Inputs :=
+  { finishSignedByteLoad with mem_rdata_word := wordOfNat 0x7f }
+
+def finishWithoutWidth : Inputs :=
+  { finishSignedByteLoad with latched_is_lb := false }
+
+example : BitVector.toNat 32
+    ((nextState finishPositiveSignedByte initialState) .reg_out) = 0x7f := by decide
+example : BitVector.toNat 32
+    ((nextState finishWithoutWidth (stateWith 0 0 0 0 0x1234 0 0)) .reg_out) = 0 := by
+  decide
 
 def aluWritebackInputs : Inputs :=
   { idleInputs with

@@ -394,7 +394,7 @@ def recognized (state : stateMap.Values) : Bool := boolOr [
   state .instr_slli, state .instr_srli, state .instr_srai, state .instr_add,
   state .instr_sub, state .instr_sll, state .instr_slt, state .instr_sltu,
   state .instr_xor, state .instr_srl, state .instr_sra, state .instr_or,
-  state .instr_and, state .instr_ecall_ebreak, state .instr_fence]
+  state .instr_and, state .instr_fence]
 
 def outputValues (state : stateMap.Values) : outputMap.Values
   | .instr_trap => !(recognized state)
@@ -475,8 +475,9 @@ open Silean.Authoring
 
 /-! ## Two-stage structural decomposition
 
-Both registered stages have concrete structural implementations. The resolve
-stage retains three smaller combinational contract blackboxes internally. -/
+Both registered stages and all three combinational resolve children have
+certified concrete implementations. The complete recursive Decoder hierarchy
+contains no behavioral blackboxes. -/
 
 module_design Decoder where
   boundary (Decoder.ports) (naming := Decoder.Naming.ports)

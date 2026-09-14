@@ -1,4 +1,7 @@
 import Silean.Examples.PicoRV.Decoder.DecoderResolveStageStructure
+import Silean.Examples.PicoRV.Decoder.DecoderImmediateCertified
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatchCertified
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummaryCertified
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
@@ -19,16 +22,16 @@ open Silean.Authoring
 open Silean.Examples.PicoRV.Decoder
 open Contracts.Cycle.Certification.Layer
 
-/-! The three combinational decoder children remain deliberate contract
-blackboxes. Every other child is a concrete certified structure. -/
+/-! All three combinational decoder children—instruction matching, immediate
+decoding, and instruction summaries—have concrete certified structures. -/
 
 module_child_certifications childContracts for body where
   pseudoInverter := Primitives.notCertified.certification,
   triggerEnable := Primitives.andCertified.certification,
   resetInverter := Primitives.notCertified.certification,
-  instructionMatch := InstructionMatch.cycleContract.blackboxCertification,
-  immediate := Immediate.cycleContract.blackboxCertification,
-  instructionSummary := InstructionSummary.cycleContract.blackboxCertification,
+  instructionMatch := InstructionMatch.Structure.certification,
+  immediate := Immediate.certification,
+  instructionSummary := InstructionSummary.Structure.certification,
   resetMatchNext := resetMatchCombiner.certified.certification,
   retainedMatchNext := retainedMatchCombiner.certified.certification,
   ordinarySummaryNext := ordinarySummaryCombiner.certified.certification,
@@ -842,5 +845,8 @@ module_cycle_certification certification for moduleStructure via body
   stateCorresponds := stateCorresponds,
   stateCoverage := hasCorrespondingState,
   implements := implements
+
+theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
+  native_decide
 
 end Silean.Examples.PicoRV.Decoder.ResolveStage

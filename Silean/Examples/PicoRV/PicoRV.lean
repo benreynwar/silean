@@ -1,20 +1,17 @@
 import Silean.Authoring.ModuleDesign
-import Silean.Contracts.Cycle.CycleBlackbox
-import Silean.Examples.PicoRV.Control
-import Silean.Examples.PicoRV.Datapath
-import Silean.Examples.PicoRV.Decoder
-import Silean.Examples.PicoRV.Memory
-import Silean.Examples.PicoRV.Regs
+import Silean.Examples.PicoRV.ControlCertified
+import Silean.Examples.PicoRV.DatapathCertified
+import Silean.Examples.PicoRV.DecoderCertified
+import Silean.Examples.PicoRV.MemoryCertified
+import Silean.Examples.PicoRV.RegsCertified
 
 namespace Silean.Examples.PicoRV.PicoRV
 
 open Silean
 open Silean.Authoring
 
-/-! The configured PicoRV32 top-level hardware boundary. Its five children are
-behavioral blackboxes at this stage: their reviewed cycle contracts define the
-equations used to check this composition, but none is presented as a completed
-structural implementation. -/
+/-! The configured PicoRV32 top-level hardware boundary. All five direct
+children use their certified structural designs. -/
 
 module_ports ports where
   input resetn : .bit,
@@ -39,16 +36,15 @@ namespace Silean.Examples.PicoRV
 open Silean
 open Silean.Authoring
 
-/-! The direct children follow the reviewed source-region split. Every child
-remains an explicit behavioral blackbox at this verification boundary. -/
+/-! The direct children follow the reviewed source-region split. -/
 module_design PicoRV where
   boundary (PicoRV.ports) (naming := PicoRV.Naming.ports)
   instances {
-    control := Control.cycleContract.blackboxDesign "PicoRVControl" Control.Naming.ports,
-    datapath := Datapath.cycleContract.blackboxDesign "PicoRVDatapath" Datapath.Naming.ports,
-    mem := Memory.cycleContract.blackboxDesign "PicoRVMemory" Memory.Naming.ports,
-    decoder := Decoder.cycleContract.blackboxDesign "PicoRVDecoder" Decoder.Naming.ports,
-    cpuregs := Regs.cycleContract.blackboxDesign "PicoRVRegs" Regs.Naming.ports }
+    control := Control.design,
+    datapath := Datapath.design,
+    mem := Memory.design,
+    decoder := Decoder.design,
+    cpuregs := Regs.design }
   wiring {
   outputs {
     -- The registered trap output belongs to control.
@@ -112,6 +108,7 @@ module_design PicoRV where
     .decoder_trigger := control.decoder_trigger,
     .instr_lui := decoder.instr_lui,
     .instr_jal := decoder.instr_jal,
+    .instr_trap := decoder.instr_trap,
     .instr_sub := decoder.instr_sub,
     .instr_beq := decoder.instr_beq,
     .instr_bne := decoder.instr_bne,

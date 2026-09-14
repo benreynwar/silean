@@ -21,6 +21,7 @@ def idleInputs : Inputs where
   decoder_trigger := false
   instr_lui := false
   instr_jal := false
+  instr_trap := false
   instr_sub := false
   instr_beq := false
   instr_bne := false
