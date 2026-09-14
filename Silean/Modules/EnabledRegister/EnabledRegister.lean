@@ -1,6 +1,6 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Authoring.ModuleCycleContract
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxStructure
 import Silean.Modules.Register.Register
 
 namespace Silean.Modules

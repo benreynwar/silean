@@ -3,7 +3,7 @@ import Silean.Naming.PrimitiveNaming
 import Silean.Modules.BitMux.BitMux
 import Silean.Modules.FullAdder.FullAdder
 import Silean.Modules.Register.Register
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxStructure
 import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.RegisterBank.RegisterBank
 import Silean.Modules.TupleField.TupleField

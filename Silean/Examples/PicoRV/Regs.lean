@@ -4,7 +4,7 @@ import Silean.Authoring.ModuleDesign
 import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Modules.Constant.Constant
 import Silean.Modules.Equality.Equality
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxStructure
 import Silean.Modules.RegisterBank.RegisterBank
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.And

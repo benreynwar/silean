@@ -1,7 +1,7 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.BinaryToOneHot.BinaryToOneHot
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxContract
 import Silean.Modules.Mux.MuxCertified
 import Silean.Modules.VectorSplit.VectorSplitCertified
 import Silean.Naming.SignalAdapterNaming

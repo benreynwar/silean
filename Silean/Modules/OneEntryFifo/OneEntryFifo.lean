@@ -4,7 +4,7 @@ import Silean.Contracts.Fifo.FifoCycleBehavior
 import Silean.Interfaces.FifoPorts
 import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.EnabledResetRegister.EnabledResetRegister
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxStructure
 import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControl
 import Silean.Naming.FifoPortsNaming
 import Silean.Naming.PrimitiveNaming

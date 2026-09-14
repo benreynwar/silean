@@ -9,7 +9,7 @@ import Silean.Modules.BitwiseOr.BitwiseOr
 import Silean.Modules.BitwiseXor.BitwiseXor
 import Silean.Modules.Constant.Constant
 import Silean.Modules.Equality.Equality
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxStructure
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.Not
