@@ -48,6 +48,12 @@ children have closed certified structures. The top-level hierarchy has
 existence and uniqueness proofs. It does not yet have the processor-level
 architectural refinement theorem described below.
 
+The repository now gives its main concerns explicit sibling boundaries:
+`Silean/` contains the reusable framework, `RV32I/` the dependency-free clean
+architecture, `PicoRV/` the processor client and its proofs, and `SailBridge/`
+the optional generated-Sail validation package. Documentation and regression
+trees remain shared and project-scoped under `docs/` and `tests/`.
+
 ## Current constraints
 
 - Signal semantics are two-state Boolean semantics.
@@ -68,7 +74,7 @@ architectural refinement theorem described below.
 ### Define and prove processor-level observation
 
 The next processor milestone extends the verification stages in
-[`docs/PicoRV32Plan.md`](docs/PicoRV32Plan.md):
+[`docs/picorv/PicoRV32Plan.md`](docs/picorv/PicoRV32Plan.md):
 
 1. define the external memory environment and identify the memory-mapped-I/O
    address region outside the processor core;

@@ -1,0 +1,17 @@
+name = "rv32i-sail-bridge"
+version = "0.1.0"
+defaultTargets = ["RV32ISailBridge"]
+
+[[lean_lib]]
+name = "RV32ISailBridge"
+roots = ["RV32ISailBridge", "SailBridge.Memory", "SailBridge.LoadStoreSimulation", "SailBridge.FenceSimulation", "SailBridge.SystemSimulation", "SailBridge.DecoderCorrespondence", "SailBridge.DecoderProof"]
+moreLeanArgs = ["--tstack=400000"]
+moreLeancArgs = ["-fbracket-depth=500"]
+
+[[require]]
+name = "silean"
+path = ".."
+
+[[require]]
+name = "Lean_RV32D"
+path = "/home/ben/Code/sail-riscv32-lean"

@@ -8,8 +8,20 @@ package «silean» where
 lean_lib «Silean» where
 
 @[default_target]
-lean_lib «SileanExamples» where
-  roots := #[`SileanExamples]
+lean_lib «RV32I» where
+
+@[default_target]
+lean_lib «PicoRV» where
+
+@[default_target]
+lean_lib «SileanTests» where
+  srcDir := "tests/silean/lean"
+  roots := #[`SileanTests]
+
+@[default_target]
+lean_lib «PicoRVTests» where
+  srcDir := "tests/picorv/lean"
+  roots := #[`PicoRVTests]
 
 lean_exe «emit-bit-register» where
   root := `Silean.Emitters.BitRegister
@@ -27,16 +39,16 @@ lean_exe «emit-bit-register-bank» where
   root := `Silean.Emitters.BitRegisterBank
 
 lean_exe «emit-picorv-decoder-capture» where
-  root := `Silean.Emitters.PicoRVDecoderCapture
+  root := `PicoRV.Emitters.PicoRVDecoderCapture
 
 lean_exe «emit-picorv-control» where
-  root := `Silean.Emitters.PicoRVControl
+  root := `PicoRV.Emitters.PicoRVControl
 
 lean_exe «emit-picorv-datapath» where
-  root := `Silean.Emitters.PicoRVDatapath
+  root := `PicoRV.Emitters.PicoRVDatapath
 
 lean_exe «emit-picorv-memory» where
-  root := `Silean.Emitters.PicoRVMemory
+  root := `PicoRV.Emitters.PicoRVMemory
 
 lean_exe «emit-picorv» where
-  root := `Silean.Emitters.PicoRV
+  root := `PicoRV.Emitters.PicoRV

@@ -265,7 +265,7 @@ lake build
 ```
 
 Check that every focused `*Checks.lean` regression is included by the explicit
-`SileanExamples.lean` aggregate with:
+`SileanTests.lean` or `PicoRVTests.lean` aggregate with:
 
 ```sh
 make check-example-imports
@@ -334,8 +334,16 @@ Use `make clean` to remove generated build artifacts.
   typed field accessors without changing structural shape compatibility.
 - [`Silean/Modules/`](Silean/Modules/) contains the reusable hardware,
   contracts, and certification proofs.
-- [`docs/Architecture.md`](docs/Architecture.md) gives the detailed current
-  design, and [`docs/SourceMap.md`](docs/SourceMap.md) maps concepts to files.
+- [`RV32I/`](RV32I/) contains the clean architectural RV32I model.
+- [`PicoRV/`](PicoRV/) contains the PicoRV implementation and its proofs as a
+  sibling client of Silean.
+- [`SailBridge/`](SailBridge/) is an optional, separately built package for the
+  generated Sail correspondence work; it is not part of the default build.
+- [`tests/`](tests/) and [`docs/`](docs/) remain shared roots, with per-project
+  subdirectories.
+- [`docs/silean/Architecture.md`](docs/silean/Architecture.md) gives the detailed
+  current design, and [`docs/silean/SourceMap.md`](docs/silean/SourceMap.md) maps
+  concepts to files.
 - [`Roadmap.md`](Roadmap.md) records the current direction and remaining work.
 
 The checked-in Nix flake supplies Lean, CIRCT, Verilator, and the Python/cocotb

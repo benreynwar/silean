@@ -1,0 +1,142 @@
+import PicoRV.Datapath.DatapathNextContracts
+import Silean.Authoring.ModuleDesign
+import Silean.Modules.Add.Add
+import Silean.Modules.Constant.Constant
+import Silean.Modules.Mux.Mux
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Naming.PrimitiveNaming
+
+namespace PicoRV.Datapath
+
+open Silean
+open Silean.Authoring
+
+def MemoryUpdateCore.signExtendLayout (width : Nat) (index : Fin 32) :
+    Silean.Modules.VectorLayout.BitSource 32 :=
+  if low : index.val < width then .input index
+  else .input ⟨width - 1, by omega⟩
+
+/-! Shared effective-address and completion datapath for store and load phases.
+The request kind is explicit so the same proved circuit can be specialized by
+the two source-region wrappers below. -/
+module_design MemoryUpdateCore (name := "picorv32_datapath_memory_update") where
+  boundary (MemoryUpdateCore.ports) (naming := MemoryUpdateCore.Naming.ports)
+  instances {
+    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
+      DatapathInputs.signalMap DatapathInputs.schema,
+    currentFields := Silean.Modules.NamedTupleSplitter.designWith
+      stateMap DatapathState.schema,
+    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
+      stateMap DatapathState.schema,
+    falseBit := Silean.Modules.Constant.design .bit false,
+    zeroWord := Silean.Modules.Constant.design (.vector 32 .bit) (wordOfNat 0),
+    notPrefetch := Silean.Primitives.notDesign,
+    progress := Silean.Primitives.orDesign,
+    active := Silean.Modules.Mux.design .bit,
+    notActive := Silean.Primitives.notDesign,
+    effectiveAddress := Silean.Modules.Add.design 32,
+    effectiveOp1 := Silean.Modules.Mux.design (.vector 32 .bit),
+    selectedOp1 := Silean.Modules.Mux.design (.vector 32 .bit),
+    signedHalf := Silean.Modules.VectorLayout.design 32 32
+      (MemoryUpdateCore.signExtendLayout 16),
+    signedByte := Silean.Modules.VectorLayout.design 32 32
+      (MemoryUpdateCore.signExtendLayout 8),
+    selectByte := Silean.Modules.Mux.design (.vector 32 .bit),
+    selectHalf := Silean.Modules.Mux.design (.vector 32 .bit),
+    selectUnsigned := Silean.Modules.Mux.design (.vector 32 .bit),
+    loadDoneLeft := Silean.Primitives.andDesign,
+    loadDone := Silean.Primitives.andDesign,
+    selectedResult := Silean.Modules.Mux.design (.vector 32 .bit),
+    result := Silean.Modules.NamedTupleCombiner.designWith
+      stateMap DatapathState.schema }
+  wiring {
+  outputs { .state := result.value }
+  instance (.inputsFields) { .value := input.inputs }
+  instance (.currentFields) { .value := input.current }
+  instance (.updatedFields) { .value := input.updated }
+  instance (.falseBit) {}
+  instance (.zeroWord) {}
+  instance (.notPrefetch) { .input := inputsFields[.mem_do_prefetch] }
+  instance (.progress) {
+    .left := notPrefetch.output, .right := inputsFields[.mem_done] }
+  instance (.active) {
+    .select := input.isLoad,
+    .whenFalse := inputsFields[.mem_do_wdata],
+    .whenTrue := inputsFields[.mem_do_rdata] }
+  instance (.notActive) { .input := active.result }
+  instance (.effectiveAddress) {
+    .left := currentFields[.reg_op1],
+    .right := inputsFields[.decoded_imm],
+    .carryIn := falseBit.output }
+  instance (.effectiveOp1) {
+    .select := notActive.output,
+    .whenFalse := updatedFields[.reg_op1],
+    .whenTrue := effectiveAddress.result }
+  instance (.selectedOp1) {
+    .select := progress.output,
+    .whenFalse := updatedFields[.reg_op1],
+    .whenTrue := effectiveOp1.result }
+  instance (.signedHalf) { .input := inputsFields[.mem_rdata_word] }
+  instance (.signedByte) { .input := inputsFields[.mem_rdata_word] }
+  instance (.selectByte) {
+    .select := inputsFields[.latched_is_lb],
+    .whenFalse := zeroWord.output,
+    .whenTrue := signedByte.output }
+  instance (.selectHalf) {
+    .select := inputsFields[.latched_is_lh],
+    .whenFalse := selectByte.result,
+    .whenTrue := signedHalf.output }
+  instance (.selectUnsigned) {
+    .select := inputsFields[.latched_is_lu],
+    .whenFalse := selectHalf.result,
+    .whenTrue := inputsFields[.mem_rdata_word] }
+  instance (.loadDoneLeft) {
+    .left := input.isLoad, .right := notPrefetch.output }
+  instance (.loadDone) {
+    .left := loadDoneLeft.output, .right := inputsFields[.mem_done] }
+  instance (.selectedResult) {
+    .select := loadDone.output,
+    .whenFalse := updatedFields[.reg_out],
+    .whenTrue := selectUnsigned.result }
+  instance (.result) {
+    .reg_pc := updatedFields[.reg_pc],
+    .reg_next_pc := updatedFields[.reg_next_pc],
+    .reg_op1 := selectedOp1.result,
+    .reg_op2 := updatedFields[.reg_op2],
+    .reg_out := selectedResult.result,
+    .reg_sh := updatedFields[.reg_sh],
+    .alu_out_q := updatedFields[.alu_out_q] }
+  }
+
+module_design StoreUpdate (name := "picorv32_datapath_store_update") where
+  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
+  instances {
+    isLoad := Silean.Modules.Constant.design .bit false,
+    update := MemoryUpdateCore.design }
+  wiring {
+  outputs { .state := update.state }
+  instance (.isLoad) {}
+  instance (.update) {
+    .isLoad := isLoad.output,
+    .inputs := input.inputs,
+    .current := input.current,
+    .updated := input.updated }
+  }
+
+module_design LoadUpdate (name := "picorv32_datapath_load_update") where
+  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
+  instances {
+    isLoad := Silean.Modules.Constant.design .bit true,
+    update := MemoryUpdateCore.design }
+  wiring {
+  outputs { .state := update.state }
+  instance (.isLoad) {}
+  instance (.update) {
+    .isLoad := isLoad.output,
+    .inputs := input.inputs,
+    .current := input.current,
+    .updated := input.updated }
+  }
+
+end PicoRV.Datapath

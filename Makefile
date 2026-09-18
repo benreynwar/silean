@@ -35,11 +35,17 @@ PICORV_FIRRTL := $(PICORV_DIR)/PicoRV.fir
 PICORV_VERILOG := $(PICORV_DIR)/PicoRV.sv
 PICORV_SIM := $(PICORV_DIR)/sim
 
-LEAN_SOURCES := $(shell find Silean -type f -name '*.lean')
+LEAN_SOURCES := $(shell find Silean RV32I PicoRV tests/silean/lean tests/picorv/lean \
+	-type f -name '*.lean') RV32I.lean PicoRV.lean
 LEAN_BUILD_INPUTS := $(LEAN_SOURCES) lakefile.lean lean-toolchain lake-manifest.json
-CHECK_SOURCES := $(shell find Silean/Examples/Checks -type f -name '*Checks.lean' | sort)
+CHECK_SOURCES := $(shell find tests/silean/lean tests/picorv/lean \
+	-type f -name '*Checks.lean' | sort)
+FOUNDATIONAL_SOURCES := $(shell find Silean/Foundation Silean/Semantics \
+	Silean/Contracts Silean/Primitives Silean/Composition Silean/Authoring \
+	-type f -name '*.lean' ! -name '*Compatibility.lean' | sort)
 
-.PHONY: all check-example-imports firrtl-bit-register verilog-bit-register test-bit-register \
+.PHONY: all check-example-imports check-foundation-compatibility-imports \
+	firrtl-bit-register verilog-bit-register test-bit-register \
 	firrtl-structured-fifo verilog-structured-fifo test-structured-fifo test clean \
 	firrtl-register-bank verilog-register-bank test-register-bank \
 	firrtl-pointer-fifo verilog-pointer-fifo test-pointer-fifo \
@@ -56,7 +62,8 @@ firrtl-bit-register: $(BIT_REGISTER_FIRRTL)
 
 verilog-bit-register: $(BIT_REGISTER_VERILOG)
 
-test: check-example-imports test-bit-register test-structured-fifo test-serial-fifo \
+test: check-example-imports check-foundation-compatibility-imports \
+	test-bit-register test-structured-fifo test-serial-fifo \
 	test-register-bank test-pointer-fifo verilog-picorv-control \
 	lint-picorv-datapath test-picorv-datapath lint-picorv-memory \
 	test-picorv-memory lint-picorv test-picorv
@@ -64,16 +71,27 @@ test: check-example-imports test-bit-register test-structured-fifo test-serial-f
 check-example-imports:
 	@status=0; \
 	for file in $(CHECK_SOURCES); do \
-		module=$$(printf '%s' "$$file" | sed 's#/#.#g; s#\.lean$$##'); \
-		if ! grep -Fqx "import $$module" SileanExamples.lean; then \
-			echo "SileanExamples.lean does not import $$module"; \
+		case "$$file" in \
+			tests/silean/lean/*) root=tests/silean/lean/SileanTests.lean; prefix=tests/silean/lean/ ;; \
+			tests/picorv/lean/*) root=tests/picorv/lean/PicoRVTests.lean; prefix=tests/picorv/lean/ ;; \
+		esac; \
+		module=$$(printf '%s' "$${file#$$prefix}" | sed 's#/#.#g; s#\.lean$$##'); \
+		if ! grep -Fqx "import $$module" "$$root"; then \
+			echo "$$root does not import $$module"; \
 			status=1; \
 		fi; \
 	done; \
 	exit $$status
 
+check-foundation-compatibility-imports:
+	@if grep -nHE '^import Silean\.(Contracts\.Cycle\.CycleCompatibility|Composition\.BinaryLeafwiseCompatibility)$$' \
+		$(FOUNDATIONAL_SOURCES); then \
+		echo "Foundational code must not import a deprecated compatibility layer"; \
+		exit 1; \
+	fi
+
 test-bit-register: $(BIT_REGISTER_VERILOG)
-	$(MAKE) --no-print-directory -C tests/bit-register \
+	$(MAKE) --no-print-directory -C tests/silean/bit-register \
 		VERILOG_SOURCES=$(abspath $(BIT_REGISTER_VERILOG)) \
 		SIM_BUILD=$(abspath $(BIT_REGISTER_SIM))
 
@@ -82,7 +100,7 @@ firrtl-structured-fifo: $(STRUCTURED_FIFO_FIRRTL)
 verilog-structured-fifo: $(STRUCTURED_FIFO_VERILOG)
 
 test-structured-fifo: $(STRUCTURED_FIFO_VERILOG)
-	$(MAKE) --no-print-directory -C tests/structured-fifo \
+	$(MAKE) --no-print-directory -C tests/silean/structured-fifo \
 		VERILOG_SOURCES=$(abspath $(STRUCTURED_FIFO_VERILOG)) \
 		SIM_BUILD=$(abspath $(STRUCTURED_FIFO_SIM))
 
@@ -91,7 +109,7 @@ firrtl-serial-fifo: $(SERIAL_FIFO_FIRRTL)
 verilog-serial-fifo: $(SERIAL_FIFO_VERILOG)
 
 test-serial-fifo: $(SERIAL_FIFO_VERILOG)
-	$(MAKE) --no-print-directory -C tests/serial-fifo \
+	$(MAKE) --no-print-directory -C tests/silean/serial-fifo \
 		VERILOG_SOURCES=$(abspath $(SERIAL_FIFO_VERILOG)) \
 		SIM_BUILD=$(abspath $(SERIAL_FIFO_SIM))
 
@@ -100,7 +118,7 @@ firrtl-register-bank: $(REGISTER_BANK_FIRRTL)
 verilog-register-bank: $(REGISTER_BANK_VERILOG)
 
 test-register-bank: $(REGISTER_BANK_VERILOG)
-	$(MAKE) --no-print-directory -C tests/register-bank \
+	$(MAKE) --no-print-directory -C tests/silean/register-bank \
 		VERILOG_SOURCES=$(abspath $(REGISTER_BANK_VERILOG)) \
 		SIM_BUILD=$(abspath $(REGISTER_BANK_SIM))
 
@@ -120,7 +138,7 @@ lint-picorv-datapath: $(PICORV_DATAPATH_VERILOG)
 	verilator --lint-only --top-module picorv32_datapath $<
 
 test-picorv-datapath: $(PICORV_DATAPATH_VERILOG)
-	$(MAKE) --no-print-directory -C tests/picorv-datapath \
+	$(MAKE) --no-print-directory -C tests/picorv/datapath \
 		VERILOG_SOURCES=$(abspath $(PICORV_DATAPATH_VERILOG)) \
 		SIM_BUILD=$(abspath $(PICORV_DATAPATH_SIM))
 
@@ -132,7 +150,7 @@ lint-picorv-memory: $(PICORV_MEMORY_VERILOG)
 	verilator --lint-only --top-module PicoRVMemory $<
 
 test-picorv-memory: $(PICORV_MEMORY_VERILOG)
-	$(MAKE) --no-print-directory -C tests/picorv-memory \
+	$(MAKE) --no-print-directory -C tests/picorv/memory \
 		VERILOG_SOURCES=$(abspath $(PICORV_MEMORY_VERILOG)) \
 		SIM_BUILD=$(abspath $(PICORV_MEMORY_SIM))
 
@@ -144,12 +162,12 @@ lint-picorv: $(PICORV_VERILOG)
 	verilator --lint-only --top-module PicoRV $<
 
 test-picorv: $(PICORV_VERILOG)
-	$(MAKE) --no-print-directory -C tests/picorv \
+	$(MAKE) --no-print-directory -C tests/picorv/core \
 		VERILOG_SOURCES=$(abspath $(PICORV_VERILOG)) \
 		SIM_BUILD=$(abspath $(PICORV_SIM))
 
 test-pointer-fifo: $(POINTER_FIFO_VERILOG)
-	$(MAKE) --no-print-directory -C tests/pointer-fifo \
+	$(MAKE) --no-print-directory -C tests/silean/pointer-fifo \
 		VERILOG_SOURCES=$(abspath $(POINTER_FIFO_VERILOG)) \
 		SIM_BUILD=$(abspath $(POINTER_FIFO_SIM))
 
