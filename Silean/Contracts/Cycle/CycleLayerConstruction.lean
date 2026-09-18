@@ -265,7 +265,7 @@ syntax (name := normalizeChildHyp)
 
 syntax (name := normalizeCompositeChildHyp)
   "normalize_child_hyp " Lean.Parser.Tactic.locationHyp " unfolding "
-    Lean.Parser.Tactic.simpArg ", " Lean.Parser.Tactic.simpArg : tactic
+    term ", " term : tactic
 
 /-- Introduce a dependent family of contract matches for children whose
 contract states are all definitionally the empty signal map.  The resulting
@@ -282,8 +282,7 @@ syntax (name := childContractFact)
 
 syntax (name := compositeChildContractFact)
   "child_contract_fact " ident " : " term " from " term " using " term
-    " unfolding " Lean.Parser.Tactic.simpArg ", " Lean.Parser.Tactic.simpArg ", "
-    Lean.Parser.Tactic.simpArg : tactic
+    " unfolding " term ", " term ", " term : tactic
 
 macro_rules
   | `(tactic| normalize_child_contract $proof:term) =>
@@ -292,10 +291,10 @@ macro_rules
         EndpointContext.moduleInput, EndpointContext.instanceOutput,
         SignalSource.value] using $proof)
   | `(tactic| normalize_child_hyp $hyp:locationHyp unfolding
-        $wiring, $context) =>
-      `(tactic| simp only [childContractStep_inputs, childContractStep_outputs,
+        $wiring:term, $context:term) =>
+      `(tactic| dsimp only [childContractStep_inputs, childContractStep_outputs,
         Wiring.childInputValues,
-        $wiring, $context,
+        $wiring:term, $context:term,
         EndpointContext.moduleInput, EndpointContext.instanceOutput,
         SignalSource.value] at $hyp)
   | `(tactic| normalize_child_hyp $hyp:locationHyp) =>
@@ -321,13 +320,15 @@ macro_rules
           normalize_child_contract ($contractTheorem $allowed))
   | `(tactic| child_contract_fact $name:ident : $type:term from
         $allowed:term using $contractTheorem:term unfolding
-        $body, $wiring, $endpointContext) =>
+        $body:term, $wiring:term, $endpointContext:term) =>
       `(tactic|
         have $name : $type := by
-          simpa only [childContractStep_inputs, childContractStep_outputs,
+          have normalized := $contractTheorem $allowed
+          dsimp only [childContractStep_inputs, childContractStep_outputs,
             Wiring.childInputValues,
-            $body, $wiring, $endpointContext,
+            $body:term, $wiring:term, $endpointContext:term,
             EndpointContext.moduleInput, EndpointContext.instanceOutput,
-            SignalSource.value] using ($contractTheorem $allowed))
+            SignalSource.value] at normalized
+          exact normalized)
 
 end Silean.Contracts.Cycle.Certification.Layer

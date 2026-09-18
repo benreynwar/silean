@@ -177,8 +177,8 @@ private theorem implements :
     exact equation.trans ((splitValue_eq_unpack _ _).trans (by rfl))
   have inputField (field : ControlInputs.Field) :
       hierStep.childOutputs .inputsFields field = controlInputs.toValues field := by
-    rw [inputsFieldsValue]
-    cases field <;> rfl
+    exact (congrFun inputsFieldsValue field).trans
+      (congrFun (Inputs.toValues_unpack _).symm field)
   have instrShValue : hierStep.childOutputs .inputsFields .instr_sh =
       controlInputs.instr_sh := by
     simpa [Inputs.toValues] using inputField .instr_sh

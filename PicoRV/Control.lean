@@ -241,6 +241,13 @@ def Inputs.unpack (value : inputsType.Denote) : Inputs :=
       cases field <;> simp [Inputs.unpack, Inputs.toValues]
     _ = value := ControlInputs.signalMap.pack_unpack value
 
+/-- Unpacking a packed input tuple and projecting its fields recovers the
+underlying signal-map values. -/
+theorem Inputs.toValues_unpack (value : inputsType.Denote) :
+    (Inputs.unpack value).toValues = ControlInputs.signalMap.unpack value := by
+  have packed := congrArg ControlInputs.signalMap.unpack (Inputs.pack_unpack value)
+  simpa only [Inputs.pack, ControlInputs.signalMap.unpack_pack] using packed
+
 def inputsOfValues (values : inputMap.Values) : Inputs where
   resetn := values .resetn
   instr_jal := values .instr_jal

@@ -86,21 +86,6 @@ theorem coversChildren_of_certificates
   exact (certificates.get (body.instancePorts.names.locate child) |>.get
     ((childContracts child).ruleNames.locate rule)).down
 
-/-- Compact numeric identity for a dependent child-rule occurrence. -/
-def occurrenceKey
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (occurrence : RuleOccurrence body childContracts) : Nat × Nat :=
-  ((body.instancePorts.names.ordinal occurrence.child).val,
-    ((childContracts occurrence.child).ruleNames.ordinal occurrence.rule).val)
-
-private theorem key_mem_of_occurrence_mem
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {occurrence : RuleOccurrence body childContracts}
-    {available : Availability body childContracts}
-    (member : occurrence ∈ available) :
-    occurrenceKey occurrence ∈ available.map occurrenceKey := by
-  exact List.mem_map.mpr ⟨occurrence, member, rfl⟩
-
 /-- Turn one availability proof per declared read into the universal premise
 required by `Schedule.call`.  The tactic constructs this dependent list one
 read at a time, keeping kernel reduction local to a single wiring endpoint. -/
@@ -188,25 +173,6 @@ theorem sourceAvailable_decidable_rec
   | isFalse proof => exact falseAvailable proof
   | isTrue proof => exact trueAvailable proof
 
-/-- Compact freshness check for a scheduled occurrence. -/
-def freshBool
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (available : Availability body childContracts)
-    (occurrence : RuleOccurrence body childContracts) : Bool :=
-  decide (occurrenceKey occurrence ∉ available.map occurrenceKey)
-
-/-- The compact freshness check supplies the proposition required by
-`Schedule.call`. -/
-theorem fresh_of_bool_eq_true
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (available : Availability body childContracts)
-    (occurrence : RuleOccurrence body childContracts)
-    (fresh : freshBool available occurrence = true) :
-    occurrence ∉ available := by
-  have keyFresh : occurrenceKey occurrence ∉ available.map occurrenceKey :=
-    of_decide_eq_true fresh
-  exact fun member => keyFresh (key_mem_of_occurrence_mem member)
-
 def childFreshBool
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     (available : Availability body childContracts)
@@ -235,44 +201,6 @@ theorem fresh_of_child_bool_eq_true
   have childFresh := child_fresh_of_bool_eq_true available occurrence fresh
   intro member
   exact childFresh (List.mem_map.mpr ⟨occurrence, member, rfl⟩)
-
-def childrenDifferentBool
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (left right : RuleOccurrence body childContracts) : Bool :=
-  letI := body.instancePorts.names.decidableEq
-  decide (left.child ≠ right.child)
-
-theorem children_different_of_bool_eq_true
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (left right : RuleOccurrence body childContracts)
-    (different : childrenDifferentBool left right = true) :
-    left.child ≠ right.child := by
-  letI := body.instancePorts.names.decidableEq
-  apply of_decide_eq_true
-  simpa [childrenDifferentBool] using different
-
-theorem fresh_after_family_of_child_disjoint
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.ports.inputs.Label → Prop}
-    (initial : Availability body childContracts)
-    {Index : Type} (indices : Enumeration Index)
-    (occurrence : Index → RuleOccurrence body childContracts)
-    (injective : Function.Injective occurrence)
-    (fresh : ∀ index, occurrence index ∉ initial)
-    (readsAvailable : ∀ index input, input ∈ (occurrence index).reads →
-      sourceAvailable inputAvailable initial
-        (body.wiring.instanceInput (occurrence index).child input))
-    (candidate : RuleOccurrence body childContracts)
-    (oldChildrenDifferent : candidate.child ∉ initial.map RuleOccurrence.child)
-    (familyChildrenDifferent : ∀ index,
-      candidate.child ≠ (occurrence index).child) :
-    candidate ∉ (Schedule.callFamilyAfter initial indices occurrence injective
-      fresh readsAvailable).finalAvailability := by
-  intro member
-  rw [Schedule.mem_finalAvailability_callFamilyAfter_iff] at member
-  rcases member with old | ⟨index, equal⟩
-  · exact oldChildrenDifferent (List.mem_map.mpr ⟨candidate, old, rfl⟩)
-  · exact familyChildrenDifferent index (congrArg RuleOccurrence.child equal)
 
 theorem fresh_after_family
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
@@ -307,6 +235,18 @@ theorem fresh_cons_of_child_disjoint
   intro member
   rcases List.mem_cons.mp member with equal | inTail
   · exact different (congrArg RuleOccurrence.child equal)
+  · exact freshTail inTail
+
+theorem fresh_cons_of_different
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    (candidate head : RuleOccurrence body childContracts)
+    (tail : Availability body childContracts)
+    (different : candidate ≠ head)
+    (freshTail : candidate ∉ tail) :
+    candidate ∉ head :: tail := by
+  intro member
+  rcases List.mem_cons.mp member with equal | inTail
+  · exact different equal
   · exact freshTail inTail
 
 /-- Direct certificates for each required parent output establish the output
@@ -459,6 +399,17 @@ private def proveChildDifferent (left right : Expr)
     throwError "`derive_schedule` could not prove {description}:{indentExpr type}"
   instantiateMVars goal
 
+private def proveOccurrenceDifferent (left right : Expr)
+    (description : MessageData) : MetaM Expr := do
+  let equality ← mkAppM ``Eq #[left, right]
+  let type ← mkAppM ``Not #[equality]
+  let goal ← mkFreshExprSyntheticOpaqueMVar type
+  let (remaining, _) ← Lean.Elab.runTactic goal.mvarId!
+    (← `(tactic| intro equal; cases equal))
+  unless remaining.isEmpty do
+    throwError "`derive_schedule` could not prove {description}:{indentExpr type}"
+  instantiateMVars goal
+
 private def casesOnWiringParameters (type : Expr) :
     MetaM (Expr × List MVarId) := do
   let goal ← mkFreshExprSyntheticOpaqueMVar type
@@ -563,9 +514,17 @@ private partial def proveFreshFromAvailability (candidate available : Expr)
     let mut proof ← proveBySimp (← mkAppM ``Not
       #[← mkAppM ``List.Mem #[candidate, tail]]) description
     for entry in entries.reverse do
-      let different ← proveChildDifferent candidate entry description
-      proof ← mkAppM ``ScheduleDerivation.fresh_cons_of_child_disjoint
-        #[candidate, entry, tail, different, proof]
+      let childDifferent? ← try
+        pure (some (← proveChildDifferent candidate entry description))
+      catch _ => pure none
+      match childDifferent? with
+      | some different =>
+          proof ← mkAppM ``ScheduleDerivation.fresh_cons_of_child_disjoint
+            #[candidate, entry, tail, different, proof]
+      | none =>
+          let different ← proveOccurrenceDifferent candidate entry description
+          proof ← mkAppM ``ScheduleDerivation.fresh_cons_of_different
+            #[candidate, entry, tail, different, proof]
       tail ← mkAppM ``List.cons #[entry, tail]
     unless ← withTransparency .all <| isDefEq tail available do
       throwError "availability reconstruction failed"
@@ -1405,63 +1364,8 @@ private partial def buildSchedule
       pure <| mkAppN (mkConst ``Schedule.done)
         #[body, childContracts, inputAvailable, Finish, available, finished]
   | .call occurrence :: rest =>
-      let freshCheck ← mkAppM ``ScheduleDerivation.freshBool #[available, occurrence]
-      let fresh ← if ← withTransparency .all <| isDefEq freshCheck (mkConst ``true) then
-        let freshProof ← mkEqRefl freshCheck
-        mkAppM ``ScheduleDerivation.fresh_of_bool_eq_true
-          #[available, occurrence, freshProof]
-      else
-        let mut familyProof? : Option Expr := none
-        let mut precedingCalls : List Expr := []
-        let mut familyTail := available
-        let mut peeling := true
-        while peeling do
-          let (tailName, tailArguments) := familyTail.getAppFnArgs
-          if tailName == ``List.cons && tailArguments.size == 3 then
-            precedingCalls := precedingCalls ++ [tailArguments[1]!]
-            familyTail := tailArguments[2]!
-          else
-            peeling := false
-        for family in familyProviders do
-          let familyFinal ← mkAppM ``Schedule.finalAvailability #[family.schedule]
-          if ← sameExpr familyFinal familyTail then
-            let oldCheck ← mkAppM ``ScheduleDerivation.childFreshBool
-              #[family.initial, occurrence]
-            if ← withTransparency .all <| isDefEq oldCheck (mkConst ``true) then
-              let oldCheckProof ← mkEqRefl oldCheck
-              let oldChildDifferent ← mkAppM
-                ``ScheduleDerivation.child_fresh_of_bool_eq_true
-                  #[family.initial, occurrence, oldCheckProof]
-              let familyDifferent ← withLocalDeclD `index family.indexType fun index => do
-                let called := mkApp family.occurrence index
-                let check ← mkAppM ``ScheduleDerivation.childrenDifferentBool
-                  #[occurrence, called]
-                let proof ← if ← withTransparency .all <|
-                    isDefEq check (mkConst ``true) then
-                  let checkProof ← mkEqRefl check
-                  mkAppM ``ScheduleDerivation.children_different_of_bool_eq_true
-                    #[occurrence, called, checkProof]
-                else
-                  proveChildDifferent occurrence called
-                    m!"rule {step} disjointness from preceding family"
-                mkLambdaFVars #[index] proof
-              let mut proof ← mkAppM
-                ``ScheduleDerivation.fresh_after_family_of_child_disjoint
-                  #[family.initial, family.indices, family.occurrence,
-                    family.injective, family.fresh, family.reads, occurrence,
-                    oldChildDifferent, familyDifferent]
-              for head in precedingCalls.reverse do
-                let different ← proveChildDifferent occurrence head
-                  m!"rule {step} disjointness from preceding call"
-                proof ← mkAppM ``ScheduleDerivation.fresh_cons_of_child_disjoint
-                  #[occurrence, head, familyTail, different, proof]
-                familyTail ← mkAppM ``List.cons #[head, familyTail]
-              familyProof? := some proof
-        match familyProof? with
-        | some proof => pure proof
-        | none =>
-            proveFreshFromAvailability occurrence available familyProviders
-              m!"freshness of rule {step}"
+      let fresh ← proveFreshFromAvailability occurrence available familyProviders
+        m!"freshness of rule {step}"
       let occurrenceReads ← mkAppM ``RuleOccurrence.reads #[occurrence]
       let concreteReads? ← try
         pure (some (← exprList occurrenceReads))

@@ -167,17 +167,20 @@ private theorem implements :
     (wordSplitter.outputRule_holds_iff _ _ _).mp ((childMatch .rightSplit).ruleHolds .apply)
   have leftSign : hierStep.childOutputs .leftSplit (Fin.last 31) = hierStep.inputs .reg_op1 31 := by
     have equation := congrFun leftSplitEquation (Fin.last 31)
-    simpa [Silean.Wiring.childInputValues, body, wiring, context, Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
-      Silean.Composition.SignalSplitter.outputValues, wordSplitter, Silean.SignalSource.value] using equation
+    normalize_child_hyp equation unfolding wiring, context
+    simpa [Silean.Composition.SignalSplitter.outputValues, wordSplitter,
+      Silean.SignalSource.value] using equation
   have rightSign : hierStep.childOutputs .rightSplit (Fin.last 31) = hierStep.inputs .reg_op2 31 := by
     have equation := congrFun rightSplitEquation (Fin.last 31)
-    simpa [Silean.Wiring.childInputValues, body, wiring, context, Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
-      Silean.Composition.SignalSplitter.outputValues, wordSplitter, Silean.SignalSource.value] using equation
+    normalize_child_hyp equation unfolding wiring, context
+    simpa [Silean.Composition.SignalSplitter.outputValues, wordSplitter,
+      Silean.SignalSource.value] using equation
   have subtractModeValue : hierStep.childOutputs .subtractMode .output =
       (hierStep.inputs .instr_sub || hierStep.inputs .is_compare) := by
     have equation := (Silean.Primitives.orOutputRule_holds_iff _ _ _).mp
       ((childMatch .subtractMode).ruleHolds .apply)
-    simpa [Silean.Wiring.childInputValues, body, wiring, context, Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using equation
+    normalize_child_hyp equation unfolding wiring, context
+    exact equation
   have addSubResult : hierStep.childOutputs .addSub .result =
       (Silean.Modules.AddSub.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2)
         (hierStep.inputs .instr_sub || hierStep.inputs .is_compare)).1 := by
@@ -226,32 +229,21 @@ private theorem implements :
       sharedUnsignedLess (valuesOf hierStep.inputs) := by
     have equation := (Silean.Primitives.notOutputRule_holds_iff _ _ _).mp
       ((childMatch .unsignedLess).ruleHolds .apply)
-    have normalized : hierStep.childOutputs .unsignedLess .output =
-        !(hierStep.childOutputs .addSub .carryOut) := by
-      simpa [Silean.Wiring.childInputValues, body, wiring, context,
-        Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
-        Silean.SignalSource.value] using equation
-    exact normalized.trans (congrArg Bool.not addSubCarry)
+    normalize_child_hyp equation unfolding wiring, context
+    exact equation.trans (congrArg Bool.not addSubCarry)
   have signDifferenceValue : hierStep.childOutputs .signDifference .output =
       Bool.xor (hierStep.inputs .reg_op1 31) (hierStep.inputs .reg_op2 31) := by
     have equation := (Silean.Primitives.xorOutputRule_holds_iff _ _ _).mp
       ((childMatch .signDifference).ruleHolds .apply)
-    have normalized : hierStep.childOutputs .signDifference .output =
-        Silean.Primitives.xorValue (hierStep.childOutputs .leftSplit (Fin.last 31))
-          (hierStep.childOutputs .rightSplit (Fin.last 31)) := by
-      simpa [Silean.Wiring.childInputValues, body, wiring, context,
-        Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
-        Silean.SignalSource.value] using equation
-    exact (normalized.trans
+    normalize_child_hyp equation unfolding wiring, context
+    exact (equation.trans
       (apply₂_congr Silean.Primitives.xorValue leftSign rightSign)).trans
       (primitiveXor_eq_boolXor _ _)
   have signedLessValue : hierStep.childOutputs .signedLess .result =
       sharedSignedLess (valuesOf hierStep.inputs) := by
     have equation := Silean.Modules.Mux.result_of_allowed .bit
       (childMatch .signedLess).allowed
-    simp only [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
-      Silean.SignalSource.value] at equation
+    normalize_child_hyp equation unfolding wiring, context
     have selected := mux_congr equation signDifferenceValue leftSign unsignedLessValue
     exact selected.trans <| by
       cases left : hierStep.inputs .reg_op1 31 <;>
@@ -261,47 +253,33 @@ private theorem implements :
       !(equal (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2)) := by
     have equation := (Silean.Primitives.notOutputRule_holds_iff _ _ _).mp
       ((childMatch .notEqual).ruleHolds .apply)
-    have normalized : hierStep.childOutputs .notEqual .output =
-        !(hierStep.childOutputs .equality .result) := by
-      simpa [Silean.Wiring.childInputValues, body, wiring, context,
-        Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
-        Silean.SignalSource.value] using equation
-    exact normalized.trans ((congrArg Bool.not equalityValue).trans
+    normalize_child_hyp equation unfolding wiring, context
+    exact equation.trans ((congrArg Bool.not equalityValue).trans
       (congrArg Bool.not (equal_eq_signalEqual _ _).symm))
   have notSignedLessValue : hierStep.childOutputs .notSignedLess .output =
       !(sharedSignedLess (valuesOf hierStep.inputs)) := by
     have equation := (Silean.Primitives.notOutputRule_holds_iff _ _ _).mp
       ((childMatch .notSignedLess).ruleHolds .apply)
-    have normalized : hierStep.childOutputs .notSignedLess .output =
-        !(hierStep.childOutputs .signedLess .result) := by
-      simpa [Silean.Wiring.childInputValues, body, wiring, context,
-        Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
-        Silean.SignalSource.value] using equation
-    exact normalized.trans (congrArg Bool.not signedLessValue)
+    normalize_child_hyp equation unfolding wiring, context
+    exact equation.trans (congrArg Bool.not signedLessValue)
   have notUnsignedLessValue : hierStep.childOutputs .notUnsignedLess .output =
       !(sharedUnsignedLess (valuesOf hierStep.inputs)) := by
     have equation := (Silean.Primitives.notOutputRule_holds_iff _ _ _).mp
       ((childMatch .notUnsignedLess).ruleHolds .apply)
-    have normalized : hierStep.childOutputs .notUnsignedLess .output =
-        !(hierStep.childOutputs .unsignedLess .output) := by
-      simpa [Silean.Wiring.childInputValues, body, wiring, context,
-        Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
-        Silean.SignalSource.value] using equation
-    exact normalized.trans (congrArg Bool.not unsignedLessValue)
+    normalize_child_hyp equation unfolding wiring, context
+    exact equation.trans (congrArg Bool.not unsignedLessValue)
   have selectUnsignedLessValue : hierStep.childOutputs .selectUnsignedLess .result =
       bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs) else false := by
     have equation := Silean.Modules.Mux.result_of_allowed .bit
       (childMatch .selectUnsignedLess).allowed
-    simp only [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] at equation
+    normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl unsignedLessValue zeroBitValueEquation
   have selectSignedLessValue : hierStep.childOutputs .selectSignedLess .result =
       bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
       else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs) else false := by
     have equation := Silean.Modules.Mux.result_of_allowed .bit
       (childMatch .selectSignedLess).allowed
-    simp only [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] at equation
+    normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl signedLessValue selectUnsignedLessValue
   have selectUnsignedGreaterEqualValue :
       hierStep.childOutputs .selectUnsignedGreaterEqual .result =
@@ -311,8 +289,7 @@ private theorem implements :
         else false := by
     have equation := Silean.Modules.Mux.result_of_allowed .bit
       (childMatch .selectUnsignedGreaterEqual).allowed
-    simp only [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] at equation
+    normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notUnsignedLessValue selectSignedLessValue
   have selectSignedGreaterEqualValue :
       hierStep.childOutputs .selectSignedGreaterEqual .result =
@@ -323,8 +300,7 @@ private theorem implements :
         else false := by
     have equation := Silean.Modules.Mux.result_of_allowed .bit
       (childMatch .selectSignedGreaterEqual).allowed
-    simp only [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] at equation
+    normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notSignedLessValue
       selectUnsignedGreaterEqualValue
   have selectNotEqualValue : hierStep.childOutputs .selectNotEqual .result =
@@ -336,15 +312,13 @@ private theorem implements :
       else false := by
     have equation := Silean.Modules.Mux.result_of_allowed .bit
       (childMatch .selectNotEqual).allowed
-    simp only [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] at equation
+    normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notEqualValue selectSignedGreaterEqualValue
   have selectEqualValue : hierStep.childOutputs .selectEqual .result =
       comparisonOutput (valuesOf hierStep.inputs) := by
     have equation := Silean.Modules.Mux.result_of_allowed .bit
       (childMatch .selectEqual).allowed
-    simp only [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] at equation
+    normalize_child_hyp equation unfolding wiring, context
     have equalityAsBool :
         hierStep.childOutputs .equality .result =
           equal (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) :=
@@ -355,6 +329,7 @@ private theorem implements :
       wordOfBool (comparisonOutput (valuesOf hierStep.inputs)) := by
     have equation := (wordCombiner.outputRule_holds_iff _ _ _).mp
       ((childMatch .comparisonWord).ruleHolds .apply)
+    normalize_child_hyp equation unfolding wiring, context
     have valueEquation := congrFun equation .value
     funext index
     change Fin 32 at index
@@ -365,34 +340,32 @@ private theorem implements :
           hierStep.childOutputs .comparisonWord .value 0 =
             hierStep.childOutputs .selectEqual .result := by
         simpa [Silean.Composition.SignalCombiner.outputValues, wordCombiner,
-          Silean.Wiring.childInputValues, body, wiring, context,
-          Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using bitEquation
+          Silean.SignalSource.value] using bitEquation
       simpa [wordOfBool] using normalized.trans selectEqualValue
     · have normalized :
           hierStep.childOutputs .comparisonWord .value index =
             hierStep.childOutputs .zeroBit .output := by
         simpa [Silean.Composition.SignalCombiner.outputValues, wordCombiner,
-        Silean.Wiring.childInputValues, body, wiring, context,
-          Silean.EndpointContext.instanceOutput, Silean.SignalSource.value, first] using bitEquation
+          Silean.SignalSource.value, first] using bitEquation
       simpa [wordOfBool, first] using normalized.trans zeroBitValueEquation
   have xorSelectedValue : hierStep.childOutputs .xorSelected .output =
       (hierStep.inputs .instr_xori || hierStep.inputs .instr_xor) := by
     have equation := (Silean.Primitives.orOutputRule_holds_iff _ _ _).mp
       ((childMatch .xorSelected).ruleHolds .apply)
-    simpa [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using equation
+    normalize_child_hyp equation unfolding wiring, context
+    exact equation
   have orSelectedValue : hierStep.childOutputs .orSelected .output =
       (hierStep.inputs .instr_ori || hierStep.inputs .instr_or) := by
     have equation := (Silean.Primitives.orOutputRule_holds_iff _ _ _).mp
       ((childMatch .orSelected).ruleHolds .apply)
-    simpa [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using equation
+    normalize_child_hyp equation unfolding wiring, context
+    exact equation
   have andSelectedValue : hierStep.childOutputs .andSelected .output =
       (hierStep.inputs .instr_andi || hierStep.inputs .instr_and) := by
     have equation := (Silean.Primitives.orOutputRule_holds_iff _ _ _).mp
       ((childMatch .andSelected).ruleHolds .apply)
-    simpa [Silean.Wiring.childInputValues, body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using equation
+    normalize_child_hyp equation unfolding wiring, context
+    exact equation
   -- Follow the result-selection mux chain.  Intermediate expressions are
   -- inferred instead of restating the progressively larger nested `bif`.
   have selectAndValue := Silean.Modules.Mux.result_of_allowed wordType
@@ -426,12 +399,16 @@ private theorem implements :
     addSubResult selectComparisonResolved
   have aluOutBoundary : hierStep.outputs .alu_out =
       hierStep.childOutputs .selectArithmetic .result := by
-    simpa [body, wiring, context, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using
-      satisfies.1 .alu_out
+    have boundary := satisfies.1 .alu_out
+    dsimp only [body, wiring, context, Silean.EndpointContext.instanceOutput,
+      Silean.SignalSource.value] at boundary
+    exact boundary
   have aluOut0Boundary : hierStep.outputs .alu_out_0 =
       hierStep.childOutputs .selectEqual .result := by
-    simpa [body, wiring, context, Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using
-      satisfies.1 .alu_out_0
+    have boundary := satisfies.1 .alu_out_0
+    dsimp only [body, wiring, context, Silean.EndpointContext.instanceOutput,
+      Silean.SignalSource.value] at boundary
+    exact boundary
   have addSubBehavior (subtract : Bool) :
       addSub subtract (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) =
         (Silean.Modules.AddSub.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) subtract).1 := by

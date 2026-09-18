@@ -110,9 +110,9 @@ private theorem implements :
       rw [outputRule_holds_iff]
       funext output
       have boundary := satisfies.1 output
+      dsimp only [wiring, context, Silean.EndpointContext.instanceOutput,
+        Silean.SignalSource.value] at boundary
       cases output <;>
-        simp only [wiring, context, Silean.EndpointContext.instanceOutput,
-          Silean.SignalSource.value] at boundary <;>
         first
         | exact boundary.trans ((congrFun captureOutputs _).trans rfl)
         | exact boundary.trans ((congrFun resolveOutputs _).trans rfl)

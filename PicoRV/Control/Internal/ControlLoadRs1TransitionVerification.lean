@@ -217,8 +217,8 @@ private theorem implements :
     exact equation.trans ((splitValue_eq_unpack _ _).trans (by rfl))
   have inputField (field : ControlInputs.Field) :
       hierStep.childOutputs .inputsFields field = controlInputs.toValues field := by
-    rw [inputsFieldsValue]
-    cases field <;> rfl
+    exact (congrFun inputsFieldsValue field).trans
+      (congrFun (Inputs.toValues_unpack _).symm field)
   have instrTrapValue : hierStep.childOutputs .inputsFields .instr_trap =
       controlInputs.instr_trap := by
     simpa [Inputs.toValues] using inputField .instr_trap
@@ -388,31 +388,14 @@ private theorem implements :
     rw [trapPhaseValue, directPhaseValue, loadPhaseValue,
       immediateShiftPhaseValue, immediateAluPhaseValue, storePhaseValue,
       regShiftPhaseValue]
-    cases trap : controlInputs.instr_trap <;>
-      cases direct : controlInputs.is_lui_auipc_jal <;>
-      cases load : controlInputs.is_lb_lh_lw_lbu_lhu <;>
-      cases immediateShift : controlInputs.is_slli_srli_srai <;>
-      cases immediateAlu :
-        controlInputs.is_jalr_addi_slti_sltiu_xori_ori_andi <;>
-      cases store : controlInputs.is_sb_sh_sw <;>
-      cases regShift : controlInputs.is_sll_srl_sra <;>
-      simp [selectedPhase, trap, direct, load, immediateShift, immediateAlu,
-        store, regShift]
+    simp only [selectedPhase, Bool.cond_eq_ite]
   have selectedRinstValue : hierStep.childOutputs .trapRinst .result =
       selectedRinst controlInputs updated := by
     rw [trapRinstValue, directRinstValue, loadRinstValue,
       immediateShiftRinstValue, immediateAluRinstValue, storeRinstValue,
       regShiftRinstValue]
-    cases trap : controlInputs.instr_trap <;>
-      cases direct : controlInputs.is_lui_auipc_jal <;>
-      cases load : controlInputs.is_lb_lh_lw_lbu_lhu <;>
-      cases immediateShift : controlInputs.is_slli_srli_srai <;>
-      cases immediateAlu :
-        controlInputs.is_jalr_addi_slti_sltiu_xori_ori_andi <;>
-      cases store : controlInputs.is_sb_sh_sw <;>
-      cases regShift : controlInputs.is_sll_srl_sra <;>
-      simp [selectedRinst, trap, direct, load, immediateShift, immediateAlu,
-        store, regShift]
+    simp only [selectedRinst, Bool.cond_eq_ite]
+    rfl
 
   have resultStateInputs : body.wiring.childInputValues hierStep.inputs
       hierStep.childOutputs .resultState = structuralState controlInputs updated := by

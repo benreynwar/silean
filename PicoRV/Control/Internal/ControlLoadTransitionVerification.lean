@@ -89,6 +89,16 @@ def selectedSize (inputs : Inputs) : TwoBits :=
   else if inputs.instr_lh || inputs.instr_lhu then twoBitsOfNat 1
   else twoBitsOfNat 0
 
+private theorem selectedSize_eq_convertedSize (inputs : Inputs) :
+    selectedSize inputs = twoBitsOfNat
+      (if inputs.instr_lb = true ∨ inputs.instr_lbu = true then 2
+      else if inputs.instr_lh = true ∨ inputs.instr_lhu = true then 1 else 0) := by
+  unfold selectedSize
+  simp only [Bool.or_eq_true]
+  split
+  · rfl
+  · split <;> rfl
+
 def waitState (updated : stateMap.Values) : stateMap.Values
   | .latched_store => true
   | field => updated field
@@ -133,15 +143,18 @@ theorem structuralTransition_eq_loadTransition (inputs : Inputs)
     (current updated : stateMap.Values) :
     structuralTransition inputs current updated =
       loadTransition inputs current updated := by
-  cases prefetch : (current .mem_do_prefetch : Bool) <;>
-    cases done : inputs.mem_done <;>
-    cases rdata : (current .mem_do_rdata : Bool) <;>
-    cases lb : inputs.instr_lb <;> cases lbu : inputs.instr_lbu <;>
-    cases lh : inputs.instr_lh <;> cases lhu : inputs.instr_lhu <;>
-    simp [structuralTransition, loadTransition, prefetch, done, rdata] <;>
-    congr <;> funext field <;> cases field <;>
-    simp [activeState, waitState, selectedSize, Silean.SignalMap.set,
-      prefetch, done, rdata, lb, lbu, lh, lhu]
+  unfold structuralTransition loadTransition
+  split <;> rename_i waiting
+  · congr
+    funext field
+    cases field <;> simp [waitState, Silean.SignalMap.set]
+  · cases prefetch : (current .mem_do_prefetch : Bool) <;>
+      cases done : inputs.mem_done <;>
+      cases rdata : (current .mem_do_rdata : Bool) <;>
+      simp_all <;>
+      congr <;> funext field <;> cases field <;>
+      simp_all [activeState, Silean.SignalMap.set] <;>
+      exact selectedSize_eq_convertedSize inputs
 
 section Certification
 
@@ -192,8 +205,8 @@ private theorem implements :
     exact equation.trans ((splitValue_eq_unpack _ _).trans (by rfl))
   have inputField (field : ControlInputs.Field) :
       hierStep.childOutputs .inputsFields field = controlInputs.toValues field := by
-    rw [inputsFieldsValue]
-    cases field <;> rfl
+    exact (congrFun inputsFieldsValue field).trans
+      (congrFun (Inputs.toValues_unpack _).symm field)
   have memDoneValue : hierStep.childOutputs .inputsFields .mem_done =
       controlInputs.mem_done := by
     simpa [Inputs.toValues] using inputField .mem_done

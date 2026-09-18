@@ -234,8 +234,8 @@ private theorem implements :
     simpa [ProofSupport.splitValue_eq_unpack, updated] using equation
   have inputField (field : DatapathInputs.Field) :
       hierStep.childOutputs .inputsFields field = datapathInputs.toValues field := by
-    rw [inputsFieldsValue]
-    cases field <;> rfl
+    exact (congrFun inputsFieldsValue field).trans
+      (congrFun (Inputs.toValues_unpack _).symm field)
 
   have amountSplit := (amountSplitter.outputRule_holds_iff _ _ _).mp
     ((childMatch .amountBits).ruleHolds Silean.Composition.SignalComponentRule.apply)

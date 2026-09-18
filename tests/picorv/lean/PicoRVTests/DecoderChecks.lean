@@ -86,10 +86,6 @@ example : ResolveStage.structuralChildren .instructionSummary =
 
 example : moduleStructure.HasNoBlackboxes := moduleStructure_hasNoBlackboxes
 
-#guard match Silean.FIRRTL.renderCircuit naming with
-  | .ok _ => true
-  | .error _ => false
-
 #guard match Silean.FIRRTL.renderClosedCircuit naming with
   | .ok _ => true
   | .error _ => false

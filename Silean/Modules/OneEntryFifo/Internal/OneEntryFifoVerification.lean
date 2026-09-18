@@ -277,16 +277,16 @@ private theorem same (signalType : SignalType) :
     Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
     Authoring.CircuitDescription.bind_apply,
     Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration EnabledResetRegister.Input).values =
-    [.value, .enable, .reset] by rfl]
-  rw [show (inferInstance : Enumeration EnabledRegister.Input).values =
-    [.data, .enable] by rfl]
-  rw [show (inferInstance : Enumeration Control.Input).values =
-    [.storedValid, .downstreamReady] by rfl]
-  rw [show (inferInstance : Enumeration Primitives.BinaryInput).values =
-    [.left, .right] by rfl]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-    [.select, .whenFalse, .whenTrue] by rfl]
+  simp only [show (inferInstance : Enumeration EnabledResetRegister.Input).values =
+      [.value, .enable, .reset] by rfl,
+    show (inferInstance : Enumeration EnabledRegister.Input).values =
+      [.data, .enable] by rfl,
+    show (inferInstance : Enumeration Control.Input).values =
+      [.storedValid, .downstreamReady] by rfl,
+    show (inferInstance : Enumeration Primitives.BinaryInput).values =
+      [.left, .right] by rfl,
+    show (inferInstance : Enumeration Mux.Input).values =
+      [.select, .whenFalse, .whenTrue] by rfl]
   simp [Authoring.CircuitDescription.Internal.finalizeDraft,
     Authoring.CircuitDescription.Internal.validateWireDrivers,
     Authoring.CircuitDescription.Internal.validateWireSources,
@@ -336,16 +336,16 @@ private theorem unique (signalType : SignalType) :
     Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
     Authoring.CircuitDescription.bind_apply,
     Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration EnabledResetRegister.Input).values =
-    [.value, .enable, .reset] by rfl]
-  rw [show (inferInstance : Enumeration EnabledRegister.Input).values =
-    [.data, .enable] by rfl]
-  rw [show (inferInstance : Enumeration Control.Input).values =
-    [.storedValid, .downstreamReady] by rfl]
-  rw [show (inferInstance : Enumeration Primitives.BinaryInput).values =
-    [.left, .right] by rfl]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-    [.select, .whenFalse, .whenTrue] by rfl]
+  simp only [show (inferInstance : Enumeration EnabledResetRegister.Input).values =
+      [.value, .enable, .reset] by rfl,
+    show (inferInstance : Enumeration EnabledRegister.Input).values =
+      [.data, .enable] by rfl,
+    show (inferInstance : Enumeration Control.Input).values =
+      [.storedValid, .downstreamReady] by rfl,
+    show (inferInstance : Enumeration Primitives.BinaryInput).values =
+      [.left, .right] by rfl,
+    show (inferInstance : Enumeration Mux.Input).values =
+      [.select, .whenFalse, .whenTrue] by rfl]
   simp [Authoring.CircuitDescription.Internal.finalizeDraft,
     Authoring.CircuitDescription.Internal.validateWireDrivers,
     Authoring.CircuitDescription.Internal.validateWireSources,

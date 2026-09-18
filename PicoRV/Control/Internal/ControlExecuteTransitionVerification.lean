@@ -161,8 +161,8 @@ private theorem implements :
 
   have inputField (field : ControlInputs.Field) :
       hierStep.childOutputs .inputsFields field = controlInputs.toValues field := by
-    rw [inputsFieldsValue]
-    cases field <;> rfl
+    exact (congrFun inputsFieldsValue field).trans
+      (congrFun (Inputs.toValues_unpack _).symm field)
 
   have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
     ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)

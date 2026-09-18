@@ -283,12 +283,7 @@ private theorem resetApplied_storageState (resetn : Bool)
       storageState (bif !resetn then falseResetMatches else resetMatches)
         retainedMatches immediate ordinarySummaries addSubSummary
         (bif !resetn then false else compare) := by
-  cases resetn
-  · funext register
-    simp only [resetApplied, Bool.not_false, cond_true]
-    cases register <;> rfl
-  · rw [resetApplied_of_resetn]
-    rfl
+  cases resetn <;> funext register <;> cases register <;> rfl
 
 /-- The contract's next state, read through the structural grouping. -/
 private theorem nextState_grouped (inputs : Inputs)
@@ -502,19 +497,18 @@ private theorem implements :
       InstructionMatch.outputValues matchValues := by
     have equation := (InstructionMatch.outputRule_holds_iff _ _ _).mp
       ((coveredMatch .instructionMatch).ruleHolds InstructionMatch.Rule.apply)
-    simpa [matchValues, matchInputs, valuesOf,
-      body, wiring, context, Silean.EndpointContext.moduleInput, Silean.SignalSource.value,
-      InstructionMatch.valuesOf] using equation
+    change hierStep.childOutputs .instructionMatch =
+      InstructionMatch.outputValues matchValues at equation
+    exact equation
 
   let immediateValues : Immediate.Inputs := immediateInputs (valuesOf hierStep.inputs)
   have immediateOutputs : hierStep.childOutputs .immediate =
       Immediate.outputValues immediateValues := by
     have equation := (Immediate.outputRule_holds_iff _ _ _).mp
       ((coveredMatch .immediate).ruleHolds Immediate.Rule.apply)
-    simpa [immediateValues, immediateInputs, valuesOf,
-      body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.SignalSource.value,
-      Immediate.valuesOf] using equation
+    change hierStep.childOutputs .immediate =
+      Immediate.outputValues immediateValues at equation
+    exact equation
 
   have summaryInputsEqual :
       body.wiring.childInputValues hierStep.inputs hierStep.childOutputs
@@ -538,8 +532,9 @@ private theorem implements :
       !(hierStep.inputs .decoder_pseudo_trigger) := by
     have equation := (Silean.Primitives.notOutputRule_holds_iff _ _ _).mp
       ((coveredMatch .pseudoInverter).ruleHolds Silean.Primitives.NotRule.apply)
-    simpa [body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using equation
+    change hierStep.childOutputs .pseudoInverter .output =
+      !(hierStep.inputs .decoder_pseudo_trigger) at equation
+    exact equation
   have triggerValue : hierStep.childOutputs .triggerEnable .output =
       (hierStep.inputs .decoder_trigger && !(hierStep.inputs .decoder_pseudo_trigger)) := by
     have equation := (Silean.Primitives.andOutputRule_holds_iff _ _ _).mp
@@ -550,8 +545,9 @@ private theorem implements :
       !(hierStep.inputs .resetn) := by
     have equation := (Silean.Primitives.notOutputRule_holds_iff _ _ _).mp
       ((coveredMatch .resetInverter).ruleHolds Silean.Primitives.NotRule.apply)
-    simpa [body, wiring, context,
-      Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using equation
+    change hierStep.childOutputs .resetInverter .output =
+      !(hierStep.inputs .resetn) at equation
+    exact equation
   have falseValue : hierStep.childOutputs .falseValue .output = false := by
     exact Silean.Modules.Constant.output_of_allowed .bit false
       (coveredMatch .falseValue).allowed
@@ -698,7 +694,6 @@ private theorem implements :
       rw [boundaryEqual]
       funext output
       cases output <;>
-        simp only [boundaryValues, outputValues, storageState] <;>
         first
         | exact trapValue
         | exact resetOutputValue _

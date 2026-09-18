@@ -141,8 +141,8 @@ private theorem implements :
     exact equation.trans <| by rw [ProofSupport.splitValue_eq_unpack]
   have inputField (field : DatapathInputs.Field) :
       hierStep.childOutputs .inputsFields field = datapathInputs.toValues field := by
-    rw [inputsFieldsValue]
-    cases field <;> rfl
+    exact (congrFun inputsFieldsValue field).trans
+      (congrFun (Inputs.toValues_unpack _).symm field)
   have zeroValue := (Silean.Modules.Constant.outputRule_holds_iff
     (.vector 32 .bit) (wordOfNat 0) _ _ _).mp
     ((childMatch .zeroWord).ruleHolds Silean.Primitives.ConstantRule.apply)

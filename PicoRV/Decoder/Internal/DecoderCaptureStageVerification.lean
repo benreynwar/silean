@@ -440,10 +440,13 @@ private theorem implements :
       rw [outputRule_holds_iff]
       funext output
       have boundary := satisfies.1 output
+      dsimp only [body, wiring, context,
+        Silean.EndpointContext.instanceOutput,
+        Silean.SignalSource.value] at boundary
       cases output <;>
-        simp [body, wiring, context, Silean.EndpointContext.instanceOutput,
-          Silean.SignalSource.value] at boundary ⊢
-      all_goals first | exact boundary.trans branchCurrent | exact boundary.trans (storedOutputValue _)
+        first
+        | exact boundary.trans branchCurrent
+        | exact boundary.trans (storedOutputValue _)
     · rfl
   · constructor
     · have stateEqual : storedContractState nextContractState =

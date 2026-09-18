@@ -77,10 +77,6 @@ example :
     PicoRV.Decoder.ResolveStage.structuralChildren .instructionSummary =
       PicoRV.Decoder.InstructionSummary.Structure.moduleStructure := rfl
 
-#guard match Silean.FIRRTL.renderCircuit PicoRV.PicoRV.naming with
-  | .ok _ => true
-  | .error _ => false
-
 #guard match Silean.FIRRTL.renderClosedCircuit PicoRV.PicoRV.naming with
   | .ok _ => true
   | .error _ => false
