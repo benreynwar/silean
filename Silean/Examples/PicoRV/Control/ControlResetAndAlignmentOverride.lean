@@ -2,7 +2,7 @@ import Silean.Examples.PicoRV.Control.ControlAlignment
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.BitMux.BitMux
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Naming.PrimitiveNaming
 

@@ -1,5 +1,5 @@
 import Silean.Contracts.Fifo.FifoCycleBehavior
-import Silean.Modules.OneEntryFifo.OneEntryFifoCycleCertified
+import Silean.Modules.OneEntryFifo.OneEntryFifoCycleTheorems
 
 namespace Silean.Modules.OneEntryFifo
 

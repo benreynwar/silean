@@ -1,5 +1,6 @@
 import Silean.Composition.BinaryLeafwise
 import Silean.Composition.SignalLogic
+import Silean.Authoring.CircuitDescription
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.BinaryLeafwiseNaming
 import Silean.Primitives.And
@@ -7,6 +8,7 @@ import Silean.Primitives.And
 namespace Silean.Modules.BitwiseAnd
 
 open Silean
+open Silean.Authoring.CircuitDescription
 
 /-! Generic bitwise AND, instantiated from the shared certified binary
 leafwise construction and the one-bit AND primitive. -/
@@ -81,13 +83,12 @@ theorem certified_moduleStructure (signalType : SignalType) :
   Composition.BinaryLeafwise.outputRule_holds_iff signalType inputs state outputs
 
 /-- Contract-facing result law for generic bitwise AND. -/
-theorem result_of_evaluatesTo (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values) (state : emptySignalMap.Values)
-    (outputs : (ports signalType).outputs.Values) (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract signalType).EvaluatesTo inputs state outputs nextState) :
-    outputs .result = signalType.bitwiseAnd (inputs .left) (inputs .right) :=
-  Composition.BinaryLeafwise.result_of_evaluatesTo signalType inputs state outputs
-    nextState evaluates
+theorem result_of_allowed (signalType : SignalType)
+    {step : (cycleContract signalType).Step}
+    (allowed : (cycleContract signalType).Allows step) :
+    step.outputs .result =
+      signalType.bitwiseAnd (step.inputs .left) (step.inputs .right) :=
+  (outputRule_holds_iff signalType _ _ _).mp (allowed.1 .apply)
 
 namespace Naming
 
@@ -119,5 +120,13 @@ end Naming
 
 @[reducible] def design (signalType : SignalType) : Silean.Naming.NamedModule :=
   designWith signalType (.positional signalType)
+
+/-- Place a bitwise AND of two equally typed nets in a circuit description. -/
+noncomputable def place (left right : Net signalType) : Builder (Net signalType) := do
+  let child ← Authoring.CircuitDescription.placeIndexed "bitwise_and"
+    (design signalType) fun
+      | .left => left
+      | .right => right
+  pure (child .result)
 
 end Silean.Modules.BitwiseAnd

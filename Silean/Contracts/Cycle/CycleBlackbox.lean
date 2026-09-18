@@ -49,37 +49,26 @@ def ModuleCycleContract.blackboxCertification
   hasCorrespondingState := fun structuralState => ⟨structuralState, rfl⟩
   hasStructuralResult := by
     intro inputs structuralState
-    refine ⟨ProposedValues.blackbox
-      (contract.evaluate inputs structuralState).1
-      (contract.evaluate inputs structuralState).2, ?_⟩
+    let hierStep : HierStep contract.blackboxStructure :=
+      { inputs := inputs
+        currentState := structuralState
+        outputs := (contract.evaluate inputs structuralState).1
+        nextState := (contract.evaluate inputs structuralState).2 }
+    refine ⟨hierStep, ?_, rfl, rfl⟩
     exact ⟨rfl, rfl⟩
-  structuralResultUnique := by
-    intro inputs structuralState left right leftSatisfies rightSatisfies
-    cases left with
-    | mk leftOutputs leftNext =>
-      cases right with
-      | mk rightOutputs rightNext =>
-        simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-          ModuleCycleContract.blackboxStructure, Primitive.IsSolution,
-          Primitive.OutputsSatisfy, Primitive.NextStateSatisfy] at leftSatisfies rightSatisfies
-        cases leftSatisfies.1.trans rightSatisfies.1.symm
-        cases leftSatisfies.2.trans rightSatisfies.2.symm
-        rfl
-  implements := by
-    intro inputs contractState structuralState proposal corresponds satisfies
-    subst structuralState
-    cases proposal with
-    | mk outputs nextState =>
-      simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-        ModuleCycleContract.blackboxStructure, Primitive.IsSolution,
-        Primitive.OutputsSatisfy, Primitive.NextStateSatisfy,
-        ModuleCycleContract.blackboxBehavior] at satisfies
-      change ∃ nextContractState,
-        contract.EvaluatesTo inputs contractState outputs nextContractState ∧
-          nextContractState = nextState
+  structuralResultUnique :=
+    Primitive.blackbox_hasAtMostOneSolution contract.blackboxBehavior
+  implements := implementsSolutions_iff_implements.mp (by
+    intro contractState hierStep corresponds satisfies
+    cases hierStep with
+    | mk inputs structuralState outputs nextState =>
+      change contractState = structuralState at corresponds
+      subst structuralState
+      change outputs = (contract.evaluate inputs contractState).1 ∧
+        nextState = (contract.evaluate inputs contractState).2 at satisfies
       rw [satisfies.1, satisfies.2]
-      refine ⟨(contract.evaluate inputs contractState).2,
-        contract.evaluate_evaluatesTo inputs contractState, rfl⟩
+      exact ⟨(contract.evaluate inputs contractState).2,
+        contract.evaluateStep_allowed inputs contractState, rfl⟩)
 
 def ModuleCycleContract.blackboxCertified
     (contract : ModuleCycleContract ports) : ModuleCycleCertified ports :=

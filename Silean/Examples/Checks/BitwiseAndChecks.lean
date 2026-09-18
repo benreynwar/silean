@@ -45,14 +45,10 @@ def result (signalType : SignalType) (left right : signalType.Denote) :=
 
 example (signalType : SignalType) (left right : signalType.Denote) :
     result signalType left right = signalType.bitwiseAnd left right := by
-  simpa [result, inputs] using Modules.BitwiseAnd.result_of_evaluatesTo signalType
+  have allowed := (Modules.BitwiseAnd.cycleContract signalType).evaluateStep_allowed
     (inputs signalType left right) SignalMap.emptyValues
-    ((Modules.BitwiseAnd.cycleContract signalType).evaluate
-      (inputs signalType left right) SignalMap.emptyValues).1
-    ((Modules.BitwiseAnd.cycleContract signalType).evaluate
-      (inputs signalType left right) SignalMap.emptyValues).2
-    ((Modules.BitwiseAnd.cycleContract signalType).evaluate_evaluatesTo
-      (inputs signalType left right) SignalMap.emptyValues)
+  simpa [result, inputs, Contracts.Cycle.ModuleCycleContract.evaluateStep] using
+    Modules.BitwiseAnd.result_of_allowed signalType allowed
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

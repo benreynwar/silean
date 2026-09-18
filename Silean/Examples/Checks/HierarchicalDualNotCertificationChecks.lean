@@ -6,92 +6,6 @@ import Silean.Examples.Fixtures.HierarchicalDualNot
 namespace Silean.Examples.Checks.HierarchicalDualNotCertification
 
 open Silean
-
-private def stateCorresponds (_ : Examples.Fixtures.DualNot.cycleContract.state.Values)
-    (_ : Examples.Fixtures.HierarchicalDualNot.moduleStructure.State) : Prop := True
-
-private theorem implements : Contracts.Cycle.Implements Examples.Fixtures.HierarchicalDualNot.moduleStructure
-    Examples.Fixtures.DualNot.cycleContract stateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
-  refine ⟨SignalMap.emptyValues, ?_, trivial⟩
-  constructor
-  · intro name
-    rcases proposal with ⟨outputs, children⟩
-    rcases satisfies with ⟨boundary, childSatisfies⟩
-    cases name
-    · change Examples.Fixtures.DualNot.forwardRule.Holds inputs contractState _
-      rw [Examples.Fixtures.DualNot.forwardRule_holds_iff]
-      have boundary' := boundary Examples.Fixtures.DualNot.Output.forward
-      have child := (childSatisfies Examples.Fixtures.HierarchicalDualNot.Instance.forwardNot).1
-      simpa [ProposedValues.outputs, ProposedValues.boundaryOutputsSatisfy,
-        ProposedValues.childInputs, Examples.Fixtures.HierarchicalDualNot.body,
-        Examples.Fixtures.HierarchicalDualNot.wiring, Examples.Fixtures.HierarchicalDualNot.context,
-        Examples.Fixtures.HierarchicalDualNot.instancePorts,
-        Examples.Fixtures.HierarchicalDualNot.moduleStructure,
-        Examples.Fixtures.HierarchicalDualNot.childStructure, EndpointContext.moduleInput,
-        EndpointContext.instanceOutput, SignalSource.value,
-        Primitive.OutputsSatisfy, Primitives.not] using
-          boundary'.trans (congrFun child .output)
-    · change Examples.Fixtures.DualNot.backwardRule.Holds inputs contractState _
-      rw [Examples.Fixtures.DualNot.backwardRule_holds_iff]
-      have boundary' := boundary Examples.Fixtures.DualNot.Output.backward
-      have child := (childSatisfies Examples.Fixtures.HierarchicalDualNot.Instance.backwardNot).1
-      simpa [ProposedValues.outputs, ProposedValues.boundaryOutputsSatisfy,
-        ProposedValues.childInputs, Examples.Fixtures.HierarchicalDualNot.body,
-        Examples.Fixtures.HierarchicalDualNot.wiring, Examples.Fixtures.HierarchicalDualNot.context,
-        Examples.Fixtures.HierarchicalDualNot.instancePorts,
-        Examples.Fixtures.HierarchicalDualNot.moduleStructure,
-        Examples.Fixtures.HierarchicalDualNot.childStructure, EndpointContext.moduleInput,
-        EndpointContext.instanceOutput, SignalSource.value,
-        Primitive.OutputsSatisfy, Primitives.not] using
-          boundary'.trans (congrFun child .output)
-  · rfl
-
-private theorem hasStructuralResult
-    (inputs : Examples.Fixtures.DualNot.ports.inputs.Values)
-    (currentState : Examples.Fixtures.HierarchicalDualNot.moduleStructure.State) :
-    ∃ proposal, Examples.Fixtures.HierarchicalDualNot.moduleStructure.IsSolution
-      inputs currentState proposal := by
-  let forwardInputs : Primitives.not.ports.inputs.Values :=
-    fun | .input => inputs .forward
-  let backwardInputs : Primitives.not.ports.inputs.Values :=
-    fun | .input => inputs .backward
-  rcases Primitives.notCertified.hasStructuralResult forwardInputs
-      (currentState .forwardNot) with ⟨forwardProposal, forwardSatisfies⟩
-  rcases Primitives.notCertified.hasStructuralResult backwardInputs
-      (currentState .backwardNot) with ⟨backwardProposal, backwardSatisfies⟩
-  let childProposal : (name : Examples.Fixtures.HierarchicalDualNot.Instance) →
-      ProposedValues (Examples.Fixtures.HierarchicalDualNot.childStructure name)
-    | .forwardNot => forwardProposal
-    | .backwardNot => backwardProposal
-  let outputs : Examples.Fixtures.DualNot.ports.outputs.Values := fun
-    | .forward => forwardProposal.outputs .output
-    | .backward => backwardProposal.outputs .output
-  refine ⟨ProposedValues.composite outputs childProposal, ?_⟩
-  constructor
-  · intro output
-    cases output <;> rfl
-  · intro child
-    cases child with
-    | forwardNot =>
-        change Primitives.notCertified.moduleStructure.IsSolution
-          (ProposedValues.childInputs Examples.Fixtures.HierarchicalDualNot.body
-            Examples.Fixtures.HierarchicalDualNot.childStructure inputs childProposal .forwardNot)
-          (currentState .forwardNot) forwardProposal
-        rw [show ProposedValues.childInputs Examples.Fixtures.HierarchicalDualNot.body
-          Examples.Fixtures.HierarchicalDualNot.childStructure inputs childProposal .forwardNot =
-            forwardInputs by funext port; cases port; rfl]
-        exact forwardSatisfies
-    | backwardNot =>
-        change Primitives.notCertified.moduleStructure.IsSolution
-          (ProposedValues.childInputs Examples.Fixtures.HierarchicalDualNot.body
-            Examples.Fixtures.HierarchicalDualNot.childStructure inputs childProposal .backwardNot)
-          (currentState .backwardNot) backwardProposal
-        rw [show ProposedValues.childInputs Examples.Fixtures.HierarchicalDualNot.body
-          Examples.Fixtures.HierarchicalDualNot.childStructure inputs childProposal .backwardNot =
-            backwardInputs by funext port; cases port; rfl]
-        exact backwardSatisfies
-
 open Silean.Contracts.Cycle.Certification.Layer
 
 private abbrev childContracts :=
@@ -99,6 +13,40 @@ private abbrev childContracts :=
 
 private abbrev layerChildren :=
   Examples.Fixtures.HierarchicalDualNot.children
+
+private def stateCorresponds (_ : Examples.Fixtures.DualNot.cycleContract.state.Values)
+    (_ : Examples.Fixtures.HierarchicalDualNot.moduleStructure.State) : Prop := True
+
+private theorem implements : Contracts.Cycle.ImplementsSolutions Examples.Fixtures.HierarchicalDualNot.moduleStructure
+    Examples.Fixtures.DualNot.cycleContract stateCorresponds := by
+  intro contractState hierStep corresponds satisfies
+  derive_empty_state_child_matches childMatches for
+    Examples.Fixtures.HierarchicalDualNot.body from
+      layerChildren, hierStep, satisfies
+  have boundary := satisfies.1
+  refine ⟨SignalMap.emptyValues, ?_, trivial⟩
+  constructor
+  · intro name
+    cases name
+    · change Examples.Fixtures.DualNot.forwardRule.Holds
+        hierStep.inputs contractState _
+      rw [Examples.Fixtures.DualNot.forwardRule_holds_iff]
+      have childOutput := (Primitives.notOutputRule_holds_iff _ _ _).mp
+        ((childMatches .forwardNot).ruleHolds Primitives.NotRule.apply)
+      normalize_child_hyp childOutput unfolding
+        Examples.Fixtures.HierarchicalDualNot.wiring,
+        Examples.Fixtures.HierarchicalDualNot.context
+      exact (boundary .forward).trans childOutput
+    · change Examples.Fixtures.DualNot.backwardRule.Holds
+        hierStep.inputs contractState _
+      rw [Examples.Fixtures.DualNot.backwardRule_holds_iff]
+      have childOutput := (Primitives.notOutputRule_holds_iff _ _ _).mp
+        ((childMatches .backwardNot).ruleHolds Primitives.NotRule.apply)
+      normalize_child_hyp childOutput unfolding
+        Examples.Fixtures.HierarchicalDualNot.wiring,
+        Examples.Fixtures.HierarchicalDualNot.context
+      exact (boundary .backward).trans childOutput
+  · rfl
 
 abbrev forwardOccurrence :
     RuleOccurrence Examples.Fixtures.HierarchicalDualNot.body childContracts :=
@@ -138,8 +86,8 @@ def dualNotCertified : Contracts.Cycle.ModuleCycleCertified Examples.Fixtures.Du
   certification := {
     stateCorresponds := stateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := hasStructuralResult,
+    hasStructuralResult := ruleSchedules.hasSolution coversChildren layerChildren,
     structuralResultUnique := hasAtMostOneSolution,
-    implements := implements }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp implements }
 
 end Silean.Examples.Checks.HierarchicalDualNotCertification

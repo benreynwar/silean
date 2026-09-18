@@ -1,71 +1,65 @@
+import Silean.Authoring.CircuitDescription
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxStructure
-import Silean.Modules.Register.Register
+import Silean.Modules.ResetRegister.Internal.ResetRegisterStructure
 
-namespace Silean.Modules
+/-! # Reset register
+
+A reset register exposes its stored value and, on each clock edge, stores the
+ordinary input unless synchronous reset is high. Reset selects the fixed
+`resetValue`.
+
+The short circuit description below is the reader-facing hardware definition.
+The expanded typed structure used by verification and emission lives under
+`Internal/`; `ResetRegisterTheorems.lean` connects the two and states the
+public correctness results.
+-/
+
+namespace Silean.Modules.ResetRegister.Description
 
 open Silean
-open Silean.Authoring
+open Silean.Authoring.CircuitDescription
 
-/-! A register which stores `value`, except that reset selects a fixed value. -/
+/-- The reset value, mux, and register that make up a reset register. -/
+noncomputable def construction (signalType : SignalType)
+    (resetValue : signalType.Denote) : Builder Unit := do
+  let value <- input "value" signalType
+  let reset <- input "reset" .bit
+  let constant <- Modules.Constant.placeNamed "resetValue" signalType resetValue
+  let selected <- Modules.Mux.placeNamed "selection" reset value constant
+  let stored <- Modules.Register.placeNamed "storage" selected
+  output "value_out" stored
 
-namespace ResetRegister
+noncomputable def description (signalType : SignalType)
+    (resetValue : signalType.Denote) : Description :=
+  build (construction signalType resetValue)
 
-module_ports ports (signalType : SignalType)
-    with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
-      .positional signalType) where
-  input value (schema := typeNaming) : signalType,
-  input reset : .bit,
-  output value (name := "value_out") (schema := typeNaming) : signalType
-
-end ResetRegister
-
-module_design ResetRegister (signalType : SignalType)
-    (resetValue : signalType.Denote)
-    (specialization := .signalType signalType ::
-      Modules.Constant.Naming.parameters signalType resetValue) where
-  boundary (ResetRegister.ports signalType)
-    (naming := ResetRegister.Naming.ports signalType)
-  instances {
-    -- Produces the value loaded during reset.
-    resetValue := Modules.Constant.design signalType resetValue,
-    -- Chooses between the ordinary input and reset value.
-    selection := Modules.Mux.design signalType,
-    -- Holds the selected value across cycles.
-    storage := Modules.Register.design signalType }
-  wiring {
-    outputs {
-      .value := storage.output }
-    instance (.resetValue) {}
-    instance (.selection) {
-      .select := input.reset,
-      .whenFalse := input.value,
-      .whenTrue := resetValue.output }
-    instance (.storage) {
-      .input := selection.result }
-  }
-
-end Silean.Modules
+end Silean.Modules.ResetRegister.Description
 
 namespace Silean.Modules.ResetRegister
 
 open Silean
 open Silean.Authoring
+open Authoring.CircuitDescription
 
-def namingWith {signalType : SignalType} (resetValue : signalType.Denote)
-    (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
-    Silean.Naming.ModuleNaming (moduleStructure signalType resetValue) :=
-  (naming signalType resetValue).withPorts
-    (Naming.portsWithNaming signalType typeNaming)
+/-! ## Placement -/
 
-@[reducible] def designWith {signalType : SignalType}
-    (resetValue : signalType.Denote)
-    (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
-    Silean.Naming.NamedModule :=
-  ⟨ports signalType, moduleStructure signalType resetValue,
-    namingWith resetValue typeNaming⟩
+/-- Place a reset register under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (resetValue : signalType.Denote) (value : Net signalType)
+    (reset : Net .bit) : Builder (Net signalType) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design signalType resetValue) fun
+      | .value => value
+      | .reset => reset
+  pure (child .value)
+
+/-- Place a reset register using the next conventional indexed name. -/
+noncomputable def place (resetValue : signalType.Denote)
+    (value : Net signalType) (reset : Net .bit) : Builder (Net signalType) := do
+  let child ← placeIndexed "reset_register" (design signalType resetValue) fun
+    | .value => value
+    | .reset => reset
+  pure (child .value)
 
 /-! ## Exact cycle behavior -/
 
@@ -78,31 +72,5 @@ module_cycle_contract cycleContract (signalType : SignalType)
   state_rule where
     reads := [reset, value]
     next := { stored := bif reset then resetValue else value }
-
-@[simp] theorem stateRule_apply_stored (signalType : SignalType)
-    (resetValue : signalType.Denote)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (Register.stateMap signalType).Values) :
-    (stateRule signalType resetValue).apply inputs state .stored =
-      bif inputs .reset then resetValue else inputs .value := by
-  rfl
-
-theorem next_stored_of_reset (signalType : SignalType)
-    (resetValue : signalType.Denote)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (Register.stateMap signalType).Values)
-    (reset : inputs .reset = true) :
-    (stateRule signalType resetValue).apply inputs state .stored = resetValue := by
-  rw [stateRule_apply_stored, reset]
-  rfl
-
-theorem next_stored_of_not_reset (signalType : SignalType)
-    (resetValue : signalType.Denote)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (Register.stateMap signalType).Values)
-    (notReset : inputs .reset = false) :
-    (stateRule signalType resetValue).apply inputs state .stored = inputs .value := by
-  rw [stateRule_apply_stored, notReset]
-  rfl
 
 end Silean.Modules.ResetRegister

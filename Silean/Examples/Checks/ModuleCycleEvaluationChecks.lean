@@ -15,10 +15,9 @@ def muxInputs : Modules.BitMux.ports.inputs.Values
 example : Modules.BitMux.cycleContract.applyOutputRules muxInputs SignalMap.emptyValues
     .result = true := rfl
 
-example : Modules.BitMux.cycleContract.EvaluatesTo muxInputs SignalMap.emptyValues
-    (Modules.BitMux.cycleContract.applyOutputRules muxInputs SignalMap.emptyValues)
-    SignalMap.emptyValues :=
-  Modules.BitMux.cycleContract.evaluate_evaluatesTo _ _
+example : Modules.BitMux.cycleContract.Allows
+    (Modules.BitMux.cycleContract.evaluateStep muxInputs SignalMap.emptyValues) :=
+  Modules.BitMux.cycleContract.evaluateStep_allowed _ _
 
 def dualInputs : Examples.Fixtures.DualNot.ports.inputs.Values
   | .forward => true

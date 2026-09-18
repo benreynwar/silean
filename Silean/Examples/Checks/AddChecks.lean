@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Add.Add
+import Silean.Modules.Add.AddTheorems
 
 namespace Silean.Examples.Checks.Add
 
@@ -44,14 +44,11 @@ example (width : Nat) (left right : Fin width → Bool) (carryIn : Bool) :
     BitVector.toNat width (outputs width left right carryIn .result) +
         2 ^ width * (outputs width left right carryIn .carryOut).toNat =
       BitVector.toNat width left + BitVector.toNat width right + carryIn.toNat := by
-  simpa [outputs, inputs] using Modules.Add.numeric_value_of_evaluatesTo
-    width (inputs width left right carryIn) SignalMap.emptyValues
-    ((Modules.Add.cycleContract width).evaluate
-      (inputs width left right carryIn) SignalMap.emptyValues).1
-    ((Modules.Add.cycleContract width).evaluate
-      (inputs width left right carryIn) SignalMap.emptyValues).2
-    ((Modules.Add.cycleContract width).evaluate_evaluatesTo
+  have behavior := Modules.Add.Behavior.of_allowed width
+    ((Modules.Add.cycleContract width).evaluateStep_allowed
       (inputs width left right carryIn) SignalMap.emptyValues)
+  simpa [outputs, inputs, Contracts.Cycle.ModuleCycleContract.evaluateStep] using
+    behavior.numeric_value
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

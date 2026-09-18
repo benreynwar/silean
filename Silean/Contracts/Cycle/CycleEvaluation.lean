@@ -1,12 +1,13 @@
 import Silean.Contracts.Cycle.CycleContract
+import Silean.Foundation.CycleStep
 
 namespace Silean
 
 open Contracts.Cycle
 
-/-! Defines what it means for outputs and next state to satisfy a cycle
-contract, then derives the contract's deterministic `evaluate` function. This
-evaluation is behavioral and does not execute a module structure. -/
+/-! Defines what it means for a boundary `Step` to satisfy a cycle contract,
+then derives deterministic executable evaluation functions. This evaluation is
+behavioral and does not execute a module structure. -/
 
 private structure SignalAssignment (signals : SignalMap) where
   group : SignalGroup signals
@@ -94,6 +95,10 @@ end Contracts.Cycle.CycleOutputRule
 
 namespace Contracts.Cycle.ModuleCycleContract
 
+/-- The values visible at the boundary of one contract cycle. -/
+abbrev Step (contract : ModuleCycleContract ports) :=
+  CycleStep ports contract.state.Values
+
 private def assignments (contract : ModuleCycleContract ports)
     (inputs : ports.inputs.Values) (currentState : contract.state.Values) :
     List (SignalAssignment ports.outputs) :=
@@ -118,11 +123,11 @@ def OutputRulesHold (contract : ModuleCycleContract ports)
     (outputs : ports.outputs.Values) : Prop :=
   ∀ name, (contract.outputRule name).Holds inputs currentState outputs
 
-def EvaluatesTo (contract : ModuleCycleContract ports)
-    (inputs : ports.inputs.Values) (currentState : contract.state.Values)
-    (outputs : ports.outputs.Values) (nextState : contract.state.Values) : Prop :=
-  contract.OutputRulesHold inputs currentState outputs ∧
-    nextState = contract.stateRule.apply inputs currentState
+/-- A boundary step is allowed when its outputs obey every output rule and its
+next state is the result of the state rule. -/
+def Allows (contract : ModuleCycleContract ports) (step : contract.Step) : Prop :=
+  contract.OutputRulesHold step.inputs step.currentState step.outputs ∧
+    step.nextState = contract.stateRule.apply step.inputs step.currentState
 
 def applyOutputRules (contract : ModuleCycleContract ports)
     (inputs : ports.inputs.Values) (currentState : contract.state.Values) :
@@ -151,11 +156,19 @@ def evaluate (contract : ModuleCycleContract ports)
   (contract.applyOutputRules inputs currentState,
     contract.stateRule.apply inputs currentState)
 
-theorem evaluate_evaluatesTo (contract : ModuleCycleContract ports)
+/-- Bundle the executable contract result with the input and current state that
+produced it. -/
+def evaluateStep (contract : ModuleCycleContract ports)
     (inputs : ports.inputs.Values) (currentState : contract.state.Values) :
-    contract.EvaluatesTo inputs currentState
-      (contract.evaluate inputs currentState).1
-      (contract.evaluate inputs currentState).2 :=
+    contract.Step where
+  inputs := inputs
+  currentState := currentState
+  outputs := (contract.evaluate inputs currentState).1
+  nextState := (contract.evaluate inputs currentState).2
+
+theorem evaluateStep_allowed (contract : ModuleCycleContract ports)
+    (inputs : ports.inputs.Values) (currentState : contract.state.Values) :
+    contract.Allows (contract.evaluateStep inputs currentState) :=
   ⟨contract.applyOutputRules_hold inputs currentState, rfl⟩
 
 theorem outputs_unique (contract : ModuleCycleContract ports)
@@ -172,16 +185,39 @@ theorem outputs_unique (contract : ModuleCycleContract ports)
     (contract.outputRule name).writesOutputs
     (leftSatisfies name) (rightSatisfies name) output outputMem
 
-theorem evaluation_unique (contract : ModuleCycleContract ports)
-    (inputs : ports.inputs.Values) (currentState : contract.state.Values)
-    (leftOutputs rightOutputs : ports.outputs.Values)
-    (leftNext rightNext : contract.state.Values)
-    (leftSatisfies : contract.EvaluatesTo inputs currentState leftOutputs leftNext)
-    (rightSatisfies : contract.EvaluatesTo inputs currentState rightOutputs rightNext) :
-    leftOutputs = rightOutputs ∧ leftNext = rightNext :=
-  ⟨contract.outputs_unique inputs currentState leftOutputs rightOutputs
-      leftSatisfies.1 rightSatisfies.1,
-    leftSatisfies.2.trans rightSatisfies.2.symm⟩
+/-- Allowed steps with the same input and current state have the same observable
+result. This is the determinism fact used by certification and execution. -/
+theorem allowed_result_unique (contract : ModuleCycleContract ports)
+    {left right : contract.Step}
+    (inputsEqual : left.inputs = right.inputs)
+    (currentStateEqual : left.currentState = right.currentState)
+    (leftAllowed : contract.Allows left)
+    (rightAllowed : contract.Allows right) :
+    left.outputs = right.outputs ∧ left.nextState = right.nextState := by
+  have rightRules :
+      contract.OutputRulesHold left.inputs left.currentState right.outputs := by
+    rw [inputsEqual, currentStateEqual]
+    exact rightAllowed.1
+  refine ⟨contract.outputs_unique left.inputs left.currentState
+      left.outputs right.outputs leftAllowed.1 rightRules, ?_⟩
+  calc
+    left.nextState =
+        contract.stateRule.apply left.inputs left.currentState := leftAllowed.2
+    _ = contract.stateRule.apply right.inputs right.currentState := by
+      rw [inputsEqual, currentStateEqual]
+    _ = right.nextState := rightAllowed.2.symm
+
+/-- An allowed step has exactly the output and next state computed by the
+contract evaluator. -/
+theorem allowed_result_eq_evaluate (contract : ModuleCycleContract ports)
+    {step : contract.Step} (allowed : contract.Allows step) :
+    step.outputs =
+        (contract.evaluate step.inputs step.currentState).1 ∧
+      step.nextState =
+        (contract.evaluate step.inputs step.currentState).2 :=
+  contract.allowed_result_unique
+    (right := contract.evaluateStep step.inputs step.currentState)
+    rfl rfl allowed (contract.evaluateStep_allowed step.inputs step.currentState)
 
 end Contracts.Cycle.ModuleCycleContract
 

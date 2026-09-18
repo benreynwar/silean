@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Examples.PicoRV.RegsCertified
+import Silean.Examples.PicoRV.RegsTheorems
 
 namespace Silean.Examples.Checks.PicoRVRegs
 

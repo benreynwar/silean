@@ -1,4 +1,6 @@
 import Silean.Contracts.Cycle.CycleImplementation
+import Silean.Authoring.CircuitDescription
+import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.EqPrimitive
 
 namespace Silean.Primitives
@@ -41,20 +43,20 @@ def eqCycleContract : Contracts.Cycle.ModuleCycleContract eq.ports where
 private def eqStateCorresponds (_ : eqCycleContract.state.Values)
     (_ : (ModuleStructure.primitive eq).State) : Prop := True
 
-private theorem eqImplements : Contracts.Cycle.Implements (.primitive eq) eqCycleContract
+private theorem eqImplements : Contracts.Cycle.ImplementsSolutions (.primitive eq) eqCycleContract
     eqStateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
+  cases hierStep with
+  | mk inputs structuralState outputs nextState =>
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    cases proposal with
-    | mk outputs nextState =>
-      change eqOutputRule.Holds inputs contractState outputs
-      simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-        Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
-      rw [satisfies.1]
-      exact SignalGroup.matches_project _ _
+    change eqOutputRule.Holds inputs contractState outputs
+    change outputs = eq.outputValues inputs structuralState ∧
+      nextState = eq.nextStateValues inputs structuralState at satisfies
+    rw [satisfies.1]
+    exact SignalGroup.matches_project _ _
   · rfl
 
 def eqCertified : Contracts.Cycle.ModuleCycleCertified eq.ports where
@@ -63,12 +65,30 @@ def eqCertified : Contracts.Cycle.ModuleCycleCertified eq.ports where
   certification := {
     stateCorresponds := eqStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := fun inputs state =>
-    ⟨ProposedValues.primitive (eq.outputValues inputs state)
-      (eq.nextStateValues inputs state), by
-        simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-          Primitive.IsSolution, Primitive.OutputsSatisfy,
-          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩,
+    hasStructuralResult := Primitive.hasSolution eq,
     structuralResultUnique := Primitive.hasAtMostOneSolution eq,
-    implements := eqImplements }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp eqImplements }
 end Silean.Primitives
+
+namespace Silean.Primitives.Eq
+
+open Silean.Authoring.CircuitDescription
+
+/-- Place a one-bit equality comparator under a caller-chosen instance name. -/
+def placeNamed (name : Silean.Naming.SourceName)
+    (left right : Net .bit) : Builder (Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    Primitives.eqDesign fun
+      | .left => left
+      | .right => right
+  pure (child .output)
+
+/-- Place a one-bit equality comparator in a circuit description. -/
+def place (left right : Net .bit) : Builder (Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeIndexed "eq"
+    Primitives.eqDesign fun
+      | .left => left
+      | .right => right
+  pure (child .output)
+
+end Silean.Primitives.Eq

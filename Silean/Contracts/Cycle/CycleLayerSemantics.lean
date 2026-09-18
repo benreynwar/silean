@@ -8,20 +8,21 @@ open Silean
 proofs consume concrete children only through certifications against the
 contracts already named by the layer. -/
 
-def ChildOutputsAgree {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
+def ChildOutputsAgree {body : ModuleBody}
+    {childContracts : ChildCycleContracts body}
+    {children : ChildStructures body childContracts}
     (available : Availability body childContracts)
-    (left right : (name : body.instancePorts.Name) →
-      ProposedValues (children name).moduleStructure) : Prop :=
+    (left right : HierStep (moduleStructure body children)) : Prop :=
   ∀ occurrence, occurrence ∈ available →
     ∀ output, output ∈ occurrence.writes →
-      (left occurrence.child).outputs output =
-        (right occurrence.child).outputs output
+      (left.children occurrence.child).outputs output =
+        (right.children occurrence.child).outputs output
 
 theorem sourceValue_eq_of_available
-    {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    {children : ChildStructures body childContracts}
     {available : Availability body childContracts}
-    {left right : (name : body.instancePorts.Name) →
-      ProposedValues (children name).moduleStructure}
+    {left right : HierStep (moduleStructure body children)}
     (agree : ChildOutputsAgree available left right)
     (inputAvailable : body.ports.inputs.Label → Prop)
     (leftInputs rightInputs : body.ports.inputs.Values)
@@ -29,8 +30,8 @@ theorem sourceValue_eq_of_available
       leftInputs input = rightInputs input)
     (source : SignalSource body.ports body.instancePorts signalType)
     (availableSource : sourceAvailable inputAvailable available source) :
-    source.value leftInputs (fun name => (left name).outputs) =
-      source.value rightInputs (fun name => (right name).outputs) := by
+    source.value leftInputs left.childOutputs =
+      source.value rightInputs right.childOutputs := by
   cases source with
   | moduleInput input => exact inputsAgree input availableSource
   | instanceOutput child output =>
@@ -40,47 +41,44 @@ theorem sourceValue_eq_of_available
 namespace Schedule
 
 theorem finishAgreement
-    {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    {children : ChildStructures body childContracts}
     {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial)
-    (leftInputs rightInputs : body.ports.inputs.Values)
+    (left right : HierStep (moduleStructure body children))
     (rootInputsAgree : ∀ input, inputAvailable input →
-      leftInputs input = rightInputs input)
-    (currentState : (moduleStructure body children).State)
-    (left right : (name : body.instancePorts.Name) →
-      ProposedValues (children name).moduleStructure)
-    (leftSatisfies : ∀ name, (children name).moduleStructure.IsSolution
-      (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-        leftInputs left name)
-      (currentState name) (left name))
-    (rightSatisfies : ∀ name, (children name).moduleStructure.IsSolution
-      (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-        rightInputs right name)
-      (currentState name) (right name))
+      left.inputs input = right.inputs input)
+    (leftSatisfies : (moduleStructure body children).IsSolution left)
+    (rightSatisfies : (moduleStructure body children).IsSolution right)
+    (currentStatesEqual :
+      HierStep.currentState (moduleStructure body children) left =
+        HierStep.currentState (moduleStructure body children) right)
     (initialAgreement : ChildOutputsAgree initial left right) :
     ChildOutputsAgree schedule.finalAvailability left right := by
   induction schedule with
   | done finished => exact initialAgreement
   | @call available occurrence readsAvailable fresh rest induction =>
       have childInputsAgree : InputsAgreeOn occurrence.reads
-          (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-            leftInputs left occurrence.child)
-          (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-            rightInputs right occurrence.child) := by
+          (left.children occurrence.child).inputs
+          (right.children occurrence.child).inputs := by
         intro input inputMem
-        exact sourceValue_eq_of_available initialAgreement inputAvailable
-          leftInputs rightInputs rootInputsAgree
+        have sourceEqual := sourceValue_eq_of_available initialAgreement
+          inputAvailable left.inputs right.inputs rootInputsAgree
           (body.wiring.instanceInput occurrence.child input)
           (readsAvailable input inputMem)
+        exact congrFun (leftSatisfies.2.1 occurrence.child) input |>.trans
+          (sourceEqual.trans
+            (congrFun (rightSatisfies.2.1 occurrence.child).symm input))
       have writesAgree : ∀ output, output ∈ occurrence.writes →
-          (left occurrence.child).outputs output =
-            (right occurrence.child).outputs output := by
+          (left.children occurrence.child).outputs output =
+            (right.children occurrence.child).outputs output := by
         exact (children occurrence.child).bundle.structuralRule occurrence.rule
-          |>.determines _ _ _ _ _
-            (leftSatisfies occurrence.child)
-            (rightSatisfies occurrence.child)
+          |>.determines _ _
+            (leftSatisfies.2.2 occurrence.child)
+            (rightSatisfies.2.2 occurrence.child)
+            (congrFun currentStatesEqual occurrence.child)
             childInputsAgree
       have extended : ChildOutputsAgree (occurrence :: available) left right := by
         intro called member output outputMem
@@ -148,80 +146,6 @@ noncomputable def replay {body : ModuleBody}
 
 end Schedule
 
-namespace StateSchedule
-
-/-- A completed state schedule makes the inputs selected by every immediate
-child state rule independent of the particular structural solution.  This is
-the semantic reason for the state schedule's finish condition: scheduled
-output rules determine every internal source needed by the next-state rules. -/
-theorem childStateInputs_eq
-    {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
-    (schedule : StateSchedule body childContracts)
-    (inputs : body.ports.inputs.Values)
-    (currentState : (moduleStructure body children).State)
-    (left right : (name : body.instancePorts.Name) →
-      ProposedValues (children name).moduleStructure)
-    (leftSatisfies : ∀ name, (children name).moduleStructure.IsSolution
-      (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-        inputs left name)
-      (currentState name) (left name))
-    (rightSatisfies : ∀ name, (children name).moduleStructure.IsSolution
-      (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-        inputs right name)
-      (currentState name) (right name))
-    (child : body.instancePorts.Name) :
-    let selection := (childContracts child).stateRule.readsInputs
-    selection.project
-        (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-          inputs left child) =
-      selection.project
-        (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-          inputs right child) := by
-  dsimp
-  apply SignalGroup.project_eq_of_eq_on
-  intro input inputMem
-  apply sourceValue_eq_of_available
-    (Schedule.finishAgreement schedule inputs inputs (fun _ _ => rfl) currentState
-      left right leftSatisfies rightSatisfies (by
-        intro occurrence member
-        contradiction))
-    (fun _ => True) inputs inputs (fun _ _ => rfl)
-    (body.wiring.instanceInput child input)
-  exact Schedule.finished schedule child input inputMem
-
-/-- Consequently, a child's public next-state rule produces the same value in
-any two structural solutions with the same parent inputs and current state. -/
-theorem childStateRuleApply_eq
-    {body : ModuleBody} {childContracts : ChildCycleContracts body} {children : ChildStructures body childContracts}
-    (schedule : StateSchedule body childContracts)
-    (inputs : body.ports.inputs.Values)
-    (currentState : (moduleStructure body children).State)
-    (left right : (name : body.instancePorts.Name) →
-      ProposedValues (children name).moduleStructure)
-    (leftSatisfies : ∀ name, (children name).moduleStructure.IsSolution
-      (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-        inputs left name)
-      (currentState name) (left name))
-    (rightSatisfies : ∀ name, (children name).moduleStructure.IsSolution
-      (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-        inputs right name)
-      (currentState name) (right name))
-    (child : body.instancePorts.Name)
-    (contractState : (childContracts child).state.Values) :
-    (childContracts child).stateRule.apply
-        (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-          inputs left child)
-        contractState =
-      (childContracts child).stateRule.apply
-        (ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-          inputs right child)
-        contractState := by
-  unfold CycleStateRule.apply
-  rw [schedule.childStateInputs_eq inputs currentState left right
-    leftSatisfies rightSatisfies child]
-
-end StateSchedule
-
 /-! A complete child-rule schedule is sufficient to prove uniqueness of a
 composite's simultaneous structural equations. This theorem does not require a
 parent behavioral contract; contracts are needed only when certifying what the
@@ -235,44 +159,42 @@ theorem Schedule.hasAtMostOneSolution
     (allInputsAvailable : ∀ input, inputAvailable input)
     (covers : CoversAllRules body childContracts schedule.finalAvailability) :
     (moduleStructure body children).HasAtMostOneSolution := by
-  intro inputs currentState left right leftSatisfies rightSatisfies
-  rcases left with ⟨leftOutputs, leftChildren⟩
-  rcases right with ⟨rightOutputs, rightChildren⟩
-  change ProposedValues.boundaryOutputsSatisfy body ((fun name => (children name).moduleStructure))
-      inputs leftOutputs leftChildren ∧ _ at leftSatisfies
-  change ProposedValues.boundaryOutputsSatisfy body ((fun name => (children name).moduleStructure))
-      inputs rightOutputs rightChildren ∧ _ at rightSatisfies
+  intro left right leftSatisfies rightSatisfies inputsEqual currentStatesEqual
   have childOutputsAgree := Schedule.finishAgreement schedule
-    inputs inputs (fun _ _ => rfl) currentState leftChildren rightChildren
-    leftSatisfies.2 rightSatisfies.2
+    left right (fun input _ => congrFun inputsEqual input)
+    leftSatisfies rightSatisfies currentStatesEqual
     (by intro occurrence member; cases member)
   have childInputsEqual : ∀ name,
-      ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-          inputs leftChildren name =
-        ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-          inputs rightChildren name := by
+      (left.children name).inputs = (right.children name).inputs := by
     intro name
     funext input
-    exact sourceValue_eq_of_available childOutputsAgree inputAvailable
-      inputs inputs (fun _ _ => rfl) (body.wiring.instanceInput name input)
-      (sourceAvailable_mono (fun input _ => allInputsAvailable input) (fun _ member => member)
-        (sourceAvailable_of_covers covers _))
-  have childrenEqual : leftChildren = rightChildren := by
+    have sourceEqual := sourceValue_eq_of_available childOutputsAgree
+      inputAvailable left.inputs right.inputs
+      (fun rootInput _ => congrFun inputsEqual rootInput)
+      (body.wiring.instanceInput name input)
+      (sourceAvailable_mono
+        (fun rootInput _ => allInputsAvailable rootInput)
+        (fun _ member => member) (sourceAvailable_of_covers covers _))
+    exact (congrFun (leftSatisfies.2.1 name) input).trans
+      (sourceEqual.trans (congrFun (rightSatisfies.2.1 name).symm input))
+  have childrenEqual : left.children = right.children := by
     funext name
     apply (children name).certification.structuralResultUnique
-    · exact leftSatisfies.2 name
-    · rw [childInputsEqual name]
-      exact rightSatisfies.2 name
-  have outputsEqual : leftOutputs = rightOutputs := by
+    · exact leftSatisfies.2.2 name
+    · exact rightSatisfies.2.2 name
+    · exact childInputsEqual name
+    · exact congrFun currentStatesEqual name
+  have outputsEqual : left.outputs = right.outputs := by
     funext output
     rw [leftSatisfies.1 output, rightSatisfies.1 output]
     exact sourceValue_eq_of_available childOutputsAgree inputAvailable
-      inputs inputs (fun _ _ => rfl) (body.wiring.moduleOutput output)
-      (sourceAvailable_mono (fun input _ => allInputsAvailable input) (fun _ member => member)
-        (sourceAvailable_of_covers covers _))
-  cases outputsEqual
-  cases childrenEqual
-  rfl
+      left.inputs right.inputs
+      (fun input _ => congrFun inputsEqual input)
+      (body.wiring.moduleOutput output)
+      (sourceAvailable_mono
+        (fun input _ => allInputsAvailable input)
+        (fun _ member => member) (sourceAvailable_of_covers covers _))
+  exact CompositeHierStep.ext inputsEqual outputsEqual childrenEqual
 
 namespace RuleSchedules
 
@@ -393,42 +315,8 @@ theorem hasAtMostOneSolution
     · exact Combined.add_preserves schedules.combineOutputs schedules.state
         (by intro input _; trivial) _
         (mem_combineOutputs schedules parentRule _ outputMember)
-  intro inputs currentState left right leftSatisfies rightSatisfies
-  rcases left with ⟨leftOutputs, leftChildren⟩
-  rcases right with ⟨rightOutputs, rightChildren⟩
-  change ProposedValues.boundaryOutputsSatisfy body ((fun name => (children name).moduleStructure))
-      inputs leftOutputs leftChildren ∧ _ at leftSatisfies
-  change ProposedValues.boundaryOutputsSatisfy body ((fun name => (children name).moduleStructure))
-      inputs rightOutputs rightChildren ∧ _ at rightSatisfies
-  have childOutputsAgree := Schedule.finishAgreement schedules.combined.schedule
-    inputs inputs (fun _ _ => rfl) currentState leftChildren rightChildren
-    leftSatisfies.2 rightSatisfies.2
-    (by intro occurrence member; cases member)
-  have childInputsEqual : ∀ name,
-      ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-          inputs leftChildren name =
-        ProposedValues.childInputs body ((fun name => (children name).moduleStructure))
-          inputs rightChildren name := by
-    intro name
-    funext input
-    exact sourceValue_eq_of_available childOutputsAgree (fun _ => True)
-      inputs inputs (fun _ _ => rfl) (body.wiring.instanceInput name input)
-      (sourceAvailable_of_covers combinedCovers _)
-  have childrenEqual : leftChildren = rightChildren := by
-    funext name
-    apply (children name).certification.structuralResultUnique
-    · exact leftSatisfies.2 name
-    · rw [childInputsEqual name]
-      exact rightSatisfies.2 name
-  have outputsEqual : leftOutputs = rightOutputs := by
-    funext output
-    rw [leftSatisfies.1 output, rightSatisfies.1 output]
-    exact sourceValue_eq_of_available childOutputsAgree (fun _ => True)
-      inputs inputs (fun _ _ => rfl) (body.wiring.moduleOutput output)
-      (sourceAvailable_of_covers combinedCovers _)
-  cases outputsEqual
-  cases childrenEqual
-  rfl
+  exact schedules.combined.schedule.hasAtMostOneSolution children
+    (fun _ => trivial) combinedCovers
 
 end RuleSchedules
 

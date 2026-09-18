@@ -87,18 +87,19 @@ contracts, and certificates; `Composition/SignalLogic.lean` contains generic
 signal-value logic laws, including recursive value equality and its
 equivalence to Lean equality.
 
-`Modules/TupleField.lean` wraps a tuple splitter to expose one type-correct
-field. The selected `SignalMap.Label` determines its signal type directly;
+`Modules/TupleField/TupleField.lean` wraps a tuple splitter to expose one
+type-correct field. The selected `SignalMap.Label` determines its signal type directly;
 no positional field witness or type transport is exposed.
-`TupleFieldCertified.lean` proves the wrapper's direct
-field-selection cycle contract.
+`Modules/TupleField/Internal/TupleFieldVerification.lean` proves the wrapper's
+direct field-selection cycle contract, while `TupleFieldTheorems.lean` exposes
+the supported boundary result.
 
 ## Meaning and certification
 
 | Source | Responsibility |
 | --- | --- |
 | `Semantics/Trace.lean` | Generic relational finite traces and their composition laws |
-| `Semantics/StructuralEquations.lean` | `ProposedValues`, order-independent structural solutions, and generic assembly of a composite solution from consistent child solutions |
+| `Semantics/StructuralEquations.lean` | `HierStep`, order-independent structural solutions, and generic assembly of a composite solution from consistent child solutions |
 | `Semantics/StructuralDependency.lean` | Semantic dependency rules and at-most-one solutions |
 | `Semantics/StructuralExecution.lean` | Contract-independent one-cycle transitions and finite relational executions |
 | `Contracts/SignalExpectation.lean` | Recursive zero/one/don't-care expectations and matching for signal values and labelled maps |
@@ -108,18 +109,18 @@ field-selection cycle contract.
 | `Contracts/Cycle/CycleLayerSchedule.lean` | The single child-implementation-independent schedule representation over a module body and its child contracts |
 | `Contracts/Cycle/CycleLayerSemantics.lean` | Generic replay and structural-uniqueness proofs over contract-only layer schedules |
 | `Contracts/Cycle/CycleLayerExistence.lean` | Private proof evaluator and generic structural-existence proof over the same schedules |
-| `Contracts/Cycle/CycleLayerConstruction.lean` | Public child-contract helpers and generic scheduled-layer certification assembly |
+| `Contracts/Cycle/CycleLayerConstruction.lean` | `ChildContractMatch` projections for parent proofs and generic scheduled-layer certification assembly; raw child-step reconstruction remains internal here |
 | `Contracts/Reset/ResetContract.lean` | Contract-only synchronous-reset synchronization and ternary finite-trace behavior |
 | `Contracts/Reset/ResetImplementation.lean` | Non-vacuous structural totality and direct structural-trace refinement for reset contracts, without a public state mapping |
 | `Contracts/Fifo/FifoContract.lean` | Interface-based, latency-independent reset-synchronized FIFO traces, reusable queue laws, and non-vacuous certified bundles |
 | `Contracts/Fifo/FifoPortContract.lean` | Standard FIFO contract specialized to the canonical FIFO interface |
 | `Contracts/Fifo/FifoCycleBehavior.lean` | Exact ready/valid cycle behavior and its serial behavioral composition |
 | `Contracts/Fifo/FifoCycleRefinement.lean` | Private-proof adapter from exact cycle certification and a logical queue invariant to FIFO certification |
-| `Composition/LeafwiseComposition.lean` | Generic split/component/combine hierarchy, proposal construction, and shared component scheduling |
+| `Composition/LeafwiseComposition.lean` | Generic split/component/combine hierarchy and shared component scheduling |
 | `Composition/BinaryLeafwise.lean` | Certified recursive construction for stateless binary leafwise operations |
 | `Composition/Reduction.lean` | Generic balanced reduction hierarchy parameterized by a binary operation and identity |
 | `Composition/FifoSerialComposition.lean` | Generic two-child serial FIFO structural layer |
-| `Composition/FifoSerialCycleCertified.lean` | Contract-parametric cycle certification of the serial layer |
+| `Composition/FifoSerialCertification.lean` | Contract-parametric cycle certification of the serial layer |
 | `Composition/FifoSerialRefinement.lean` | Preservation of latency-independent FIFO behavior under serial composition |
 
 Schedules are proof data. They neither belong to `ModuleStructure` nor define
@@ -159,10 +160,15 @@ hierarchy and child modules, so clients need not unfold those identities.
 
 Reusable modules have one directory each and a uniform public boundary:
 `moduleStructure`, `cycleContract`, `certification`, `certified`, and `design`.
-Ordinary fixed composites use the authoring declarations and place structural
-certification in a sibling `*Certified.lean` file. Recursive/generated modules
+Ordinary fixed composites use the authoring declarations, keep expanded
+structure and certification under `Internal/`, and expose reusable proof
+results through a sibling `*Theorems.lean` file. Recursive/generated modules
 (`Add`, `BinaryToOneHot`, `CombMuxTree`, `Constant`, `Equality`, `Increment`,
 `Mask`, and `Register`) keep their dependent construction in ordinary Lean.
+`Equality`, `BinaryToOneHot`, `CombMuxTree`, `Add`, `Increment`, and `Register`
+keep their recursive hardware definitions in the main file, recursive
+certification under `Internal/`, and public structural laws in sibling theorem
+files.
 The reduction specializations (`All`, `Any`) and binary-leafwise
 specializations (`BitwiseAnd`, `BitwiseOr`, `BitwiseXor`) also remain direct
 ordinary-Lean instantiations of their generic `Composition/` machinery. These
@@ -170,7 +176,8 @@ are intentional exceptions to fixed-module syntax, not alternate public APIs.
 The PicoRV32 decoder capture stage separates its readable hardware, exact cycle
 contract, and emission naming in `Examples/PicoRV/Decoder/DecoderCaptureStage.lean`
 from child schedules, state correspondence, and correctness proof in
-`Examples/PicoRV/Decoder/DecoderCaptureStageCertified.lean`.
+`Examples/PicoRV/Decoder/Internal/DecoderCaptureStageVerification.lean`; its
+supported result is exposed by `DecoderCaptureStageTheorems.lean`.
 The decoder,
 mux-tree, and register-bank contracts share `BitVector.toIndex` from the
 foundation arithmetic utilities. The XOR primitive and `HalfAdder` provide the
@@ -198,25 +205,26 @@ state or reset input. `EnabledResetCounter` composes Increment and
 EnabledResetRegister into the generic synchronous state element used by FIFO
 pointers; its public
 contract describes modular arithmetic rather than feedback wiring.
-`Mux`, `EnabledResetCounter`, and `AddSub` keep readable structure and natural
-contract laws in their main sources and isolate structural certification in
-their corresponding `*Certified.lean` sources. Recursive `Add` and `Increment`
-retain ordinary Lean construction internally while exposing canonical
-`design` and `certification` values to parents.
+`Mux`, `AddSub`, and `EnabledResetCounter` keep readable structure and natural
+contract laws in their main sources, public guarantees in `*Theorems.lean`,
+and structural certification under `Internal/`. Recursive `Add` and
+`Increment` retain ordinary Lean hardware construction in their main files
+while moving schedules and inductive certification under `Internal/`.
 `Fifo` is the certified pointer-and-register-bank composition: two
 zero-reset counters feed FifoPointerControl, whose addresses and transfer
 enables drive RegisterBank and the counters. Its contract owns logical pointer
 and entry state and remains independent of those four structural children.
 Reset is synchronous: it wins in pointer next state without suppressing the
 current pre-edge handshake or clearing storage.
-`Fifo/FifoPointerControl.lean` contains its combinational equations, public
-laws, and complete thirteen-child design; `FifoPointerControlCertified.lean`
-contains its child certificates, schedule, and structural equivalence proof.
+`Fifo/FifoPointerControl.lean` contains its combinational equations and
+complete thirteen-child design; `FifoPointerControlTheorems.lean` exposes its
+public behavior, while `Internal/FifoPointerControlVerification.lean` contains
+its child certificates, schedule, and structural proof.
 `Modules/Fifo/Fifo.lean` contains the readable `module_design`, exact cycle
-behavior, and public contract laws. `FifoCycleCertified.lean` contains only the
-child certificates, explicit rule schedules, state correspondence, and proof
-that the structure implements that cycle contract. `FifoCertified.lean` then
-proves the separate latency-independent FIFO contract.
+behavior, and public contract laws. `FifoCycleTheorems.lean` exposes the exact
+cycle guarantee backed by `Internal/FifoCycleVerification.lean`.
+`FifoFifoTheorems.lean` then exposes the separate latency-independent FIFO
+certification backed by `Internal/FifoFifoVerification.lean`.
 `FifoProperties` gives this cycle contract its logical queue interpretation and
 proves the reachable occupancy invariant, empty/full boundaries, and exact
 ordinary-cycle enqueue/dequeue behavior. FIFO-local circular-buffer arithmetic

@@ -1,5 +1,5 @@
 import Silean.Examples.PicoRV.Datapath.DatapathBasicUpdates
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterCertified
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 
 namespace Silean.Examples.PicoRV.Datapath.ProofSupport
 

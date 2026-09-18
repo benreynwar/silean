@@ -1,7 +1,7 @@
 import Silean.Examples.PicoRV.Memory.MemoryBasicUpdates
 import Silean.Examples.PicoRV.Memory.MemoryLookaheadCapture
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 
 namespace Silean.Examples.PicoRV.Memory

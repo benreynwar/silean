@@ -1,5 +1,5 @@
 import Silean.Examples.Fixtures.PicoRVDatapath
-import Silean.Examples.PicoRV.DatapathCertified
+import Silean.Examples.PicoRV.DatapathTheorems
 import Silean.FIRRTL
 
 namespace Silean.Examples.Checks.PicoRVDatapathStandaloneChecks

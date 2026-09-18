@@ -7,7 +7,7 @@ import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.EnabledResetRegister.EnabledResetRegister
 import Silean.Modules.Register.Register
 import Silean.Modules.ResetRegister.ResetRegister
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.Constant.Constant
 import Silean.Primitives.Not
 import Silean.Naming.PrimitiveNaming

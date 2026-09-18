@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.RegisterBank.RegisterBankCertified
+import Silean.Modules.RegisterBank.RegisterBankTheorems
 
 namespace Silean.Examples.Checks.RegisterBank
 
@@ -37,10 +37,28 @@ def initialState : (Modules.RegisterBank.stateMap .bit 2).Values
 def sameAddressCycle := (Modules.RegisterBank.cycleContract .bit 2 1).evaluate
   (inputs true 1 false 1) initialState
 
+def sameAddressStep := (Modules.RegisterBank.cycleContract .bit 2 1).evaluateStep
+  (inputs true 1 false 1) initialState
+
 -- Combinational read observes the pre-update value; the write appears in next state.
 #guard sameAddressCycle.1 (.readValue 0)
 #guard !(sameAddressCycle.2 .entries 1)
 #guard sameAddressCycle.2 .entries 3
+
+-- The reader-facing Step laws capture the two important timing facts: reads
+-- see the current array, while an enabled write changes the next array.
+example : sameAddressStep.outputs (.readValue 0) =
+    sameAddressStep.currentState .entries
+      (BitVector.toIndex 2 (sameAddressStep.inputs (.readAddress 0))) := by
+  exact Modules.RegisterBank.readValue_of_allowed
+    ((Modules.RegisterBank.cycleContract .bit 2 1).evaluateStep_allowed _ _) 0
+
+example : sameAddressStep.nextState .entries
+      (BitVector.toIndex 2 (sameAddressStep.inputs .writeAddress)) =
+    sameAddressStep.inputs .writeValue := by
+  apply Modules.RegisterBank.written_entry_of_allowed
+    ((Modules.RegisterBank.cycleContract .bit 2 1).evaluateStep_allowed _ _)
+  rfl
 
 def dualReadInputs : (Modules.RegisterBank.ports .bit 2 2).inputs.Values
   | .writeEnable => false
@@ -56,6 +74,12 @@ def dualReadCycle := (Modules.RegisterBank.cycleContract .bit 2 2).evaluate
 #guard !(dualReadCycle.1 (.readValue 1))
 
 example : Modules.RegisterBank.entryCount 3 = 8 := by decide
+
+example : Contracts.Cycle.Implements
+    (Modules.RegisterBank.moduleStructure .bit 2 1)
+    (Modules.RegisterBank.cycleContract .bit 2 1)
+    (Modules.RegisterBank.certification .bit 2 1).stateCorresponds :=
+  Modules.RegisterBank.implements_contract .bit 2 1
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

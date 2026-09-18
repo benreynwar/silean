@@ -8,7 +8,12 @@ namespace Silean.Modules
 open Silean
 open Silean.Authoring
 
-/-! A combinational comparison between an input signal and a fixed value. -/
+/-! # Comparison with a constant
+
+This combinational circuit compares an input signal with a fixed value. Its
+authored hardware and exact contract are here, certification construction is
+under `Internal/`, and `EqualsConstantTheorems.lean` is the public proof
+interface. -/
 
 namespace EqualsConstant
 
@@ -95,16 +100,13 @@ theorem output_eq_true_iff_of_holds (signalType : SignalType)
   rw [(outputRule_holds_iff signalType constant inputs state outputs).mp holds]
   exact signalType.equal_eq_true_iff _ _
 
-theorem result_of_evaluatesTo (signalType : SignalType)
+/-- Contract-facing result law over the shared boundary-step API. -/
+theorem result_of_allowed (signalType : SignalType)
     (constant : signalType.Denote)
-    (inputs : (ports signalType).inputs.Values)
-    (state : emptySignalMap.Values)
-    (outputs : (ports signalType).outputs.Values)
-    (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract signalType constant).EvaluatesTo
-      inputs state outputs nextState) :
-    outputs .result = signalType.equal (inputs .value) constant :=
-  (outputRule_holds_iff signalType constant inputs state outputs).mp
-    (evaluates.1 .apply)
+    {step : (cycleContract signalType constant).Step}
+    (allowed : (cycleContract signalType constant).Allows step) :
+    step.outputs .result = signalType.equal (step.inputs .value) constant :=
+  (outputRule_holds_iff signalType constant step.inputs step.currentState
+    step.outputs).mp (allowed.1 .apply)
 
 end Silean.Modules.EqualsConstant

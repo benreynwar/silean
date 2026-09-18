@@ -112,17 +112,13 @@ module_cycle_contract cycleContract (inputWidth : Nat) (outputWidth : Nat)
     reads := []
     next := {}
 
-/-- Contract-level meaning of the layout output. -/
-theorem output_of_evaluatesTo (inputWidth outputWidth : Nat)
+/-- Every contract-allowed layout step produces the specified bit layout. -/
+theorem output_of_allowed (inputWidth outputWidth : Nat)
     (layout : Fin outputWidth → BitSource inputWidth)
-    (inputs : (ports inputWidth outputWidth).inputs.Values)
-    (state : emptySignalMap.Values)
-    (outputs : (ports inputWidth outputWidth).outputs.Values)
-    (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract inputWidth outputWidth layout).EvaluatesTo
-      inputs state outputs nextState) :
-    outputs .output = VectorLayout.apply layout (inputs .input) :=
-  (applyRule_holds_iff inputWidth outputWidth layout inputs state outputs).mp
-    (evaluates.1 .apply)
+    {step : (cycleContract inputWidth outputWidth layout).Step}
+    (allowed : (cycleContract inputWidth outputWidth layout).Allows step) :
+    step.outputs .output = VectorLayout.apply layout (step.inputs .input) :=
+  (applyRule_holds_iff inputWidth outputWidth layout
+    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
 
 end Silean.Modules.VectorLayout

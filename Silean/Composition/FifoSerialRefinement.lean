@@ -1,6 +1,6 @@
 import Silean.Contracts.Fifo.FifoCycleRefinement
 import Silean.Contracts.Fifo.FifoPortContract
-import Silean.Composition.FifoSerialCycleCertified
+import Silean.Composition.FifoSerialCertification
 
 namespace Silean.Composition.FifoSerial
 

@@ -6,7 +6,7 @@ import Silean.Composition.LeafwiseComposition
 import Silean.Composition.BinaryLeafwise
 import Silean.Composition.Reduction
 import Silean.Composition.FifoSerialComposition
-import Silean.Composition.FifoSerialCycleCertified
+import Silean.Composition.FifoSerialCertification
 import Silean.Composition.FifoSerialRefinement
 
 /-! # Reusable composition mechanisms

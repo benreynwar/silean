@@ -68,13 +68,12 @@ private theorem refineExecution
   | nil =>
       exact ⟨cycleState, synchronization, corresponds, aligned, .nil synchronization⟩
   | cons input output transition rest induction =>
-      rcases transition with ⟨proposal, solution, outputEq, nextEq⟩
-      rcases cycleCertified.solution_matches_evaluate input cycleState _ proposal
-          corresponds solution with ⟨evaluatedOutputEq, nextCorresponds⟩
+      rcases cycleCertified.realization_matches_evaluate cycleState
+          corresponds transition with
+        ⟨evaluatedOutputEq, nextCorresponds⟩
       have actualOutputEq : output =
           (cycleCertified.cycleContract.evaluate input cycleState).1 :=
-        outputEq.symm.trans evaluatedOutputEq
-      rw [nextEq] at nextCorresponds
+        evaluatedOutputEq
       cases resetEq : fifoContract.resetAsserted input
       · cases synchronization with
         | none =>

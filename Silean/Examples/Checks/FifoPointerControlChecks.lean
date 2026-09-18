@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Fifo.FifoPointerControlCertified
+import Silean.Modules.Fifo.FifoPointerControlTheorems
 
 namespace Silean.Examples.Checks.FifoPointerControl
 
@@ -76,12 +76,16 @@ example : (inputReadyRule 2).readsInputs.labels =
 #guard outputs .writeAdvance
 
 example : (readAddressRule 2).Holds inputs SignalMap.emptyValues outputs := by
-  exact ((cycleContract 2).evaluate_evaluatesTo inputs SignalMap.emptyValues).1
+  exact ((cycleContract 2).evaluateStep_allowed inputs SignalMap.emptyValues).1
     .readAddress
 
 example : (inputReadyRule 2).Holds inputs SignalMap.emptyValues outputs := by
-  exact ((cycleContract 2).evaluate_evaluatesTo inputs SignalMap.emptyValues).1
+  exact ((cycleContract 2).evaluateStep_allowed inputs SignalMap.emptyValues).1
     .inputReady
+
+example : Behavior 2 inputs outputs :=
+  Behavior.of_allowed 2
+    ((cycleContract 2).evaluateStep_allowed inputs SignalMap.emptyValues)
 
 -- At address width zero, the sole pointer bit is the wrap bit and the address
 -- value is the unique empty vector.
@@ -112,27 +116,15 @@ example (readPointer writePointer : Pointer 2)
 noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 0) := certified 0
 noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 2) := certified 2
 
-noncomputable def structuralState (addressWidth : Nat) :
-    (moduleStructure addressWidth).State :=
-  (moduleStructure addressWidth).structuralState.defaultValues
-
-example : ∃ proposal,
-    (moduleStructure 2).IsSolution inputs (structuralState 2) proposal ∧
-    ∀ other, (moduleStructure 2).IsSolution inputs (structuralState 2) other →
-      other = proposal :=
-  (certified 2).hasExactlyOneStructuralResult inputs (structuralState 2)
-
 def zeroInputs : (ports 0).inputs.Values
   | .readPointer => wrapZero
   | .writePointer => wrapOne
   | .inputValid => true
   | .outputReady => true
 
-example : ∃ proposal,
-    (moduleStructure 0).IsSolution zeroInputs (structuralState 0) proposal ∧
-    ∀ other, (moduleStructure 0).IsSolution zeroInputs (structuralState 0) other →
-      other = proposal :=
-  (certified 0).hasExactlyOneStructuralResult zeroInputs (structuralState 0)
+example : Contracts.Cycle.Implements (moduleStructure 2) (cycleContract 2)
+    (certification 2).stateCorresponds :=
+  implements_contract 2
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

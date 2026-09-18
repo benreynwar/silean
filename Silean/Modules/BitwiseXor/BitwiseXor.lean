@@ -1,3 +1,4 @@
+import Silean.Authoring.CircuitDescription
 import Silean.Composition.BinaryLeafwise
 import Silean.Composition.SignalLogic
 import Silean.Naming.PrimitiveNaming
@@ -81,13 +82,12 @@ theorem certified_moduleStructure (signalType : SignalType) :
   Composition.BinaryLeafwise.outputRule_holds_iff signalType inputs state outputs
 
 /-- Contract-facing result law for generic bitwise XOR. -/
-theorem result_of_evaluatesTo (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values) (state : emptySignalMap.Values)
-    (outputs : (ports signalType).outputs.Values) (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract signalType).EvaluatesTo inputs state outputs nextState) :
-    outputs .result = signalType.bitwiseXor (inputs .left) (inputs .right) :=
-  Composition.BinaryLeafwise.result_of_evaluatesTo signalType inputs state outputs
-    nextState evaluates
+theorem result_of_allowed (signalType : SignalType)
+    {step : (cycleContract signalType).Step}
+    (allowed : (cycleContract signalType).Allows step) :
+    step.outputs .result =
+      signalType.bitwiseXor (step.inputs .left) (step.inputs .right) :=
+  (outputRule_holds_iff signalType _ _ _).mp (allowed.1 .apply)
 
 namespace Naming
 
@@ -119,5 +119,15 @@ end Naming
 
 @[reducible] def design (signalType : SignalType) : Silean.Naming.NamedModule :=
   designWith signalType (.positional signalType)
+
+/-- Place a bitwise XOR of two equally typed nets in a circuit description. -/
+noncomputable def place (left right : Authoring.CircuitDescription.Net signalType) :
+    Authoring.CircuitDescription.Builder
+      (Authoring.CircuitDescription.Net signalType) := do
+  let child ← Authoring.CircuitDescription.placeIndexed "bitwise_xor"
+    (design signalType) fun
+      | .left => left
+      | .right => right
+  pure (child .result)
 
 end Silean.Modules.BitwiseXor

@@ -197,6 +197,13 @@ def withPorts {modulePorts : ModulePorts}
   | _, .composite key _ instanceName childNaming =>
       .composite key newPorts instanceName childNaming
 
+@[simp] theorem ports_withPorts {modulePorts : ModulePorts}
+    (newPorts : ModulePortsNaming modulePorts)
+    {moduleStructure : ModuleStructure modulePorts}
+    (naming : ModuleNaming moduleStructure) :
+    (naming.withPorts newPorts).ports = newPorts := by
+  cases naming <;> rfl
+
 end ModuleNaming
 
 structure NamedModule where

@@ -1,50 +1,61 @@
+import Silean.Authoring.CircuitDescription
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
-import Silean.Naming.PrimitiveNaming
-import Silean.Primitives.EqPrimitive
-import Silean.Primitives.NotPrimitive
-import Silean.Primitives.OrPrimitive
+import Silean.Modules.OneEntryFifo.Control.Internal.OneEntryFifoControlStructure
+import Silean.Primitives.Eq
+import Silean.Primitives.Not
+import Silean.Primitives.Or
 
-namespace Silean.Modules.OneEntryFifo
+/-! # One-entry FIFO control
+
+This is the one-entry FIFO's private combinational handshake child. It makes
+the upstream ready when the entry is empty or the downstream is ready, and it
+requests a storage update exactly when downstream readiness and current
+occupancy agree.
+
+It is kept as a child because the same two decisions drive several independent
+data-path elements in the parent. It is not intended as a general-purpose
+public module.
+-/
+
+namespace Silean.Modules.OneEntryFifo.Control.Description
 
 open Silean
-open Silean.Authoring
+open Silean.Authoring.CircuitDescription
 
-/-! Combinational handshake control for a fall-through one-entry FIFO. -/
+noncomputable def construction : Builder Unit := do
+  let storedValid ← input "storedValid" .bit
+  let downstreamReady ← input "downstreamReady" .bit
+  let empty ← Primitives.Not.placeNamed "invertValid" storedValid
+  let upstreamReady ← Primitives.Or.placeNamed "readyOr" downstreamReady empty
+  let storageUpdate ← Primitives.Eq.placeNamed "updateEq"
+    downstreamReady storedValid
+  output "upstreamReady" upstreamReady
+  output "storageUpdate" storageUpdate
 
-module_design Control where
-  ports {
-    input storedValid : .bit,
-    input downstreamReady : .bit,
-    output upstreamReady : .bit,
-    output storageUpdate : .bit }
-  instances {
-    -- Detects that the storage entry is empty.
-    invertValid := Primitives.notDesign,
-    -- Makes the upstream ready when storage is empty or downstream is ready.
-    readyOr := Primitives.orDesign,
-    -- Detects the two cases in which the storage-valid bit must change.
-    updateEq := Primitives.eqDesign }
-  wiring {
-    outputs {
-      .upstreamReady := readyOr.output,
-      .storageUpdate := updateEq.output }
-    instance (.invertValid) {
-      .input := input.storedValid }
-    instance (.readyOr) {
-      .left := input.downstreamReady,
-      .right := invertValid.output }
-    instance (.updateEq) {
-      .left := input.downstreamReady,
-      .right := input.storedValid }
-  }
+noncomputable def description : Description :=
+  build construction
 
-end Silean.Modules.OneEntryFifo
+end Silean.Modules.OneEntryFifo.Control.Description
 
 namespace Silean.Modules.OneEntryFifo.Control
 
 open Silean
 open Silean.Authoring
+open Authoring.CircuitDescription
+
+/-! ## Placement -/
+
+/-- Place the FIFO control child under a caller-chosen instance name. The
+result is `(upstreamReady, storageUpdate)`. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (storedValid downstreamReady : Net .bit) :
+    Builder (Net .bit × Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeNamed name design fun
+    | .storedValid => storedValid
+    | .downstreamReady => downstreamReady
+  pure (child .upstreamReady, child .storageUpdate)
+
+/-! ## Exact combinational behavior -/
 
 module_cycle_contract cycleContract for ports where
   state := emptySignalMap

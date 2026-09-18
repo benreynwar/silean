@@ -3,7 +3,7 @@ import Silean.Authoring.ModuleDesign
 import Silean.Modules.BinaryToOneHot.BinaryToOneHot
 import Silean.Modules.Constant.Constant
 import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Modules.VectorLayout.VectorLayout
 import Silean.Modules.VectorSlice.VectorSlice

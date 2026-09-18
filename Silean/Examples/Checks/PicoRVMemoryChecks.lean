@@ -1,4 +1,4 @@
-import Silean.Examples.PicoRV.MemoryCertified
+import Silean.Examples.PicoRV.MemoryTheorems
 import Silean.FIRRTL
 
 namespace Silean.Examples.Checks.PicoRVMemoryChecks

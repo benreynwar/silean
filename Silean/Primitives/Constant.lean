@@ -43,20 +43,21 @@ private def stateCorresponds (value : Bool)
     (_ : (ModuleStructure.primitive (constant value)).State) : Prop := True
 
 private theorem implements (value : Bool) :
-    Contracts.Cycle.Implements (.primitive (constant value)) (constantCycleContract value)
+    Contracts.Cycle.ImplementsSolutions (.primitive (constant value))
+      (constantCycleContract value)
       (stateCorresponds value) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
+  cases hierStep with
+  | mk inputs structuralState outputs nextState =>
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    cases proposal with
-    | mk outputs nextState =>
-      change (constantOutputRule value).Holds inputs contractState outputs
-      simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-        Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
-      rw [satisfies.1]
-      exact SignalGroup.matches_project _ _
+    change (constantOutputRule value).Holds inputs contractState outputs
+    change outputs = (constant value).outputValues inputs structuralState ∧
+      nextState = (constant value).nextStateValues inputs structuralState at satisfies
+    rw [satisfies.1]
+    exact SignalGroup.matches_project _ _
   · rfl
 
 def constantCertified (value : Bool) :
@@ -66,13 +67,9 @@ def constantCertified (value : Bool) :
   certification := {
     stateCorresponds := stateCorresponds value
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-    hasStructuralResult := fun inputs state =>
-      ⟨ProposedValues.primitive ((constant value).outputValues inputs state)
-        ((constant value).nextStateValues inputs state), by
-          simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-            Primitive.IsSolution, Primitive.OutputsSatisfy,
-            Primitive.NextStateSatisfy, ProposedValues.primitive]⟩
+    hasStructuralResult := Primitive.hasSolution (constant value)
     structuralResultUnique := Primitive.hasAtMostOneSolution (constant value)
-    implements := implements value }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp
+      (implements value) }
 
 end Silean.Primitives

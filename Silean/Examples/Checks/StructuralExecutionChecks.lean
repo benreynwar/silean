@@ -17,10 +17,16 @@ def notOutputs (value : Bool) : Primitives.not.ports.outputs.Values
 
 def emptyState : notModule.State := SignalMap.emptyValues
 
+def notHierStep (input output : Bool) : HierStep notModule :=
+  { inputs := notInputs input
+    currentState := emptyState
+    outputs := notOutputs output
+    nextState := emptyState }
+
 example : notModule.Transition (notInputs false) emptyState
     (notOutputs true) emptyState := by
-  refine ModuleStructure.transition_of_solution (proposal := ProposedValues.primitive
-    (notOutputs true) emptyState) ?_
+  refine ModuleStructure.transition_of_solution
+    (hierStep := notHierStep false true) ?_
   change Primitives.not.IsSolution (notInputs false) emptyState emptyState
     (notOutputs true)
   exact ⟨rfl, rfl⟩
@@ -28,16 +34,16 @@ example : notModule.Transition (notInputs false) emptyState
 example : notModule.Executes emptyState [notInputs false, notInputs true]
     [notOutputs true, notOutputs false] emptyState := by
   apply Trace.cons (notInputs false) (notOutputs true)
-  · refine ModuleStructure.transition_of_solution (proposal := ProposedValues.primitive
-      (notOutputs true) emptyState) ?_
+  · refine ModuleStructure.transition_of_solution
+      (hierStep := notHierStep false true) ?_
     change Primitives.not.IsSolution (notInputs false) emptyState emptyState
       (notOutputs true)
     exact ⟨rfl, rfl⟩
   · change notModule.Executes emptyState [notInputs true]
       [notOutputs false] emptyState
     rw [ModuleStructure.Executes.single_iff]
-    refine ModuleStructure.transition_of_solution (proposal := ProposedValues.primitive
-      (notOutputs false) emptyState) ?_
+    refine ModuleStructure.transition_of_solution
+      (hierStep := notHierStep true false) ?_
     change Primitives.not.IsSolution (notInputs true) emptyState emptyState
       (notOutputs false)
     exact ⟨rfl, rfl⟩
@@ -54,25 +60,20 @@ def registerState (value : Bool) : registerModule.State
 def registerOutputs (value : Bool) : Primitives.register.ports.outputs.Values
   | .output => value
 
-def registerProposal (current input : Bool) : ProposedValues registerModule :=
-  ProposedValues.primitive (registerOutputs current) (registerState input)
+def registerHierStep (current input : Bool) : HierStep registerModule :=
+  { inputs := registerInputs input
+    currentState := registerState current
+    outputs := registerOutputs current
+    nextState := registerState input }
 
 theorem registerSolution (current input : Bool) :
-    registerModule.IsSolution (registerInputs input) (registerState current)
-      (registerProposal current input) := by
+    registerModule.IsSolution (registerHierStep current input) := by
   change Primitives.register.IsSolution (registerInputs input)
     (registerState current) (registerState input) (registerOutputs current)
   exact ⟨rfl, rfl⟩
 
 theorem registerHasSolution : registerModule.HasSolution := by
-  intro inputs state
-  refine ⟨ProposedValues.primitive
-    (Primitives.register.outputValues inputs state)
-    (Primitives.register.nextStateValues inputs state), ?_⟩
-  change Primitives.register.IsSolution inputs state
-    (Primitives.register.nextStateValues inputs state)
-    (Primitives.register.outputValues inputs state)
-  exact ⟨rfl, rfl⟩
+  exact Primitives.register.hasSolution
 
 example : registerModule.Executes (registerState false)
     [registerInputs true, registerInputs false]

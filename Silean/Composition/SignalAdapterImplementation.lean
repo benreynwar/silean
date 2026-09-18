@@ -46,16 +46,17 @@ private def emptyStateCorresponds (_ : emptySignalMap.Values)
     (_ : emptySignalMap.Values) : Prop := True
 
 private theorem implements (splitter : SignalSplitter) :
-    Contracts.Cycle.Implements (.splitter splitter) splitter.cycleContract
+    Contracts.Cycle.ImplementsSolutions (.splitter splitter) splitter.cycleContract
       emptyStateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
+  cases hierStep with
+  | mk inputs outputs =>
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    change splitter.outputRule.Holds inputs contractState proposal
-    simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-      SignalSplitter.IsSolution] at satisfies
+    change splitter.outputRule.Holds inputs contractState outputs
+    change outputs = splitter.outputValues inputs at satisfies
     rw [satisfies]
     exact SignalGroup.matches_project _ _
   · rfl
@@ -67,10 +68,10 @@ def certified (splitter : SignalSplitter) :
   certification := {
     stateCorresponds := emptyStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := fun inputs _ =>
-      ⟨ProposedValues.splitter (splitter.outputValues inputs), rfl⟩,
+    hasStructuralResult := splitter.hasSolution,
     structuralResultUnique := splitter.hasAtMostOneSolution,
-    implements := splitter.implements }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp
+      splitter.implements }
 
 end SignalSplitter
 
@@ -105,16 +106,17 @@ private def emptyStateCorresponds (_ : emptySignalMap.Values)
     (_ : emptySignalMap.Values) : Prop := True
 
 private theorem implements (combiner : SignalCombiner) :
-    Contracts.Cycle.Implements (.combiner combiner) combiner.cycleContract
+    Contracts.Cycle.ImplementsSolutions (.combiner combiner) combiner.cycleContract
       emptyStateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
+  cases hierStep with
+  | mk inputs outputs =>
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    change combiner.outputRule.Holds inputs contractState proposal
-    simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-      SignalCombiner.IsSolution] at satisfies
+    change combiner.outputRule.Holds inputs contractState outputs
+    change outputs = combiner.outputValues inputs at satisfies
     rw [satisfies]
     exact SignalGroup.matches_project _ _
   · rfl
@@ -126,10 +128,10 @@ def certified (combiner : SignalCombiner) :
   certification := {
     stateCorresponds := emptyStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := fun inputs _ =>
-      ⟨ProposedValues.combiner (combiner.outputValues inputs), rfl⟩,
+    hasStructuralResult := combiner.hasSolution,
     structuralResultUnique := combiner.hasAtMostOneSolution,
-    implements := combiner.implements }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp
+      combiner.implements }
 
 end SignalCombiner
 

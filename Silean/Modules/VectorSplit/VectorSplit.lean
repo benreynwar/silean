@@ -122,4 +122,14 @@ theorem right_of_holds (element : SignalType) (leftWidth rightWidth : Nat)
     outputs .right = rightPart (inputs .value) :=
   (outputRule_holds_iff element leftWidth rightWidth inputs state outputs).mp holds |>.2
 
+/-- Every contract-allowed split step returns the two corresponding portions
+of the input vector. -/
+theorem outputs_of_allowed (element : SignalType) (leftWidth rightWidth : Nat)
+    {step : (cycleContract element leftWidth rightWidth).Step}
+    (allowed : (cycleContract element leftWidth rightWidth).Allows step) :
+    step.outputs .left = leftPart (step.inputs .value) ∧
+      step.outputs .right = rightPart (step.inputs .value) :=
+  (outputRule_holds_iff element leftWidth rightWidth
+    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
+
 end Silean.Modules.VectorSplit

@@ -4,6 +4,7 @@ import Silean.Composition.LeafwiseComposition
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.Constant
+import Silean.Authoring.CircuitDescription
 
 namespace Silean.Modules.Constant
 
@@ -185,28 +186,27 @@ private def bitStateCorresponds (_ : emptySignalMap.Values)
     (_ : (bitCertificationStructure value layerChildren).State) : Prop := True
 
 private theorem bitImplements :
-    Contracts.Cycle.Implements
+    Contracts.Cycle.ImplementsSolutions
       (bitCertificationStructure value layerChildren) (cycleContract .bit value)
       (bitStateCorresponds value layerChildren) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
   letI : Subsingleton
       ((bitChildContracts value .source).state.Values) := by
     change Subsingleton emptySignalMap.Values
     infer_instance
-  have sourceEvaluates :=
+  have sourceMatch :=
     (Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      layerChildren inputs structuralState proposal
-        satisfies .source SignalMap.emptyValues).1
+      (body := bitBody value) layerChildren hierStep satisfies .source
+        SignalMap.emptyValues)
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
     rw [outputRule_holds_iff]
-    rcases proposal with ⟨outputs, children⟩
     have boundary := satisfies.1
-    have sourceOutput : (children .source).outputs .output = value :=
+    have sourceOutput : (hierStep.children .source).outputs .output = value :=
       (Primitives.constantOutputRule_holds_iff value _ _ _).mp
-        (sourceEvaluates.1 Primitives.ConstantRule.apply)
+        (sourceMatch.ruleHolds Primitives.ConstantRule.apply)
     exact (boundary .output).trans sourceOutput
   · rfl
 
@@ -321,11 +321,11 @@ private def aggregateStateCorresponds (_ : emptySignalMap.Values)
     (_ : (aggregateCertificationStructure splitter value layerChildren).State) : Prop := True
 
 private theorem aggregateImplements :
-    Contracts.Cycle.Implements
+    Contracts.Cycle.ImplementsSolutions
       (aggregateCertificationStructure splitter value layerChildren)
       (cycleContract splitter.aggregateType value)
       (aggregateStateCorresponds splitter value layerChildren) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
   have childStateSubsingleton
       (child : (aggregateBody splitter).instancePorts.Name) :
       Subsingleton
@@ -337,51 +337,50 @@ private theorem aggregateImplements :
   have childMatch (child : (aggregateBody splitter).instancePorts.Name) := by
     letI := childStateSubsingleton child
     exact Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      layerChildren inputs structuralState
-        proposal satisfies child (by cases child <;> exact SignalMap.emptyValues)
-  rcases proposal with ⟨outputs, childProposals⟩
+      (body := aggregateBody splitter) layerChildren hierStep satisfies child
+        (by cases child <;> exact SignalMap.emptyValues)
   have boundary := satisfies.1
   have componentOutputs : ∀ component,
-      (childProposals (.component component)).outputs .output =
+      (hierStep.children (.component component)).outputs .output =
         componentValue splitter value component := by
     intro component
-    have evaluates := (childMatch (.component component)).1
-    have holds := evaluates.1 Primitives.ConstantRule.apply
+    have holds := (childMatch (.component component)).ruleHolds Primitives.ConstantRule.apply
     change (outputRule _ (componentValue splitter value component)).Holds _ _ _ at holds
     exact (outputRule_holds_iff _ _ _ _ _).mp holds
-  have combineOutputs : (childProposals (.combiner .output)).outputs =
+  have combineOutputs : (hierStep.children (.combiner .output)).outputs =
       splitter.combiner.outputValues
-        (ProposedValues.childInputs (aggregateBody splitter)
-          ((fun name => (layerChildren name).moduleStructure)) inputs childProposals
-          (.combiner .output)) := by
+        ((aggregateBody splitter).wiring.childInputValues
+          hierStep.inputs hierStep.childOutputs (.combiner .output)) := by
     exact (Composition.SignalCombiner.outputRule_holds_iff splitter.combiner _ _ _).mp
-      ((childMatch (.combiner .output)).1.1 Composition.SignalComponentRule.apply)
+      ((childMatch (.combiner .output)).ruleHolds Composition.SignalComponentRule.apply)
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
     rw [outputRule_holds_iff]
-    change outputs .output = value
+    change hierStep.outputs .output = value
     cases splitter with
     | vector length element =>
         have boundaryOutput := boundary .output
-        change outputs .output =
-          (childProposals (.combiner .output)).outputs Composition.AggregatePort.value at boundaryOutput
+        change hierStep.outputs .output =
+          (hierStep.children (.combiner .output)).outputs
+            Composition.AggregatePort.value at boundaryOutput
         rw [boundaryOutput, congrFun combineOutputs Composition.AggregatePort.value]
         change (fun component =>
-          (childProposals (.component component)).outputs .output) = value
+          (hierStep.children (.component component)).outputs .output) = value
         funext component
         exact componentOutputs component
     | tuple fields =>
         have boundaryOutput := boundary .output
-        change outputs .output =
-          (childProposals (.combiner .output)).outputs Composition.AggregatePort.value at boundaryOutput
+        change hierStep.outputs .output =
+          (hierStep.children (.combiner .output)).outputs
+            Composition.AggregatePort.value at boundaryOutput
         rw [boundaryOutput, congrFun combineOutputs Composition.AggregatePort.value]
         change fields.assemble (fun component =>
-          (childProposals (.component component)).outputs .output) = value
+          (hierStep.children (.component component)).outputs .output) = value
         calc
           fields.assemble (fun component =>
-              (childProposals (.component component)).outputs .output) =
+              (hierStep.children (.component component)).outputs .output) =
               fields.assemble (fun component => fields.get value component) := by
                 apply congrArg fields.assemble
                 funext component
@@ -493,12 +492,11 @@ noncomputable def certified (signalType : SignalType) (value : signalType.Denote
   rfl
 
 /-- Contract-facing constant result law. -/
-theorem output_of_evaluatesTo (signalType : SignalType) (value : signalType.Denote)
-    (inputs : (ports signalType).inputs.Values) (state : emptySignalMap.Values)
-    (outputs : (ports signalType).outputs.Values) (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract signalType value).EvaluatesTo inputs state outputs nextState) :
-    outputs .output = value :=
-  (outputRule_holds_iff signalType value inputs state outputs).mp (evaluates.1 .apply)
+theorem output_of_allowed (signalType : SignalType) (value : signalType.Denote)
+    {step : (cycleContract signalType value).Step}
+    (allowed : (cycleContract signalType value).Allows step) :
+    step.outputs .output = value :=
+  (outputRule_holds_iff signalType value _ _ _).mp (allowed.1 .apply)
 
 end Silean.Modules.Constant
 
@@ -609,13 +607,33 @@ namespace Silean.Modules.Constant
 
 @[reducible] def designWith (signalType : SignalType) (value : signalType.Denote)
     (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
-    Silean.Naming.NamedModule where
+  Silean.Naming.NamedModule where
   ports := ports signalType
   moduleStructure := moduleStructure signalType value
-  naming := Naming.namingWith signalType value typeNaming
+  naming := (Naming.namingWith signalType value typeNaming).withPorts
+    (Naming.portsWithNaming signalType typeNaming)
 
 @[reducible] def design (signalType : SignalType) (value : signalType.Denote) :
     Silean.Naming.NamedModule :=
   designWith signalType value (.positional signalType)
+
+/-! ## Placement -/
+
+open Silean.Authoring.CircuitDescription
+
+/-- Place a constant source under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (signalType : SignalType) (value : signalType.Denote) :
+    Builder (Net signalType) := do
+  let child <- Authoring.CircuitDescription.placeNamed name
+    (design signalType value) fun impossible => nomatch impossible
+  pure (child .output)
+
+/-- Place a constant source using the next conventional indexed name. -/
+noncomputable def place (signalType : SignalType) (value : signalType.Denote) :
+    Builder (Net signalType) := do
+  let child <- placeIndexed "constant" (design signalType value)
+    fun impossible => nomatch impossible
+  pure (child .output)
 
 end Silean.Modules.Constant

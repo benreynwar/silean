@@ -30,26 +30,24 @@ private def registerStateCorresponds
     (structuralState : (ModuleStructure.primitive register).State) : Prop :=
   contractState = structuralState
 
-private theorem registerImplements : Contracts.Cycle.Implements (.primitive register)
+private theorem registerImplements : Contracts.Cycle.ImplementsSolutions (.primitive register)
     registerCycleContract registerStateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
+  cases hierStep with
+  | mk inputs structuralState outputs nextState =>
+  change contractState = structuralState at corresponds
+  change outputs = register.outputValues inputs structuralState ∧
+    nextState = register.nextStateValues inputs structuralState at satisfies
   refine ⟨registerStateRule.apply inputs contractState, ?_, ?_⟩
   · constructor
     · intro rule
       cases rule
-      cases proposal with
-      | mk outputs nextState =>
-        change registerOutputRule.Holds inputs contractState outputs
-        simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-          Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
-        rw [satisfies.1, corresponds.symm]
-        exact SignalGroup.matches_project _ _
+      change registerOutputRule.Holds inputs contractState outputs
+      rw [satisfies.1, corresponds.symm]
+      exact SignalGroup.matches_project _ _
     · rfl
-  · cases proposal with
-    | mk outputs nextState =>
-      simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-        Primitive.IsSolution, Primitive.NextStateSatisfy] at satisfies
-      exact (congrArg (registerStateRule.apply inputs) corresponds).trans satisfies.2.symm
+  · exact (congrArg (registerStateRule.apply inputs) corresponds).trans
+      satisfies.2.symm
 
 def registerCertified : Contracts.Cycle.ModuleCycleCertified register.ports where
   moduleStructure := .primitive register
@@ -57,13 +55,9 @@ def registerCertified : Contracts.Cycle.ModuleCycleCertified register.ports wher
   certification := {
     stateCorresponds := registerStateCorresponds
     hasCorrespondingState := fun state => ⟨state, rfl⟩
-    hasStructuralResult := fun inputs state =>
-      ⟨ProposedValues.primitive (register.outputValues inputs state)
-        (register.nextStateValues inputs state), by
-          simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-            Primitive.IsSolution, Primitive.OutputsSatisfy,
-            Primitive.NextStateSatisfy, ProposedValues.primitive]⟩
+    hasStructuralResult := Primitive.hasSolution register
     structuralResultUnique := Primitive.hasAtMostOneSolution register
-    implements := registerImplements }
+    implements :=
+      Contracts.Cycle.implementsSolutions_iff_implements.mp registerImplements }
 
 end Silean.Primitives

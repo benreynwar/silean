@@ -10,72 +10,95 @@ open Silean
 def emptyLocalState : emptySignalMap.Values :=
   SignalMap.emptyValues
 
-def equalInputs : Primitives.eq.ports.inputs.Values
-  | .left | .right => true
+def notLeafStep (value : Bool) :
+    HierStep (.primitive Primitives.not) :=
+  { inputs := fun | .input => value
+    currentState := emptyLocalState
+    outputs := fun | .output => !value
+    nextState := emptyLocalState }
 
-def equalOutputs : Primitives.eq.ports.outputs.Values
-  | .output => true
-
-example : Primitives.eq.IsSolution equalInputs emptyLocalState emptyLocalState
-    equalOutputs := ⟨rfl, rfl⟩
+example (value : Bool) :
+    (ModuleStructure.primitive Primitives.not).IsSolution
+      (notLeafStep value) :=
+  ⟨rfl, rfl⟩
 
 def notInputs : Examples.Fixtures.Not.ports.inputs.Values
   | .value => true
 
-def notState : Examples.Fixtures.Not.moduleStructure.State
-  | .inverter => emptyLocalState
+def notHierStep : HierStep Examples.Fixtures.Not.moduleStructure :=
+  { inputs := notInputs
+    outputs := fun | .inverted => false
+    children := fun | .inverter => notLeafStep true }
 
-def notProposal : ProposedValues Examples.Fixtures.Not.moduleStructure :=
-  .composite (fun | .inverted => false)
-    (fun
-      | .inverter =>
-          .primitive (fun | .output => false) emptyLocalState)
-
-example : Examples.Fixtures.Not.moduleStructure.IsSolution notInputs notState notProposal := by
-  constructor
+example : Examples.Fixtures.Not.moduleStructure.IsSolution notHierStep := by
+  refine ⟨?_, ?_, ?_⟩
   · intro output
     cases output
     rfl
   · intro name
     cases name
+    rfl
+  · intro name
+    cases name
     exact ⟨rfl, rfl⟩
 
-def invalidNotProposal : ProposedValues Examples.Fixtures.Not.moduleStructure :=
-  .composite (fun | .inverted => true)
-    (fun
-      | .inverter =>
-          .primitive (fun | .output => true) emptyLocalState)
+def invalidNotLeafStep : HierStep (.primitive Primitives.not) :=
+  { inputs := fun | .input => true
+    currentState := emptyLocalState
+    outputs := fun | .output => true
+    nextState := emptyLocalState }
 
-example : ¬Examples.Fixtures.Not.moduleStructure.IsSolution notInputs notState invalidNotProposal := by
+def invalidNotHierStep : HierStep Examples.Fixtures.Not.moduleStructure :=
+  { inputs := notInputs
+    outputs := fun | .inverted => true
+    children := fun | .inverter => invalidNotLeafStep }
+
+example :
+    ¬Examples.Fixtures.Not.moduleStructure.IsSolution invalidNotHierStep := by
   intro satisfies
-  have primitiveSatisfies := satisfies.2 Examples.Fixtures.Not.Instance.inverter
-  exact Bool.noConfusion (congrFun primitiveSatisfies.1 .output)
+  have primitiveSatisfies := satisfies.2.2
+    Examples.Fixtures.Not.Instance.inverter
+  have impossible := congrFun primitiveSatisfies.1 .output
+  change true = false at impossible
+  exact Bool.noConfusion impossible
 
 def muxInputs : Modules.BitMux.ports.inputs.Values
   | .select => true
   | .whenFalse => false
   | .whenTrue => true
 
-def muxState : Modules.BitMux.moduleStructure.State
-  | .invertSelect | .chooseFalse | .chooseTrue | .combine => emptyLocalState
-
-def muxProposal : ProposedValues Modules.BitMux.moduleStructure :=
-  .composite (fun | .result => true)
-    (fun
+def muxHierStep : HierStep Modules.BitMux.moduleStructure :=
+  { inputs := muxInputs
+    outputs := fun | .result => true
+    children := fun
       | .invertSelect =>
-          .primitive (fun | .output => false) emptyLocalState
+          { inputs := fun | .input => true
+            currentState := emptyLocalState
+            outputs := fun | .output => false
+            nextState := emptyLocalState }
       | .chooseFalse =>
-          .primitive (fun | .output => false) emptyLocalState
+          { inputs := fun | .left => false | .right => false
+            currentState := emptyLocalState
+            outputs := fun | .output => false
+            nextState := emptyLocalState }
       | .chooseTrue =>
-          .primitive (fun | .output => true) emptyLocalState
+          { inputs := fun | .left => true | .right => true
+            currentState := emptyLocalState
+            outputs := fun | .output => true
+            nextState := emptyLocalState }
       | .combine =>
-          .primitive (fun | .output => true) emptyLocalState)
+          { inputs := fun | .left => false | .right => true
+            currentState := emptyLocalState
+            outputs := fun | .output => true
+            nextState := emptyLocalState } }
 
-example : Modules.BitMux.moduleStructure.IsSolution muxInputs muxState muxProposal := by
-  constructor
+example : Modules.BitMux.moduleStructure.IsSolution muxHierStep := by
+  refine ⟨?_, ?_, ?_⟩
   · intro output
     cases output
     rfl
+  · intro name
+    cases name <;> funext port <;> cases port <;> rfl
   · intro name
     cases name <;> exact ⟨rfl, rfl⟩
 
@@ -83,62 +106,70 @@ def dualInputs : Examples.Fixtures.DualNot.ports.inputs.Values
   | .forward => true
   | .backward => false
 
-def hierarchicalState : Examples.Fixtures.HierarchicalDualNot.moduleStructure.State
-  | .forwardNot | .backwardNot => emptyLocalState
+def firstDualStep :
+    HierStep Examples.Fixtures.HierarchicalDualNot.moduleStructure :=
+  { inputs := dualInputs
+    outputs := fun | .forward => false | .backward => true
+    children := fun
+      | .forwardNot => notLeafStep true
+      | .backwardNot => notLeafStep false }
 
-def hierarchicalProposal : ProposedValues Examples.Fixtures.HierarchicalDualNot.moduleStructure :=
-  .composite (fun | .forward => false | .backward => true)
-    (fun
-      | .forwardNot =>
-          .primitive (fun | .output => false) emptyLocalState
-      | .backwardNot =>
-          .primitive (fun | .output => true) emptyLocalState)
+def secondDualStep :
+    HierStep Examples.Fixtures.HierarchicalDualNot.moduleStructure :=
+  { inputs := fun | .forward => false | .backward => true
+    outputs := fun | .forward => true | .backward => false
+    children := fun
+      | .forwardNot => notLeafStep false
+      | .backwardNot => notLeafStep true }
 
-example : Examples.Fixtures.HierarchicalDualNot.moduleStructure.IsSolution dualInputs hierarchicalState
-    hierarchicalProposal := by
-  constructor
+def repeatedHierStep :
+    HierStep Examples.Fixtures.RepeatedDualNot.moduleStructure :=
+  { inputs := dualInputs
+    outputs := fun | .forward => true | .backward => false
+    children := fun
+      | .first => firstDualStep
+      | .second => secondDualStep }
+
+example :
+    Examples.Fixtures.RepeatedDualNot.moduleStructure.IsSolution
+      repeatedHierStep := by
+  refine ⟨?_, ?_, ?_⟩
   · intro output
     cases output <;> rfl
   · intro name
-    cases name <;> exact ⟨rfl, rfl⟩
-
-def repeatedState : Examples.Fixtures.RepeatedDualNot.moduleStructure.State
-  | .first | .second => hierarchicalState
-
-def secondHierarchicalProposal : ProposedValues Examples.Fixtures.HierarchicalDualNot.moduleStructure :=
-  .composite (fun | .forward => true | .backward => false)
-    (fun
-      | .forwardNot =>
-          .primitive (fun | .output => true) emptyLocalState
-      | .backwardNot =>
-          .primitive (fun | .output => false) emptyLocalState)
-
-def repeatedProposal : ProposedValues Examples.Fixtures.RepeatedDualNot.moduleStructure :=
-  .composite (fun | .forward => true | .backward => false)
-    (fun
-      | .first => hierarchicalProposal
-      | .second => secondHierarchicalProposal)
-
-example : Examples.Fixtures.RepeatedDualNot.moduleStructure.IsSolution dualInputs repeatedState
-    repeatedProposal := by
-  constructor
-  · intro output
-    cases output <;> rfl
+    cases name <;> funext port <;> cases port <;> rfl
   · intro name
     cases name
-    · constructor
+    · refine ⟨?_, ?_, ?_⟩
       · intro output
         cases output <;> rfl
-      · intro childName
-        cases childName <;> exact ⟨rfl, rfl⟩
-    · constructor
+      · intro child
+        cases child <;> funext port <;> cases port <;> rfl
+      · intro child
+        cases child <;> exact ⟨rfl, rfl⟩
+    · refine ⟨?_, ?_, ?_⟩
       · intro output
         cases output <;> rfl
-      · intro childName
-        cases childName <;> exact ⟨rfl, rfl⟩
+      · intro child
+        cases child <;> funext port <;> cases port <;> rfl
+      · intro child
+        cases child <;> exact ⟨rfl, rfl⟩
 
-example : repeatedProposal.nextState = repeatedState := by
+example :
+    HierStep.nextState Examples.Fixtures.RepeatedDualNot.moduleStructure
+      repeatedHierStep =
+      HierStep.currentState
+        Examples.Fixtures.RepeatedDualNot.moduleStructure repeatedHierStep := by
   funext name
-  cases name <;> funext childName <;> cases childName <;> rfl
+  cases name <;> simp [Examples.Fixtures.RepeatedDualNot.moduleStructure,
+    Examples.Fixtures.RepeatedDualNot.childStructure,
+    Examples.Fixtures.HierarchicalDualNot.moduleStructure,
+    Examples.Fixtures.HierarchicalDualNot.children,
+    Contracts.Cycle.Certification.Layer.moduleStructure,
+    Contracts.Cycle.ModuleCycleCertified.certifiedStructure,
+    Primitives.notCertified, HierStep.nextState, HierStep.currentState,
+    repeatedHierStep, firstDualStep, secondDualStep, notLeafStep] <;>
+    funext child <;> cases child <;>
+    simp [HierStep.nextState, HierStep.currentState]
 
 end Silean.Examples.Checks.StructuralEquations

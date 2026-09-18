@@ -1,3 +1,4 @@
+import Silean.Authoring.CircuitDescription
 import Silean.Modules.OneEntryFifo.OneEntryFifo
 import Silean.Naming.FifoSerialNaming
 
@@ -7,8 +8,18 @@ open Silean
 open Contracts.Fifo.Cycle
 open OneEntryFifo
 
-/-! A positive-depth FIFO assembled by connecting fall-through one-entry FIFOs
-in series. The public `depth` is the total number of entries. -/
+/-! # Serial-depth FIFO
+
+A positive-depth FIFO assembled by connecting fall-through one-entry FIFOs in
+series. The public `depth` is the total number of entries.
+
+This module deliberately keeps its recursive `ModuleStructure` as the primary
+hardware definition instead of adding a `CircuitDescription.Builder` version.
+The hierarchy itself changes with `depth`, and each recursive step is exactly
+the already-certified generic `FifoSerial` composition. A second handwritten
+builder recursion would duplicate that programmatic construction without
+making the hardware easier to understand.
+-/
 
 /-! `additionalDepth` counts entries after the required first entry. It is an
 internal recursion index; the public API below takes the FIFO's actual positive
@@ -95,6 +106,7 @@ end Silean.Modules.SerialDepthFifo.Naming
 namespace Silean.Modules.SerialDepthFifo
 
 open Silean Silean.Naming
+open Silean.Authoring.CircuitDescription
 
 /-- The complete recursively assembled design with authored payload names. -/
 @[reducible] def designWith (signalType : SignalType)
@@ -108,5 +120,24 @@ open Silean Silean.Naming
 @[reducible] def design (signalType : SignalType)
     (depth : Nat) (positive : 0 < depth) : NamedModule :=
   designWith signalType (.positional signalType) depth positive
+
+/-! ## Placement -/
+
+/-- Place a positive-depth serial FIFO under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : SourceName)
+    (depth : Nat) (positive : 0 < depth)
+    (inputValid : Net .bit) (inputData : Net signalType)
+    (outputReady reset : Net .bit) :
+    Builder (OneEntryFifo.PlacedOutputs signalType) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design signalType depth positive) fun
+      | .inputValid => inputValid
+      | .inputData => inputData
+      | .outputReady => outputReady
+      | .reset => reset
+  pure {
+    outputValid := child .outputValid
+    outputData := child .outputData
+    inputReady := child .inputReady }
 
 end Silean.Modules.SerialDepthFifo

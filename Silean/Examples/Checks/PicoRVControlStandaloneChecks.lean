@@ -1,5 +1,5 @@
 import Silean.Examples.Fixtures.PicoRVControl
-import Silean.Examples.PicoRV.ControlCertified
+import Silean.Examples.PicoRV.ControlTheorems
 import Silean.FIRRTL
 
 namespace Silean.Examples.Checks.PicoRVControlStandaloneChecks

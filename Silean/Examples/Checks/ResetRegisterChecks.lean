@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EnabledResetRegister.EnabledResetRegisterCertified
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterTheorems
 
 namespace Silean.Examples.Checks.ResetRegister
 
@@ -93,7 +93,10 @@ def tupleState : (Modules.Register.stateMap tupleType).Values
 example :
     ((Modules.EnabledResetRegister.cycleContract tupleType tupleReset).evaluate
       enabledTupleInputs tupleState).2 .stored = tupleReset := by
-  rfl
+  have allowed :=
+    ((Modules.EnabledResetRegister.cycleContract tupleType tupleReset).evaluateStep_allowed
+      enabledTupleInputs tupleState)
+  exact Modules.EnabledResetRegister.next_stored_of_reset allowed rfl
 
 noncomputable example : Contracts.Cycle.ModuleCycleCertified (Modules.ResetRegister.ports .bit) :=
   Modules.ResetRegister.certified .bit false
@@ -115,6 +118,32 @@ noncomputable example :
 noncomputable example :
     Contracts.Cycle.ModuleCycleCertified (Modules.EnabledResetRegister.ports tupleType) :=
   Modules.EnabledResetRegister.certified tupleType tupleReset
+
+example : Contracts.Cycle.Implements
+    (Modules.EnabledResetRegister.moduleStructure .bit false)
+    (Modules.EnabledResetRegister.cycleContract .bit false)
+    (Modules.EnabledResetRegister.certification .bit false).stateCorresponds :=
+  Modules.EnabledResetRegister.implements_contract .bit false
+
+/-! The reader-facing feedback description is checked against the production
+structure used by certification and FIRRTL emission. -/
+
+example : Authoring.CircuitDescription.Corresponds
+    (Modules.ResetRegister.Description.description .bit false)
+    (Modules.ResetRegister.naming .bit false) :=
+  Modules.ResetRegister.Description.authored_definition_corresponds .bit false
+
+example :
+    (Modules.EnabledResetRegister.Description.description .bit false).children.map
+      (fun child => child.name) =
+        [SourceName.plain "selection", SourceName.plain "storage"] := by
+  rfl
+
+example : Authoring.CircuitDescription.Corresponds
+    (Modules.EnabledResetRegister.Description.description .bit false)
+    (Modules.EnabledResetRegister.naming .bit false) :=
+  Modules.EnabledResetRegister.Description.authored_definition_corresponds
+    .bit false
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
@@ -140,7 +169,7 @@ private def renders {ports : ModulePorts} {moduleStructure : ModuleStructure por
    "inst storage of ResetRegister_bit_0"]
 
 #guard renders
-  (Modules.EnabledResetRegister.namingWith tupleReset tupleNaming)
+  (Modules.EnabledResetRegister.namingWith tupleType tupleReset tupleNaming)
   ["input value : { flag : UInt<1>, payload : UInt<1>[2] }",
    "output value_out : { flag : UInt<1>, payload : UInt<1>[2] }",
    "inst storage of ResetRegister"]

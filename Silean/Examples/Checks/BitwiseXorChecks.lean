@@ -45,14 +45,10 @@ def result (signalType : SignalType) (left right : signalType.Denote) :=
 
 example (signalType : SignalType) (left right : signalType.Denote) :
     result signalType left right = signalType.bitwiseXor left right := by
-  simpa [result, inputs] using Modules.BitwiseXor.result_of_evaluatesTo signalType
+  have allowed := (Modules.BitwiseXor.cycleContract signalType).evaluateStep_allowed
     (inputs signalType left right) SignalMap.emptyValues
-    ((Modules.BitwiseXor.cycleContract signalType).evaluate
-      (inputs signalType left right) SignalMap.emptyValues).1
-    ((Modules.BitwiseXor.cycleContract signalType).evaluate
-      (inputs signalType left right) SignalMap.emptyValues).2
-    ((Modules.BitwiseXor.cycleContract signalType).evaluate_evaluatesTo
-      (inputs signalType left right) SignalMap.emptyValues)
+  simpa [result, inputs, Contracts.Cycle.ModuleCycleContract.evaluateStep] using
+    Modules.BitwiseXor.result_of_allowed signalType allowed
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

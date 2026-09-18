@@ -59,4 +59,12 @@ module_cycle_contract cycleContract for ports where
     reads := []
     next := {}
 
+/-- Every contract-allowed bit-mux step selects the requested input. -/
+theorem result_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .result =
+      bif step.inputs .select then step.inputs .whenTrue else step.inputs .whenFalse :=
+  (selectRule_holds_iff step.inputs step.currentState step.outputs).mp
+    (allowed.1 .select)
+
 end Silean.Modules.BitMux

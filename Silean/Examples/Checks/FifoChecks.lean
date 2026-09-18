@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Fifo.FifoCycleCertified
+import Silean.Modules.Fifo.FifoCycleTheorems
 import Silean.Emitters.StructuredPayload
 
 namespace Silean.Examples.Checks.Fifo
@@ -123,23 +123,28 @@ noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports .bit) :=
 noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports (.vector 3 .bit)) :=
   certified (.vector 3 .bit) 2
 
-noncomputable def structuralState (element : SignalType) (addressWidth : Nat) :
-    (moduleStructure element addressWidth).State :=
-  (moduleStructure element addressWidth).structuralState.defaultValues
+def middleStep := (cycleContract .bit 1).evaluateStep
+  (inputs true true true false) middleState
 
-example : ∃ proposal,
-    (moduleStructure .bit 1).IsSolution (inputs true true true false)
-      (structuralState .bit 1) proposal ∧
-    ∀ other, (moduleStructure .bit 1).IsSolution (inputs true true true false)
-      (structuralState .bit 1) other → other = proposal :=
-  (certified .bit 1).hasExactlyOneStructuralResult _ _
+-- The public Step interface exposes the same boundary behavior and state
+-- transition without mentioning the FIFO's child hierarchy.
+example : middleStep.outputs .inputReady =
+    inputReady (middleStep.currentState .readPointer)
+      (middleStep.currentState .writePointer) :=
+  input_ready_of_allowed
+    ((cycleContract .bit 1).evaluateStep_allowed _ _)
 
-example : ∃ proposal,
-    (moduleStructure .bit 0).IsSolution (inputs true true false false)
-      (structuralState .bit 0) proposal ∧
-    ∀ other, (moduleStructure .bit 0).IsSolution (inputs true true false false)
-      (structuralState .bit 0) other → other = proposal :=
-  (certified .bit 0).hasExactlyOneStructuralResult _ _
+example : middleStep.nextState .entries =
+    nextEntries 1 (middleStep.inputs .inputValid) (middleStep.inputs .inputData)
+      (middleStep.currentState .readPointer)
+      (middleStep.currentState .writePointer)
+      (middleStep.currentState .entries) :=
+  next_entries_of_allowed
+    ((cycleContract .bit 1).evaluateStep_allowed _ _)
+
+example : Contracts.Cycle.Implements (moduleStructure .bit 1)
+    (cycleContract .bit 1) (certification .bit 1).stateCorresponds :=
+  implements_cycle_contract .bit 1
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

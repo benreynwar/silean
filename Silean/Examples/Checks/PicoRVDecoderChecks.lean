@@ -1,4 +1,4 @@
-import Silean.Examples.PicoRV.DecoderCertified
+import Silean.Examples.PicoRV.DecoderTheorems
 import Silean.FIRRTL
 
 namespace Silean.Examples.Checks.PicoRVDecoderChecks

@@ -1,9 +1,9 @@
 import Silean.Authoring.ModuleDesign
-import Silean.Examples.PicoRV.ControlCertified
-import Silean.Examples.PicoRV.DatapathCertified
-import Silean.Examples.PicoRV.DecoderCertified
-import Silean.Examples.PicoRV.MemoryCertified
-import Silean.Examples.PicoRV.RegsCertified
+import Silean.Examples.PicoRV.ControlTheorems
+import Silean.Examples.PicoRV.DatapathTheorems
+import Silean.Examples.PicoRV.DecoderTheorems
+import Silean.Examples.PicoRV.MemoryTheorems
+import Silean.Examples.PicoRV.RegsTheorems
 
 namespace Silean.Examples.PicoRV.PicoRV
 

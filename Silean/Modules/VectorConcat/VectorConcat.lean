@@ -146,4 +146,13 @@ theorem result_right_of_holds (element : SignalType) (leftWidth rightWidth : Nat
   rw [(outputRule_holds_iff element leftWidth rightWidth inputs state outputs).mp holds]
   exact concat_right _ _ index
 
+/-- Every contract-allowed concatenation step joins the left and right input
+vectors in order. -/
+theorem result_of_allowed (element : SignalType) (leftWidth rightWidth : Nat)
+    {step : (cycleContract element leftWidth rightWidth).Step}
+    (allowed : (cycleContract element leftWidth rightWidth).Allows step) :
+    step.outputs .result = concat (step.inputs .left) (step.inputs .right) :=
+  (outputRule_holds_iff element leftWidth rightWidth
+    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
+
 end Silean.Modules.VectorConcat

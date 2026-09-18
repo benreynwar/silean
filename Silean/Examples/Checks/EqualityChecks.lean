@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Equality.Equality
+import Silean.Modules.Equality.EqualityTheorems
 
 namespace Silean.Examples.Checks.Equality
 

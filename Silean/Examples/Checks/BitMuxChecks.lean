@@ -4,6 +4,20 @@ namespace Silean.Examples.Checks.BitMux
 
 open Silean
 
+def inputs (select whenFalse whenTrue : Bool) : Modules.BitMux.ports.inputs.Values
+  | .select => select
+  | .whenFalse => whenFalse
+  | .whenTrue => whenTrue
+
+def result (select whenFalse whenTrue : Bool) : Bool :=
+  ((Modules.BitMux.cycleContract.evaluate
+    (inputs select whenFalse whenTrue) SignalMap.emptyValues).1 .result)
+
+#guard !result false false true
+#guard result false true false
+#guard !result true true false
+#guard result true false true
+
 example : Modules.BitMux.instancePorts.names.values =
     [Modules.BitMux.Instance.invertSelect, Modules.BitMux.Instance.chooseFalse,
       Modules.BitMux.Instance.chooseTrue, Modules.BitMux.Instance.combine] := rfl

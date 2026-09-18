@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.AddSub.AddSub
+import Silean.Modules.AddSub.AddSubTheorems
 
 namespace Silean.Examples.Checks.AddSub
 
@@ -20,6 +20,15 @@ def inputs (width : Nat) (left right : Fin width → Bool) (subtract : Bool) :
 def outputs (width : Nat) (left right : Fin width → Bool) (subtract : Bool) :=
   ((Modules.AddSub.cycleContract width).evaluate
     (inputs width left right subtract) SignalMap.emptyValues).1
+
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
+    (Modules.AddSub.ports 4) :=
+  Modules.AddSub.certified 4
+
+example : Contracts.Cycle.Implements
+    (Modules.AddSub.moduleStructure 4) (Modules.AddSub.cycleContract 4)
+    (Modules.AddSub.certification 4).stateCorresponds :=
+  Modules.AddSub.implements_contract 4
 
 -- Width zero has no result bits; addition has no carry and subtraction has no borrow.
 #guard !(outputs 0 bits0 bits0 false .carryOut)
@@ -45,27 +54,19 @@ example (width : Nat) (left right : Fin width → Bool) (subtract : Bool) :
       else
         (BitVector.toNat width left + BitVector.toNat width right) %
           BitVector.cardinality width := by
-  simpa [outputs, inputs] using Modules.AddSub.result_toNat_of_evaluatesTo width
-    (inputs width left right subtract) SignalMap.emptyValues
-    ((Modules.AddSub.cycleContract width).evaluate
-      (inputs width left right subtract) SignalMap.emptyValues).1
-    ((Modules.AddSub.cycleContract width).evaluate
-      (inputs width left right subtract) SignalMap.emptyValues).2
-    ((Modules.AddSub.cycleContract width).evaluate_evaluatesTo
+  have behavior := Modules.AddSub.Behavior.of_allowed width
+    ((Modules.AddSub.cycleContract width).evaluateStep_allowed
       (inputs width left right subtract) SignalMap.emptyValues)
+  simpa [outputs, inputs, Contracts.Cycle.ModuleCycleContract.evaluateStep] using
+    behavior.result_toNat
 
 example (width : Nat) (left right : Fin width → Bool) :
     outputs width left right true .carryOut =
       decide (BitVector.toNat width right ≤ BitVector.toNat width left) := by
-  apply Modules.AddSub.carry_eq_noBorrow_of_evaluatesTo width
-    (inputs width left right true) SignalMap.emptyValues
-    ((Modules.AddSub.cycleContract width).evaluate
-      (inputs width left right true) SignalMap.emptyValues).1
-    ((Modules.AddSub.cycleContract width).evaluate
-      (inputs width left right true) SignalMap.emptyValues).2
-  · rfl
-  · exact (Modules.AddSub.cycleContract width).evaluate_evaluatesTo
-      (inputs width left right true) SignalMap.emptyValues
+  have behavior := Modules.AddSub.Behavior.of_allowed width
+    ((Modules.AddSub.cycleContract width).evaluateStep_allowed
+      (inputs width left right true) SignalMap.emptyValues)
+  exact behavior.carry_eq_noBorrow rfl
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

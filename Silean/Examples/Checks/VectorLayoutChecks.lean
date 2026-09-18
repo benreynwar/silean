@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.VectorLayout.VectorLayoutCertified
+import Silean.Modules.VectorLayout.VectorLayoutTheorems
 
 namespace Silean.Examples.Checks.VectorLayout
 

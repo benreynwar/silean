@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Increment.Increment
+import Silean.Modules.Increment.IncrementTheorems
 
 namespace Silean.Examples.Checks.Increment
 
@@ -44,13 +44,9 @@ def result (width : Nat) (value : Fin width → Bool) :=
 example (width : Nat) (value : Fin width → Bool) :
     BitVector.toNat width (result width value) =
       (BitVector.toNat width value + 1) % BitVector.cardinality width := by
-  simpa [result, inputs] using Modules.Increment.result_toNat_of_evaluatesTo
-    width (inputs width value) SignalMap.emptyValues
-    ((Modules.Increment.cycleContract width).evaluate
-      (inputs width value) SignalMap.emptyValues).1
-    ((Modules.Increment.cycleContract width).evaluate
-      (inputs width value) SignalMap.emptyValues).2
-    ((Modules.Increment.cycleContract width).evaluate_evaluatesTo
+  simpa [result, inputs, Contracts.Cycle.ModuleCycleContract.evaluateStep] using
+    Modules.Increment.result_toNat_of_allowed
+      width ((Modules.Increment.cycleContract width).evaluateStep_allowed
       (inputs width value) SignalMap.emptyValues)
 
 private def contains (text fragment : String) : Bool :=

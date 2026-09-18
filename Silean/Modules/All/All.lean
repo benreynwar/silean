@@ -106,18 +106,17 @@ private def andStateCorresponds (_ : emptySignalMap.Values)
     (_ : (ModuleStructure.primitive Primitives.and).State) : Prop := True
 
 private theorem andImplements :
-    Contracts.Cycle.Implements (.primitive Primitives.and)
+    Contracts.Cycle.ImplementsSolutions (.primitive Primitives.and)
       (Composition.Reduction.binaryCycleContract .bit andOperation)
       andStateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    rcases proposal with ⟨outputs, nextState⟩
     simp only [Composition.Reduction.binaryCycleContract]
     rw [Composition.Reduction.binaryOutputRule_holds_iff]
-    change outputs .output = _
+    change hierStep.outputs .output = _
     simpa [andOperation, Primitives.and] using congrFun satisfies.1 .output
   · rfl
 
@@ -129,24 +128,23 @@ private def andImplementation :
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
     hasStructuralResult := Primitives.andCertified.hasStructuralResult
     structuralResultUnique := Primitives.andCertified.structuralResultUnique
-    implements := andImplements }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp andImplements }
 
 private def trueStateCorresponds (_ : emptySignalMap.Values)
     (_ : (ModuleStructure.primitive (Primitives.constant true)).State) : Prop := True
 
 private theorem trueImplements :
-    Contracts.Cycle.Implements (.primitive (Primitives.constant true))
+    Contracts.Cycle.ImplementsSolutions (.primitive (Primitives.constant true))
       (Composition.Reduction.identityCycleContract .bit trueValue)
       trueStateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    rcases proposal with ⟨outputs, nextState⟩
     simp only [Composition.Reduction.identityCycleContract]
     rw [Composition.Reduction.identityOutputRule_holds_iff]
-    change outputs .output = _
+    change hierStep.outputs .output = _
     simpa [trueValue, Primitives.constant] using congrFun satisfies.1 .output
   · rfl
 
@@ -158,7 +156,7 @@ private def trueImplementation : Composition.Reduction.IdentityImplementation .b
     hasStructuralResult := (Primitives.constantCertified true).hasStructuralResult
     structuralResultUnique :=
       (Primitives.constantCertified true).structuralResultUnique
-    implements := trueImplements }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp trueImplements }
 
 private abbrev tree (width : Nat) : Composition.Reduction.Tree :=
   Composition.Reduction.balancedTree width

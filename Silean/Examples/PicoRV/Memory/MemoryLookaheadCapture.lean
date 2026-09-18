@@ -3,7 +3,7 @@ import Silean.Examples.PicoRV.Memory.MemoryLookahead
 import Silean.Examples.PicoRV.Memory.MemoryNextContracts
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Primitives.Or
 

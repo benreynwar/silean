@@ -12,7 +12,7 @@ import Silean.Examples.PicoRV.Control.ControlShiftTransition
 import Silean.Examples.PicoRV.Control.ControlTrapTransition
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Naming.PrimitiveNaming
 

@@ -4,121 +4,212 @@ namespace Silean.Contracts.Cycle.Certification.Layer
 
 open Silean
 
+/-! Small congruence lemmas used when composing typed child-output equations.
+They avoid rewriting through the dependent child-output family itself. -/
+
+theorem apply₂_congr {α β γ : Type} (function : α → β → γ)
+    {left left' : α} {right right' : β}
+    (leftEq : left = left') (rightEq : right = right') :
+    function left right = function left' right' := by
+  subst left'
+  subst right'
+  rfl
+
+theorem bif_congr {α : Type} {select select' : Bool}
+    {whenTrue whenTrue' whenFalse whenFalse' : α}
+    (selectEq : select = select') (whenTrueEq : whenTrue = whenTrue')
+    (whenFalseEq : whenFalse = whenFalse') :
+    (bif select then whenTrue else whenFalse) =
+      bif select' then whenTrue' else whenFalse' := by
+  subst select'
+  subst whenTrue'
+  subst whenFalse'
+  rfl
+
+/-- The contract boundary step induced by one child assignment. The next
+contract state is canonical because a cycle contract's state rule is
+deterministic. Naming this step keeps dependent child proofs from exposing a
+large inline record expression. -/
+@[reducible] def childContractStep
+    (children : ChildStructures body childContracts)
+    (hierStep : HierStep (moduleStructure body children))
+    (child : body.instancePorts.Name)
+    (contractState : (childContracts child).state.Values) :
+    (childContracts child).Step :=
+  { inputs := body.wiring.childInputValues hierStep.inputs
+      hierStep.childOutputs child
+    currentState := contractState
+    outputs := hierStep.childOutputs child
+    nextState := (childContracts child).stateRule.apply
+      (body.wiring.childInputValues hierStep.inputs
+        hierStep.childOutputs child) contractState }
+
+@[simp] theorem childContractStep_inputs
+    (children : ChildStructures body childContracts)
+    (hierStep : HierStep (moduleStructure body children))
+    (child : body.instancePorts.Name)
+    (contractState : (childContracts child).state.Values) :
+    (childContractStep children hierStep child contractState).inputs =
+      body.wiring.childInputValues hierStep.inputs hierStep.childOutputs child :=
+  rfl
+
+@[simp] theorem childContractStep_outputs
+    (children : ChildStructures body childContracts)
+    (hierStep : HierStep (moduleStructure body children))
+    (child : body.instancePorts.Name)
+    (contractState : (childContracts child).state.Values) :
+    (childContractStep children hierStep child contractState).outputs =
+      hierStep.childOutputs child :=
+  rfl
+
+/-- The result of applying a certified child's public contract to its part of
+the parent's structural solution. Parent proofs normally use `ruleHolds`;
+`allowed` exposes the complete Step fact when a theorem needs the whole child
+transition, and `nextCorresponds` threads state correspondence forward. -/
+structure ChildContractMatch
+    (children : ChildStructures body childContracts)
+    (hierStep : HierStep (moduleStructure body children))
+    (child : body.instancePorts.Name)
+    (contractState : (childContracts child).state.Values) : Prop where
+  allowed : (childContracts child).Allows
+    (childContractStep children hierStep child contractState)
+  nextCorresponds : (children child).certification.stateCorresponds
+    ((childContracts child).stateRule.apply
+      (body.wiring.childInputValues hierStep.inputs
+        hierStep.childOutputs child) contractState)
+    (HierStep.nextState (children child).moduleStructure
+      (hierStep.children child))
+
+/-- The common parent-proof view of a child match: a named output rule holds
+for the child inputs and outputs induced by the hierarchy assignment. -/
+theorem ChildContractMatch.ruleHolds
+    {body : ModuleBody}
+    {childContracts : ChildCycleContracts body}
+    {children : ChildStructures body childContracts}
+    {hierStep : HierStep (moduleStructure body children)}
+    {child : body.instancePorts.Name}
+    {contractState : (childContracts child).state.Values}
+    (childMatch : ChildContractMatch children hierStep child contractState)
+    (rule : (childContracts child).RuleName) :
+    ((childContracts child).outputRule rule).Holds
+      (body.wiring.childInputValues hierStep.inputs
+        hierStep.childOutputs child)
+      contractState
+      (hierStep.childOutputs child) := by
+  exact childMatch.allowed.1 rule
+
+/-- Apply a child's public boundary theorem without exposing the internal Step
+used to connect the child's contract to the parent's structural assignment.
+
+This is useful for child modules that package several output rules into a
+reader-facing `Behavior`: the package is returned over the child inputs and
+outputs visible in the parent proof. -/
+theorem ChildContractMatch.boundaryFact
+    {body : ModuleBody}
+    {childContracts : ChildCycleContracts body}
+    {children : ChildStructures body childContracts}
+    {hierStep : HierStep (moduleStructure body children)}
+    {child : body.instancePorts.Name}
+    {contractState : (childContracts child).state.Values}
+    (childMatch : ChildContractMatch children hierStep child contractState)
+    {property :
+      (body.instancePorts.ports child).inputs.Values →
+        (body.instancePorts.ports child).outputs.Values → Prop}
+    (ofAllowed : ∀ {step : (childContracts child).Step},
+      (childContracts child).Allows step → property step.inputs step.outputs) :
+    property
+      (body.wiring.childInputValues hierStep.inputs
+        hierStep.childOutputs child)
+      (hierStep.childOutputs child) := by
+  exact ofAllowed childMatch.allowed
+
 /-- Apply one child's public contract to its part of a valid layer solution.
 The result depends only on the declared contract and supplied certification,
 not on any schedule or definition internal to the child. -/
 theorem childSolutionMatchesContract
     (children : ChildStructures body childContracts)
-    (inputs : body.ports.inputs.Values)
-    (structuralState : (moduleStructure body children).State)
-    (proposal : ProposedValues (moduleStructure body children))
-    (satisfies : (moduleStructure body children).IsSolution
-      inputs structuralState proposal)
+    (hierStep : HierStep (moduleStructure body children))
+    (satisfies : (moduleStructure body children).IsSolution hierStep)
     (child : body.instancePorts.Name)
     (contractState : (childContracts child).state.Values)
     (corresponds : (children child).certification.stateCorresponds contractState
-      (structuralState child)) :
-    (childContracts child).EvaluatesTo
-        (ProposedValues.childInputs body
-          (fun name => (children name).moduleStructure)
-          inputs proposal.2 child)
-        contractState (proposal.2 child).outputs
-        ((childContracts child).stateRule.apply
-          (ProposedValues.childInputs body
-            (fun name => (children name).moduleStructure)
-            inputs proposal.2 child)
-          contractState) ∧
-      (children child).certification.stateCorresponds
-        ((childContracts child).stateRule.apply
-          (ProposedValues.childInputs body
-            (fun name => (children name).moduleStructure)
-            inputs proposal.2 child)
-          contractState)
-        (proposal.2 child).nextState := by
-  rcases (children child).certification.implements
-      (ProposedValues.childInputs body
-        (fun name => (children name).moduleStructure)
-        inputs proposal.2 child)
-      contractState (structuralState child) (proposal.2 child)
-      corresponds (satisfies.2 child) with
-    ⟨nextState, evaluates, nextCorresponds⟩
-  rw [evaluates.2] at nextCorresponds
-  exact ⟨⟨evaluates.1, rfl⟩, nextCorresponds⟩
+      (HierStep.currentState (children child).moduleStructure
+        (hierStep.children child))) :
+    ChildContractMatch children hierStep child contractState := by
+  rcases (children child).certification.implements contractState
+      (hierStep.children child).step corresponds
+      (ModuleStructure.child_realizes satisfies child) with
+    ⟨nextState, allowed, nextCorresponds⟩
+  change (childContracts child).OutputRulesHold
+      (hierStep.children child).inputs contractState
+      (hierStep.children child).outputs ∧
+    nextState = (childContracts child).stateRule.apply
+      (hierStep.children child).inputs contractState at allowed
+  change (children child).certification.stateCorresponds
+    nextState (HierStep.nextState (children child).moduleStructure
+      (hierStep.children child)) at nextCorresponds
+  have childInputsEqual := satisfies.2.1 child
+  change (hierStep.children child).inputs =
+    body.wiring.childInputValues hierStep.inputs hierStep.childOutputs child
+    at childInputsEqual
+  rw [childInputsEqual] at allowed
+  rw [allowed.2] at nextCorresponds
+  exact ⟨⟨allowed.1, rfl⟩, nextCorresponds⟩
+
+/-- Apply a child's contract using a contract state supplied by that child's
+state-coverage theorem. This is the natural parent-proof interface when only
+the child's boundary behavior matters; parents that relate a particular
+contract state should use `childSolutionMatchesContract` directly. -/
+theorem childSolutionMatchesCoveredContract
+    (children : ChildStructures body childContracts)
+    (hierStep : HierStep (moduleStructure body children))
+    (satisfies : (moduleStructure body children).IsSolution hierStep)
+    (child : body.instancePorts.Name) :
+    ∃ contractState, ChildContractMatch children hierStep child contractState := by
+  rcases (children child).certification.hasCorrespondingState
+      (HierStep.currentState (children child).moduleStructure
+        (hierStep.children child)) with ⟨contractState, corresponds⟩
+  exact ⟨contractState, childSolutionMatchesContract children hierStep satisfies
+    child contractState corresponds⟩
 
 /-- For a stateless child, state coverage supplies the correspondence witness
 automatically, so a parent can use the public child contract directly. -/
 theorem childSolutionMatchesContract_of_subsingletonState
     (children : ChildStructures body childContracts)
-    (inputs : body.ports.inputs.Values)
-    (structuralState : (moduleStructure body children).State)
-    (proposal : ProposedValues (moduleStructure body children))
-    (satisfies : (moduleStructure body children).IsSolution
-      inputs structuralState proposal)
+    (hierStep : HierStep (moduleStructure body children))
+    (satisfies : (moduleStructure body children).IsSolution hierStep)
     (child : body.instancePorts.Name)
     [Subsingleton (childContracts child).state.Values]
     (contractState : (childContracts child).state.Values) :
-    (childContracts child).EvaluatesTo
-        (ProposedValues.childInputs body
-          (fun name => (children name).moduleStructure)
-          inputs proposal.2 child)
-        contractState (proposal.2 child).outputs
-        ((childContracts child).stateRule.apply
-          (ProposedValues.childInputs body
-            (fun name => (children name).moduleStructure)
-            inputs proposal.2 child)
-          contractState) ∧
-      (children child).certification.stateCorresponds
-        ((childContracts child).stateRule.apply
-          (ProposedValues.childInputs body
-            (fun name => (children name).moduleStructure)
-            inputs proposal.2 child)
-          contractState)
-        (proposal.2 child).nextState := by
+    ChildContractMatch children hierStep child contractState := by
   rcases (children child).certification.hasCorrespondingState
-      (structuralState child) with ⟨coveredState, covered⟩
+      (HierStep.currentState (children child).moduleStructure
+        (hierStep.children child)) with ⟨coveredState, covered⟩
   have corresponds : (children child).certification.stateCorresponds contractState
-      (structuralState child) := by
+      (HierStep.currentState (children child).moduleStructure
+        (hierStep.children child)) := by
     rw [Subsingleton.elim contractState coveredState]
     exact covered
-  exact childSolutionMatchesContract children inputs structuralState proposal
-    satisfies child contractState corresponds
+  exact childSolutionMatchesContract children hierStep satisfies child
+    contractState corresponds
 
 /-- Apply every stateless child's contract at once. A module supplies the
 unique state value for each child; the helper handles correspondence coverage
-and returns a dependent family of contract evaluations. -/
+and returns a dependent family of child-contract matches. -/
 theorem childSolutionsMatchContracts_of_subsingletonState
     (children : ChildStructures body childContracts)
-    (inputs : body.ports.inputs.Values)
-    (structuralState : (moduleStructure body children).State)
-    (proposal : ProposedValues (moduleStructure body children))
-    (satisfies : (moduleStructure body children).IsSolution
-      inputs structuralState proposal)
+    (hierStep : HierStep (moduleStructure body children))
+    (satisfies : (moduleStructure body children).IsSolution hierStep)
     (contractStates : (child : body.instancePorts.Name) →
       (childContracts child).state.Values)
     (stateSubsingleton : ∀ child,
       Subsingleton (childContracts child).state.Values) :
     ∀ child,
-      (childContracts child).EvaluatesTo
-          (ProposedValues.childInputs body
-            (fun name => (children name).moduleStructure)
-            inputs proposal.2 child)
-          (contractStates child) (proposal.2 child).outputs
-          ((childContracts child).stateRule.apply
-            (ProposedValues.childInputs body
-              (fun name => (children name).moduleStructure)
-              inputs proposal.2 child)
-            (contractStates child)) ∧
-        (children child).certification.stateCorresponds
-          ((childContracts child).stateRule.apply
-            (ProposedValues.childInputs body
-              (fun name => (children name).moduleStructure)
-              inputs proposal.2 child)
-            (contractStates child))
-          (proposal.2 child).nextState := by
+      ChildContractMatch children hierStep child (contractStates child) := by
   intro child
   letI := stateSubsingleton child
-  exact childSolutionMatchesContract_of_subsingletonState children inputs
-    structuralState proposal satisfies child (contractStates child)
+  exact childSolutionMatchesContract_of_subsingletonState children hierStep
+    satisfies child (contractStates child)
 
 /-! ## Assembling a scheduled layer certificate
 
@@ -151,7 +242,7 @@ noncomputable def RuleSchedules.certifiedLayer
         stateCorresponds children contractState structuralState)
     (implements :
       (children : ChildStructures body childContracts) →
-        Implements (moduleStructure body children) cycleContract
+        ImplementsSolutions (moduleStructure body children) cycleContract
           (stateCorresponds children)) :
     ModuleCycleCertifiedLayer body childContracts cycleContract where
   certify children := {
@@ -159,7 +250,7 @@ noncomputable def RuleSchedules.certifiedLayer
     hasCorrespondingState := hasCorrespondingState children
     hasStructuralResult := schedules.hasSolution covers children
     structuralResultUnique := schedules.hasAtMostOneSolution covers children
-    implements := implements children
+    implements := implementsSolutions_iff_implements.mp (implements children)
   }
 
 /-! Parent proofs often specialize a public child-contract theorem and then
@@ -174,19 +265,18 @@ syntax (name := normalizeChildHyp)
 
 syntax (name := normalizeCompositeChildHyp)
   "normalize_child_hyp " Lean.Parser.Tactic.locationHyp " unfolding "
-    Lean.Parser.Tactic.simpArg ", " Lean.Parser.Tactic.simpArg ", "
-    Lean.Parser.Tactic.simpArg : tactic
+    Lean.Parser.Tactic.simpArg ", " Lean.Parser.Tactic.simpArg : tactic
 
-/-- Introduce a dependent family of contract evaluations for children whose
+/-- Introduce a dependent family of contract matches for children whose
 contract states are all definitionally the empty signal map.  The resulting
 fact uses only the supplied child certifications and structural-solution
 hypothesis. -/
 syntax (name := deriveEmptyStateChildMatches)
-  "derive_empty_state_child_matches " ident " from " term ", " term ", "
-    term ", " term ", " term : tactic
+  "derive_empty_state_child_matches " ident " for " term " from " term ", "
+    term ", " term : tactic
 
-/-- Introduce a named fact by applying a public child-contract theorem to a
-child evaluation and normalizing the inputs induced by the parent wiring. -/
+/-- Introduce a named fact by applying a public child-contract theorem to
+allowed-step evidence and normalizing the inputs induced by the parent wiring. -/
 syntax (name := childContractFact)
   "child_contract_fact " ident " : " term " from " term " using " term : tactic
 
@@ -197,44 +287,47 @@ syntax (name := compositeChildContractFact)
 
 macro_rules
   | `(tactic| normalize_child_contract $proof:term) =>
-      `(tactic| simpa [ProposedValues.childInputs_apply,
+      `(tactic| simpa only [childContractStep_inputs, childContractStep_outputs,
+        Wiring.childInputValues,
         EndpointContext.moduleInput, EndpointContext.instanceOutput,
         SignalSource.value] using $proof)
   | `(tactic| normalize_child_hyp $hyp:locationHyp unfolding
-        $body, $wiring, $context) =>
-      `(tactic| simp only [ProposedValues.childInputs_apply,
-        $body, $wiring, $context,
+        $wiring, $context) =>
+      `(tactic| simp only [childContractStep_inputs, childContractStep_outputs,
+        Wiring.childInputValues,
+        $wiring, $context,
         EndpointContext.moduleInput, EndpointContext.instanceOutput,
         SignalSource.value] at $hyp)
   | `(tactic| normalize_child_hyp $hyp:locationHyp) =>
-      `(tactic| simp only [ProposedValues.childInputs_apply,
+      `(tactic| simp only [childContractStep_inputs, childContractStep_outputs,
+        Wiring.childInputValues,
         EndpointContext.moduleInput, EndpointContext.instanceOutput,
         SignalSource.value] at $hyp)
-  | `(tactic| derive_empty_state_child_matches $name:ident from
-        $children:term, $inputs:term, $structuralState:term,
-        $proposal:term, $satisfies:term) =>
+  | `(tactic| derive_empty_state_child_matches $name:ident for $body:term from
+        $children:term, $hierStep:term, $satisfies:term) =>
       `(tactic|
         have $name :=
           childSolutionsMatchContracts_of_subsingletonState
-            $children $inputs $structuralState $proposal $satisfies
+            (body := $body) $children $hierStep $satisfies
             (fun child => by cases child <;> exact SignalMap.emptyValues)
             (fun child => by
               cases child <;>
                 change Subsingleton emptySignalMap.Values <;>
                 infer_instance))
   | `(tactic| child_contract_fact $name:ident : $type:term from
-        $evaluation:term using $contractTheorem:term) =>
+        $allowed:term using $contractTheorem:term) =>
       `(tactic|
         have $name : $type := by
-          normalize_child_contract ($contractTheorem $evaluation))
+          normalize_child_contract ($contractTheorem $allowed))
   | `(tactic| child_contract_fact $name:ident : $type:term from
-        $evaluation:term using $contractTheorem:term unfolding
+        $allowed:term using $contractTheorem:term unfolding
         $body, $wiring, $endpointContext) =>
       `(tactic|
         have $name : $type := by
-          simpa only [ProposedValues.childInputs_apply,
+          simpa only [childContractStep_inputs, childContractStep_outputs,
+            Wiring.childInputValues,
             $body, $wiring, $endpointContext,
             EndpointContext.moduleInput, EndpointContext.instanceOutput,
-            SignalSource.value] using ($contractTheorem $evaluation))
+            SignalSource.value] using ($contractTheorem $allowed))
 
 end Silean.Contracts.Cycle.Certification.Layer

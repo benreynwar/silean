@@ -477,45 +477,57 @@ theorem hasSolution
   let finalValues := Schedule.evaluateRules schedule inputs contractState .nil
   let childOutputValues := finalValues.childOutputs covers
   have rulesHold := Schedule.evaluateRules_outputRulesHold schedule inputs contractState covers
-  let ProposalProperty := fun child proposal =>
-    (children child).moduleStructure.IsSolution
-      (body.wiring.childInputValues inputs childOutputValues child)
-      (structuralState child) proposal
-  have proposalsAvailable : ∀ child, ∃ proposal, ProposalProperty child proposal :=
+  let ChildProperty := fun child hierStep =>
+    (children child).moduleStructure.IsSolution hierStep ∧
+      hierStep.inputs =
+        body.wiring.childInputValues inputs childOutputValues child ∧
+      HierStep.currentState (children child).moduleStructure hierStep =
+        structuralState child
+  have childrenAvailable : ∀ child, ∃ hierStep, ChildProperty child hierStep :=
     fun child => (children child).certification.hasStructuralResult
       (body.wiring.childInputValues inputs childOutputValues child)
       (structuralState child)
-  rcases body.instancePorts.names.exists_pi ProposalProperty
-      proposalsAvailable with ⟨childProposals, childrenSatisfy⟩
+  rcases body.instancePorts.names.exists_pi ChildProperty
+      childrenAvailable with ⟨childHierSteps, childProperties⟩
   have childOutputsEqual : ∀ child,
-      (childProposals child).outputs = childOutputValues child := by
+      (childHierSteps child).outputs = childOutputValues child := by
     intro child
-    rcases (children child).certification.implements
-        (body.wiring.childInputValues inputs childOutputValues child)
-        (contractState child) (structuralState child) (childProposals child)
-        (stateCorresponds child) (childrenSatisfy child) with
-      ⟨nextContractState, evaluates, nextCorresponds⟩
+    have corresponds : (children child).certification.stateCorresponds
+        (contractState child)
+        (HierStep.currentState (children child).moduleStructure
+          (childHierSteps child)) := by
+      rw [childProperties child |>.2.2]
+      exact stateCorresponds child
+    rcases (children child).certification.implements (contractState child)
+        (childHierSteps child).step corresponds
+        (ModuleStructure.realizes_of_solution (childProperties child |>.1)) with
+      ⟨nextContractState, allowed, nextCorresponds⟩
     exact (childContracts child).outputs_unique
-      (body.wiring.childInputValues inputs childOutputValues child)
-      (contractState child) (childProposals child).outputs
-      (childOutputValues child) evaluates.1 (rulesHold child)
+      (childHierSteps child).inputs (contractState child)
+      (childHierSteps child).outputs (childOutputValues child)
+      allowed.1 (by
+        rw [childProperties child |>.2.1]
+        exact rulesHold child)
   have outputFamiliesEqual :
-      (fun child => (childProposals child).outputs) = childOutputValues := by
+      (fun child => (childHierSteps child).outputs) = childOutputValues := by
     funext child
     exact childOutputsEqual child
-  have childInputsEqual : ∀ child,
-      ProposedValues.childInputs body ((fun name => (children name).moduleStructure)) inputs
-          childProposals child =
-        body.wiring.childInputValues inputs childOutputValues child := by
+  have childInputsSatisfy : HierStep.ChildInputsSatisfy body inputs
+      (fun child => (childHierSteps child).inputs)
+      (fun child => (childHierSteps child).outputs) := by
     intro child
-    unfold ProposedValues.childInputs
-    rw [outputFamiliesEqual]
-  refine ⟨ProposedValues.compositeFromChildren body ((fun name => (children name).moduleStructure))
-    inputs childProposals, ProposedValues.compositeFromChildren_isSolution
-      body ((fun name => (children name).moduleStructure)) inputs structuralState childProposals ?_⟩
-  intro child
-  rw [childInputsEqual child]
-  exact childrenSatisfy child
+    change (childHierSteps child).inputs =
+      body.wiring.childInputValues inputs
+        (fun name => (childHierSteps name).outputs) child
+    rw [childProperties child |>.2.1, outputFamiliesEqual]
+  let hierStep := HierStep.compositeFromChildren body
+    (fun name => (children name).moduleStructure) inputs childHierSteps
+  refine ⟨hierStep,
+    HierStep.compositeFromChildren_isSolution body
+      (fun name => (children name).moduleStructure) inputs childHierSteps
+      childInputsSatisfy (fun child => childProperties child |>.1), rfl, ?_⟩
+  funext child
+  exact childProperties child |>.2.2
 
 end Schedule
 

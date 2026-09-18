@@ -6,8 +6,9 @@ written behavioral contracts. The same hierarchy is traversed directly when
 emitting FIRRTL; there is no lowered circuit representation in between.
 
 This document describes the current design. [SourceMap.md](SourceMap.md) maps
-the concepts to files, and [../Roadmap.md](../Roadmap.md) lists only future
-work.
+the concepts to files, [ModuleOrganization.md](ModuleOrganization.md) describes
+the intended public and internal layout of a reusable module, and
+[../Roadmap.md](../Roadmap.md) lists only future work.
 
 ## Correctness boundary
 
@@ -86,12 +87,13 @@ points require this evidence.
 
 ## Order-independent structural meaning
 
-`ProposedValues` assigns boundary outputs and primitive next-state values at
-every occurrence in a hierarchy. Given current inputs and state,
+`HierStep` assigns boundary inputs and outputs at every occurrence in a
+hierarchy and current and next state at stateful leaves.
 `ModuleStructure.IsSolution` requires:
 
 - every primitive or adapter equation to hold;
-- every child proposal to solve that child's equations with its wired inputs;
+- every child `HierStep` to solve that child's equations, with its stored
+  inputs equal to the values supplied by the parent wiring;
   and
 - every parent output to equal its wired source.
 

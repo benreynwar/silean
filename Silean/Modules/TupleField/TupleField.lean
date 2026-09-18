@@ -40,21 +40,6 @@ namespace Silean.Modules.TupleField
 open Silean
 open Silean.Authoring
 
-theorem outputSourceValue (signals : SignalMap) (field : signals.Label)
-    (inputs : (ports signals field).inputs.Values)
-    (childOutputs : (name : (instancePorts signals field).Name) →
-      ((instancePorts signals field).ports name).outputs.Values) :
-    ((body signals field).wiring.moduleOutput .field).value inputs childOutputs =
-      signals.typeAt_tuplePosition field ▸
-        (show (signals.tupleFields.typeAt
-          (signals.tuplePosition field)).Denote from
-          childOutputs .split (signals.tuplePosition field)) := by
-  change (SignalSource.castType (signals.typeAt_tuplePosition field)
-    ((context signals field).instanceOutput .split
-      (signals.tuplePosition field))).value inputs childOutputs = _
-  rw [SignalSource.value_castType]
-  rfl
-
 def selectedValue (signals : SignalMap) (field : signals.Label)
     (value : signals.tupleType.Denote) : (signals.signalType field).Denote :=
   signals.typeAt_tuplePosition field ▸
@@ -70,15 +55,12 @@ module_cycle_contract cycleContract (signals : SignalMap)
     reads := []
     next := {}
 
-theorem field_of_evaluatesTo (signals : SignalMap)
-    (field : signals.Label) (inputs : (ports signals field).inputs.Values)
-    (state : emptySignalMap.Values)
-    (outputs : (ports signals field).outputs.Values)
-    (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract signals field).EvaluatesTo
-      inputs state outputs nextState) :
-    outputs .field = selectedValue signals field (inputs .tuple) :=
-  (selectRule_holds_iff signals field inputs state outputs).mp
-    (evaluates.1 .select)
+/-- Every allowed tuple-field step returns the selected field. -/
+theorem field_of_allowed (signals : SignalMap) (field : signals.Label)
+    {step : (cycleContract signals field).Step}
+    (allowed : (cycleContract signals field).Allows step) :
+    step.outputs .field = selectedValue signals field (step.inputs .tuple) :=
+  (selectRule_holds_iff signals field
+    step.inputs step.currentState step.outputs).mp (allowed.1 .select)
 
 end Silean.Modules.TupleField

@@ -85,22 +85,6 @@ def combinedValue (signals : SignalMap) (values : signals.Values) :
     combinedValue signals values = signals.pack values :=
   signals.allSelection.assemble_valueAt values
 
-/-- The cast in the authored wiring only transports a named input to its
-definitionally corresponding positional child input. -/
-theorem adapterInputValue (signals : SignalMap)
-    (inputs : (ports signals).inputs.Values)
-    (childOutputs : (name : (instancePorts signals).Name) →
-      ((instancePorts signals).ports name).outputs.Values)
-    (position : SignalTypes.Position signals.tupleFields) :
-    ((wiring signals).instanceInput .adapter position).value inputs childOutputs =
-      signals.allSelection.valueAt inputs position := by
-  change (SignalSource.castType
-    (signals.allSelection.signalType_labelAt position).symm
-    ((context signals).moduleInput
-      (signals.allSelection.labelAt position))).value inputs childOutputs = _
-  rw [SignalSource.value_castType]
-  exact signals.allSelection.cast_labelAt_value inputs position
-
 def outputRule (signals : SignalMap) :
     Contracts.Cycle.CycleOutputRule (ports signals) emptySignalMap where
   readsInputs := .all signals
@@ -126,6 +110,15 @@ module_cycle_contract cycleContract (signals : SignalMap) for ports signals wher
     funext label
     cases label
     exact equal
+
+/-- Every contract-allowed combiner step packs the named inputs into their
+canonical tuple representation. -/
+theorem value_of_allowed (signals : SignalMap)
+    {step : (cycleContract signals).Step}
+    (allowed : (cycleContract signals).Allows step) :
+    step.outputs .value = combinedValue signals step.inputs :=
+  (outputRule_holds_iff signals step.inputs step.currentState step.outputs).mp
+    (allowed.1 .apply)
 
 end Silean.Modules.NamedTupleCombiner
 
@@ -217,32 +210,6 @@ def splitValue (signals : SignalMap) (value : signals.tupleType.Denote) :
   rw [SignalSelection.get_project]
   exact signals.cast_valueAt_tuplePosition values label
 
-/-- The cast in the authored wiring transports a positional child output to
-the corresponding named boundary output. -/
-theorem moduleOutputValue (signals : SignalMap)
-    (inputs : (ports signals).inputs.Values)
-    (childOutputs : (name : (instancePorts signals).Name) →
-      ((instancePorts signals).ports name).outputs.Values)
-    (label : signals.Label) :
-    ((wiring signals).moduleOutput label).value inputs childOutputs =
-      signals.typeAt_tuplePosition label ▸
-        childOutputs .adapter (signals.tuplePosition label) := by
-  change (SignalSource.castType (signals.typeAt_tuplePosition label)
-    ((context signals).instanceOutput .adapter
-      (signals.tuplePosition label))).value inputs childOutputs = _
-  rw [SignalSource.value_castType]
-  rfl
-
-theorem castOutput_congr (signals : SignalMap) (label : signals.Label)
-    (left right : (position : SignalTypes.Position signals.tupleFields) →
-      (signals.tupleFields.typeAt position).Denote)
-    (equal : left = right) :
-    signals.typeAt_tuplePosition label ▸
-        left (signals.tuplePosition label) =
-      signals.typeAt_tuplePosition label ▸
-        right (signals.tuplePosition label) := by
-  rw [equal]
-
 def outputRule (signals : SignalMap) :
     Contracts.Cycle.CycleOutputRule (ports signals) emptySignalMap where
   readsInputs := .all (Composition.aggregateSignalMap signals.tupleType)
@@ -263,5 +230,13 @@ module_cycle_contract cycleContract (signals : SignalMap) for ports signals wher
     (outputRule signals).Holds inputs state outputs ↔
       outputs = splitValue signals (inputs .value) := by
   simp [outputRule, Contracts.Cycle.CycleOutputRule.Holds]
+
+/-- Every contract-allowed splitter step exposes every named tuple field. -/
+theorem outputs_of_allowed (signals : SignalMap)
+    {step : (cycleContract signals).Step}
+    (allowed : (cycleContract signals).Allows step) :
+    step.outputs = splitValue signals (step.inputs .value) :=
+  (outputRule_holds_iff signals step.inputs step.currentState step.outputs).mp
+    (allowed.1 .apply)
 
 end Silean.Modules.NamedTupleSplitter

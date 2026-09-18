@@ -1,4 +1,6 @@
+import Silean.Authoring.CircuitDescription
 import Silean.Contracts.Cycle.CycleImplementation
+import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.OrPrimitive
 
 namespace Silean.Primitives
@@ -38,20 +40,20 @@ def orCycleContract : Contracts.Cycle.ModuleCycleContract or.ports where
 private def orStateCorresponds (_ : orCycleContract.state.Values)
     (_ : (ModuleStructure.primitive or).State) : Prop := True
 
-private theorem orImplements : Contracts.Cycle.Implements (.primitive or) orCycleContract
+private theorem orImplements : Contracts.Cycle.ImplementsSolutions (.primitive or) orCycleContract
     orStateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
+  cases hierStep with
+  | mk inputs structuralState outputs nextState =>
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    cases proposal with
-    | mk outputs nextState =>
-      change orOutputRule.Holds inputs contractState outputs
-      simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-        Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
-      rw [satisfies.1]
-      exact SignalGroup.matches_project _ _
+    change orOutputRule.Holds inputs contractState outputs
+    change outputs = or.outputValues inputs structuralState ∧
+      nextState = or.nextStateValues inputs structuralState at satisfies
+    rw [satisfies.1]
+    exact SignalGroup.matches_project _ _
   · rfl
 
 def orCertified : Contracts.Cycle.ModuleCycleCertified or.ports where
@@ -60,12 +62,30 @@ def orCertified : Contracts.Cycle.ModuleCycleCertified or.ports where
   certification := {
     stateCorresponds := orStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := fun inputs state =>
-    ⟨ProposedValues.primitive (or.outputValues inputs state)
-      (or.nextStateValues inputs state), by
-        simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-          Primitive.IsSolution, Primitive.OutputsSatisfy,
-          Primitive.NextStateSatisfy, ProposedValues.primitive]⟩,
+    hasStructuralResult := Primitive.hasSolution or,
     structuralResultUnique := Primitive.hasAtMostOneSolution or,
-    implements := orImplements }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp orImplements }
 end Silean.Primitives
+
+namespace Silean.Primitives.Or
+
+open Silean.Authoring.CircuitDescription
+
+/-- Place a one-bit OR gate under a caller-chosen instance name. -/
+def placeNamed (name : Silean.Naming.SourceName)
+    (left right : Net .bit) : Builder (Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    Primitives.orDesign fun
+      | .left => left
+      | .right => right
+  pure (child .output)
+
+/-- Place a one-bit OR gate in a circuit description. -/
+def place (left right : Net .bit) : Builder (Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeIndexed "or"
+    Primitives.orDesign fun
+      | .left => left
+      | .right => right
+  pure (child .output)
+
+end Silean.Primitives.Or

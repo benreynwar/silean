@@ -1,5 +1,6 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
+import Silean.Authoring.CircuitDescription
 import Silean.Composition.LeafwiseComposition
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
@@ -143,24 +144,24 @@ private abbrev bitCertificationStructure :=
 private def emptyStateCorresponds (_ : emptySignalMap.Values)
     (_ : (bitCertificationStructure layerChildren).State) : Prop := True
 
-private theorem bitImplements : Contracts.Cycle.Implements
+private theorem bitImplements : Contracts.Cycle.ImplementsSolutions
     (bitCertificationStructure layerChildren) (cycleContract .bit)
     (emptyStateCorresponds layerChildren) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
   letI : Subsingleton
       ((bitChildContracts .gate).state.Values) := by
     change Subsingleton emptySignalMap.Values
     infer_instance
-  have gateEvaluates :=
+  have gateMatch :=
     (Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      layerChildren inputs structuralState proposal
-        satisfies .gate SignalMap.emptyValues).1
+      (body := bitBody) layerChildren hierStep satisfies .gate
+        SignalMap.emptyValues)
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    rw [show (outputRule .bit).Holds inputs contractState proposal.outputs ↔
-        proposal.outputs .result = (inputs .value && inputs .mask) by
+    rw [show (outputRule .bit).Holds hierStep.inputs contractState hierStep.outputs ↔
+        hierStep.outputs .result = (hierStep.inputs .value && hierStep.inputs .mask) by
       simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
         SignalGroup.all_matches]
       constructor
@@ -170,15 +171,16 @@ private theorem bitImplements : Contracts.Cycle.Implements
         funext label
         cases label
         simpa [SignalType.mask] using equal]
-    rcases proposal with ⟨outputs, children⟩
     have boundary := satisfies.1
-    change outputs .result = (inputs .value && inputs .mask)
+    change hierStep.outputs .result =
+      (hierStep.inputs .value && hierStep.inputs .mask)
     have boundaryResult := boundary .result
-    change outputs .result = (children .gate).outputs .output at boundaryResult
-    have gateOutput : (children .gate).outputs .output =
-        (inputs .value && inputs .mask) := by
+    change hierStep.outputs .result =
+      (hierStep.children .gate).outputs .output at boundaryResult
+    have gateOutput : (hierStep.children .gate).outputs .output =
+        (hierStep.inputs .value && hierStep.inputs .mask) := by
       exact (Primitives.andOutputRule_holds_iff _ _ _).mp
-        (gateEvaluates.1 Primitives.AndRule.apply)
+        (gateMatch.ruleHolds Primitives.AndRule.apply)
     exact boundaryResult.trans gateOutput
   · rfl
 
@@ -317,11 +319,11 @@ private def aggregateStateCorresponds
     (_ : (aggregateCertificationStructure splitter layerChildren).State) : Prop := True
 
 private theorem aggregateImplements :
-    Contracts.Cycle.Implements
+    Contracts.Cycle.ImplementsSolutions
       (aggregateCertificationStructure splitter layerChildren)
       (cycleContract splitter.aggregateType)
       (aggregateStateCorresponds splitter layerChildren) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
   have childStateSubsingleton
       (child : (aggregateBody splitter).instancePorts.Name) :
       Subsingleton
@@ -341,84 +343,85 @@ private theorem aggregateImplements :
   have childMatch (child : (aggregateBody splitter).instancePorts.Name) := by
     letI := childStateSubsingleton child
     exact Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      layerChildren inputs structuralState
-        proposal satisfies child (by cases child <;> exact SignalMap.emptyValues)
-  rcases proposal with ⟨outputs, childProposals⟩
+      (body := aggregateBody splitter) layerChildren hierStep satisfies child
+        (by cases child <;> exact SignalMap.emptyValues)
   have boundary := satisfies.1
-  have splitOutputs : (childProposals (.splitter .unit)).outputs =
-      splitter.outputValues (splitterInputs splitter inputs) := by
+  have splitOutputs : (hierStep.children (.splitter .unit)).outputs =
+      splitter.outputValues (splitterInputs splitter hierStep.inputs) := by
     have holds := (Composition.SignalSplitter.outputRule_holds_iff splitter _ _ _).mp
-      ((childMatch (.splitter .unit)).1.1 Composition.SignalComponentRule.apply)
-    have inputsEqual : ProposedValues.childInputs (aggregateBody splitter)
-        ((fun name => (layerChildren name).moduleStructure))
-        inputs childProposals (.splitter .unit) = splitterInputs splitter inputs := by
+      ((childMatch (.splitter .unit)).ruleHolds Composition.SignalComponentRule.apply)
+    have inputsEqual : (aggregateBody splitter).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs (.splitter .unit) =
+          splitterInputs splitter hierStep.inputs := by
       cases splitter <;> funext port <;> cases port <;> rfl
     rw [inputsEqual] at holds
     exact holds
   have componentOutputs : ∀ component,
-      (childProposals (.component component)).outputs .result =
+      (hierStep.children (.component component)).outputs .result =
         (splitter.ports.outputs.signalType component).mask
-          (splitter.outputValues (splitterInputs splitter inputs) component)
-          (inputs .mask) := by
+          (splitter.outputValues (splitterInputs splitter hierStep.inputs) component)
+          (hierStep.inputs .mask) := by
     intro component
-    have evaluates := (childMatch (.component component)).1
-    have holds := evaluates.1 Rule.apply
+    have holds := (childMatch (.component component)).ruleHolds Rule.apply
     change (outputRule (splitter.ports.outputs.signalType component)).Holds
       _ _ _ at holds
     rw [outputRule_holds_iff] at holds
     have valueInput :
-        (ProposedValues.childInputs (aggregateBody splitter)
-          ((fun name => (layerChildren name).moduleStructure)) inputs childProposals
-          (.component component)) .value =
-      splitter.outputValues (splitterInputs splitter inputs) component := by
+        ((aggregateBody splitter).wiring.childInputValues
+          hierStep.inputs hierStep.childOutputs (.component component)) .value =
+      splitter.outputValues (splitterInputs splitter hierStep.inputs) component := by
       cases splitter <;> exact congrFun splitOutputs component
     have maskInput :
-        (ProposedValues.childInputs (aggregateBody splitter)
-          ((fun name => (layerChildren name).moduleStructure)) inputs childProposals
-          (.component component)) .mask = inputs .mask := by
+        ((aggregateBody splitter).wiring.childInputValues
+          hierStep.inputs hierStep.childOutputs (.component component)) .mask =
+            hierStep.inputs .mask := by
       cases splitter <;> rfl
     exact holds.trans (by rw [valueInput, maskInput])
-  have combineOutputs : (childProposals (.combiner .result)).outputs =
+  have combineOutputs : (hierStep.children (.combiner .result)).outputs =
       splitter.combiner.outputValues
-        (ProposedValues.childInputs (aggregateBody splitter)
-          ((fun name => (layerChildren name).moduleStructure)) inputs childProposals
-          (.combiner .result)) := by
+        ((aggregateBody splitter).wiring.childInputValues
+          hierStep.inputs hierStep.childOutputs (.combiner .result)) := by
     exact (Composition.SignalCombiner.outputRule_holds_iff splitter.combiner _ _ _).mp
-      ((childMatch (.combiner .result)).1.1 Composition.SignalComponentRule.apply)
+      ((childMatch (.combiner .result)).ruleHolds Composition.SignalComponentRule.apply)
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
     rw [outputRule_holds_iff]
-    change outputs .result =
-      splitter.aggregateType.mask (inputs .value) (inputs .mask)
+    change hierStep.outputs .result =
+      splitter.aggregateType.mask (hierStep.inputs .value) (hierStep.inputs .mask)
     cases splitter with
     | vector length element =>
         have boundaryResult := boundary .result
-        change outputs .result =
-          (childProposals (.combiner .result)).outputs Composition.AggregatePort.value at boundaryResult
+        change hierStep.outputs .result =
+          (hierStep.children (.combiner .result)).outputs
+            Composition.AggregatePort.value at boundaryResult
         rw [boundaryResult]
         rw [congrFun combineOutputs Composition.AggregatePort.value]
         change (fun component =>
-          (childProposals (.component component)).outputs .result) = _
+          (hierStep.children (.component component)).outputs .result) = _
         funext component
         exact componentOutputs component
     | tuple fields =>
         have boundaryResult := boundary .result
-        change outputs .result =
-          (childProposals (.combiner .result)).outputs Composition.AggregatePort.value at boundaryResult
+        change hierStep.outputs .result =
+          (hierStep.children (.combiner .result)).outputs
+            Composition.AggregatePort.value at boundaryResult
         rw [boundaryResult]
         rw [congrFun combineOutputs Composition.AggregatePort.value]
         change fields.assemble (fun component =>
-          (childProposals (.component component)).outputs .result) =
-            (SignalType.tuple fields).mask (inputs .value) (inputs .mask : Bool)
+          (hierStep.children (.component component)).outputs .result) =
+            (SignalType.tuple fields).mask
+              (hierStep.inputs .value) (hierStep.inputs .mask : Bool)
         rw [← (Composition.SignalSplitter.tuple fields).combine_split
-          ((SignalType.tuple fields).mask (inputs .value) (inputs .mask : Bool))]
+          ((SignalType.tuple fields).mask
+            (hierStep.inputs .value) (hierStep.inputs .mask : Bool))]
         apply congrArg fields.assemble
         funext component
         exact (componentOutputs component).trans
           (congrFun (Silean.SignalSplitter.split_mask
-            (.tuple fields) (inputs .value) (inputs .mask : Bool)) component).symm
+            (.tuple fields) (hierStep.inputs .value)
+              (hierStep.inputs .mask : Bool)) component).symm
   · rfl
 
 end AggregateLayerCertification
@@ -579,6 +582,7 @@ end Silean.Modules.Mask.Naming
 namespace Silean.Modules.Mask
 
 open Silean Silean.Naming
+open Silean.Authoring.CircuitDescription
 
 @[reducible] def designWith (signalType : SignalType)
     (typeNaming : SignalTypeNaming signalType) : NamedModule :=
@@ -587,5 +591,13 @@ open Silean Silean.Naming
 
 @[reducible] def design (signalType : SignalType) : NamedModule :=
   designWith signalType (.positional signalType)
+
+/-- Place a mask operation in a circuit description. -/
+noncomputable def place (value : Net signalType)
+    (enabled : Net .bit) : Builder (Net signalType) := do
+  let child ← Authoring.CircuitDescription.placeIndexed "mask" (design signalType) fun
+    | .value => value
+    | .mask => enabled
+  pure (child .result)
 
 end Silean.Modules.Mask

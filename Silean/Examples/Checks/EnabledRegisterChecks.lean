@@ -1,4 +1,5 @@
-import Silean.Modules.EnabledRegister.EnabledRegisterCertified
+import Silean.Modules.EnabledRegister.EnabledRegisterTheorems
+import Silean.Semantics.StructuralExecution
 
 namespace Silean.Examples.Checks.EnabledRegister
 
@@ -26,21 +27,17 @@ def bitHoldInputs : (Modules.EnabledRegister.ports .bit).inputs.Values
 def bitUpdateInputs : (Modules.EnabledRegister.ports .bit).inputs.Values
   | .data | .enable => true
 
-example : ∃ proposal,
-    (Modules.EnabledRegister.moduleStructure .bit).IsSolution
-      bitHoldInputs (structuralState .bit) proposal ∧
-    ∀ other,
-      (Modules.EnabledRegister.moduleStructure .bit).IsSolution
-        bitHoldInputs (structuralState .bit) other → other = proposal :=
-  (Modules.EnabledRegister.certified .bit).hasExactlyOneStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.EnabledRegister.moduleStructure .bit).Transition bitHoldInputs
+      (structuralState .bit) outputs nextState :=
+  (Modules.EnabledRegister.certified .bit).hasStructuralResult.transition_exists
+    bitHoldInputs (structuralState .bit)
 
-example : ∃ proposal,
-    (Modules.EnabledRegister.moduleStructure .bit).IsSolution
-      bitUpdateInputs (structuralState .bit) proposal ∧
-    ∀ other,
-      (Modules.EnabledRegister.moduleStructure .bit).IsSolution
-        bitUpdateInputs (structuralState .bit) other → other = proposal :=
-  (Modules.EnabledRegister.certified .bit).hasExactlyOneStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.EnabledRegister.moduleStructure .bit).Transition bitUpdateInputs
+      (structuralState .bit) outputs nextState :=
+  (Modules.EnabledRegister.certified .bit).hasStructuralResult.transition_exists
+    bitUpdateInputs (structuralState .bit)
 
 abbrev vectorType : SignalType := .vector 3 .bit
 
@@ -53,13 +50,11 @@ def vectorInputs : (Modules.EnabledRegister.ports vectorType).inputs.Values
   | .data => vectorValue
   | .enable => true
 
-example : ∃ proposal,
-    (Modules.EnabledRegister.moduleStructure vectorType).IsSolution
-      vectorInputs (structuralState vectorType) proposal ∧
-    ∀ other,
-      (Modules.EnabledRegister.moduleStructure vectorType).IsSolution
-        vectorInputs (structuralState vectorType) other → other = proposal :=
-  (Modules.EnabledRegister.certified vectorType).hasExactlyOneStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.EnabledRegister.moduleStructure vectorType).Transition vectorInputs
+      (structuralState vectorType) outputs nextState :=
+  (Modules.EnabledRegister.certified vectorType).hasStructuralResult.transition_exists
+    vectorInputs (structuralState vectorType)
 
 abbrev nestedFields : SignalTypes :=
   .ofList [.bit, .vector 2 (.tuple (.ofList [.bit, .bit]))]
@@ -74,17 +69,29 @@ def nestedInputs : (Modules.EnabledRegister.ports nestedType).inputs.Values
   | .data => nestedValue
   | .enable => true
 
-example : ∃ proposal,
-    (Modules.EnabledRegister.moduleStructure nestedType).IsSolution
-      nestedInputs (structuralState nestedType) proposal ∧
-    ∀ other,
-      (Modules.EnabledRegister.moduleStructure nestedType).IsSolution
-        nestedInputs (structuralState nestedType) other → other = proposal :=
-  (Modules.EnabledRegister.certified nestedType).hasExactlyOneStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.EnabledRegister.moduleStructure nestedType).Transition nestedInputs
+      (structuralState nestedType) outputs nextState :=
+  (Modules.EnabledRegister.certified nestedType).hasStructuralResult.transition_exists
+    nestedInputs (structuralState nestedType)
 
 example : ∃ contractState,
     (Modules.EnabledRegister.certified nestedType).stateCorresponds contractState
       (structuralState nestedType) :=
   (Modules.EnabledRegister.certified nestedType).hasCorrespondingState _
+
+/-! The two reader-facing correctness links are available without importing
+the structural proof files directly. -/
+
+example : Authoring.CircuitDescription.Corresponds
+    (Modules.EnabledRegister.Description.description .bit)
+    (Modules.EnabledRegister.naming .bit) :=
+  Modules.EnabledRegister.Description.authored_definition_corresponds .bit
+
+example : Contracts.Cycle.Implements
+    (Modules.EnabledRegister.moduleStructure .bit)
+    (Modules.EnabledRegister.cycleContract .bit)
+    (Modules.EnabledRegister.certification .bit).stateCorresponds :=
+  Modules.EnabledRegister.implements_contract .bit
 
 end Silean.Examples.Checks.EnabledRegister

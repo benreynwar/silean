@@ -1,6 +1,6 @@
-import Silean.Examples.PicoRV.Decoder.DecoderImmediateCertified
-import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatchCertified
-import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummaryCertified
+import Silean.Examples.PicoRV.Decoder.DecoderImmediateTheorems
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionMatchTheorems
+import Silean.Examples.PicoRV.Decoder.DecoderInstructionSummaryTheorems
 import Silean.Examples.PicoRV.Decoder.DecoderResolveStage
 import Silean.Examples.PicoRV.Decoder.DecoderResolveStageStructure
 import Silean.FIRRTL

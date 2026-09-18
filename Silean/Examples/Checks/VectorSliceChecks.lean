@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.VectorSlice.VectorSliceCertified
+import Silean.Modules.VectorSlice.VectorSliceTheorems
 
 namespace Silean.Examples.Checks.VectorSlice
 

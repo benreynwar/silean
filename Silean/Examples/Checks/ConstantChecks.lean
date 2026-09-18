@@ -21,9 +21,10 @@ example (inputs : (Modules.Constant.ports signalType).inputs.Values)
     (state : (Modules.Constant.cycleContract signalType value).state.Values) :
     ((Modules.Constant.cycleContract signalType value).evaluate inputs state).1
         .output = value := by
-  have holds := ((Modules.Constant.cycleContract signalType value).evaluate_evaluatesTo
-    inputs state).1 Primitives.ConstantRule.apply
-  exact (Modules.Constant.outputRule_holds_iff signalType value _ _ _).mp holds
+  have allowed := (Modules.Constant.cycleContract signalType value).evaluateStep_allowed
+    inputs state
+  simpa [Contracts.Cycle.ModuleCycleContract.evaluateStep] using
+    Modules.Constant.output_of_allowed signalType value allowed
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

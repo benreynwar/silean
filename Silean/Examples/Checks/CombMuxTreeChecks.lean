@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.CombMuxTree.CombMuxTree
+import Silean.Modules.CombMuxTree.CombMuxTreeTheorems
 import Silean.Composition.SignalLogic
 
 namespace Silean.Examples.Checks.CombMuxTree

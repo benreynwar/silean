@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EnabledResetCounter.EnabledResetCounterCertified
+import Silean.Modules.EnabledResetCounter.EnabledResetCounterTheorems
 
 namespace Silean.Examples.Checks.EnabledResetCounter
 
@@ -33,6 +33,18 @@ def next (width : Nat) (resetValue stored : Value width)
   ((cycleContract width resetValue).evaluate
     (inputs width enable reset) (state width stored)).2 .stored
 
+/-! The public Step theorem states the same enabled transition without
+unpacking the four pieces of a cycle by hand. -/
+
+example :
+    ((cycleContract 3 bits3Two).evaluateStep
+      (inputs 3 true false) (state 3 bits3Six)).nextState .stored =
+      Modules.Increment.incrementValue 3 bits3Six := by
+  apply next_stored_of_enabled
+    ((cycleContract 3 bits3Two).evaluateStep_allowed _ _)
+  · rfl
+  · rfl
+
 -- Reset has priority over an enabled increment.
 #guard BitVector.toNat 3 (next 3 bits3Two bits3Seven true true) == 2
 -- Disabled counters retain their complete value.
@@ -48,23 +60,17 @@ def next (width : Nat) (resetValue stored : Value width)
 noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 0) := certified 0 bits0
 noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 3) := certified 3 bits3Two
 
-noncomputable def structuralState (width : Nat) (resetValue : Value width) :
-    (moduleStructure width resetValue).State :=
-  (moduleStructure width resetValue).structuralState.defaultValues
+/-! The readable feedback circuit is the certified production hierarchy, and
+that hierarchy implements the cycle contract used by the Step laws above. -/
 
-example : ∃ proposal,
-    (moduleStructure 3 bits3Two).IsSolution (inputs 3 true false)
-      (structuralState 3 bits3Two) proposal ∧
-    ∀ other, (moduleStructure 3 bits3Two).IsSolution (inputs 3 true false)
-      (structuralState 3 bits3Two) other → other = proposal :=
-  (certified 3 bits3Two).hasExactlyOneStructuralResult _ _
+example : Authoring.CircuitDescription.Corresponds
+    (Description.description 3 bits3Two) (naming 3 bits3Two) :=
+  Description.authored_definition_corresponds 3 bits3Two
 
-example : ∃ proposal,
-    (moduleStructure 0 bits0).IsSolution (inputs 0 true false)
-      (structuralState 0 bits0) proposal ∧
-    ∀ other, (moduleStructure 0 bits0).IsSolution (inputs 0 true false)
-      (structuralState 0 bits0) other → other = proposal :=
-  (certified 0 bits0).hasExactlyOneStructuralResult _ _
+example : Contracts.Cycle.Implements
+    (moduleStructure 3 bits3Two) (cycleContract 3 bits3Two)
+    (certification 3 bits3Two).stateCorresponds :=
+  implements_contract 3 bits3Two
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

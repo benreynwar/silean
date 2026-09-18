@@ -7,7 +7,7 @@ open Silean Silean.Interfaces.Fifo
 
 /-! Queue-oriented properties of the FIFO's exact cycle contract. The FIFO is
 built from a register bank controlled by read and write pointers. These lemmas
-support the abstract FIFO refinement in `FifoCertified`. -/
+support the abstract FIFO refinement behind `FifoFifoTheorems`. -/
 
 abbrev Word (element : SignalType) := element.Denote
 abbrev ContractState (element : SignalType) (addressWidth : Nat) :=
@@ -555,14 +555,14 @@ theorem evaluated_outputs (element : SignalType) (addressWidth : Nat)
         (state .entries) ∧
       outputs .inputReady = inputReady (state .readPointer) (state .writePointer) := by
   intro outputs
-  have evaluates := (cycleContract element addressWidth).evaluate_evaluatesTo
+  have allowed := (cycleContract element addressWidth).evaluateStep_allowed
     inputs state
   exact ⟨((forwardRule_holds_iff element addressWidth _ _ outputs).mp
-      (evaluates.1 .forward)).1,
+      (allowed.1 .forward)).1,
     ((forwardRule_holds_iff element addressWidth _ _ outputs).mp
-      (evaluates.1 .forward)).2,
+      (allowed.1 .forward)).2,
     (readyRule_holds_iff element addressWidth _ _ outputs).mp
-      (evaluates.1 .ready)⟩
+      (allowed.1 .ready)⟩
 
 @[simp] theorem evaluated_next_readPointer (element : SignalType)
     (addressWidth : Nat) (state : ContractState element addressWidth)

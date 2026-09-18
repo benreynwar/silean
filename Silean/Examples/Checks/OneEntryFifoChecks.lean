@@ -1,5 +1,5 @@
 import Silean.Contracts.Cycle.CycleEvaluation
-import Silean.Modules.OneEntryFifo.OneEntryFifoCycleCertified
+import Silean.Modules.OneEntryFifo.OneEntryFifoCycleTheorems
 
 namespace Silean.Examples.Checks.OneEntryFifo
 
@@ -49,6 +49,20 @@ example : ((OneEntryFifo.cycleContract .bit).evaluate captureInputs emptyState).
 example : ((OneEntryFifo.cycleContract .bit).evaluate captureInputs emptyState).2
     .storedData = true := rfl
 
+/-! The reusable theorem interface says why the computed fall-through result
+has these values. -/
+
+example : ((OneEntryFifo.cycleContract .bit).evaluateStep
+    captureInputs emptyState).outputs .outputData = true := by
+  rw [OneEntryFifo.outputData_of_allowed
+    ((OneEntryFifo.cycleContract .bit).evaluateStep_allowed _ _)]
+  rfl
+
+example : Authoring.CircuitDescription.Corresponds
+    (OneEntryFifo.Description.description .bit)
+    (OneEntryFifo.naming .bit) :=
+  OneEntryFifo.Description.authored_definition_corresponds .bit
+
 /-! Backpressure holds both occupied state fields and deasserts input ready. -/
 
 example : ((OneEntryFifo.cycleContract .bit).evaluate stalledInputs fullTrueState).1
@@ -87,10 +101,6 @@ example : ((OneEntryFifo.cycleContract .bit).evaluate resetInputs fullTrueState)
 /-! The same certified FIFO carries aggregate payloads without changing its
 bit-valued valid/ready protocol. -/
 
-noncomputable def structuralState (signalType : SignalType) :
-    (OneEntryFifo.moduleStructure signalType).State :=
-  (OneEntryFifo.moduleStructure signalType).structuralState.defaultValues
-
 abbrev vectorType : SignalType := .vector 3 .bit
 
 def vectorValue : vectorType.Denote
@@ -113,13 +123,9 @@ example : ((OneEntryFifo.cycleContract vectorType).evaluate
 example : ((OneEntryFifo.cycleContract vectorType).evaluate
     vectorCaptureInputs vectorEmptyState).2 .storedData = vectorValue := rfl
 
-example : ∃ proposal,
-    (OneEntryFifo.moduleStructure vectorType).IsSolution
-      vectorCaptureInputs (structuralState vectorType) proposal ∧
-    ∀ other,
-      (OneEntryFifo.moduleStructure vectorType).IsSolution
-        vectorCaptureInputs (structuralState vectorType) other → other = proposal :=
-  (OneEntryFifo.certified vectorType).hasExactlyOneStructuralResult _ _
+noncomputable example : Contracts.Cycle.ModuleCycleCertified
+    (Silean.Interfaces.Fifo.ports vectorType) :=
+  OneEntryFifo.certified vectorType
 
 abbrev nestedFields : SignalTypes :=
   .ofList [.bit, .vector 2 (.tuple (.ofList [.bit, .bit]))]
@@ -150,17 +156,10 @@ example : ((OneEntryFifo.cycleContract nestedType).evaluate
 example : ((OneEntryFifo.cycleContract nestedType).evaluate
     nestedReplaceInputs nestedFullState).2 .storedData = nestedNew := rfl
 
-example : ∃ proposal,
-    (OneEntryFifo.moduleStructure nestedType).IsSolution
-      nestedReplaceInputs (structuralState nestedType) proposal ∧
-    ∀ other,
-      (OneEntryFifo.moduleStructure nestedType).IsSolution
-        nestedReplaceInputs (structuralState nestedType) other → other = proposal :=
-  (OneEntryFifo.certified nestedType).hasExactlyOneStructuralResult _ _
-
-example : ∃ contractState,
-    (OneEntryFifo.certified nestedType).stateCorresponds contractState
-      (structuralState nestedType) :=
-  (OneEntryFifo.certified nestedType).hasCorrespondingState _
+example : Contracts.Cycle.Implements
+    (OneEntryFifo.moduleStructure nestedType)
+    (OneEntryFifo.cycleContract nestedType)
+    (OneEntryFifo.certification nestedType).stateCorresponds :=
+  OneEntryFifo.implements_contract nestedType
 
 end Silean.Examples.Checks.OneEntryFifo

@@ -195,6 +195,59 @@ module_cycle_contract cycleContract (element : SignalType) (addressWidth : Nat)
 
 /-! ## Contract-facing laws -/
 
+section AllowedStep
+
+variable {element : SignalType} {addressWidth : Nat}
+  {step : (cycleContract element addressWidth).Step}
+  (allowed : (cycleContract element addressWidth).Allows step)
+
+include allowed
+
+/-- The forward channel is determined entirely by the current FIFO state. -/
+theorem forward_of_allowed :
+    step.outputs .outputValid =
+        outputValid (step.currentState .readPointer)
+          (step.currentState .writePointer) ∧
+      step.outputs .outputData =
+        outputData addressWidth (step.currentState .readPointer)
+          (step.currentState .entries) :=
+  (forwardRule_holds_iff element addressWidth
+    step.inputs step.currentState step.outputs).mp (allowed.1 .forward)
+
+/-- Input readiness is determined entirely by the current FIFO pointers. -/
+theorem input_ready_of_allowed :
+    step.outputs .inputReady =
+      inputReady (step.currentState .readPointer)
+        (step.currentState .writePointer) :=
+  (readyRule_holds_iff element addressWidth
+    step.inputs step.currentState step.outputs).mp (allowed.1 .ready)
+
+theorem next_readPointer_of_allowed :
+    step.nextState .readPointer =
+      nextReadPointer addressWidth (step.inputs .reset)
+        (step.inputs .outputReady) (step.currentState .readPointer)
+        (step.currentState .writePointer) := by
+  rw [allowed.2]
+  rfl
+
+theorem next_writePointer_of_allowed :
+    step.nextState .writePointer =
+      nextWritePointer addressWidth (step.inputs .reset)
+        (step.inputs .inputValid) (step.currentState .readPointer)
+        (step.currentState .writePointer) := by
+  rw [allowed.2]
+  rfl
+
+theorem next_entries_of_allowed :
+    step.nextState .entries =
+      nextEntries addressWidth (step.inputs .inputValid) (step.inputs .inputData)
+        (step.currentState .readPointer) (step.currentState .writePointer)
+        (step.currentState .entries) := by
+  rw [allowed.2]
+  rfl
+
+end AllowedStep
+
 @[simp] theorem stateRule_apply_readPointer (element : SignalType)
     (addressWidth : Nat) (inputs : (ports element).inputs.Values)
     (state : (stateMap element addressWidth).Values) :

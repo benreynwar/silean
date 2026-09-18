@@ -10,21 +10,17 @@ hardware interpreter.
 realizations certified against the same description have corresponding
 structural solutions. Their label types may differ. The input/output/child
 bijections preserve full entries, including child modules and all connections;
-they are derived from the certificates, not supplied by an author. Dependent
-transfer covers all target valuations, and `transferNextState` ensures that
-proposal transfer respects the next-state boundary as well.
-
-`Corresponds.certified_solution` then reuses an existing cycle certification.
-The Mux application is `Mux.Description.result_of_corresponding_solution` in
-`MuxCertified.lean`; it invokes production's selection law without
-repeating its Boolean proof. No additional invariant was needed in Corresponds.
+they are derived from the certificates, not supplied by an author. A complete
+`HierStep` is transferred as one value, so its boundary values, recursive child
+assignments, and derived structural state cannot drift apart.
 
 Verification (2026-09-13): the final theorems use only Lean's standard
 `propext`, `Classical.choice`, and `Quot.sound`; there are no admitted proofs or
 new axioms. Choice constructs proof-level label correspondences, not executable
 hardware. Three fresh-process checks with prebuilt imports took 1.29/1.23/1.25s
 for this file (median 1.25s), and 1.24/1.30/1.36s for the Mux mapping proofs
-(median 1.30s, before merging them into MuxCertified). These are whole-file wall times including imports, not isolated
+(median 1.30s, before merging them into `Internal/MuxVerification.lean`). These
+are whole-file wall times including imports, not isolated
 kernel timings. Production structure, semantics, and certification files were
 not modified.
 -/
@@ -194,7 +190,7 @@ theorem EntryBijection.backward_preserves {left : α → γ} {right : β → γ}
     left (bijection.backward label) = right label := by
   rw [bijection.preserves, bijection.forward_backward]
 
-/-- Transfer dependent data (port values, child states, or child proposals)
+/-- Transfer dependent data (port values, child states, or child assignments)
 along the automatically constructed entry correspondence. -/
 def EntryBijection.transfer {α : Type u} {β : Type v} {γ : Type w}
     {left : α → γ} {right : β → γ} (bijection : EntryBijection left right)
@@ -220,7 +216,7 @@ def EntryBijection.symm {left : α → γ} {right : β → γ}
   preserves := fun label => (bijection.backward_preserves label).symm
 
 /-- The dependent transfer covers every target valuation. This applies equally
-to boundary values, child states, and child proposals; preservation is not
+to boundary values, child states, and child assignments; preservation is not
 restricted to a proper subset of target data. -/
 theorem EntryBijection.transfer_surjective {α : Type u} {β : Type v} {γ : Type w}
     {left : α → γ} {right : β → γ} (bijection : EntryBijection left right)
@@ -304,19 +300,19 @@ abbrev childEntry {body : ModuleBody}
         sourceDescription ports instanceName (fun child => (childNaming child).ports)
           (body.wiring.instanceInput child port)⟩ }
 
-/-- Equal actual children and corresponding proposals have corresponding
+/-- Equal actual children and corresponding hierarchy assignments have corresponding
 output values. This inspects neither the child implementation nor its proof. -/
 theorem namedModule_output_heq (left right : NamedModule) (same : left = right)
-    (leftProposal : ProposedValues left.moduleStructure)
-    (rightProposal : ProposedValues right.moduleStructure)
-    (proposalsEqual : HEq leftProposal rightProposal)
+    (leftStep : HierStep left.moduleStructure)
+    (rightStep : HierStep right.moduleStructure)
+    (stepsEqual : HEq leftStep rightStep)
     (unique : left.naming.ports.outputs.names.Nodup)
     (leftPort : left.ports.outputs.Label) (rightPort : right.ports.outputs.Label)
     (namesEqual : left.naming.ports.outputs.name leftPort =
       right.naming.ports.outputs.name rightPort) :
-    HEq (leftProposal.outputs leftPort) (rightProposal.outputs rightPort) := by
+    HEq (leftStep.outputs leftPort) (rightStep.outputs rightPort) := by
   cases same
-  have equal := eq_of_heq proposalsEqual
+  have equal := eq_of_heq stepsEqual
   cases equal
   have portEqual := enumeration_name_injective left.ports.outputs.labels
     left.naming.ports.outputs.name unique namesEqual
@@ -353,29 +349,24 @@ theorem namedModule_inputs_heq (left right : NamedModule) (same : left = right)
   funext port
   exact eq_of_heq (agree port port rfl)
 
-theorem namedModule_nextState_heq (left right : NamedModule) (same : left = right)
-    (leftProposal : ProposedValues left.moduleStructure)
-    (rightProposal : ProposedValues right.moduleStructure)
-    (sameProposal : HEq leftProposal rightProposal) :
-    HEq leftProposal.nextState rightProposal.nextState := by
+theorem namedModule_hierStep_inputs_heq (left right : NamedModule)
+    (same : left = right)
+    (leftStep : HierStep left.moduleStructure)
+    (rightStep : HierStep right.moduleStructure)
+    (sameStep : HEq leftStep rightStep) :
+    HEq leftStep.inputs rightStep.inputs := by
   cases same
-  cases eq_of_heq sameProposal
+  cases eq_of_heq sameStep
   rfl
 
 theorem namedModule_solution_iff (left right : NamedModule) (same : left = right)
-    (leftInputs : left.ports.inputs.Values) (rightInputs : right.ports.inputs.Values)
-    (leftState : left.moduleStructure.State) (rightState : right.moduleStructure.State)
-    (leftProposal : ProposedValues left.moduleStructure)
-    (rightProposal : ProposedValues right.moduleStructure)
-    (inputsEqual : HEq leftInputs rightInputs)
-    (stateEqual : HEq leftState rightState)
-    (proposalEqual : HEq leftProposal rightProposal) :
-    left.moduleStructure.IsSolution leftInputs leftState leftProposal ↔
-      right.moduleStructure.IsSolution rightInputs rightState rightProposal := by
+    (leftStep : HierStep left.moduleStructure)
+    (rightStep : HierStep right.moduleStructure)
+    (stepEqual : HEq leftStep rightStep) :
+    left.moduleStructure.IsSolution leftStep ↔
+      right.moduleStructure.IsSolution rightStep := by
   cases same
-  cases eq_of_heq inputsEqual
-  cases eq_of_heq stateEqual
-  cases eq_of_heq proposalEqual
+  cases eq_of_heq stepEqual
   rfl
 
 /-- Name-aligned production valuations give the same value to corresponding
@@ -501,19 +492,14 @@ noncomputable def Corresponds.transferInputs (inputs : leftBody.ports.inputs.Val
   (leftCertificate.inputBijection rightCertificate).transfer
     (fun entry => entry.signalType.Denote) inputs
 
-noncomputable def Corresponds.transferState
-    (state : (ModuleStructure.composite leftBody leftChildren).State) :
-    (ModuleStructure.composite rightBody rightChildren).State :=
-  (leftCertificate.childBijection rightCertificate).transfer
-    (fun entry => entry.module.moduleStructure.State) state
-
-noncomputable def Corresponds.transferProposal
-    (proposal : ProposedValues (ModuleStructure.composite leftBody leftChildren)) :
-    ProposedValues (ModuleStructure.composite rightBody rightChildren) :=
-  ((leftCertificate.outputBijection rightCertificate).transfer
-      (fun entry => entry.port.signalType.Denote) proposal.1,
-    (leftCertificate.childBijection rightCertificate).transfer
-      (fun entry => ProposedValues entry.module.moduleStructure) proposal.2)
+noncomputable def Corresponds.transferHierStep
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren)) :
+    HierStep (ModuleStructure.composite rightBody rightChildren) :=
+  { inputs := leftCertificate.transferInputs rightCertificate hierStep.inputs
+    outputs := (leftCertificate.outputBijection rightCertificate).transfer
+      (fun entry => entry.port.signalType.Denote) hierStep.outputs
+    children := (leftCertificate.childBijection rightCertificate).transfer
+      (fun entry => HierStep entry.module.moduleStructure) hierStep.children }
 
 theorem Corresponds.transferInputs_agree (inputs : leftBody.ports.inputs.Values)
     (left : leftBody.ports.inputs.Label) (right : rightBody.ports.inputs.Label)
@@ -528,15 +514,16 @@ theorem Corresponds.transferInputs_agree (inputs : leftBody.ports.inputs.Values)
   exact (bijection.transfer_forward (fun entry => entry.signalType.Denote) inputs left).symm
 
 theorem Corresponds.transferChildOutputs_agree
-    (proposal : ProposedValues (ModuleStructure.composite leftBody leftChildren))
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))
     (leftChild : leftBody.instancePorts.Name) (rightChild : rightBody.instancePorts.Name)
     (leftPort : (leftBody.instancePorts.ports leftChild).outputs.Label)
     (rightPort : (rightBody.instancePorts.ports rightChild).outputs.Label)
     (sameChild : leftName leftChild = rightName rightChild)
     (samePort : (leftNaming leftChild).ports.outputs.name leftPort =
       (rightNaming rightChild).ports.outputs.name rightPort) :
-    HEq ((proposal.2 leftChild).outputs leftPort)
-      (((leftCertificate.transferProposal rightCertificate proposal).2 rightChild).outputs rightPort) := by
+    HEq ((hierStep.children leftChild).outputs leftPort)
+      (((leftCertificate.transferHierStep rightCertificate hierStep).children
+        rightChild).outputs rightPort) := by
   let bijection := leftCertificate.childBijection rightCertificate
   have names := congrArg Child.name (bijection.preserves leftChild)
   have equal : bijection.forward leftChild = rightChild :=
@@ -545,7 +532,7 @@ theorem Corresponds.transferChildOutputs_agree
   subst rightChild
   exact namedModule_output_heq _ _ (congrArg Child.module (bijection.preserves leftChild))
     _ _ (bijection.transfer_forward
-      (fun entry => ProposedValues entry.module.moduleStructure) proposal.2 leftChild).symm
+      (fun entry => HierStep entry.module.moduleStructure) hierStep.children leftChild).symm
     (leftCertificate.source_names_unique.2.2 leftChild) leftPort rightPort samePort
 
 include leftCertificate in
@@ -558,127 +545,101 @@ theorem Corresponds.childInputsUnique (child : leftBody.instancePorts.Name) :
   exact (List.nodup_append.mp (unique.2.2 _ member).1).1
 
 theorem Corresponds.transferSourceValue (inputs : leftBody.ports.inputs.Values)
-    (proposal : ProposedValues (ModuleStructure.composite leftBody leftChildren))
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))
     {leftType rightType : SignalType}
     (left : SignalSource leftBody.ports leftBody.instancePorts leftType)
     (right : SignalSource rightBody.ports rightBody.instancePorts rightType)
     (same : sourceDescription leftPorts leftName (fun child => (leftNaming child).ports) left =
       sourceDescription rightPorts rightName (fun child => (rightNaming child).ports) right) :
-    HEq (left.value inputs (fun child => (proposal.2 child).outputs))
+    HEq (left.value inputs hierStep.childOutputs)
       (right.value (leftCertificate.transferInputs rightCertificate inputs)
-        (fun child => ((leftCertificate.transferProposal rightCertificate proposal).2 child).outputs)) :=
+        (leftCertificate.transferHierStep rightCertificate hierStep).childOutputs) :=
   sourceDescription_value_heq leftPorts rightPorts leftName rightName
     (fun child => (leftNaming child).ports) (fun child => (rightNaming child).ports)
-    inputs _ (fun child => (proposal.2 child).outputs) _
+    inputs _ hierStep.childOutputs _
     (leftCertificate.transferInputs_agree rightCertificate inputs)
-    (leftCertificate.transferChildOutputs_agree rightCertificate proposal) left right same
+    (leftCertificate.transferChildOutputs_agree rightCertificate hierStep) left right same
 
 theorem Corresponds.transferChildInputs (inputs : leftBody.ports.inputs.Values)
-    (proposal : ProposedValues (ModuleStructure.composite leftBody leftChildren))
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))
     (child : leftBody.instancePorts.Name) :
-    HEq (ProposedValues.childInputs leftBody leftChildren inputs proposal.2 child)
-      (ProposedValues.childInputs rightBody rightChildren
+    HEq (leftBody.wiring.childInputValues inputs hierStep.childOutputs child)
+      (rightBody.wiring.childInputValues
         (leftCertificate.transferInputs rightCertificate inputs)
-        (leftCertificate.transferProposal rightCertificate proposal).2
+        (leftCertificate.transferHierStep rightCertificate hierStep).childOutputs
         ((leftCertificate.childBijection rightCertificate).forward child)) := by
   let bijection := leftCertificate.childBijection rightCertificate
   have childEqual := bijection.preserves child
   have moduleEqual := congrArg Child.module childEqual
   apply namedModule_inputs_heq _ _ moduleEqual
   intro leftPort rightPort sameName
-  exact leftCertificate.transferSourceValue rightCertificate inputs proposal
+  exact leftCertificate.transferSourceValue rightCertificate inputs hierStep
     (leftBody.wiring.instanceInput child leftPort)
     (rightBody.wiring.instanceInput (bijection.forward child) rightPort)
     (namedModule_input_source_eq _ _ moduleEqual _ _ (congrArg Child.inputs childEqual)
       (leftCertificate.childInputsUnique child) leftPort rightPort sameName)
 
+theorem Corresponds.transferStoredChildInputs
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))
+    (child : leftBody.instancePorts.Name) :
+    HEq (hierStep.children child).inputs
+      ((leftCertificate.transferHierStep rightCertificate hierStep).children
+        ((leftCertificate.childBijection rightCertificate).forward child)).inputs := by
+  let bijection := leftCertificate.childBijection rightCertificate
+  exact namedModule_hierStep_inputs_heq _ _
+    (congrArg Child.module (bijection.preserves child)) _ _
+    (bijection.transfer_forward
+      (fun entry => HierStep entry.module.moduleStructure)
+      hierStep.children child).symm
+
 /-- Generic structural soundness. Equal uniquely named descriptions preserve
 the production solution relation under automatically derived boundary and
-child correspondences. This includes every structural state and proposal,
+child correspondences. This includes every complete hierarchy assignment,
 not just evaluation of a chosen example. -/
-theorem Corresponds.transferSolution_iff (inputs : leftBody.ports.inputs.Values)
-    (state : (ModuleStructure.composite leftBody leftChildren).State)
-    (proposal : ProposedValues (ModuleStructure.composite leftBody leftChildren)) :
-    (ModuleStructure.composite leftBody leftChildren).IsSolution inputs state proposal ↔
+theorem Corresponds.transferSolution_iff
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren)) :
+    (ModuleStructure.composite leftBody leftChildren).IsSolution hierStep ↔
       (ModuleStructure.composite rightBody rightChildren).IsSolution
-        (leftCertificate.transferInputs rightCertificate inputs)
-        (leftCertificate.transferState rightCertificate state)
-        (leftCertificate.transferProposal rightCertificate proposal) := by
+        (leftCertificate.transferHierStep rightCertificate hierStep) := by
   let outputs := leftCertificate.outputBijection rightCertificate
   let children := leftCertificate.childBijection rightCertificate
-  have boundary : ProposedValues.boundaryOutputsSatisfy leftBody leftChildren inputs proposal.1 proposal.2 ↔
-      ProposedValues.boundaryOutputsSatisfy rightBody rightChildren
-        (leftCertificate.transferInputs rightCertificate inputs)
-        (leftCertificate.transferProposal rightCertificate proposal).1
-        (leftCertificate.transferProposal rightCertificate proposal).2 := by
+  have boundary : HierStep.ParentOutputsSatisfy leftBody hierStep.inputs
+      hierStep.outputs hierStep.childOutputs ↔
+      HierStep.ParentOutputsSatisfy rightBody
+        (leftCertificate.transferHierStep rightCertificate hierStep).inputs
+        (leftCertificate.transferHierStep rightCertificate hierStep).outputs
+        (leftCertificate.transferHierStep rightCertificate hierStep).childOutputs := by
     apply outputs.forall_iff
     intro port
     apply equality_iff_of_heq
-    · exact (outputs.transfer_forward (fun entry => entry.port.signalType.Denote) proposal.1 port).symm
-    · exact leftCertificate.transferSourceValue rightCertificate inputs proposal
+    · exact (outputs.transfer_forward
+        (fun entry => entry.port.signalType.Denote) hierStep.outputs port).symm
+    · exact leftCertificate.transferSourceValue rightCertificate hierStep.inputs hierStep
         (leftBody.wiring.moduleOutput port) (rightBody.wiring.moduleOutput (outputs.forward port))
         (congrArg Connection.source (outputs.preserves port))
+  have childInputs : HierStep.ChildInputsSatisfy leftBody hierStep.inputs
+      hierStep.childInputs hierStep.childOutputs ↔
+      HierStep.ChildInputsSatisfy rightBody
+        (leftCertificate.transferHierStep rightCertificate hierStep).inputs
+        (leftCertificate.transferHierStep rightCertificate hierStep).childInputs
+        (leftCertificate.transferHierStep rightCertificate hierStep).childOutputs := by
+    apply children.forall_iff
+    intro child
+    apply equality_iff_of_heq
+    · exact leftCertificate.transferStoredChildInputs rightCertificate hierStep child
+    · exact leftCertificate.transferChildInputs rightCertificate hierStep.inputs
+        hierStep child
   have childSolutions : (∀ child, (leftChildren child).IsSolution
-      (ProposedValues.childInputs leftBody leftChildren inputs proposal.2 child)
-      (state child) (proposal.2 child)) ↔
+      (hierStep.children child)) ↔
       (∀ child, (rightChildren child).IsSolution
-        (ProposedValues.childInputs rightBody rightChildren
-          (leftCertificate.transferInputs rightCertificate inputs)
-          (leftCertificate.transferProposal rightCertificate proposal).2 child)
-        (leftCertificate.transferState rightCertificate state child)
-        ((leftCertificate.transferProposal rightCertificate proposal).2 child)) := by
+        ((leftCertificate.transferHierStep rightCertificate hierStep).children child)) := by
     apply children.forall_iff
     intro child
     exact namedModule_solution_iff _ _ (congrArg Child.module (children.preserves child))
-      _ _ _ _ _ _ (leftCertificate.transferChildInputs rightCertificate inputs proposal child)
-      (children.transfer_forward (fun entry => entry.module.moduleStructure.State) state child).symm
-      (children.transfer_forward (fun entry => ProposedValues entry.module.moduleStructure) proposal.2 child).symm
-  exact and_congr boundary childSolutions
-
-/-- Transferring a proposal also transfers its next state, so correspondence
-can be maintained across cycles rather than only at one isolated observation. -/
-theorem Corresponds.transferNextState
-    (proposal : ProposedValues (ModuleStructure.composite leftBody leftChildren)) :
-    leftCertificate.transferState rightCertificate proposal.nextState =
-      (leftCertificate.transferProposal rightCertificate proposal).nextState := by
-  let children := leftCertificate.childBijection rightCertificate
-  have atChild (child : leftBody.instancePorts.Name) :
-      leftCertificate.transferState rightCertificate proposal.nextState (children.forward child) =
-        (leftCertificate.transferProposal rightCertificate proposal).nextState (children.forward child) := by
-    apply eq_of_heq
-    exact (children.transfer_forward (fun entry => entry.module.moduleStructure.State)
-      proposal.nextState child).trans
-      (namedModule_nextState_heq _ _ (congrArg Child.module (children.preserves child)) _ _
-        (children.transfer_forward (fun entry => ProposedValues entry.module.moduleStructure)
-          proposal.2 child).symm)
-  funext child
-  have atRight := atChild (children.backward child)
-  rw [children.forward_backward child] at atRight
-  exact atRight
-
-/-- Reuse a production contract proof for any structure corresponding to the
-same description. Contract states and their preservation come from the existing
-certification; no behavioral proof is repeated at the authoring boundary. -/
-theorem Corresponds.certified_solution
-    {contract : Contracts.Cycle.ModuleCycleContract rightBody.ports}
-    (certification : Contracts.Cycle.ModuleCycleCertification
-      (ModuleStructure.composite rightBody rightChildren) contract)
-    (inputs : leftBody.ports.inputs.Values)
-    (state : (ModuleStructure.composite leftBody leftChildren).State)
-    (proposal : ProposedValues (ModuleStructure.composite leftBody leftChildren))
-    (solution : (ModuleStructure.composite leftBody leftChildren).IsSolution inputs state proposal) :
-    ∃ contractState nextContractState,
-      certification.stateCorresponds contractState
-        (leftCertificate.transferState rightCertificate state) ∧
-      contract.EvaluatesTo (leftCertificate.transferInputs rightCertificate inputs)
-        contractState (leftCertificate.transferProposal rightCertificate proposal).outputs nextContractState ∧
-      certification.stateCorresponds nextContractState
-        (leftCertificate.transferProposal rightCertificate proposal).nextState := by
-  obtain ⟨contractState, stateMatches⟩ := certification.hasCorrespondingState
-    (leftCertificate.transferState rightCertificate state)
-  obtain ⟨nextContractState, evaluates, nextMatches⟩ := certification.implements _ _ _ _ stateMatches
-    ((leftCertificate.transferSolution_iff rightCertificate inputs state proposal).mp solution)
-  exact ⟨contractState, nextContractState, stateMatches, evaluates, nextMatches⟩
+      _ _ (children.transfer_forward
+        (fun entry => HierStep entry.module.moduleStructure)
+        hierStep.children child).symm
+  exact and_congr boundary (and_congr childInputs childSolutions)
 
 end Comparison
 

@@ -1,6 +1,6 @@
 import Silean.Authoring.ModuleWiring
 import Silean.Authoring.ModuleChildCertifications
-import Silean.Modules.HalfAdder.HalfAdderCertified
+import Silean.Modules.HalfAdder.HalfAdderTheorems
 import Silean.Primitives.Or
 
 namespace Silean.Examples.Checks.ModuleWiringAuthoring

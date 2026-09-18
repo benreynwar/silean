@@ -1,4 +1,5 @@
-import Silean.Modules.Register.Register
+import Silean.Modules.Register.RegisterTheorems
+import Silean.Semantics.StructuralExecution
 
 namespace Silean.Examples.Checks.Register
 
@@ -13,22 +14,40 @@ def vectorInput : vectorType.Denote
 def vectorInputs : (Modules.Register.ports vectorType).inputs.Values
   | .input => vectorInput
 
+def vectorContractState : (Modules.Register.stateMap vectorType).Values
+  | .stored => fun _ => false
+
+/-! The public Step laws capture the two defining facts about a register: it
+shows the old value now and stores the input for the next cycle. -/
+
+example : ((Modules.Register.cycleContract vectorType).evaluateStep
+    vectorInputs vectorContractState).outputs .output =
+    vectorContractState .stored :=
+  Modules.Register.output_of_allowed
+    ((Modules.Register.cycleContract vectorType).evaluateStep_allowed _ _)
+
+example : ((Modules.Register.cycleContract vectorType).evaluateStep
+    vectorInputs vectorContractState).nextState .stored = vectorInput :=
+  Modules.Register.next_stored_of_allowed
+    ((Modules.Register.cycleContract vectorType).evaluateStep_allowed _ _)
+
 noncomputable def vectorStructuralState :
     (Modules.Register.certified vectorType).moduleStructure.State :=
   (Modules.Register.certified vectorType).moduleStructure.structuralState.defaultValues
 
-example : ∃ proposal,
-    (Modules.Register.certified vectorType).moduleStructure.IsSolution
-      vectorInputs vectorStructuralState proposal :=
-  (Modules.Register.certified vectorType).hasStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.Register.certified vectorType).moduleStructure.Transition
+      vectorInputs vectorStructuralState outputs nextState :=
+  (Modules.Register.certified vectorType).hasStructuralResult.transition_exists
+    vectorInputs vectorStructuralState
 
-example : ∃ proposal,
-    (Modules.Register.certified vectorType).moduleStructure.IsSolution
-      vectorInputs vectorStructuralState proposal ∧
-    ∀ other,
-      (Modules.Register.certified vectorType).moduleStructure.IsSolution
-        vectorInputs vectorStructuralState other → other = proposal :=
-  (Modules.Register.certified vectorType).hasExactlyOneStructuralResult _ _
+example {outputs nextState otherOutputs otherNext}
+    (left : (Modules.Register.certified vectorType).moduleStructure.Transition
+      vectorInputs vectorStructuralState outputs nextState)
+    (right : (Modules.Register.certified vectorType).moduleStructure.Transition
+      vectorInputs vectorStructuralState otherOutputs otherNext) :
+    outputs = otherOutputs ∧ nextState = otherNext :=
+  left.unique (Modules.Register.certified vectorType).structuralResultUnique right
 
 abbrev tupleFields : SignalTypes :=
   .ofList [.bit, .vector 2 (.tuple (.ofList [.bit, .bit]))]
@@ -46,12 +65,10 @@ noncomputable def tupleStructuralState :
     (Modules.Register.certified tupleType).moduleStructure.State :=
   (Modules.Register.certified tupleType).moduleStructure.structuralState.defaultValues
 
-example : ∃ proposal,
-    (Modules.Register.certified tupleType).moduleStructure.IsSolution
-      tupleInputs tupleStructuralState proposal ∧
-    ∀ other,
-      (Modules.Register.certified tupleType).moduleStructure.IsSolution
-        tupleInputs tupleStructuralState other → other = proposal :=
-  (Modules.Register.certified tupleType).hasExactlyOneStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.Register.certified tupleType).moduleStructure.Transition
+      tupleInputs tupleStructuralState outputs nextState :=
+  (Modules.Register.certified tupleType).hasStructuralResult.transition_exists
+    tupleInputs tupleStructuralState
 
 end Silean.Examples.Checks.Register

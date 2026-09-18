@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Examples.PicoRV.AluLaws
+import Silean.Examples.PicoRV.AluTheorems
 
 namespace Silean.Examples.Checks.PicoRVAlu
 

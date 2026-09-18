@@ -1,9 +1,16 @@
 import Silean.FIRRTL
-import Silean.Modules.HalfAdder.HalfAdderCertified
+import Silean.Modules.HalfAdder.HalfAdderTheorems
 
 namespace Silean.Examples.Checks.HalfAdder
 
 open Silean Silean.FIRRTL
+
+example : Modules.HalfAdder.Description.description.children.map (·.name) =
+    [.indexed "xor" 0, .indexed "and" 0] := rfl
+
+example : Authoring.CircuitDescription.Corresponds
+    Modules.HalfAdder.Description.description Modules.HalfAdder.naming :=
+  Modules.HalfAdder.Description.authored_definition_corresponds
 
 noncomputable example : Contracts.Cycle.ModuleCycleCertified Modules.HalfAdder.ports :=
   Modules.HalfAdder.certified
@@ -24,6 +31,16 @@ noncomputable example := Modules.HalfAdder.certifiedLayer.certify
 
 example : ModuleStructure.NoBlackboxesCertified Modules.HalfAdder.moduleStructure :=
   Modules.HalfAdder.noBlackboxesCertified
+
+example {step : Modules.HalfAdder.moduleStructure.Step}
+    (realizes : Modules.HalfAdder.moduleStructure.Realizes step) :
+    Modules.HalfAdder.Behavior step.inputs step.outputs :=
+  Modules.HalfAdder.Description.behavior_of_realization realizes
+
+example : Contracts.Cycle.Implements
+    Modules.HalfAdder.moduleStructure Modules.HalfAdder.cycleContract
+    Modules.HalfAdder.certification.stateCorresponds :=
+  Modules.HalfAdder.implements_contract
 
 /-- The exported proof is intentionally opaque: clients obtain state
 correspondence from its public coverage theorem, not by reducing the private
@@ -59,14 +76,9 @@ def carryResult (left right : Bool) : Bool := result left right .carry
 example (left right : Bool) :
     (result left right .sum).toNat + 2 * (result left right .carry).toNat =
       left.toNat + right.toNat := by
-  simpa [result, inputs] using Modules.HalfAdder.numeric_value_of_evaluatesTo
-    (inputs left right) SignalMap.emptyValues
-    (Modules.HalfAdder.cycleContract.evaluate
-      (inputs left right) SignalMap.emptyValues).1
-    (Modules.HalfAdder.cycleContract.evaluate
-      (inputs left right) SignalMap.emptyValues).2
-    (Modules.HalfAdder.cycleContract.evaluate_evaluatesTo
-      (inputs left right) SignalMap.emptyValues)
+  exact (Modules.HalfAdder.Behavior.of_allowed
+    (Modules.HalfAdder.cycleContract.evaluateStep_allowed
+      (inputs left right) SignalMap.emptyValues)).numeric_value
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
@@ -83,7 +95,7 @@ private def containsAll (rendered : RenderResult String) (fragments : List Strin
   ["public module HalfAdder",
    "input left : UInt<1>", "input right : UInt<1>",
    "output sum : UInt<1>", "output carry : UInt<1>",
-   "inst sumGate of xor_bit", "inst carryGate of and_bit",
-   "connect sumGate.left, left", "connect carryGate.right, right"]
+   "inst xor_0 of xor_bit", "inst and_0 of and_bit",
+   "connect xor_0.left, left", "connect and_0.right, right"]
 
 end Silean.Examples.Checks.HalfAdder

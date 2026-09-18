@@ -1,9 +1,16 @@
 import Silean.FIRRTL
-import Silean.Modules.FullAdder.FullAdderCertified
+import Silean.Modules.FullAdder.FullAdderTheorems
 
 namespace Silean.Examples.Checks.FullAdder
 
 open Silean Silean.FIRRTL
+
+example : Modules.FullAdder.Description.description.children.map (·.name) =
+    [.indexed "half_adder" 0, .indexed "half_adder" 1, .indexed "or" 0] := rfl
+
+example : Authoring.CircuitDescription.Corresponds
+    Modules.FullAdder.Description.description Modules.FullAdder.naming :=
+  Modules.FullAdder.Description.authored_definition_corresponds
 
 noncomputable example : Contracts.Cycle.ModuleCycleCertified Modules.FullAdder.ports :=
   Modules.FullAdder.certified
@@ -14,6 +21,16 @@ noncomputable example := Modules.FullAdder.certifiedLayer.certify
 
 example : ModuleStructure.NoBlackboxesCertified Modules.FullAdder.moduleStructure :=
   Modules.FullAdder.noBlackboxesCertified
+
+example {step : Modules.FullAdder.moduleStructure.Step}
+    (realizes : Modules.FullAdder.moduleStructure.Realizes step) :
+    Modules.FullAdder.Behavior step.inputs step.outputs :=
+  Modules.FullAdder.Description.behavior_of_realization realizes
+
+example : Contracts.Cycle.Implements
+    Modules.FullAdder.moduleStructure Modules.FullAdder.cycleContract
+    Modules.FullAdder.certification.stateCorresponds :=
+  Modules.FullAdder.implements_contract
 
 /-- Clients cannot discharge the private state relation by unfolding the
 FullAdder proof; they must use its public state-coverage guarantee. -/
@@ -48,14 +65,9 @@ example (left right carryIn : Bool) :
     (result left right carryIn .sum).toNat +
         2 * (result left right carryIn .carryOut).toNat =
       left.toNat + right.toNat + carryIn.toNat := by
-  simpa [result, inputs] using Modules.FullAdder.numeric_value_of_evaluatesTo
-    (inputs left right carryIn) SignalMap.emptyValues
-    (Modules.FullAdder.cycleContract.evaluate
-      (inputs left right carryIn) SignalMap.emptyValues).1
-    (Modules.FullAdder.cycleContract.evaluate
-      (inputs left right carryIn) SignalMap.emptyValues).2
-    (Modules.FullAdder.cycleContract.evaluate_evaluatesTo
-      (inputs left right carryIn) SignalMap.emptyValues)
+  exact (Modules.FullAdder.Behavior.of_allowed
+    (Modules.FullAdder.cycleContract.evaluateStep_allowed
+      (inputs left right carryIn) SignalMap.emptyValues)).numeric_value
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
@@ -67,11 +79,11 @@ private def contains (text fragment : String) : Bool :=
        "input left : UInt<1>", "input right : UInt<1>",
        "input carryIn : UInt<1>",
        "output sum : UInt<1>", "output carryOut : UInt<1>",
-       "inst operands of HalfAdder",
-       "inst carry of HalfAdder",
-       "inst combineCarry of or_bit",
-       "connect carry.left, operands.sum",
-       "connect combineCarry.left, operands.carry",
-       "connect combineCarry.right, carry.carry"].all (contains text)
+       "inst half_adder_0 of HalfAdder",
+       "inst half_adder_1 of HalfAdder",
+       "inst or_0 of or_bit",
+       "connect half_adder_1.left, half_adder_0.sum",
+       "connect or_0.left, half_adder_0.carry",
+       "connect or_0.right, half_adder_1.carry"].all (contains text)
 
 end Silean.Examples.Checks.FullAdder

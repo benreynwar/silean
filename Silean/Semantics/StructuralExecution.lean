@@ -5,10 +5,10 @@ namespace Silean
 
 /-! # Execution derived from structural equations
 
-A structural transition exists when there is a proposal satisfying all
-simultaneous equations. The transition hides internal proposed values and keeps
-only boundary outputs and next structural state. `Executes` repeats this
-relation over an input trace.
+A structural transition exists when there is a complete hierarchy assignment
+satisfying all simultaneous equations. The transition hides that internal
+assignment and keeps only boundary outputs and next structural state.
+`Executes` repeats this relation over an input trace.
 
 This does not introduce a solver or evaluation order. `HasSolution` establishes
 that transitions exist; `HasAtMostOneSolution` establishes determinism. When
@@ -18,37 +18,48 @@ and current state. -/
 def ModuleStructure.Transition (module : ModuleStructure ports)
     (inputs : ports.inputs.Values) (currentState : module.State)
     (outputs : ports.outputs.Values) (nextState : module.State) : Prop :=
-  ∃ proposal, module.IsSolution inputs currentState proposal ∧
-    proposal.outputs = outputs ∧ proposal.nextState = nextState
+  module.Realizes
+    { inputs := inputs
+      currentState := currentState
+      outputs := outputs
+      nextState := nextState }
 
 abbrev ModuleStructure.Executes (module : ModuleStructure ports) :=
   Trace module.Transition
 
-def ModuleStructure.HasSolution (module : ModuleStructure ports) : Prop :=
-  ∀ inputs currentState,
-    ∃ proposal, module.IsSolution inputs currentState proposal
-
-def ModuleStructure.HasExactlyOneSolution
-    (module : ModuleStructure ports) : Prop :=
-  module.HasSolution ∧ module.HasAtMostOneSolution
-
 namespace ModuleStructure
 
-theorem transition_of_solution {module : ModuleStructure ports}
+/-- The four-argument transition is exactly the structural relation on
+the corresponding boundary step. -/
+theorem transition_iff_realizes {module : ModuleStructure ports}
     {inputs : ports.inputs.Values} {currentState : module.State}
-    {proposal : ProposedValues module}
-    (solution : module.IsSolution inputs currentState proposal) :
-    module.Transition inputs currentState proposal.outputs proposal.nextState :=
-  ⟨proposal, solution, rfl, rfl⟩
+    {outputs : ports.outputs.Values} {nextState : module.State} :
+    module.Transition inputs currentState outputs nextState ↔
+      module.Realizes
+        { inputs := inputs
+          currentState := currentState
+          outputs := outputs
+          nextState := nextState } :=
+  Iff.rfl
+
+theorem transition_of_solution {module : ModuleStructure ports}
+    {hierStep : HierStep module} (solution : module.IsSolution hierStep) :
+    module.Transition hierStep.inputs (HierStep.currentState module hierStep)
+      hierStep.outputs (HierStep.nextState module hierStep) :=
+  realizes_of_solution solution
 
 theorem Transition.solution_exists
     {module : ModuleStructure ports} {inputs : ports.inputs.Values}
     {currentState : module.State} {outputs : ports.outputs.Values}
     {nextState : module.State}
     (transition : module.Transition inputs currentState outputs nextState) :
-    ∃ proposal, module.IsSolution inputs currentState proposal := by
-  rcases transition with ⟨proposal, solution, _, _⟩
-  exact ⟨proposal, solution⟩
+    ∃ hierStep, module.IsSolution hierStep ∧
+      hierStep.step =
+        { inputs := inputs
+          currentState := currentState
+          outputs := outputs
+          nextState := nextState } :=
+  transition
 
 theorem Transition.unique
     {module : ModuleStructure ports} (unique : module.HasAtMostOneSolution)
@@ -58,13 +69,22 @@ theorem Transition.unique
     (left : module.Transition inputs currentState leftOutputs leftNext)
     (right : module.Transition inputs currentState rightOutputs rightNext) :
     leftOutputs = rightOutputs ∧ leftNext = rightNext := by
-  rcases left with ⟨leftProposal, leftSolution, leftOutputsEq, leftNextEq⟩
-  rcases right with ⟨rightProposal, rightSolution, rightOutputsEq, rightNextEq⟩
-  have proposalsEqual := unique inputs currentState leftProposal rightProposal
-    leftSolution rightSolution
-  subst rightProposal
-  exact ⟨leftOutputsEq.symm.trans rightOutputsEq,
-    leftNextEq.symm.trans rightNextEq⟩
+  rcases left with ⟨leftHierStep, leftSolution, leftStepEq⟩
+  rcases right with ⟨rightHierStep, rightSolution, rightStepEq⟩
+  have inputsEqual : leftHierStep.inputs = rightHierStep.inputs := by
+    change leftHierStep.step.inputs = rightHierStep.step.inputs
+    rw [leftStepEq, rightStepEq]
+  have currentStatesEqual :
+      HierStep.currentState module leftHierStep =
+        HierStep.currentState module rightHierStep := by
+    change leftHierStep.step.currentState = rightHierStep.step.currentState
+    rw [leftStepEq, rightStepEq]
+  have hierarchyEqual := unique leftHierStep rightHierStep
+    leftSolution rightSolution inputsEqual currentStatesEqual
+  subst rightHierStep
+  have boundaryEqual := leftStepEq.symm.trans rightStepEq
+  exact ⟨congrArg CycleStep.outputs boundaryEqual,
+    congrArg CycleStep.nextState boundaryEqual⟩
 
 theorem Executes.length_eq
     {module : ModuleStructure ports} {initialState finalState : module.State}
@@ -137,9 +157,11 @@ theorem HasSolution.transition_exists
     (inputs : ports.inputs.Values) (currentState : module.State) :
     ∃ outputs nextState,
       module.Transition inputs currentState outputs nextState := by
-  rcases available inputs currentState with ⟨proposal, solution⟩
-  exact ⟨proposal.outputs, proposal.nextState,
-    transition_of_solution solution⟩
+  rcases available inputs currentState with
+    ⟨hierStep, solution, inputsEqual, currentStateEqual⟩
+  refine ⟨hierStep.outputs, HierStep.nextState module hierStep, ?_⟩
+  rw [← inputsEqual, ← currentStateEqual]
+  exact transition_of_solution solution
 
 theorem HasSolution.execution_exists
     {module : ModuleStructure ports} (available : module.HasSolution) :

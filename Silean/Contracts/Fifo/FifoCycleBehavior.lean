@@ -186,7 +186,7 @@ theorem evaluate_forward (behavior : CycleBehavior signalType)
         (behavior.forward (inputs .inputValid) (inputs .inputData) state).2 := by
   intro evaluated
   have holds : behavior.forwardRule.Holds inputs state evaluated.1 :=
-    (behavior.cycleContract.evaluate_evaluatesTo inputs state).1 .forward
+    (behavior.cycleContract.evaluateStep_allowed inputs state).1 .forward
   exact (behavior.forwardRule_holds_iff inputs state evaluated.1).mp
     holds
 
@@ -197,7 +197,7 @@ theorem evaluate_ready (behavior : CycleBehavior signalType)
     evaluated.1 .inputReady = behavior.ready (inputs .outputReady) state := by
   intro evaluated
   have holds : behavior.readyRule.Holds inputs state evaluated.1 :=
-    (behavior.cycleContract.evaluate_evaluatesTo inputs state).1 .ready
+    (behavior.cycleContract.evaluateStep_allowed inputs state).1 .ready
   exact (behavior.readyRule_holds_iff inputs state evaluated.1).mp
     holds
 

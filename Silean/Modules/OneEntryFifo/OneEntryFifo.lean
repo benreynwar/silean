@@ -1,62 +1,56 @@
+import Silean.Authoring.CircuitDescription
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
 import Silean.Contracts.Fifo.FifoCycleBehavior
 import Silean.Interfaces.FifoPorts
-import Silean.Modules.EnabledRegister.EnabledRegister
-import Silean.Modules.EnabledResetRegister.EnabledResetRegister
-import Silean.Modules.Mux.MuxStructure
-import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControl
+import Silean.Modules.OneEntryFifo.Internal.OneEntryFifoStructure
 import Silean.Naming.FifoPortsNaming
-import Silean.Naming.PrimitiveNaming
-import Silean.Primitives.OrPrimitive
+import Silean.Primitives.Or
 
-namespace Silean.Modules
+/-! # One-entry fall-through FIFO
+
+The FIFO forwards an incoming payload combinationally while its single storage
+entry is empty. If the consumer stalls, the entry captures that payload; while
+occupied, it presents the stored payload until the consumer accepts it.
+
+The authored circuit below shows the control and feedback paths. Its exact
+clock-cycle behavior is stated later in this file. The separate higher-level
+FIFO refinement is intentionally kept in `OneEntryFifoFifoTheorems.lean`.
+-/
+
+namespace Silean.Modules.OneEntryFifo.Description
 
 open Silean
-open Silean.Authoring
+open Silean.Authoring.CircuitDescription
 
-/-! A one-entry FIFO with combinational fall-through when the entry is empty.
-Data is stored only when it cannot pass directly to the output. -/
+noncomputable def construction (signalType : SignalType) : Builder Unit := do
+  let inputValid ← input "input_valid" .bit
+  let inputData ← input "input_data" signalType
+  let outputReady ← input "output_ready" .bit
+  let reset ← input "reset" .bit
+  let storedValid ← wire "stored_valid" .bit
+  let storedData ← wire "stored_data" signalType
+  let storageUpdate ← wire "storage_update" .bit
+  let valid ← Modules.EnabledResetRegister.placeNamed (signalType := .bit)
+    "validStorage" false inputValid storageUpdate reset
+  let data ← Modules.EnabledRegister.placeNamed "dataStorage"
+    inputData storageUpdate
+  let (inputReady, update) ← Modules.OneEntryFifo.Control.placeNamed
+    "control" storedValid outputReady
+  let outputValid ← Primitives.Or.placeNamed "outputValidOr"
+    storedValid inputValid
+  let outputData ← Modules.Mux.placeNamed "outputDataMux"
+    storedValid inputData storedData
+  assign storedValid valid
+  assign storedData data
+  assign storageUpdate update
+  output "output_valid" outputValid
+  output "output_data" outputData
+  output "input_ready" inputReady
 
-module_design OneEntryFifo (signalType : SignalType) where
-  boundary (Interfaces.Fifo.ports signalType)
-    (naming := Naming.FifoPorts.ports signalType)
-  instances {
-    -- Records whether the storage entry currently contains data.
-    validStorage := EnabledResetRegister.design .bit false,
-    -- Holds the buffered payload.
-    dataStorage := EnabledRegister.design signalType,
-    -- Decides readiness and whether storage must be updated.
-    control := OneEntryFifo.Control.design,
-    -- Combines buffered-valid and incoming-valid for the output.
-    outputValidOr := Primitives.orDesign,
-    -- Selects buffered or incoming data.
-    outputDataMux := Mux.design signalType }
-  wiring {
-    outputs {
-      .outputValid := outputValidOr.output,
-      .outputData := outputDataMux.result,
-      .inputReady := control.upstreamReady }
-    instance (.validStorage) {
-      .enable := control.storageUpdate,
-      .value := input.inputValid,
-      .reset := input.reset }
-    instance (.dataStorage) {
-      .enable := control.storageUpdate,
-      .data := input.inputData }
-    instance (.control) {
-      .storedValid := validStorage.value,
-      .downstreamReady := input.outputReady }
-    instance (.outputValidOr) {
-      .left := validStorage.value,
-      .right := input.inputValid }
-    instance (.outputDataMux) {
-      .select := validStorage.value,
-      .whenFalse := input.inputData,
-      .whenTrue := dataStorage.q }
-  }
+noncomputable def description (signalType : SignalType) : Description :=
+  build (construction signalType)
 
-end Silean.Modules
+end Silean.Modules.OneEntryFifo.Description
 
 namespace Silean.Modules.OneEntryFifo
 
@@ -73,6 +67,30 @@ def namingWith (signalType : SignalType)
     Silean.Naming.ModuleNaming (moduleStructure signalType) :=
   (naming signalType).withPorts
     (Silean.Naming.FifoPorts.portsWithNaming signalType typeNaming)
+
+/-! ## Placement -/
+
+/-- Boundary nets returned when a one-entry FIFO is placed as a child. -/
+structure PlacedOutputs (signalType : SignalType) where
+  outputValid : Authoring.CircuitDescription.Net .bit
+  outputData : Authoring.CircuitDescription.Net signalType
+  inputReady : Authoring.CircuitDescription.Net .bit
+
+/-- Place a one-entry FIFO under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (inputValid : Authoring.CircuitDescription.Net .bit)
+    (inputData : Authoring.CircuitDescription.Net signalType)
+    (outputReady reset : Authoring.CircuitDescription.Net .bit) :
+    Authoring.CircuitDescription.Builder (PlacedOutputs signalType) := do
+  let child ← Authoring.CircuitDescription.placeNamed name (design signalType) fun
+    | .inputValid => inputValid
+    | .inputData => inputData
+    | .outputReady => outputReady
+    | .reset => reset
+  pure {
+    outputValid := child .outputValid
+    outputData := child .outputData
+    inputReady := child .inputReady }
 
 /-! ## Exact cycle behavior -/
 
@@ -144,23 +162,6 @@ def cycleContract (signalType : SignalType) :
         (!inputs .outputReady && !state .storedValid))
         then inputs .inputData else state .storedData := rfl
 
-theorem next_storedValid_of_reset (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (stateMap signalType).Values) (reset : inputs .reset = true) :
-    (stateRule signalType).apply inputs state .storedValid = false := by
-  simp [reset]
-
-/-- Payload storage follows the ordinary FIFO update condition even during a
-reset. In particular, reset does not require choosing or writing a reset
-payload. -/
-theorem next_storedData_of_no_update (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (stateMap signalType).Values)
-    (noUpdate : ((inputs .outputReady && state .storedValid) ||
-      (!inputs .outputReady && !state .storedValid)) = false) :
-    (stateRule signalType).apply inputs state .storedData = state .storedData := by
-  simp [noUpdate]
-
 theorem forwardRule_holds_iff (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
     (state : (cycleContract signalType).state.Values)
@@ -191,35 +192,5 @@ theorem readyRule_holds_iff (signalType : SignalType)
     funext output
     cases output
     exact equal
-
-@[simp] theorem evaluate_outputValid (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (cycleContract signalType).state.Values) :
-    ((cycleContract signalType).evaluate inputs state).1 .outputValid =
-      (state .storedValid || inputs .inputValid) := rfl
-
-@[simp] theorem evaluate_outputData (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (cycleContract signalType).state.Values) :
-    ((cycleContract signalType).evaluate inputs state).1 .outputData =
-      bif state .storedValid then state .storedData else inputs .inputData := rfl
-
-@[simp] theorem evaluate_inputReady (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (cycleContract signalType).state.Values) :
-    ((cycleContract signalType).evaluate inputs state).1 .inputReady =
-      (inputs .outputReady || !state .storedValid) := rfl
-
-@[simp] theorem evaluate_next_storedValid (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (cycleContract signalType).state.Values) :
-    ((cycleContract signalType).evaluate inputs state).2 .storedValid =
-      (stateRule signalType).apply inputs state .storedValid := rfl
-
-@[simp] theorem evaluate_next_storedData (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (cycleContract signalType).state.Values) :
-    ((cycleContract signalType).evaluate inputs state).2 .storedData =
-      (stateRule signalType).apply inputs state .storedData := rfl
 
 end Silean.Modules.OneEntryFifo

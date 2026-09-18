@@ -10,9 +10,12 @@ namespace Silean.Modules.AddSub
 open Silean
 open Silean.Authoring
 
-/-! Fixed-width addition and subtraction. The behavioral contract below uses
-direct carry/borrow recursion. The hardware separately implements subtraction
-as `left + ~right + 1`. -/
+/-! # Fixed-width addition and subtraction
+
+The behavioral contract below uses direct carry/borrow recursion. The hardware
+separately implements subtraction as `left + ~right + 1`. Structural
+certification is in `Internal/AddSubVerification.lean`; the supported proof
+boundary is `AddSubTheorems.lean`. -/
 
 module_ports ports (width : Nat) where
   input left : .vector width .bit,
@@ -180,6 +183,56 @@ module_cycle_contract cycleContract (width : Nat) for ports width where
     · exact result
     · exact carry
 
+/-- The observable result and carry/no-borrow flag of the selected operation. -/
+structure Behavior (width : Nat) (inputs : (ports width).inputs.Values)
+    (outputs : (ports width).outputs.Values) : Prop where
+  result : outputs .result =
+    (addSubBits width (inputs .left) (inputs .right) (inputs .subtract)).1
+  carryOut : outputs .carryOut =
+    (addSubBits width (inputs .left) (inputs .right) (inputs .subtract)).2
+
+namespace Behavior
+
+/-- An allowed contract step has the add/subtract unit's complete behavior. -/
+theorem of_allowed (width : Nat) {step : (cycleContract width).Step}
+    (allowed : (cycleContract width).Allows step) :
+    Behavior width step.inputs step.outputs := by
+  rcases (outputRule_holds_iff width step.inputs step.currentState
+    step.outputs).mp (allowed.1 .apply) with ⟨result, carryOut⟩
+  exact ⟨result, carryOut⟩
+
+/-- The result is addition or modular subtraction according to `subtract`. -/
+theorem result_toNat {width : Nat} {inputs : (ports width).inputs.Values}
+    {outputs : (ports width).outputs.Values}
+    (behavior : Behavior width inputs outputs) :
+    BitVector.toNat width (outputs .result) =
+      bif inputs .subtract then
+        (BitVector.toNat width (inputs .left) + BitVector.cardinality width -
+          BitVector.toNat width (inputs .right)) % BitVector.cardinality width
+      else
+        (BitVector.toNat width (inputs .left) +
+          BitVector.toNat width (inputs .right)) %
+            BitVector.cardinality width := by
+  rw [behavior.result]
+  have result := addSubBits_result_toNat width
+    (inputs .left) (inputs .right) (inputs .subtract)
+  cases subtract : inputs .subtract <;>
+    simp [subtract] at result ⊢ <;> exact result
+
+/-- In subtraction mode, carry-out is true exactly when no borrow occurred. -/
+theorem carry_eq_noBorrow {width : Nat}
+    {inputs : (ports width).inputs.Values}
+    {outputs : (ports width).outputs.Values}
+    (behavior : Behavior width inputs outputs)
+    (subtracts : inputs .subtract = true) :
+    outputs .carryOut =
+      decide (BitVector.toNat width (inputs .right) ≤
+        BitVector.toNat width (inputs .left)) := by
+  rw [behavior.carryOut, subtracts]
+  exact addSubBits_carry_subtract width (inputs .left) (inputs .right)
+
+end Behavior
+
 /-! ## Hardware structure -/
 
 def subtractVector (width : Nat) : Composition.SignalCombiner :=
@@ -218,56 +271,3 @@ module_design AddSub (width : Nat) where
   }
 
 end Silean.Modules
-
-namespace Silean.Modules.AddSub
-
-open Silean
-open Silean.Authoring
-
-theorem result_of_evaluatesTo (width : Nat)
-    (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
-    (outputs : (ports width).outputs.Values) (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract width).EvaluatesTo inputs state outputs nextState) :
-    outputs .result =
-      (addSubBits width (inputs .left) (inputs .right) (inputs .subtract)).1 :=
-  ((outputRule_holds_iff width inputs state outputs).mp (evaluates.1 .apply)).1
-
-theorem carry_of_evaluatesTo (width : Nat)
-    (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
-    (outputs : (ports width).outputs.Values) (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract width).EvaluatesTo inputs state outputs nextState) :
-    outputs .carryOut =
-      (addSubBits width (inputs .left) (inputs .right) (inputs .subtract)).2 :=
-  ((outputRule_holds_iff width inputs state outputs).mp (evaluates.1 .apply)).2
-
-/-- Public modular arithmetic law for either selected operation. -/
-theorem result_toNat_of_evaluatesTo (width : Nat)
-    (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
-    (outputs : (ports width).outputs.Values) (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract width).EvaluatesTo inputs state outputs nextState) :
-    BitVector.toNat width (outputs .result) =
-      bif inputs .subtract then
-        (BitVector.toNat width (inputs .left) + BitVector.cardinality width -
-          BitVector.toNat width (inputs .right)) % BitVector.cardinality width
-      else
-        (BitVector.toNat width (inputs .left) + BitVector.toNat width (inputs .right)) %
-          BitVector.cardinality width := by
-  rw [result_of_evaluatesTo width inputs state outputs nextState evaluates]
-  have result := addSubBits_result_toNat width
-    (inputs .left) (inputs .right) (inputs .subtract)
-  cases subtract : inputs .subtract <;> simp [subtract] at result ⊢ <;> exact result
-
-/-- In subtraction mode, the public carry output is true exactly when no
-borrow was required. -/
-theorem carry_eq_noBorrow_of_evaluatesTo (width : Nat)
-    (inputs : (ports width).inputs.Values) (state : emptySignalMap.Values)
-    (outputs : (ports width).outputs.Values) (nextState : emptySignalMap.Values)
-    (subtracts : inputs .subtract = true)
-    (evaluates : (cycleContract width).EvaluatesTo inputs state outputs nextState) :
-    outputs .carryOut =
-      decide (BitVector.toNat width (inputs .right) ≤
-        BitVector.toNat width (inputs .left)) := by
-  rw [carry_of_evaluatesTo width inputs state outputs nextState evaluates, subtracts]
-  exact addSubBits_carry_subtract width (inputs .left) (inputs .right)
-
-end Silean.Modules.AddSub

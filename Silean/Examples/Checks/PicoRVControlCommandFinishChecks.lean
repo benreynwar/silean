@@ -1,6 +1,6 @@
 import Silean.FIRRTL
 import Silean.Examples.Fixtures.PicoRVControl
-import Silean.Examples.PicoRV.Control.ControlCommandFinishCertified
+import Silean.Examples.PicoRV.Control.ControlCommandFinishTheorems
 
 namespace Silean.Examples.Checks.PicoRVControlCommandFinishChecks
 

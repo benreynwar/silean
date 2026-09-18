@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EqualsConstant.EqualsConstantCertified
+import Silean.Modules.EqualsConstant.EqualsConstantTheorems
 
 namespace Silean.Examples.Checks.EqualsConstant
 

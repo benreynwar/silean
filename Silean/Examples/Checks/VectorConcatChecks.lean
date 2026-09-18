@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.VectorConcat.VectorConcatCertified
+import Silean.Modules.VectorConcat.VectorConcatTheorems
 import Silean.Composition.SignalLogic
 
 namespace Silean.Examples.Checks.VectorConcat

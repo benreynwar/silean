@@ -1,4 +1,5 @@
 import Silean.Composition.SignalAdapterImplementation
+import Silean.Semantics.StructuralExecution
 
 namespace Silean.Examples.Checks.SignalAdapter
 
@@ -59,19 +60,34 @@ example : namedSignals.tupleFields.get (namedSignals.pack namedValues)
     (namedSignals.tuplePosition .payload) = vectorValue := by
   rfl
 
-def emptyComponentState : emptySignalMap.Values := SignalMap.emptyValues
+noncomputable def tupleSplitterState :
+    tupleSplitter.certified.moduleStructure.State :=
+  tupleSplitter.certified.moduleStructure.structuralState.defaultValues
 
-example : ∃ proposal,
-    vectorSplitter.certified.moduleStructure.IsSolution
-      (fun | .value => vectorValue) emptyComponentState proposal :=
-  vectorSplitter.certified.hasStructuralResult _ _
+noncomputable def tupleCombinerState :
+    tupleCombiner.certified.moduleStructure.State :=
+  tupleCombiner.certified.moduleStructure.structuralState.defaultValues
 
-example : ∃ proposal,
-    tupleSplitter.certified.moduleStructure.IsSolution
-      (fun | .value => tupleValue) emptyComponentState proposal ∧
-    ∀ other,
-      tupleSplitter.certified.moduleStructure.IsSolution
-        (fun | .value => tupleValue) emptyComponentState other → other = proposal :=
-  tupleSplitter.certified.hasExactlyOneStructuralResult _ _
+/-! Structural clients see ordinary boundary transitions. The recursive
+assignment used to justify each transition remains behind `Transition`. -/
+
+example : ∃ outputs nextState,
+    tupleSplitter.certified.moduleStructure.Transition
+      (fun | .value => tupleValue) tupleSplitterState outputs nextState :=
+  tupleSplitter.certified.hasStructuralResult.transition_exists _ _
+
+example : ∃ outputs nextState,
+    tupleCombiner.certified.moduleStructure.Transition
+      (tupleSplitter.outputValues (fun | .value => tupleValue))
+      tupleCombinerState outputs nextState :=
+  tupleCombiner.certified.hasStructuralResult.transition_exists _ _
+
+example {outputs nextState otherOutputs otherNext}
+    (left : tupleSplitter.certified.moduleStructure.Transition
+      (fun | .value => tupleValue) tupleSplitterState outputs nextState)
+    (right : tupleSplitter.certified.moduleStructure.Transition
+      (fun | .value => tupleValue) tupleSplitterState otherOutputs otherNext) :
+    outputs = otherOutputs ∧ nextState = otherNext :=
+  left.unique tupleSplitter.certified.structuralResultUnique right
 
 end Silean.Examples.Checks.SignalAdapter

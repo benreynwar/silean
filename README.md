@@ -125,10 +125,10 @@ modules, and combining the results again.
 ## What a circuit means
 
 The structural meaning of one clock cycle is
-`ModuleStructure.IsSolution`. Given boundary inputs and current structural
-state, a `ProposedValues` supplies all boundary outputs, child values, and
-primitive next states. It is a solution when all primitive equations, child
-equations, and wiring equations hold.
+`ModuleStructure.IsSolution`. A `HierStep` contains the parent boundary values
+and the corresponding assignment for every child recursively; current and next
+structural state are derived from that hierarchy. It is a solution when all
+primitive equations, child equations, and wiring equations hold.
 
 This is a relation, not an algorithm. It says which values satisfy the circuit
 without choosing an order in which to evaluate its components. Consequently,

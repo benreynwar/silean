@@ -1,48 +1,59 @@
-import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
 import Silean.Authoring.ModuleCycleContract
-import Silean.Modules.Mux.MuxStructure
-import Silean.Modules.Register.Register
+import Silean.Modules.EnabledRegister.Internal.EnabledRegisterStructure
 
-namespace Silean.Modules
+/-! # Enabled register
+
+An enabled register loads `data` on a clock edge when `enable` is high and
+otherwise feeds its stored value back to itself. The description below shows
+that feedback directly; the expanded typed hierarchy lives under `Internal/`.
+-/
+
+namespace Silean.Modules.EnabledRegister.Description
 
 open Silean
-open Silean.Authoring
-open Contracts.Cycle.Certification.Layer
+open Silean.Authoring.CircuitDescription
 
-/-! ## Hardware structure -/
+/-- A mux selects either the feedback value or new data, and a register stores
+the result. -/
+noncomputable def construction (signalType : SignalType) : Builder Unit := do
+  let data <- input "data" signalType
+  let enable <- input "enable" .bit
+  let stored <- wire "stored" signalType
+  let selected <- Modules.Mux.placeNamed "selection" enable stored data
+  let current <- Modules.Register.placeNamed "storage" selected
+  assign stored current
+  output "q" current
 
-/- A register which loads `data` when `enable` is high and otherwise retains
-its current value. -/
-module_design EnabledRegister (signalType : SignalType)
-    with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
-      .positional signalType) where
-  ports {
-    input data (schema := typeNaming) : signalType,
-    input enable : .bit,
-    output q (schema := typeNaming) : signalType }
-  instances {
-    -- Chooses between the new input and the stored value.
-    selection := Modules.Mux.design signalType,
-    -- Holds the selected value across cycles.
-    storage := Modules.Register.design signalType }
-  wiring {
-    outputs {
-      -- The stored value is exposed directly.
-      .q := storage.output }
-    -- Select the new input when enabled, or feed the stored value back.
-    instance (.selection) {
-      .select := input.enable,
-      .whenFalse := storage.output,
-      .whenTrue := input.data }
-    -- Store the mux result on the next clock edge.
-    instance (.storage) {
-      .input := selection.result }
-  }
+noncomputable def description (signalType : SignalType) : Description :=
+  build (construction signalType)
 
-end Silean.Modules
+end Silean.Modules.EnabledRegister.Description
 
 namespace Silean.Modules.EnabledRegister
 open Silean
+open Silean.Authoring
+
+open Authoring.CircuitDescription
+
+/-! ## Placement -/
+
+/-- Place an enabled register under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (data : Net signalType) (enable : Net .bit) : Builder (Net signalType) := do
+  let child <- Authoring.CircuitDescription.placeNamed name (design signalType) fun
+    | .data => data
+    | .enable => enable
+  pure (child .q)
+
+/-- Place an enabled register using the next conventional indexed name. -/
+noncomputable def place (data : Net signalType)
+    (enable : Net .bit) : Builder (Net signalType) := do
+  let child <- placeIndexed "enabled_register" (design signalType) fun
+    | .data => data
+    | .enable => enable
+  pure (child .q)
+
 /-! ## Exact cycle behavior -/
 
 module_cycle_contract cycleContract (signalType : SignalType)

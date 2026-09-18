@@ -1,7 +1,7 @@
 import Silean.Examples.Fixtures.PicoRVControl
-import Silean.Examples.PicoRV.Control.ControlFetchTransitionCertified
-import Silean.Examples.PicoRV.Control.ControlLoadRs1TransitionCertified
-import Silean.Examples.PicoRV.Control.ControlShiftTransitionCertified
+import Silean.Examples.PicoRV.Control.ControlFetchTransitionTheorems
+import Silean.Examples.PicoRV.Control.ControlLoadRs1TransitionTheorems
+import Silean.Examples.PicoRV.Control.ControlShiftTransitionTheorems
 
 namespace Silean.Examples.Checks.PicoRVControlPhaseTransitionChecks
 

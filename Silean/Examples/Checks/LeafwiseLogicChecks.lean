@@ -1,4 +1,5 @@
-import Silean.Modules.Mux.MuxCertified
+import Silean.Modules.Mux.MuxTheorems
+import Silean.Semantics.StructuralExecution
 
 namespace Silean.Examples.Checks.LeafwiseLogic
 
@@ -12,14 +13,11 @@ def bitMaskInputs : (Modules.Mask.ports .bit).inputs.Values
   | .value => true
   | .mask => false
 
-example : ∃ proposal,
-    (Modules.Mask.certified .bit).moduleStructure.IsSolution
-      bitMaskInputs (emptyState (Modules.Mask.certified .bit)) proposal ∧
-    ∀ other,
-      (Modules.Mask.certified .bit).moduleStructure.IsSolution
-        bitMaskInputs (emptyState (Modules.Mask.certified .bit)) other →
-      other = proposal :=
-  (Modules.Mask.certified .bit).hasExactlyOneStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.Mask.certified .bit).moduleStructure.Transition bitMaskInputs
+      (emptyState (Modules.Mask.certified .bit)) outputs nextState :=
+  (Modules.Mask.certified .bit).hasStructuralResult.transition_exists
+    bitMaskInputs (emptyState (Modules.Mask.certified .bit))
 
 abbrev vectorType : SignalType := .vector 3 .bit
 
@@ -37,14 +35,12 @@ def vectorOrInputs : (Modules.BitwiseOr.ports vectorType).inputs.Values
   | .left => vectorLeft
   | .right => vectorRight
 
-example : ∃ proposal,
-    (Modules.BitwiseOr.certified vectorType).moduleStructure.IsSolution
-      vectorOrInputs (emptyState (Modules.BitwiseOr.certified vectorType)) proposal ∧
-    ∀ other,
-      (Modules.BitwiseOr.certified vectorType).moduleStructure.IsSolution
-        vectorOrInputs (emptyState (Modules.BitwiseOr.certified vectorType)) other →
-      other = proposal :=
-  (Modules.BitwiseOr.certified vectorType).hasExactlyOneStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.BitwiseOr.certified vectorType).moduleStructure.Transition
+      vectorOrInputs (emptyState (Modules.BitwiseOr.certified vectorType))
+      outputs nextState :=
+  (Modules.BitwiseOr.certified vectorType).hasStructuralResult.transition_exists
+    vectorOrInputs (emptyState (Modules.BitwiseOr.certified vectorType))
 
 abbrev nestedFields : SignalTypes :=
   .ofList [.bit, .vector 2 (.tuple (.ofList [.bit, .bit]))]
@@ -64,13 +60,18 @@ def nestedMuxInputs : (Modules.Mux.ports nestedType).inputs.Values
   | .whenFalse => nestedFalse
   | .whenTrue => nestedTrue
 
-example : ∃ proposal,
-    (Modules.Mux.certified nestedType).moduleStructure.IsSolution
-      nestedMuxInputs (emptyState (Modules.Mux.certified nestedType)) proposal ∧
-    ∀ other,
-      (Modules.Mux.certified nestedType).moduleStructure.IsSolution
-        nestedMuxInputs (emptyState (Modules.Mux.certified nestedType)) other →
-      other = proposal :=
-  (Modules.Mux.certified nestedType).hasExactlyOneStructuralResult _ _
+example : ∃ outputs nextState,
+    (Modules.Mux.certified nestedType).moduleStructure.Transition nestedMuxInputs
+      (emptyState (Modules.Mux.certified nestedType)) outputs nextState :=
+  (Modules.Mux.certified nestedType).hasStructuralResult.transition_exists
+    nestedMuxInputs (emptyState (Modules.Mux.certified nestedType))
+
+example {outputs nextState}
+    (transition : (Modules.Mux.moduleStructure nestedType).Transition
+      nestedMuxInputs (emptyState (Modules.Mux.certified nestedType))
+      outputs nextState) :
+    outputs .result = nestedTrue := by
+  simpa [nestedMuxInputs] using
+    Modules.Mux.Description.result_of_realization nestedType transition
 
 end Silean.Examples.Checks.LeafwiseLogic

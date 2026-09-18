@@ -101,6 +101,46 @@ module_cycle_contract cycleContract (addressWidth : Nat) for ports addressWidth 
       writeAdvance := writeAdvance readPointer writePointer inputValid }
   state_rule := Contracts.Cycle.CycleStateRule.empty _
 
+/-- The complete combinational behavior of the pointer controller. Keeping the
+six equations together gives readers and parent proofs one semantic view,
+while the contract retains separate rules for dependency scheduling. -/
+structure Behavior (addressWidth : Nat)
+    (inputs : (ports addressWidth).inputs.Values)
+    (outputs : (ports addressWidth).outputs.Values) : Prop where
+  readAddress : outputs .readAddress = pointerAddress (inputs .readPointer)
+  writeAddress : outputs .writeAddress = pointerAddress (inputs .writePointer)
+  inputReady : outputs .inputReady =
+    inputReady (inputs .readPointer) (inputs .writePointer)
+  outputValid : outputs .outputValid =
+    outputValid (inputs .readPointer) (inputs .writePointer)
+  readAdvance : outputs .readAdvance =
+    readAdvance (inputs .readPointer) (inputs .writePointer)
+      (inputs .outputReady)
+  writeAdvance : outputs .writeAdvance =
+    writeAdvance (inputs .readPointer) (inputs .writePointer)
+      (inputs .inputValid)
+
+namespace Behavior
+
+/-- An allowed contract step satisfies every pointer-control equation. -/
+theorem of_allowed (addressWidth : Nat) {step : (cycleContract addressWidth).Step}
+    (allowed : (cycleContract addressWidth).Allows step) :
+    Behavior addressWidth step.inputs step.outputs :=
+  ⟨(readAddressRule_holds_iff addressWidth _ _ _).mp
+      (allowed.1 .readAddress),
+    (writeAddressRule_holds_iff addressWidth _ _ _).mp
+      (allowed.1 .writeAddress),
+    (inputReadyRule_holds_iff addressWidth _ _ _).mp
+      (allowed.1 .inputReady),
+    (outputValidRule_holds_iff addressWidth _ _ _).mp
+      (allowed.1 .outputValid),
+    (readAdvanceRule_holds_iff addressWidth _ _ _).mp
+      (allowed.1 .readAdvance),
+    (writeAdvanceRule_holds_iff addressWidth _ _ _).mp
+      (allowed.1 .writeAdvance)⟩
+
+end Behavior
+
 theorem addressesEqual_eq_true_iff (readPointer writePointer : Pointer addressWidth) :
     addressesEqual readPointer writePointer = true ↔
       pointerAddress readPointer = pointerAddress writePointer := by

@@ -1,9 +1,7 @@
-import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Foundation.BitVector
 import Silean.Modules.Constant.Constant
 import Silean.Modules.Mask.Mask
-import Silean.Modules.VectorConcat.VectorConcatCertified
+import Silean.Modules.VectorConcat.VectorConcat
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.Not
@@ -13,8 +11,12 @@ namespace Silean.Modules.BinaryToOneHot
 open Silean
 open Contracts.Cycle.Certification.Layer
 
-/-! A combinational binary-to-one-hot decoder. For a `width`-bit input, exactly
-one of the `2 ^ width` output bits is asserted. -/
+/-! # Binary-to-one-hot decoder
+
+For a `width`-bit input, exactly one of the `2 ^ width` output bits is asserted.
+Ordinary recursion keeps the base and successor hardware cases visible here;
+recursive certification is in `Internal/BinaryToOneHotVerification.lean`, and
+public structural guarantees are in `BinaryToOneHotTheorems.lean`. -/
 
 inductive Input | value
 deriving Enumeration
@@ -186,35 +188,41 @@ splits off the highest-index bit, rebuilds the lower-bit vector, recursively
 decodes it, masks two copies with the high bit and its inverse, then joins
 the halves. -/
 
-private def baseValue : (SignalType.vector 1 .bit).Denote := fun _ => true
+namespace Internal
 
-private inductive BaseInstance
+def baseValue : (SignalType.vector 1 .bit).Denote := fun _ => true
+
+inductive BaseInstance
   /-- Supplies the sole asserted output for a zero-width input. -/
   | constant
 deriving Enumeration
 
-@[reducible] private def baseInstances : InstancePorts :=
+@[reducible] def baseInstances : InstancePorts :=
   EnumeratedMap.of BaseInstance fun
     | .constant => Modules.Constant.ports (.vector 1 .bit)
 
-@[reducible] private def baseContext : EndpointContext where
+@[reducible] def baseContext : EndpointContext where
   ports := ports 0
   instancePorts := baseInstances
 
-private def baseWiring : Wiring baseContext.ports baseContext.instancePorts where
+def baseWiring : Wiring baseContext.ports baseContext.instancePorts where
   moduleOutput | .result => baseContext.instanceOutput .constant .output
   instanceInput | .constant, impossible => nomatch impossible
 
-@[reducible] private def baseBody : ModuleBody := ⟨baseContext, baseWiring⟩
+@[reducible] def baseBody : ModuleBody := ⟨baseContext, baseWiring⟩
 
-private def baseModuleStructure : ModuleStructure (ports 0) :=
+def baseModuleStructure : ModuleStructure (ports 0) :=
   .composite baseBody fun
     | .constant => Modules.Constant.moduleStructure (.vector 1 .bit) baseValue
 
-private def splitter (width : Nat) : Composition.SignalSplitter := .vector (width + 1) .bit
-private def lowerCombiner (width : Nat) : Composition.SignalCombiner := .vector width .bit
-private def highIndex (width : Nat) : (splitter width).ports.outputs.Label :=
+def splitter (width : Nat) : Composition.SignalSplitter := .vector (width + 1) .bit
+def lowerCombiner (width : Nat) : Composition.SignalCombiner := .vector width .bit
+def highIndex (width : Nat) : (splitter width).ports.outputs.Label :=
   Fin.last width
+
+end Internal
+
+open Internal
 
 inductive SuccInstance
   /-- Exposes the individual input bits. -/
@@ -281,380 +289,14 @@ def succWiring (width : Nat) :
 def moduleStructure : (width : Nat) → ModuleStructure (ports width)
   | 0 => baseModuleStructure
   | width + 1 => .composite (succBody width) fun
-      | .split => (splitter width).certified.moduleStructure
-      | .lowerBits => (lowerCombiner width).certified.moduleStructure
+      | .split => .splitter (splitter width)
+      | .lowerBits => .combiner (lowerCombiner width)
       | .decode => moduleStructure width
       | .invert => Primitives.notCertified.moduleStructure
       | .lowerMask | .upperMask =>
           Modules.Mask.moduleStructure (.vector (size width) .bit)
       | .concat => Modules.VectorConcat.moduleStructure .bit (size width) (size width)
 
-private abbrev Implementation (width : Nat) :=
-  Contracts.Cycle.ModuleCycleCertification (moduleStructure width) (cycleContract width)
-
-private def Implementation.certified (implementation : Implementation width) :
-    Contracts.Cycle.ModuleCycleCertified (ports width) := implementation.bundle
-
-@[reducible] private def baseChildContracts : Contracts.Cycle.ChildCycleContracts baseBody
-  | .constant => Modules.Constant.cycleContract (.vector 1 .bit) baseValue
-
-private abbrev baseOccurrence :
-    Contracts.Cycle.Certification.Layer.RuleOccurrence baseBody baseChildContracts :=
-  ⟨.constant, Primitives.ConstantRule.apply⟩
-
-private def baseScheduleOrders : ScheduleDerivation.RuleScheduleOrders
-    baseBody baseChildContracts (cycleContract 0) where
-  output | .apply => [baseOccurrence]
-  state := []
-
-private def baseDerivedRuleSchedules : ScheduleDerivation.DerivedRuleSchedules
-    baseBody baseChildContracts (cycleContract 0) := by
-  derive_rule_schedules baseScheduleOrders
-
-private abbrev baseSchedules := baseDerivedRuleSchedules.schedules
-
-private theorem baseCoversChildren : baseSchedules.CoversChildren :=
-  baseDerivedRuleSchedules.coversChildren
-
-private theorem baseImplements
-    (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
-      baseBody baseChildContracts) :
-    Contracts.Cycle.Implements
-      (Contracts.Cycle.Certification.Layer.moduleStructure baseBody layerChildren)
-      (cycleContract 0) (fun _ _ => True) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
-  have boundary := satisfies.1
-  have childStateSubsingleton :
-      Subsingleton (baseChildContracts .constant).state.Values := by
-    change Subsingleton emptySignalMap.Values
-    infer_instance
-  have childEvaluates :=
-    letI := childStateSubsingleton
-    (Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      layerChildren inputs structuralState proposal satisfies .constant SignalMap.emptyValues).1
-  refine ⟨SignalMap.emptyValues, ?_, trivial⟩
-  constructor
-  · intro rule
-    cases rule
-    rw [outputRule_holds_iff]
-    funext index
-    change proposal.fst .result index = _
-    have boundaryResult := boundary .result
-    rw [congrFun boundaryResult index]
-    have constantRule := (Modules.Constant.outputRule_holds_iff
-      (.vector 1 .bit) baseValue _ SignalMap.emptyValues _).mp
-      (childEvaluates.1 Primitives.ConstantRule.apply)
-    change (proposal.snd .constant).outputs .output index = _
-    exact (congrFun constantRule index).trans (by
-      simp [baseValue, oneHot, BitVector.toNat])
-  · change SignalMap.emptyValues = SignalMap.emptyValues
-    rfl
-
-private noncomputable opaque baseCertifiedLayer :
-    Contracts.Cycle.ModuleCycleCertifiedLayer baseBody baseChildContracts
-      (cycleContract 0) :=
-  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
-    baseSchedules baseCoversChildren (fun _ _ _ => True)
-    (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩) baseImplements
-
-private noncomputable def baseCertifiedChildren :
-    Contracts.Cycle.Certification.Layer.ChildStructures baseBody baseChildContracts
-  | .constant =>
-      (Modules.Constant.certified (.vector 1 .bit) baseValue).certifiedStructure
-
-private noncomputable def baseImplementation : Implementation 0 :=
-  (baseCertifiedLayer.certify baseCertifiedChildren).transportStructure (by rfl)
-
-@[reducible] private def succChildContracts (width : Nat) :
-    Contracts.Cycle.ChildCycleContracts (succBody width)
-  | .split => (splitter width).cycleContract
-  | .lowerBits => (lowerCombiner width).cycleContract
-  | .decode => cycleContract width
-  | .invert => Primitives.notCycleContract
-  | .lowerMask | .upperMask => Modules.Mask.cycleContract (.vector (size width) .bit)
-  | .concat => Modules.VectorConcat.cycleContract .bit (size width) (size width)
-
-private abbrev splitOccurrence (width) :
-    Contracts.Cycle.Certification.Layer.RuleOccurrence
-      (succBody width) (succChildContracts width) :=
-  ⟨.split, Composition.SignalComponentRule.apply⟩
-private abbrev lowerBitsOccurrence (width) :
-    Contracts.Cycle.Certification.Layer.RuleOccurrence
-      (succBody width) (succChildContracts width) :=
-  ⟨.lowerBits, Composition.SignalComponentRule.apply⟩
-private abbrev decodeOccurrence (width) :
-    Contracts.Cycle.Certification.Layer.RuleOccurrence
-      (succBody width) (succChildContracts width) :=
-  ⟨.decode, Rule.apply⟩
-private abbrev invertOccurrence (width) :
-    Contracts.Cycle.Certification.Layer.RuleOccurrence
-      (succBody width) (succChildContracts width) :=
-  ⟨.invert, Primitives.NotRule.apply⟩
-private abbrev lowerOccurrence (width) :
-    Contracts.Cycle.Certification.Layer.RuleOccurrence
-      (succBody width) (succChildContracts width) :=
-  ⟨.lowerMask, Modules.Mask.Rule.apply⟩
-private abbrev upperOccurrence (width) :
-    Contracts.Cycle.Certification.Layer.RuleOccurrence
-      (succBody width) (succChildContracts width) :=
-  ⟨.upperMask, Modules.Mask.Rule.apply⟩
-private abbrev concatOccurrence (width) :
-    Contracts.Cycle.Certification.Layer.RuleOccurrence
-      (succBody width) (succChildContracts width) :=
-  ⟨.concat, Modules.VectorConcat.Rule.apply⟩
-
-private def succScheduleOrders (width : Nat) :
-    ScheduleDerivation.RuleScheduleOrders (succBody width)
-      (succChildContracts width) (cycleContract (width + 1)) where
-  output := fun
-    | .apply => [splitOccurrence width, lowerBitsOccurrence width,
-        decodeOccurrence width, invertOccurrence width, lowerOccurrence width,
-        upperOccurrence width, concatOccurrence width]
-  state := []
-
-private def succDerivedRuleSchedules (width : Nat) :
-    ScheduleDerivation.DerivedRuleSchedules (succBody width)
-      (succChildContracts width) (cycleContract (width + 1)) := by
-  derive_rule_schedules (succScheduleOrders width)
-
-private abbrev succSchedules (width : Nat) :=
-  (succDerivedRuleSchedules width).schedules
-
-private theorem succCoversChildren (width : Nat) :
-    (succSchedules width).CoversChildren :=
-  (succDerivedRuleSchedules width).coversChildren
-
-private def splitInputs (width : Nat) (inputs : (ports (width + 1)).inputs.Values) :
-    (splitter width).ports.inputs.Values
-  | .value => inputs .value
-
-private def lowerBitsInputs (width : Nat)
-    (split : (splitter width).ports.outputs.Values) :
-    (lowerCombiner width).ports.inputs.Values := fun index =>
-  split index.castSucc
-
-private def decodeInputs (width : Nat)
-    (lowerBits : (lowerCombiner width).ports.outputs.Values) :
-    (ports width).inputs.Values
-  | .value => lowerBits .value
-
-private def invertInputs (width : Nat)
-    (split : (splitter width).ports.outputs.Values) :
-    Primitives.not.ports.inputs.Values
-  | .input => split (highIndex width)
-
-private def lowerInputs (width : Nat)
-    (decoded : (ports width).outputs.Values)
-    (inverted : Primitives.not.ports.outputs.Values) :
-    (Modules.Mask.ports (.vector (size width) .bit)).inputs.Values
-  | .value => decoded .result
-  | .mask => inverted .output
-
-private def upperInputs (width : Nat)
-    (split : (splitter width).ports.outputs.Values)
-    (decoded : (ports width).outputs.Values) :
-    (Modules.Mask.ports (.vector (size width) .bit)).inputs.Values
-  | .value => decoded .result
-  | .mask => split (highIndex width)
-
-private def concatInputs (width : Nat)
-    (lower upper : (Modules.Mask.ports (.vector (size width) .bit)).outputs.Values) :
-    (Modules.VectorConcat.ports .bit (size width) (size width)).inputs.Values
-  | .left => lower .result
-  | .right => upper .result
-
-private theorem succImplements (width : Nat)
-    (layerChildren : Contracts.Cycle.Certification.Layer.ChildStructures
-      (succBody width) (succChildContracts width)) :
-    Contracts.Cycle.Implements
-      (Contracts.Cycle.Certification.Layer.moduleStructure (succBody width) layerChildren)
-      (cycleContract (width + 1))
-      (fun _ _ => True) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
-  have boundary := satisfies.1
-  have childStates : ∀ child, (succChildContracts width child).state.Values := by
-    intro child
-    cases child <;> exact SignalMap.emptyValues
-  have childStateSubsingleton : ∀ child,
-      Subsingleton (succChildContracts width child).state.Values := by
-    intro child
-    cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
-  have childMatches :=
-    Contracts.Cycle.Certification.Layer.childSolutionsMatchContracts_of_subsingletonState
-      layerChildren inputs structuralState proposal satisfies childStates childStateSubsingleton
-  have splitOutputs : (proposal.snd .split).outputs =
-      (splitter width).outputValues (splitInputs width inputs) := by
-    have holds := (Composition.SignalSplitter.outputRule_holds_iff
-      (splitter width) _ _ _).mp
-      ((childMatches .split).1.1 Composition.SignalComponentRule.apply)
-    have inputsEqual : ProposedValues.childInputs (succBody width)
-        (fun child => (layerChildren child).moduleStructure)
-        inputs proposal.snd .split = splitInputs width inputs := by
-      funext port
-      cases port
-      rfl
-    rw [inputsEqual] at holds
-    exact holds
-  have lowerOutputs : (proposal.snd .lowerBits).outputs =
-      (lowerCombiner width).outputValues
-        (ProposedValues.childInputs (succBody width)
-          (fun child => (layerChildren child).moduleStructure)
-          inputs proposal.snd .lowerBits) := by
-    exact (Composition.SignalCombiner.outputRule_holds_iff
-      (lowerCombiner width) _ _ _).mp
-      ((childMatches .lowerBits).1.1 Composition.SignalComponentRule.apply)
-
-  have decodedEquation := (outputRule_holds_iff width _ SignalMap.emptyValues _).mp
-    ((childMatches .decode).1.1 Rule.apply)
-
-  have invertEquation := (Primitives.notOutputRule_holds_iff
-    _ SignalMap.emptyValues _).mp
-    ((childMatches .invert).1.1 Primitives.NotRule.apply)
-
-  have lowerEquation := (Modules.Mask.outputRule_holds_iff
-    (.vector (size width) .bit) _ SignalMap.emptyValues _).mp
-      ((childMatches .lowerMask).1.1 Modules.Mask.Rule.apply)
-
-  have upperEquation := (Modules.Mask.outputRule_holds_iff
-    (.vector (size width) .bit) _ SignalMap.emptyValues _).mp
-      ((childMatches .upperMask).1.1 Modules.Mask.Rule.apply)
-
-  have concatEquation := (Modules.VectorConcat.outputRule_holds_iff
-    .bit (size width) (size width) _ SignalMap.emptyValues _).mp
-      ((childMatches .concat).1.1 Modules.VectorConcat.Rule.apply)
-
-  refine ⟨SignalMap.emptyValues, ?_, trivial⟩
-  constructor
-  · intro rule
-    cases rule
-    rw [outputRule_holds_iff]
-    rw [oneHot_eq_decode]
-    change proposal.fst .result = decode (width + 1) (inputs .value)
-    rw [show proposal.fst .result =
-        (proposal.snd .concat).outputs .result by exact boundary .result]
-    have lowerBitsInputsEquation : ProposedValues.childInputs (succBody width) _
-        inputs proposal.snd .lowerBits =
-          lowerBitsInputs width (proposal.snd .split).outputs := by
-      funext index
-      rfl
-    have decodeInputsEquation : ProposedValues.childInputs (succBody width) _
-        inputs proposal.snd .decode =
-          decodeInputs width (proposal.snd .lowerBits).outputs := by
-      funext port; cases port; rfl
-    have invertInputsEquation : ProposedValues.childInputs (succBody width) _
-        inputs proposal.snd .invert =
-          invertInputs width (proposal.snd .split).outputs := by
-      funext port; cases port; rfl
-    have lowerInputsEquation : ProposedValues.childInputs (succBody width) _
-        inputs proposal.snd .lowerMask =
-          lowerInputs width (proposal.snd .decode).outputs
-            (proposal.snd .invert).outputs := by
-      funext port; cases port <;> rfl
-    have upperInputsEquation : ProposedValues.childInputs (succBody width) _
-        inputs proposal.snd .upperMask =
-          upperInputs width (proposal.snd .split).outputs
-            (proposal.snd .decode).outputs := by
-      funext port; cases port <;> rfl
-    have concatInputsEquation : ProposedValues.childInputs (succBody width) _
-        inputs proposal.snd .concat =
-          concatInputs width (proposal.snd .lowerMask).outputs
-            (proposal.snd .upperMask).outputs := by
-      funext port; cases port <;> rfl
-    rw [lowerInputsEquation] at lowerEquation
-    rw [upperInputsEquation] at upperEquation
-    rw [decodeInputsEquation] at decodedEquation
-    rw [oneHot_eq_decode] at decodedEquation
-    rw [invertInputsEquation] at invertEquation
-    rw [lowerBitsInputsEquation] at lowerOutputs
-    rw [concatInputsEquation] at concatEquation
-    have lowerValue : (proposal.snd .lowerBits).outputs .value =
-        fun index => inputs .value index.castSucc := by
-      rw [congrFun lowerOutputs .value]
-      funext index
-      change (proposal.snd .split).outputs index.castSucc = inputs .value index.castSucc
-      rw [splitOutputs]
-      rfl
-    have splitHigh : (proposal.snd .split).outputs (highIndex width) =
-        inputs .value (Fin.last width) := by
-      rw [splitOutputs]
-      rfl
-    change (proposal.snd .decode).outputs .result =
-      decode width ((proposal.snd .lowerBits).outputs .value) at decodedEquation
-    rw [lowerValue] at decodedEquation
-    change (proposal.snd .invert).outputs .output =
-      !(proposal.snd .split).outputs (highIndex width) at invertEquation
-    rw [splitHigh] at invertEquation
-    rw [concatEquation]
-    funext index
-    refine Fin.addCases ?_ ?_ index
-    · intro lowerIndex
-      rw [Modules.VectorConcat.concat_left]
-      change (proposal.snd .lowerMask).outputs .result lowerIndex = _
-      rw [congrFun lowerEquation lowerIndex]
-      simp [lowerInputs, SignalType.mask]
-      rw [congrFun decodedEquation lowerIndex, invertEquation]
-      simp [decode, Bool.and_comm]
-    · intro upperIndex
-      rw [Modules.VectorConcat.concat_right]
-      change (proposal.snd .upperMask).outputs .result upperIndex = _
-      rw [congrFun upperEquation upperIndex]
-      simp [upperInputs, SignalType.mask]
-      rw [congrFun decodedEquation upperIndex]
-      rw [splitHigh]
-      simp only [decode]
-      rw [Bool.and_comm (decode width
-        (fun index => inputs .value index.castSucc) upperIndex)
-          (inputs .value (Fin.last width))]
-      symm
-      rw [show upperIndex.addNat (size width) =
-          Fin.natAdd (size width) upperIndex by
-        apply Fin.ext
-        simp [Fin.addNat, Fin.natAdd, Nat.add_comm]]
-      apply Fin.addCases_right
-  · change SignalMap.emptyValues = SignalMap.emptyValues
-    rfl
-
-private noncomputable opaque succCertifiedLayer (width : Nat) :
-    Contracts.Cycle.ModuleCycleCertifiedLayer (succBody width)
-      (succChildContracts width) (cycleContract (width + 1)) :=
-  Contracts.Cycle.Certification.Layer.RuleSchedules.certifiedLayer
-    (succSchedules width) (succCoversChildren width) (fun _ _ _ => True)
-    (fun _ _ => ⟨SignalMap.emptyValues, trivial⟩) (succImplements width)
-
-private noncomputable def succCertifiedChildren (width : Nat)
-    (previous : Implementation width) :
-    Contracts.Cycle.Certification.Layer.ChildStructures
-      (succBody width) (succChildContracts width)
-  | .split => (splitter width).certified.certifiedStructure
-  | .lowerBits => (lowerCombiner width).certified.certifiedStructure
-  | .decode => previous.certified.certifiedStructure
-  | .invert => Primitives.notCertified.certifiedStructure
-  | .lowerMask | .upperMask =>
-      (Modules.Mask.certified (.vector (size width) .bit)).certifiedStructure
-  | .concat =>
-      (Modules.VectorConcat.certified .bit (size width) (size width)).certifiedStructure
-
-private noncomputable def succImplementation (width : Nat)
-    (previous : Implementation width) : Implementation (width + 1) :=
-  ((succCertifiedLayer width).certify (succCertifiedChildren width previous)).transportStructure
-    (by
-      unfold Contracts.Cycle.Certification.Layer.moduleStructure
-        succCertifiedChildren Contracts.Cycle.ModuleCycleCertified.certifiedStructure
-      rw [moduleStructure.eq_def]
-      congr
-      funext child
-      cases child <;> rfl)
-
-noncomputable def implementation : (width : Nat) → Implementation width
-  | 0 => baseImplementation
-  | width + 1 => succImplementation width (implementation width)
-
-noncomputable def certification (width : Nat) :
-    Contracts.Cycle.ModuleCycleCertification (moduleStructure width) (cycleContract width) :=
-  implementation width
-
-noncomputable def certified (width : Nat) : Contracts.Cycle.ModuleCycleCertified (ports width) :=
-  (certification width).bundle
 
 end Silean.Modules.BinaryToOneHot
 
@@ -673,11 +315,11 @@ def naming : (width : Nat) →
   | 0 => by
       rw [Modules.BinaryToOneHot.moduleStructure.eq_def]
       exact .composite ⟨"binary_to_one_hot", "base", []⟩ (ports 0)
-        (fun | Modules.BinaryToOneHot.BaseInstance.constant => "constant")
+        (fun | Modules.BinaryToOneHot.Internal.BaseInstance.constant => "constant")
         (fun
-          | Modules.BinaryToOneHot.BaseInstance.constant =>
+          | Modules.BinaryToOneHot.Internal.BaseInstance.constant =>
               Modules.Constant.Naming.naming (SignalType.vector 1 .bit)
-                Modules.BinaryToOneHot.baseValue)
+                Modules.BinaryToOneHot.Internal.baseValue)
   | width + 1 => by
       rw [Modules.BinaryToOneHot.moduleStructure.eq_def]
       exact .composite
@@ -693,9 +335,9 @@ def naming : (width : Nat) →
           | .concat => "concat")
         (fun
           | .split => Silean.Naming.SignalAdapter.splitter
-              (Modules.BinaryToOneHot.splitter width)
+              (Modules.BinaryToOneHot.Internal.splitter width)
           | .lowerBits => Silean.Naming.SignalAdapter.combiner
-              (Modules.BinaryToOneHot.lowerCombiner width)
+              (Modules.BinaryToOneHot.Internal.lowerCombiner width)
           | .decode => naming width
           | .invert => Silean.Naming.Primitive.not
           | .lowerMask | .upperMask => Modules.Mask.Naming.naming

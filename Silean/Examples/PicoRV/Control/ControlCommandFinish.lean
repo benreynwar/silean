@@ -54,17 +54,6 @@ module_cycle_contract cycleContract for ports where
     cases output
     exact equal
 
-theorem state_of_evaluatesTo
-    (inputs : inputMap.Values) (state : emptySignalMap.Values)
-    (outputs : outputMap.Values) (nextState : emptySignalMap.Values)
-    (evaluates : cycleContract.EvaluatesTo inputs state outputs nextState) :
-    stateMap.unpack (outputs .state) =
-      finishCommands (inputs .clear) (Transition.unpack (inputs .transition)) := by
-  have packed := (outputRule_holds_iff inputs state outputs).mp
-    (evaluates.1 Rule.apply)
-  rw [packed, stateMap.unpack_pack]
-  rfl
-
 end Silean.Examples.PicoRV.Control.CommandFinish
 
 namespace Silean.Examples.PicoRV.Control

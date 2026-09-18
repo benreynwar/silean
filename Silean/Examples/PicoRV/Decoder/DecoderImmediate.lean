@@ -6,7 +6,7 @@ import Silean.Foundation.SignalLayout
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 import Silean.Modules.VectorLayout.VectorLayout
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.Constant.Constant
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming

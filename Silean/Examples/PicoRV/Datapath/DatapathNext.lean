@@ -4,7 +4,7 @@ import Silean.Examples.PicoRV.Datapath.DatapathLoadRs1Update
 import Silean.Examples.PicoRV.Datapath.DatapathMemoryUpdate
 import Silean.Examples.PicoRV.Datapath.DatapathShiftUpdate
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 
 namespace Silean.Examples.PicoRV.Datapath

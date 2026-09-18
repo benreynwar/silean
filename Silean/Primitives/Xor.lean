@@ -1,4 +1,6 @@
+import Silean.Authoring.CircuitDescription
 import Silean.Contracts.Cycle.CycleImplementation
+import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.XorPrimitive
 
 namespace Silean.Primitives
@@ -40,20 +42,20 @@ def xorCycleContract : Contracts.Cycle.ModuleCycleContract xor.ports where
 private def stateCorresponds (_ : xorCycleContract.state.Values)
     (_ : (ModuleStructure.primitive xor).State) : Prop := True
 
-private theorem implements : Contracts.Cycle.Implements (.primitive xor) xorCycleContract
+private theorem implements : Contracts.Cycle.ImplementsSolutions (.primitive xor) xorCycleContract
     stateCorresponds := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
+  cases hierStep with
+  | mk inputs structuralState outputs nextState =>
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    cases proposal with
-    | mk outputs nextState =>
-      change xorOutputRule.Holds inputs contractState outputs
-      simp only [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-        Primitive.IsSolution, Primitive.OutputsSatisfy] at satisfies
-      rw [satisfies.1]
-      exact SignalGroup.matches_project _ _
+    change xorOutputRule.Holds inputs contractState outputs
+    change outputs = xor.outputValues inputs structuralState ∧
+      nextState = xor.nextStateValues inputs structuralState at satisfies
+    rw [satisfies.1]
+    exact SignalGroup.matches_project _ _
   · rfl
 
 def xorCertified : Contracts.Cycle.ModuleCycleCertified xor.ports where
@@ -62,13 +64,22 @@ def xorCertified : Contracts.Cycle.ModuleCycleCertified xor.ports where
   certification := {
     stateCorresponds := stateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := fun inputs state =>
-      ⟨ProposedValues.primitive (xor.outputValues inputs state)
-        (xor.nextStateValues inputs state), by
-          simp [ModuleStructure.IsSolution, ProposedValues.IsSolution,
-            Primitive.IsSolution, Primitive.OutputsSatisfy,
-            Primitive.NextStateSatisfy, ProposedValues.primitive]⟩,
+    hasStructuralResult := Primitive.hasSolution xor,
     structuralResultUnique := Primitive.hasAtMostOneSolution xor,
-    implements := implements }
+    implements := Contracts.Cycle.implementsSolutions_iff_implements.mp implements }
 
 end Silean.Primitives
+
+namespace Silean.Primitives.Xor
+
+open Silean.Authoring.CircuitDescription
+
+/-- Place a one-bit XOR gate in a circuit description. -/
+def place (left right : Net .bit) : Builder (Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeIndexed "xor"
+    Primitives.xorDesign fun
+      | .left => left
+      | .right => right
+  pure (child .output)
+
+end Silean.Primitives.Xor

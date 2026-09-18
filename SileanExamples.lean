@@ -27,6 +27,7 @@ import Silean.Examples.Checks.CombMuxTreeChecks
 import Silean.Examples.Checks.RegisterBankChecks
 import Silean.Examples.Checks.EnabledRegisterChecks
 import Silean.Examples.Checks.ModuleCycleEvaluationChecks
+import Silean.Examples.Checks.CircuitLogicChecks
 import Silean.Examples.Checks.ModulePortsAuthoringChecks
 import Silean.Examples.Checks.ModuleInstancesAuthoringChecks
 import Silean.Examples.Checks.ModuleWiringAuthoringChecks
@@ -51,15 +52,15 @@ import Silean.Examples.Checks.FifoPointerControlChecks
 import Silean.Examples.Checks.EqualityChecks
 import Silean.Examples.Checks.FifoContractChecks
 import Silean.Examples.Checks.SerialDepthFifoChecks
-import Silean.Examples.PicoRV.RegsCertified
+import Silean.Examples.PicoRV.RegsTheorems
 import Silean.Examples.Checks.PicoRVRegsChecks
-import Silean.Examples.PicoRV.AluLaws
+import Silean.Examples.PicoRV.AluTheorems
 import Silean.Examples.Checks.PicoRVAluChecks
-import Silean.Examples.PicoRV.DecoderCertified
+import Silean.Examples.PicoRV.DecoderTheorems
 import Silean.Examples.Checks.PicoRVDecoderChecks
 import Silean.Examples.Checks.PicoRVDecoderCaptureStageChecks
 import Silean.Examples.Checks.PicoRVDecoderResolveChildrenChecks
-import Silean.Examples.PicoRV.Decoder.DecoderResolveStageCertified
+import Silean.Examples.PicoRV.Decoder.DecoderResolveStageTheorems
 import Silean.Examples.PicoRV.Memory
 import Silean.Examples.PicoRV.PicoRV
 import Silean.Examples.PicoRV.PicoRVSchedule
@@ -74,7 +75,7 @@ import Silean.Examples.Checks.PicoRVDatapathArithmeticShiftChecks
 import Silean.Examples.Checks.PicoRVDatapathOutputChecks
 import Silean.Examples.Checks.PicoRVDatapathStandaloneChecks
 import Silean.Examples.PicoRV.Control
-import Silean.Examples.PicoRV.Control.ControlCommandFinishCertified
+import Silean.Examples.PicoRV.Control.ControlCommandFinishTheorems
 import Silean.Examples.Checks.PicoRVControlFetchChecks
 import Silean.Examples.Checks.PicoRVControlExecuteChecks
 import Silean.Examples.Checks.PicoRVControlMemoryChecks

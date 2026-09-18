@@ -3,7 +3,7 @@ import Silean.Naming.PrimitiveNaming
 import Silean.Modules.BitMux.BitMux
 import Silean.Modules.FullAdder.FullAdder
 import Silean.Modules.Register.Register
-import Silean.Modules.Mux.MuxStructure
+import Silean.Modules.Mux.Mux
 import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.RegisterBank.RegisterBank
 import Silean.Modules.TupleField.TupleField
@@ -37,9 +37,9 @@ private def excludesAll (result : RenderResult String) (fragments : List String)
 
 #guard containsAll (renderCircuit Modules.FullAdder.naming)
   ["circuit FullAdder", "public module FullAdder",
-   "inst operands of HalfAdder", "inst carry of HalfAdder",
-   "inst combineCarry of or_bit", "connect carry.left, operands.sum",
-   "connect carryOut, combineCarry.out"]
+   "inst half_adder_0 of HalfAdder", "inst half_adder_1 of HalfAdder",
+   "inst or_0 of or_bit", "connect half_adder_1.left, half_adder_0.sum",
+   "connect carryOut, or_0.out"]
 
 private def opaqueNotNaming :
     Naming.ModuleNaming (.blackbox Primitives.not) :=
@@ -151,14 +151,14 @@ module_design SameNamedAggregate where
 -- aggregates.
 #guard containsAll (renderCircuit
   (Modules.Mux.namingWith namedPairType NamedPair.schema))
-  ["input whenFalse : { valid : UInt<1>, payload : UInt<1> }",
+   ["input whenFalse : { valid : UInt<1>, payload : UInt<1> }",
    "output result : { valid : UInt<1>, payload : UInt<1> }",
-   "inst chooseFalse of mask_structural_t_bit_bit_unit"]
+   "inst mask_0 of mask_structural_t_bit_bit_unit"]
 
 #guard containsAll (renderCircuit
   (Modules.Mux.namingWith nestedPayloadType NestedPayload.schema))
   ["input whenTrue : { tag : UInt<1>, contents : { valid : UInt<1>, payload : UInt<1> } }",
-   "inst combine of bitwise_or_structural_t_bit_t_bit_bit_unit_unit"]
+   "inst bitwise_or_0 of bitwise_or_structural_t_bit_t_bit_bit_unit_unit"]
 
 #guard containsAll (renderCircuit
   (Modules.Mux.namingWith pairVectorType pairVectorSchema))

@@ -478,30 +478,28 @@ private def emptyStateCorresponds
     (_ : (emptyCertificationStructure signalType identity layerChildren).State) : Prop := True
 
 private theorem emptyImplements
-    : Contracts.Cycle.Implements
+    : Contracts.Cycle.ImplementsSolutions
       (emptyCertificationStructure signalType identity layerChildren)
       (cycleContract signalType operation identity .empty)
       (emptyStateCorresponds signalType identity layerChildren) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
-  rcases proposal with ⟨outputs, children⟩
+  intro contractState hierStep corresponds satisfies
   have boundary := satisfies.1
   letI : Subsingleton
       ((emptyChildContracts (signalType := signalType) (identity := identity) .identity).state.Values) := by
     change Subsingleton emptySignalMap.Values
     infer_instance
-  have evaluates :=
+  have identityMatch :=
     (Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      layerChildren inputs
-        structuralState (ProposedValues.composite outputs children) satisfies
-        .identity SignalMap.emptyValues).1
+      (body := emptyBody signalType)
+      layerChildren hierStep satisfies .identity SignalMap.emptyValues)
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
     change (outputRule signalType operation identity .empty).Holds
-      inputs contractState outputs
+      hierStep.inputs contractState hierStep.outputs
     rw [outputRule_holds_iff]
-    have identityEquation := evaluates.1 Rule.apply
+    have identityEquation := identityMatch.ruleHolds Rule.apply
     change (identityOutputRule signalType identity).Holds _ _ _ at identityEquation
     rw [identityOutputRule_holds_iff] at identityEquation
     exact (boundary .output).trans identityEquation
@@ -535,66 +533,73 @@ private noncomputable def emptyImplementation
     (emptyCertifiedChildren identityModule)
     (by intro child; cases child; rfl)
 
-private def leafProposal (inputs : (ports signalType .leaf).inputs.Values) :
-    ProposedValues (moduleStructure (signalType := signalType)
+private def leafHierStep (inputs : (ports signalType .leaf).inputs.Values) :
+    HierStep (moduleStructure (signalType := signalType)
       binary identityModule .leaf) :=
-  ProposedValues.composite
-    (fun | .output => inputs (.leaf ⟨0, by simp [Tree.leafCount]⟩))
-    (fun impossible => nomatch impossible)
+  { inputs := inputs
+    outputs := fun | .output => inputs (.leaf ⟨0, by simp [Tree.leafCount]⟩)
+    children := fun impossible => nomatch impossible }
 
-private theorem leafProposal_satisfies
-    (inputs : (ports signalType .leaf).inputs.Values)
-    (state : (moduleStructure binary identityModule .leaf).State) :
-    (moduleStructure (signalType := signalType) binary identityModule .leaf).IsSolution inputs state
-      (leafProposal (binary := binary) (identityModule := identityModule) inputs) := by
-  constructor
+private theorem leafHierStep_satisfies
+    (inputs : (ports signalType .leaf).inputs.Values) :
+    (moduleStructure (signalType := signalType) binary identityModule .leaf).IsSolution
+      (leafHierStep (binary := binary) (identityModule := identityModule) inputs) := by
+  refine ⟨?_, ?_, ?_⟩
   · intro outputName
     cases outputName
     rfl
   · intro impossible
     exact nomatch impossible
+  · intro impossible
+    exact nomatch impossible
 
 private theorem leafUnique :
     (moduleStructure (signalType := signalType) binary identityModule .leaf).HasAtMostOneSolution := by
-  intro inputs state left right leftSatisfies rightSatisfies
-  rcases left with ⟨leftOutputs, leftChildren⟩
-  rcases right with ⟨rightOutputs, rightChildren⟩
-  have outputsEqual : leftOutputs = rightOutputs := by
+  intro left right leftSatisfies rightSatisfies inputsEqual currentStatesEqual
+  have outputsEqual : left.outputs = right.outputs := by
     funext outputName
-    exact (leftSatisfies.1 outputName).trans
-      (rightSatisfies.1 outputName).symm
-  have childrenEqual : leftChildren = rightChildren := by
+    cases outputName
+    have leftBoundary := leftSatisfies.1 Primitives.SingleOutput.output
+    have rightBoundary := rightSatisfies.1 Primitives.SingleOutput.output
+    change left.outputs Primitives.SingleOutput.output = left.inputs (.leaf _)
+      at leftBoundary
+    change right.outputs Primitives.SingleOutput.output = right.inputs (.leaf _)
+      at rightBoundary
+    exact leftBoundary.trans ((congrFun inputsEqual _).trans rightBoundary.symm)
+  have childrenEqual : left.children = right.children := by
     funext impossible
     exact nomatch impossible
-  cases outputsEqual
-  cases childrenEqual
-  rfl
+  exact CompositeHierStep.ext inputsEqual outputsEqual childrenEqual
 
 private theorem leafImplements :
-    Contracts.Cycle.Implements (moduleStructure (signalType := signalType) binary identityModule .leaf)
+    Contracts.Cycle.ImplementsSolutions
+      (moduleStructure (signalType := signalType) binary identityModule .leaf)
       (cycleContract signalType operation identity .leaf)
       (fun (_ : emptySignalMap.Values) _ => True) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
+  intro contractState hierStep corresponds satisfies
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
     rw [outputRule_holds_iff]
-    rcases proposal with ⟨outputs, children⟩
-    change outputs Primitives.SingleOutput.output = _
-    simpa [fold, Tree.leafCount, leafBody, leafWiring, leafContext,
-      EndpointContext.moduleInput, SignalSource.value] using
-        satisfies.1 Primitives.SingleOutput.output
-  · rfl
+    have boundary := satisfies.1 Primitives.SingleOutput.output
+    change hierStep.outputs Primitives.SingleOutput.output =
+      hierStep.inputs (.leaf _) at boundary
+    refine boundary.trans ?_
+    simp only [fold]
+  · change SignalMap.emptyValues = SignalMap.emptyValues
+    rfl
 
 private def leafImplementation : Implementation binary identityModule .leaf where
   stateCorresponds := fun _ _ => True
   hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
   hasStructuralResult := fun inputs state =>
-    ⟨leafProposal (binary := binary) (identityModule := identityModule) inputs,
-      leafProposal_satisfies inputs state⟩
+    ⟨leafHierStep (binary := binary) (identityModule := identityModule) inputs,
+      leafHierStep_satisfies inputs, rfl, (by
+        funext impossible
+        exact nomatch impossible)⟩
   structuralResultUnique := leafUnique
-  implements := leafImplements
+  implements := Contracts.Cycle.implementsSolutions_iff_implements.mp leafImplements
 
 private def nodeChildContracts
     (signalType : SignalType)
@@ -725,77 +730,70 @@ private def nodeStateCorresponds (_ : emptySignalMap.Values)
       layerChildren).State) : Prop := True
 
 private theorem nodeImplements :
-    Contracts.Cycle.Implements
+    Contracts.Cycle.ImplementsSolutions
       (nodeCertificationStructure signalType operation identity left right layerChildren)
       (cycleContract signalType operation identity (.node left right))
       (nodeStateCorresponds signalType operation identity left right layerChildren) := by
-  intro inputs contractState structuralState proposal corresponds satisfies
-  rcases proposal with ⟨outputs, children⟩
+  intro contractState hierStep corresponds satisfies
   have boundary := satisfies.1
   have childMatch (child : NodeInstance) := by
     letI : Subsingleton
         ((nodeChildContracts signalType operation identity left right child).state.Values) := by
       cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
     exact Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      layerChildren
-        inputs structuralState (ProposedValues.composite outputs children) satisfies child
+      (body := nodeBody signalType left right) layerChildren hierStep satisfies child
         (by cases child <;> exact SignalMap.emptyValues)
-  have leftInputs_eq : ProposedValues.childInputs
-      (nodeBody signalType left right) _ inputs children .left = leftInputs inputs := by
+  let childInputs := (nodeBody signalType left right).wiring.childInputValues
+    hierStep.inputs hierStep.childOutputs
+  have leftInputs_eq : childInputs .left = leftInputs hierStep.inputs := by
     funext input
     cases input
     rfl
-  have rightInputs_eq : ProposedValues.childInputs
-      (nodeBody signalType left right) _ inputs children .right = rightInputs inputs := by
+  have rightInputs_eq : childInputs .right = rightInputs hierStep.inputs := by
     funext input
     cases input
     rfl
-  have combineInputs_eq : ProposedValues.childInputs
-      (nodeBody signalType left right) _ inputs children .combine =
-        combineInputs (children .left).outputs (children .right).outputs := by
+  have combineInputs_eq : childInputs .combine =
+      combineInputs (hierStep.children .left).outputs
+        (hierStep.children .right).outputs := by
     funext input
     cases input <;> rfl
-  have leftEvaluates := (childMatch .left).1
-  have rightEvaluates := (childMatch .right).1
-  have combineEvaluates := (childMatch .combine).1
+  dsimp only [childInputs] at leftInputs_eq rightInputs_eq combineInputs_eq
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   · constructor
     · intro rule
       cases rule
       rw [outputRule_holds_iff]
-      have leftEquation := leftEvaluates.1 Rule.apply
+      have leftEquation := (childMatch .left).ruleHolds Rule.apply
       change (outputRule signalType operation identity left).Holds _ _ _ at leftEquation
       rw [outputRule_holds_iff] at leftEquation
-      change (children .left).outputs .output =
+      change (hierStep.children .left).outputs .output =
         fold operation identity left fun index =>
-          ProposedValues.childInputs (nodeBody signalType left right)
-            ((fun name => (layerChildren name).moduleStructure))
-            inputs children .left (.leaf index) at leftEquation
-      have rightEquation := rightEvaluates.1 Rule.apply
+          (nodeBody signalType left right).wiring.childInputValues
+            hierStep.inputs hierStep.childOutputs .left (.leaf index) at leftEquation
+      have rightEquation := (childMatch .right).ruleHolds Rule.apply
       change (outputRule signalType operation identity right).Holds _ _ _ at rightEquation
       rw [outputRule_holds_iff] at rightEquation
-      change (children .right).outputs .output =
+      change (hierStep.children .right).outputs .output =
         fold operation identity right fun index =>
-          ProposedValues.childInputs (nodeBody signalType left right)
-            ((fun name => (layerChildren name).moduleStructure))
-            inputs children .right (.leaf index) at rightEquation
-      have combineEquation := combineEvaluates.1 Rule.apply
+          (nodeBody signalType left right).wiring.childInputValues
+            hierStep.inputs hierStep.childOutputs .right (.leaf index) at rightEquation
+      have combineEquation := (childMatch .combine).ruleHolds Rule.apply
       change (binaryOutputRule signalType operation).Holds _ _ _ at combineEquation
       rw [binaryOutputRule_holds_iff] at combineEquation
-      change (children .combine).outputs .output = operation
-        (ProposedValues.childInputs (nodeBody signalType left right)
-          ((fun name => (layerChildren name).moduleStructure))
-          inputs children .combine .left)
-        (ProposedValues.childInputs (nodeBody signalType left right)
-          ((fun name => (layerChildren name).moduleStructure))
-          inputs children .combine .right) at combineEquation
+      change (hierStep.children .combine).outputs .output = operation
+        ((nodeBody signalType left right).wiring.childInputValues
+          hierStep.inputs hierStep.childOutputs .combine .left)
+        ((nodeBody signalType left right).wiring.childInputValues
+          hierStep.inputs hierStep.childOutputs .combine .right) at combineEquation
       rw [leftInputs_eq] at leftEquation
       rw [rightInputs_eq] at rightEquation
       rw [combineInputs_eq] at combineEquation
       simp only [combineInputs] at combineEquation
       have outputBoundary := boundary Primitives.SingleOutput.output
-      change outputs Primitives.SingleOutput.output = (children .combine).outputs Primitives.SingleOutput.output at outputBoundary
-      change outputs Primitives.SingleOutput.output = _
+      change hierStep.outputs Primitives.SingleOutput.output =
+        (hierStep.children .combine).outputs Primitives.SingleOutput.output at outputBoundary
+      change hierStep.outputs Primitives.SingleOutput.output = _
       rw [outputBoundary, combineEquation, leftEquation, rightEquation]
       rfl
     · rfl

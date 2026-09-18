@@ -305,44 +305,53 @@ open Silean
         (inputs .writeValue) (state .entries) := by
   rfl
 
-theorem readValue_of_evaluatesTo (element : SignalType) (addressWidth readCount : Nat)
-    (port : Fin readCount)
-    (inputs : (ports element addressWidth readCount).inputs.Values)
-    (state : (stateMap element addressWidth).Values)
-    (outputs : (ports element addressWidth readCount).outputs.Values)
-    (nextState : (stateMap element addressWidth).Values)
-    (evaluates : (cycleContract element addressWidth readCount).EvaluatesTo
-      inputs state outputs nextState) :
-    outputs (.readValue port) =
-      state .entries (BitVector.toIndex addressWidth (inputs (.readAddress port))) :=
-  (readRule_holds_iff element addressWidth readCount port inputs state outputs).mp
-    (evaluates.1 (.read port))
+/-! ## Consequences of the cycle contract -/
 
-theorem written_entry_of_evaluatesTo (element : SignalType) (addressWidth readCount : Nat)
-    (inputs : (ports element addressWidth readCount).inputs.Values)
-    (state : (stateMap element addressWidth).Values)
-    (outputs : (ports element addressWidth readCount).outputs.Values)
-    (nextState : (stateMap element addressWidth).Values)
-    (evaluates : (cycleContract element addressWidth readCount).EvaluatesTo
-      inputs state outputs nextState)
-    (enabled : inputs .writeEnable = true) :
-    nextState .entries (BitVector.toIndex addressWidth (inputs .writeAddress)) =
-      inputs .writeValue := by
-  rw [evaluates.2, stateRule_apply_entries, enabled]
+section AllowedStep
+
+variable {element : SignalType} {addressWidth readCount : Nat}
+  {step : (cycleContract element addressWidth readCount).Step}
+  (allowed : (cycleContract element addressWidth readCount).Allows step)
+
+include allowed
+
+/-- Each read port asynchronously observes the entry selected by its own
+address in the current bank state. -/
+theorem readValue_of_allowed (port : Fin readCount) :
+    step.outputs (.readValue port) =
+      step.currentState .entries
+        (BitVector.toIndex addressWidth (step.inputs (.readAddress port))) :=
+  (readRule_holds_iff element addressWidth readCount port
+    step.inputs step.currentState step.outputs).mp
+    (allowed.1 (.read port))
+
+/-- The state transition updates exactly the addressed entry when writing and
+otherwise retains every entry. -/
+theorem next_entries_of_allowed :
+    step.nextState .entries =
+      nextEntries addressWidth (step.inputs .writeEnable)
+        (step.inputs .writeAddress) (step.inputs .writeValue)
+        (step.currentState .entries) := by
+  rw [allowed.2]
+  rfl
+
+/-- An enabled write stores the input value at the selected address. -/
+theorem written_entry_of_allowed (enabled : step.inputs .writeEnable = true) :
+    step.nextState .entries
+        (BitVector.toIndex addressWidth (step.inputs .writeAddress)) =
+      step.inputs .writeValue := by
+  rw [next_entries_of_allowed allowed, enabled]
   exact nextEntries_selected _ _ _ _
 
-theorem retained_entry_of_evaluatesTo (element : SignalType) (addressWidth readCount : Nat)
-    (inputs : (ports element addressWidth readCount).inputs.Values)
-    (state : (stateMap element addressWidth).Values)
-    (outputs : (ports element addressWidth readCount).outputs.Values)
-    (nextState : (stateMap element addressWidth).Values)
-    (evaluates : (cycleContract element addressWidth readCount).EvaluatesTo
-      inputs state outputs nextState)
+/-- Every entry other than the selected write address is retained. -/
+theorem retained_entry_of_allowed
     (index : Fin (entryCount addressWidth))
-    (different : index ≠ BitVector.toIndex addressWidth (inputs .writeAddress)) :
-    nextState .entries index = state .entries index := by
-  rw [evaluates.2, stateRule_apply_entries]
+    (different : index ≠ BitVector.toIndex addressWidth (step.inputs .writeAddress)) :
+    step.nextState .entries index = step.currentState .entries index := by
+  rw [next_entries_of_allowed allowed]
   exact nextEntries_other _ _ _ _ _ _ different
+
+end AllowedStep
 
 end Silean.Modules.RegisterBank
 

@@ -33,6 +33,8 @@ syntax ident "(" ident " : " term " in " term ")" moduleInstanceModifier*
 declare_syntax_cat moduleDesignPorts
 syntax ident " { " modulePortEntry,* " }" : moduleDesignPorts
 syntax ident "(" term ")" "(" ident " := " term ")" : moduleDesignPorts
+syntax ident "(" term ")" "(" ident " := " term ")"
+  "(" ident " := " term ")" : moduleDesignPorts
 
 declare_syntax_cat moduleDesignInstances
 syntax ident " { " moduleDesignInstanceEntry,* " }" : moduleDesignInstances
@@ -44,7 +46,9 @@ syntax ident " { " moduleWireGroup* " }" : moduleDesignWiring
 Declare one complete composite hardware design: its typed boundary, concrete
 child designs, wiring, and recursive emission naming. An inline `ports`
 section generates the ordinary boundary declarations; a `boundary` section
-instead reuses an existing typed boundary and its naming. The remaining
+instead reuses an existing typed boundary and its naming. A reused boundary
+may additionally provide `namingWith` when the command has component-naming
+parameters. The remaining
 generated declarations include `instancePorts`, `wiring`, `body`,
 `moduleStructure`, `naming`, and the final `design : Naming.NamedModule`.
 When component-naming parameters are present, it also generates `namingWith`
@@ -279,6 +283,19 @@ elab_rules : command
             throwErrorAt clause
               "a component-naming clause cannot accompany an existing boundary"
           pure (existingPorts, existingNaming, none)
+      | `(moduleDesignPorts| $boundaryKeyword:ident ($existingPorts:term)
+          ($namingKeyword:ident := $existingNaming:term)
+          ($namingWithKeyword:ident := $existingNamingWith:term)) => do
+          unless boundaryKeyword.getId == `boundary do
+            throwErrorAt boundaryKeyword "expected a `boundary` section"
+          unless namingKeyword.getId == `naming do
+            throwErrorAt namingKeyword "expected a `naming` modifier"
+          unless namingWithKeyword.getId == `namingWith do
+            throwErrorAt namingWithKeyword "expected a `namingWith` modifier"
+          if namingClause.isNone then
+            throwErrorAt namingWithKeyword
+              "`namingWith` requires component-naming parameters"
+          pure (existingPorts, existingNaming, some existingNamingWith)
       | _ => throwUnsupportedSyntax
     elabCommand <| ← `(
       module_instances $instancePortsName $instancesParams:moduleInstancesParam*

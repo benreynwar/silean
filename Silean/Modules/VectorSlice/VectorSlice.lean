@@ -105,16 +105,13 @@ theorem result_at_of_holds (element : SignalType)
     inputs state outputs).mp holds]
   rfl
 
-theorem result_of_evaluatesTo (element : SignalType)
+/-- Every contract-allowed slice step returns the selected contiguous range. -/
+theorem result_of_allowed (element : SignalType)
     (prefixWidth width suffixWidth : Nat)
-    (inputs : (ports element prefixWidth width suffixWidth).inputs.Values)
-    (state : emptySignalMap.Values)
-    (outputs : (ports element prefixWidth width suffixWidth).outputs.Values)
-    (nextState : emptySignalMap.Values)
-    (evaluates : (cycleContract element prefixWidth width suffixWidth).EvaluatesTo
-      inputs state outputs nextState) :
-    outputs .result = slice (inputs .value) :=
-  (outputRule_holds_iff element prefixWidth width suffixWidth inputs state outputs).mp
-    (evaluates.1 .apply)
+    {step : (cycleContract element prefixWidth width suffixWidth).Step}
+    (allowed : (cycleContract element prefixWidth width suffixWidth).Allows step) :
+    step.outputs .result = slice (step.inputs .value) :=
+  (outputRule_holds_iff element prefixWidth width suffixWidth
+    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
 
 end Silean.Modules.VectorSlice
