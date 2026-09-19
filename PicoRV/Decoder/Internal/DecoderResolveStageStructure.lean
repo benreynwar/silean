@@ -1,7 +1,7 @@
 import PicoRV.Decoder.DecoderResolveStage
-import PicoRV.Decoder.DecoderInstructionMatchStructure
+import PicoRV.Decoder.Internal.DecoderInstructionMatchStructure
 import PicoRV.Decoder.DecoderImmediate
-import PicoRV.Decoder.DecoderInstructionSummaryStructure
+import PicoRV.Decoder.Internal.DecoderInstructionSummaryStructure
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.EnabledResetRegister.EnabledResetRegister

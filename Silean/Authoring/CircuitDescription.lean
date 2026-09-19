@@ -1,3 +1,5 @@
+import Lean
+import Silean.Authoring.CircuitDescriptionAttributes
 import Silean.Naming.ModuleNaming
 
 /-! A checked-translation boundary, not a replacement structural semantics.
@@ -6,19 +8,10 @@ module keys or interfaces. Lists also preserve declaration order. Authoring nets
 are symbolic references: their validity is established by matching the complete
 description extracted from a typed production body, not by trusting the builder.
 -/
+
 namespace Silean.Authoring.CircuitDescription
 
 open Silean Naming
-
-/-- Naming transported between equal structures at the same interface keeps
-its port names. The explicit structure equality also handles opaque equality
-proofs emitted by production's naming definitions. -/
-theorem ports_mpr_of_eq {ports : ModulePorts} {left right : ModuleStructure ports}
-    (equal : left = right) (typeEqual : ModuleNaming left = ModuleNaming right)
-    (naming : ModuleNaming right) :
-    (typeEqual.mpr naming).ports = naming.ports := by
-  cases equal
-  rfl
 
 structure Port where
   name : SourceName
@@ -38,10 +31,18 @@ structure Child where
   module : NamedModule
   inputs : List Connection
 
+/-- A resolved reader-facing wire name for an already existing source. It
+survives into emission metadata but adds no structural endpoint. -/
+structure NamedWire where
+  name : SourceName
+  signalType : SignalType
+  source : Source
+
 structure Description where
   inputs : List Port := []
   outputs : List Connection := []
   children : List Child := []
+  namedWires : List NamedWire := []
 
 def portList (signals : SignalMap) (names : SignalMapNaming signals) : List Port :=
   signals.labels.values.map fun label => ⟨names.name label, signals.signalType label⟩
@@ -64,7 +65,8 @@ naming witness. -/
     (ports : ModulePortsNaming body.ports)
     (instanceName : body.instancePorts.Name → SourceName)
     (childNaming : (child : body.instancePorts.Name) →
-      ModuleNaming (children child)) : Description :=
+      ModuleNaming (children child))
+    (namedWires : List (Naming.NamedWire body) := []) : Description :=
   let source := fun {signalType} => sourceDescription (body := body)
     ports instanceName (fun child => (childNaming child).ports) (signalType := signalType)
   { inputs := portList body.ports.inputs ports.inputs
@@ -77,14 +79,18 @@ naming witness. -/
         inputs := (body.instancePorts.ports child).inputs.labels.values.map fun port =>
           ⟨⟨(childNaming child).ports.inputs.name port,
               (body.instancePorts.ports child).inputs.signalType port⟩,
-            source (body.wiring.instanceInput child port)⟩ } }
+            source (body.wiring.instanceInput child port)⟩ }
+    namedWires := namedWires.map fun wire =>
+      { name := wire.name
+        signalType := wire.signalType
+        source := source wire.source } }
 
 /-- Extract a description from a composite naming. Primitive and adapter
 namings do not contain a child hierarchy and therefore return `none`. -/
 def ofNaming {modulePorts : ModulePorts} {moduleStructure : ModuleStructure modulePorts} :
     ModuleNaming moduleStructure → Option Description
-  | .composite _ ports instanceName childNaming =>
-      some (ofCompositeNaming ports instanceName childNaming)
+  | .composite _ ports instanceName childNaming namedWires =>
+      some (ofCompositeNaming ports instanceName childNaming namedWires)
   | _ => none
 
 @[simp] theorem ofNaming_composite {body : ModuleBody}
@@ -93,9 +99,10 @@ def ofNaming {modulePorts : ModulePorts} {moduleStructure : ModuleStructure modu
     (key : ModuleKey) (ports : ModulePortsNaming body.ports)
     (instanceName : body.instancePorts.Name → SourceName)
     (childNaming : (child : body.instancePorts.Name) →
-      ModuleNaming (children child)) :
-    ofNaming (ModuleNaming.composite key ports instanceName childNaming) =
-      some (ofCompositeNaming ports instanceName childNaming) := rfl
+      ModuleNaming (children child))
+    (namedWires : List (Naming.NamedWire body)) :
+    ofNaming (ModuleNaming.composite key ports instanceName childNaming namedWires) =
+      some (ofCompositeNaming ports instanceName childNaming namedWires) := rfl
 
 /-- Unique names at each namespace prevent erasure from merging labels.
 Child port uniqueness covers outputs too, including unused outputs. -/
@@ -120,8 +127,9 @@ structure Corresponds {body : ModuleBody}
 `Description` remains the resolved, checked-translation boundary used by the
 soundness development above. The builder works in a separate draft language so
 authors may declare a typed wire before its driver is available. Finalization
-eliminates every such wire; neither `Description` nor structural semantics has
-an unresolved-wire case. -/
+resolves every wire to an ordinary structural source and retains only its
+emission name; neither `Description` nor structural semantics has an
+unresolved-wire case. -/
 
 inductive NetOrigin where
   | source (source : Source)
@@ -141,6 +149,11 @@ structure DraftChild where
   name : SourceName
   module : NamedModule
   inputs : List DraftConnection
+
+structure DraftNamedWire where
+  name : SourceName
+  signalType : SignalType
+  driver : Net signalType
 
 structure WireDraft where
   id : Nat
@@ -163,6 +176,11 @@ structure Draft where
   inputs : List Port := []
   outputs : List DraftConnection := []
   children : List DraftChild := []
+  /-- Counts indexed instance stems without repeatedly traversing the much
+  larger child records. This is builder bookkeeping and is discarded by
+  finalization. -/
+  indexedInstanceCounts : List (String × Nat) := []
+  namedWires : List DraftNamedWire := []
   wires : List WireDraft := []
   errors : List BuildError := []
   nextWire : Nat := 0
@@ -271,6 +289,20 @@ def finalizeChildren (wires : List WireDraft) :
           | .error error => .error error
           | .ok resolvedRest => .ok (resolved :: resolvedRest)
 
+@[simp] def finalizeNamedWire (wires : List WireDraft)
+    (wire : DraftNamedWire) : Except BuildError NamedWire :=
+  match resolveNet wires (wires.length + 1) wire.driver with
+  | .ok source => .ok ⟨wire.name, wire.signalType, source⟩
+  | .error error => .error error
+
+@[simp] def finalizeNamedWires (wires : List WireDraft) :
+    List DraftNamedWire → Except BuildError (List NamedWire)
+  | [] => .ok []
+  | wire :: rest => do
+      let resolved ← finalizeNamedWire wires wire
+      let resolvedRest ← finalizeNamedWires wires rest
+      pure (resolved :: resolvedRest)
+
 def finalizeDraft (draft : Draft) : Except BuildError Description :=
   match draft.errors with
   | error :: _ => .error error
@@ -287,8 +319,16 @@ def finalizeDraft (draft : Draft) : Except BuildError Description :=
             | .ok outputs =>
                 match finalizeChildren draft.wires draft.children with
                 | .error error => .error error
-                | .ok children => .ok
-                    { inputs := draft.inputs, outputs := outputs, children := children }
+                | .ok children =>
+                    if _uniqueNamedWires :
+                        (draft.namedWires.map (fun wire => wire.name)).Nodup then
+                      match finalizeNamedWires draft.wires draft.namedWires with
+                      | .error error => .error error
+                      | .ok namedWires => .ok
+                          { inputs := draft.inputs, outputs := outputs,
+                            children := children, namedWires := namedWires }
+                    else
+                      .error .duplicateWireName
       else
         .error .duplicateWireName
 
@@ -324,15 +364,53 @@ def output (name : SourceName) (net : Net signalType) : Builder Unit :=
   fun state => ((), { state with outputs := state.outputs ++
     [{ port := ⟨name, signalType⟩, driver := net }] })
 
+/-- Run an ordinary net-producing action and retain a name for its resolved
+structural source. The returned net is unchanged, so naming has no semantic
+effect and composes like a `let` binding. -/
+def namedWire (name : SourceName) (action : Builder (Net signalType)) :
+    Builder (Net signalType) :=
+  fun state =>
+    let (net, state) := action state
+    (net, { state with namedWires := state.namedWires ++
+      [{ name := name, signalType := signalType, driver := net }] })
+
 /-- Declare a typed authoring wire whose driver may be assigned later. -/
 def wire (name : SourceName) (signalType : SignalType) : Builder (Net signalType) :=
   fun state =>
     let id := state.nextWire
-    (⟨.wire id⟩,
+    let net : Net signalType := ⟨.wire id⟩
+    (net,
       { state with
         wires := state.wires ++
           [{ id := id, name := name, signalType := signalType, drivers := [] }]
+        namedWires := state.namedWires ++
+          [{ name := name, signalType := signalType, driver := net }]
         nextWire := id + 1 })
+
+/-- Bind and immediately drive a wire while preserving the binder's spelling
+as emission metadata. -/
+syntax "wire " ident " ← " term : doElem
+
+/-- Bind and immediately drive a wire while checking an explicit signal type. -/
+syntax "wire " ident " : " term " ← " term : doElem
+
+/-- Declare a typed wire for a driver supplied later with `assign`. -/
+syntax "wire " ident " : " term : doElem
+
+macro_rules
+  | `(doElem| wire $name:ident ← $action:term) => do
+      let emittedName := Lean.Syntax.mkStrLit name.getId.toString
+      `(doElem| let $name ←
+          Silean.Authoring.CircuitDescription.namedWire $emittedName $action)
+  | `(doElem| wire $name:ident : $signalType:term ← $action:term) => do
+      let emittedName := Lean.Syntax.mkStrLit name.getId.toString
+      `(doElem| let $name ←
+          (Silean.Authoring.CircuitDescription.namedWire
+            (signalType := $signalType) $emittedName $action))
+  | `(doElem| wire $name:ident : $signalType:term) => do
+      let emittedName := Lean.Syntax.mkStrLit name.getId.toString
+      `(doElem| let $name ←
+          Silean.Authoring.CircuitDescription.wire $emittedName $signalType)
 
 /-- Give a previously declared wire a driver. Destination comes first, as in a
 Verilog continuous assignment. Finalization rejects missing or multiple
@@ -356,27 +434,74 @@ def assign (target driver : Net signalType) : Builder Unit :=
               ((), { state with
                 errors := state.errors ++ [.wireTypeMismatch targetWire.name] })
 
+private def indexedInstanceCount (stem : String) : List (String × Nat) → Nat
+  | [] => 0
+  | (other, count) :: rest =>
+      if other = stem then count else indexedInstanceCount stem rest
+
+private def incrementIndexedInstanceCount (stem : String) :
+    List (String × Nat) → List (String × Nat)
+  | [] => [(stem, 1)]
+  | (other, count) :: rest =>
+      if other = stem then (other, count + 1) :: rest
+      else (other, count) :: incrementIndexedInstanceCount stem rest
+
+@[simp] private theorem indexedInstanceCount_nil (stem : String) :
+    indexedInstanceCount stem [] = 0 := rfl
+
+@[simp] private theorem indexedInstanceCount_increment_same
+    (stem : String) (counts : List (String × Nat)) :
+    indexedInstanceCount stem (incrementIndexedInstanceCount stem counts) =
+      indexedInstanceCount stem counts + 1 := by
+  induction counts with
+  | nil => simp [incrementIndexedInstanceCount, indexedInstanceCount]
+  | cons entry rest induction =>
+      rcases entry with ⟨other, count⟩
+      by_cases same : other = stem
+      · subst other
+        simp [incrementIndexedInstanceCount, indexedInstanceCount]
+      · simp [incrementIndexedInstanceCount, indexedInstanceCount, same, induction]
+
+@[simp] private theorem indexedInstanceCount_increment_other
+    {stem other : String} (different : other ≠ stem)
+    (counts : List (String × Nat)) :
+    indexedInstanceCount other (incrementIndexedInstanceCount stem counts) =
+      indexedInstanceCount other counts := by
+  have reverse : stem ≠ other := Ne.symm different
+  induction counts with
+  | nil => simp [incrementIndexedInstanceCount, indexedInstanceCount, reverse]
+  | cons entry rest induction =>
+      rcases entry with ⟨existing, count⟩
+      by_cases same : existing = stem
+      · subst existing
+        simp [incrementIndexedInstanceCount, indexedInstanceCount, reverse]
+      · by_cases queried : existing = other
+        · subst existing
+          simp [incrementIndexedInstanceCount, indexedInstanceCount, same]
+        · simp [incrementIndexedInstanceCount, indexedInstanceCount, same,
+            queried, induction]
+
 /-- Place an existing production child under an explicit instance name,
 preserving its full identity. -/
 def placeNamed (name : SourceName) (module : NamedModule)
     (inputs : (port : module.ports.inputs.Label) → Net (module.ports.inputs.signalType port)) :
     Builder ((port : module.ports.outputs.Label) → Net (module.ports.outputs.signalType port)) :=
   fun state =>
+    let indexedInstanceCounts :=
+      match name with
+      | .indexed stem _ =>
+          incrementIndexedInstanceCount stem state.indexedInstanceCounts
+      | _ => state.indexedInstanceCounts
     (fun port => ⟨.source (.child name (module.naming.ports.outputs.name port))⟩,
-      { state with children := state.children ++
+      { state with
+        children := state.children ++
           [{ name := name
              module := module
              inputs := module.ports.inputs.labels.values.map fun port =>
                { port := ⟨module.naming.ports.inputs.name port,
                    module.ports.inputs.signalType port⟩
-                 driver := inputs port } }] })
-
-private def indexedInstanceCount (stem : String) : List DraftChild → Nat
-  | [] => 0
-  | child :: children =>
-      (match child.name with
-        | .indexed other _ => if other = stem then 1 else 0
-        | _ => 0) + indexedInstanceCount stem children
+                 driver := inputs port } }]
+        indexedInstanceCounts := indexedInstanceCounts })
 
 /-- Place an existing production child using a conventional stem and its
 occurrence number as a deterministic instance name. Module-specific helpers
@@ -386,6 +511,16 @@ def placeIndexed (stem : String) (module : NamedModule)
     (inputs : (port : module.ports.inputs.Label) → Net (module.ports.inputs.signalType port)) :
     Builder ((port : module.ports.outputs.Label) → Net (module.ports.outputs.signalType port)) :=
   fun state =>
-    placeNamed (.indexed stem (indexedInstanceCount stem state.children)) module inputs state
+    placeNamed (.indexed stem (indexedInstanceCount stem state.indexedInstanceCounts))
+      module inputs state
+
+attribute [circuit_description]
+  bind_apply pure_apply build buildResult input output namedWire
+  Silean.Authoring.CircuitDescription.wire assign
+  placeNamed placeIndexed
+  Internal.findWire? Internal.replaceWire Internal.validateWireDrivers
+  Internal.resolveNet Internal.validateWireSources Internal.finalizeConnection
+  Internal.finalizeConnections Internal.finalizeChild Internal.finalizeChildren
+  Internal.finalizeNamedWire Internal.finalizeNamedWires Internal.finalizeDraft
 
 end Silean.Authoring.CircuitDescription

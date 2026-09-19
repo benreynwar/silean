@@ -19,6 +19,12 @@ inside tuples and vectors.
 
 abbrev SignalSchema (signalType : SignalType) := SignalTypeNaming signalType
 
+/-- A labelled aggregate's typed fields together with their emission names.
+Most authoring operations need these two descriptions together. -/
+structure SignalLayout where
+  signalMap : SignalMap
+  schema : SignalSchema signalMap.tupleType
+
 namespace SignalSchema
 
 def bit : SignalSchema .bit := SignalTypeNaming.bit

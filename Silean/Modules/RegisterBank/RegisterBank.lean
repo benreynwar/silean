@@ -1,4 +1,5 @@
 import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
 import Silean.Modules.BinaryToOneHot.BinaryToOneHot
 import Silean.Modules.CombMuxTree.CombMuxTree
 import Silean.Modules.EnabledRegister.EnabledRegister
@@ -9,6 +10,14 @@ namespace Silean.Modules.RegisterBank
 
 open Silean
 open Silean.Authoring
+
+/-! # Register bank
+
+The hardware contains `2 ^ addressWidth` generated storage cells and write
+gates plus `readCount` generated mux trees. The indexed `module_design` is the
+reader-facing construction because it shows those families directly; a
+`CircuitDescription` loop would duplicate the generator without making the
+organization clearer. -/
 
 /-- A synchronous-write bank containing `2 ^ addressWidth` entries of `element`,
 with an independently addressed combinational output for each read port. -/
@@ -387,3 +396,46 @@ def naming (element : SignalType) (addressWidth readCount : Nat) :
   namingWith element addressWidth readCount (.positional element)
 
 end Silean.Modules.RegisterBank.Naming
+
+namespace Silean.Modules.RegisterBank
+
+open Silean
+open Silean.Authoring.CircuitDescription
+
+/-! ## Placement -/
+
+/-- Read ports produced by a placed register bank. -/
+structure PlacedOutputs (element : SignalType) (readCount : Nat) where
+  readValue : Fin readCount → Net element
+
+/-- Place a register bank under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (writeEnable : Net .bit) (writeAddress : Net (.vector addressWidth .bit))
+    (writeValue : Net element)
+    (readAddress : Fin readCount → Net (.vector addressWidth .bit)) :
+    Builder (PlacedOutputs element readCount) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design element addressWidth readCount) fun
+      | .writeEnable => writeEnable
+      | .writeAddress => writeAddress
+      | .writeValue => writeValue
+      | .readAddress port => readAddress port
+  pure { readValue := fun port => child (.readValue port) }
+
+/-- Place a register bank using the next conventional indexed name. -/
+noncomputable def place
+    (writeEnable : Net .bit) (writeAddress : Net (.vector addressWidth .bit))
+    (writeValue : Net element)
+    (readAddress : Fin readCount → Net (.vector addressWidth .bit)) :
+    Builder (PlacedOutputs element readCount) := do
+  let child ← placeIndexed "register_bank"
+    (design element addressWidth readCount) fun
+      | .writeEnable => writeEnable
+      | .writeAddress => writeAddress
+      | .writeValue => writeValue
+      | .readAddress port => readAddress port
+  pure { readValue := fun port => child (.readValue port) }
+
+attribute [circuit_description] placeNamed place
+
+end Silean.Modules.RegisterBank

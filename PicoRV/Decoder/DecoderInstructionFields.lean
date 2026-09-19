@@ -14,7 +14,12 @@ open InstructionMatch
 
 /-! Shared comparisons used by the instruction matcher. This child extracts the
 RISC-V encoding fields once and exposes the comparisons consumed by the exact
-instruction predicates. -/
+instruction predicates.
+
+The eight `funct3` comparisons form an indexed child family. The typed
+`module_design` below is the primary hardware definition because it shows that
+generator directly; a fixed builder description would only unroll the same
+family into repetitive placements. -/
 
 module_ports ports where
   input word : .vector 32 .bit,

@@ -136,7 +136,7 @@ example : Authoring.CircuitDescription.Corresponds
 example :
     (Modules.EnabledResetRegister.Description.description .bit false).children.map
       (fun child => child.name) =
-        [SourceName.plain "selection", SourceName.plain "storage"] := by
+        [SourceName.indexed "mux" 0, SourceName.indexed "reset_register" 0] := by
   rfl
 
 example : Authoring.CircuitDescription.Corresponds
@@ -158,21 +158,21 @@ private def renders {ports : ModulePorts} {moduleStructure : ModuleStructure por
 #guard renders (Modules.ResetRegister.naming .bit false)
   ["public module ResetRegister_bit_0",
    "input reset : UInt<1>",
-   "inst resetValue of constant_bit_0",
-   "inst selection of Mux_bit",
-   "inst storage of register_bit"]
+   "inst constant_0 of constant_bit_0",
+   "inst mux_0 of Mux_bit",
+   "inst register_0 of register_bit"]
 
 #guard renders (Modules.EnabledResetRegister.naming .bit false)
   ["public module EnabledResetRegister_bit_0",
    "input enable : UInt<1>",
    "input reset : UInt<1>",
-   "inst storage of ResetRegister_bit_0"]
+   "inst reset_register_0 of ResetRegister_bit_0"]
 
 #guard renders
   (Modules.EnabledResetRegister.namingWith tupleType tupleReset tupleNaming)
   ["input value : { flag : UInt<1>, payload : UInt<1>[2] }",
    "output value_out : { flag : UInt<1>, payload : UInt<1>[2] }",
-   "inst storage of ResetRegister"]
+   "inst reset_register_0 of ResetRegister"]
 
 
 end SileanTests.ResetRegister

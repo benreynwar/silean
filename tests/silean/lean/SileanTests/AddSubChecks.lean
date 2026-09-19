@@ -77,10 +77,10 @@ private def contains (text fragment : String) : Bool :=
       ["public module AddSub_4", "input left : UInt<1>[4]",
        "input right : UInt<1>[4]", "input subtract : UInt<1>",
        "output result : UInt<1>[4]", "output carryOut : UInt<1>",
-       "inst broadcastSubtract", "inst transformRight",
-       "inst add of add_ripple_4",
-       "connect transformRight.right, broadcastSubtract.aggregate_0",
-       "connect add.right, transformRight.result",
-       "connect add.carry_in, subtract"].all (contains text)
+       "inst combiner_0", "inst bitwise_xor_0",
+       "inst add_0 of add_ripple_4",
+       "connect bitwise_xor_0.right, combiner_0.aggregate_0",
+       "connect add_0.right, transformedRight",
+       "connect add_0.carry_in, subtract"].all (contains text)
 
 end SileanTests.AddSub

@@ -1,7 +1,6 @@
-import PicoRV.Memory.MemoryCombinationalContracts
-import Silean.Authoring.ModuleDesign
+import PicoRV.Memory.Internal.MemoryReadFormattingStructure
+import PicoRV.Authoring.CircuitLogic
 import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.Mux
 import Silean.Modules.VectorLayout.VectorLayout
 import Silean.Modules.VectorSlice.VectorSlice
 
@@ -9,95 +8,78 @@ namespace PicoRV.Memory
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
 
-def ReadFormatting.halfLayout (high : Bool) (index : Fin 32) :
-    Silean.Modules.VectorLayout.BitSource 32 :=
-  if low : index.val < 16 then
-    .input ⟨index.val + if high then 16 else 0, by
-      cases high <;> simp <;> omega⟩
-  else
-    .constant false
+/-! # Memory read formatting
 
-def ReadFormatting.byteLayout (lane : Fin 4) (index : Fin 32) :
-    Silean.Modules.VectorLayout.BitSource 32 :=
-  if low : index.val < 8 then
-    .input ⟨index.val + 8 * lane.val, by omega⟩
-  else
-    .constant false
+The addressed byte or halfword is selected from the returned memory word and
+zero-extended. Final word-size selection deliberately makes encodings 0 and 3
+return the full word, matching the configured Verilog's `full_case`
+totalization. The expanded typed hierarchy and verification remain under
+`Internal/`. -/
 
-def ReadFormatting.byte0Layout := ReadFormatting.byteLayout ⟨0, by decide⟩
-def ReadFormatting.byte1Layout := ReadFormatting.byteLayout ⟨1, by decide⟩
-def ReadFormatting.byte2Layout := ReadFormatting.byteLayout ⟨2, by decide⟩
-def ReadFormatting.byte3Layout := ReadFormatting.byteLayout ⟨3, by decide⟩
+namespace ReadFormatting.Description
 
-/-! Select the addressed byte or halfword and zero-extend it. The final
-word-size muxes deliberately make encodings 0 and 3 return the full word,
-matching the configured Verilog's `full_case` totalization in the contract. -/
-module_design ReadFormatting (name := "picorv32_memory_read_formatting") where
-  boundary (ReadFormatting.ports) (naming := ReadFormatting.Naming.ports)
-  instances {
-    lowBit := Silean.Modules.VectorSlice.design .bit 0 1 31,
-    highBit := Silean.Modules.VectorSlice.design .bit 1 1 30,
-    lowLane := Silean.Modules.EqualsConstant.design (.vector 1 .bit) (fun _ => true),
-    highLane := Silean.Modules.EqualsConstant.design (.vector 1 .bit) (fun _ => true),
-    halfLow := Silean.Modules.VectorLayout.design 32 32
-      (ReadFormatting.halfLayout false),
-    halfHigh := Silean.Modules.VectorLayout.design 32 32
-      (ReadFormatting.halfLayout true),
-    byte0 := Silean.Modules.VectorLayout.design 32 32
-      ReadFormatting.byte0Layout,
-    byte1 := Silean.Modules.VectorLayout.design 32 32
-      ReadFormatting.byte1Layout,
-    byte2 := Silean.Modules.VectorLayout.design 32 32
-      ReadFormatting.byte2Layout,
-    byte3 := Silean.Modules.VectorLayout.design 32 32
-      ReadFormatting.byte3Layout,
-    halfValue := Silean.Modules.Mux.design (.vector 32 .bit),
-    lowByteValue := Silean.Modules.Mux.design (.vector 32 .bit),
-    highByteValue := Silean.Modules.Mux.design (.vector 32 .bit),
-    byteValue := Silean.Modules.Mux.design (.vector 32 .bit),
-    halfWordsize := Silean.Modules.EqualsConstant.design (.vector 2 .bit) (stateOfNat 1),
-    byteWordsize := Silean.Modules.EqualsConstant.design (.vector 2 .bit) (stateOfNat 2),
-    selectHalf := Silean.Modules.Mux.design (.vector 32 .bit),
-    selectByte := Silean.Modules.Mux.design (.vector 32 .bit) }
-  wiring {
-  outputs { .mem_rdata_word := selectByte.result }
-  instance (.lowBit) { .value := input.reg_op1 }
-  instance (.highBit) { .value := input.reg_op1 }
-  instance (.lowLane) { .value := lowBit.result }
-  instance (.highLane) { .value := highBit.result }
-  instance (.halfLow) { .input := input.mem_rdata }
-  instance (.halfHigh) { .input := input.mem_rdata }
-  instance (.byte0) { .input := input.mem_rdata }
-  instance (.byte1) { .input := input.mem_rdata }
-  instance (.byte2) { .input := input.mem_rdata }
-  instance (.byte3) { .input := input.mem_rdata }
-  instance (.halfValue) {
-    .select := highLane.result,
-    .whenFalse := halfLow.output,
-    .whenTrue := halfHigh.output }
-  instance (.lowByteValue) {
-    .select := lowLane.result,
-    .whenFalse := byte0.output,
-    .whenTrue := byte1.output }
-  instance (.highByteValue) {
-    .select := lowLane.result,
-    .whenFalse := byte2.output,
-    .whenTrue := byte3.output }
-  instance (.byteValue) {
-    .select := highLane.result,
-    .whenFalse := lowByteValue.result,
-    .whenTrue := highByteValue.result }
-  instance (.halfWordsize) { .value := input.mem_wordsize }
-  instance (.byteWordsize) { .value := input.mem_wordsize }
-  instance (.selectHalf) {
-    .select := halfWordsize.result,
-    .whenFalse := input.mem_rdata,
-    .whenTrue := halfValue.result }
-  instance (.selectByte) {
-    .select := byteWordsize.result,
-    .whenFalse := selectHalf.result,
-    .whenTrue := byteValue.result }
-  }
+noncomputable def construction : Builder Unit := do
+  let memWordsize ← input "mem_wordsize" (.vector 2 .bit)
+  let regOp1 ← input "reg_op1" (.vector 32 .bit)
+  let memRdata ← input "mem_rdata" (.vector 32 .bit)
+
+  let lowBit ← Silean.Modules.VectorSlice.place .bit 0 1 31 regOp1
+  let highBit ← Silean.Modules.VectorSlice.place .bit 1 1 30 regOp1
+  let lowLane ← Silean.Modules.EqualsConstant.place lowBit (fun _ => true)
+  let highLane ← Silean.Modules.EqualsConstant.place highBit (fun _ => true)
+  let halfLow ← Silean.Modules.VectorLayout.place
+    (ReadFormatting.halfLayout false) memRdata
+  let halfHigh ← Silean.Modules.VectorLayout.place
+    (ReadFormatting.halfLayout true) memRdata
+  let byte0 ← Silean.Modules.VectorLayout.place
+    ReadFormatting.byte0Layout memRdata
+  let byte1 ← Silean.Modules.VectorLayout.place
+    ReadFormatting.byte1Layout memRdata
+  let byte2 ← Silean.Modules.VectorLayout.place
+    ReadFormatting.byte2Layout memRdata
+  let byte3 ← Silean.Modules.VectorLayout.place
+    ReadFormatting.byte3Layout memRdata
+  let halfValue ← mux highLane halfLow halfHigh
+  let lowByteValue ← mux lowLane byte0 byte1
+  let highByteValue ← mux lowLane byte2 byte3
+  let byteValue ← mux highLane lowByteValue highByteValue
+  let halfWordsize ← Silean.Modules.EqualsConstant.place
+    memWordsize (stateOfNat 1)
+  let byteWordsize ← Silean.Modules.EqualsConstant.place
+    memWordsize (stateOfNat 2)
+  let selectHalf ← mux halfWordsize memRdata halfValue
+  output "mem_rdata_word" (← mux byteWordsize selectHalf byteValue)
+
+noncomputable def description : Description := build construction
+
+end ReadFormatting.Description
+
+namespace ReadFormatting
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (memWordsize : Net (.vector 2 .bit))
+    (regOp1 memRdata : Net (.vector 32 .bit)) :
+    Builder (Net (.vector 32 .bit)) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .mem_wordsize => memWordsize
+    | .reg_op1 => regOp1
+    | .mem_rdata => memRdata
+  pure (child .mem_rdata_word)
+
+noncomputable def place (memWordsize : Net (.vector 2 .bit))
+    (regOp1 memRdata : Net (.vector 32 .bit)) :
+    Builder (Net (.vector 32 .bit)) := do
+  let child ← placeIndexed "memory_read_formatting" design fun
+    | .mem_wordsize => memWordsize
+    | .reg_op1 => regOp1
+    | .mem_rdata => memRdata
+  pure (child .mem_rdata_word)
+
+attribute [circuit_description] placeNamed place
+
+end ReadFormatting
 
 end PicoRV.Memory

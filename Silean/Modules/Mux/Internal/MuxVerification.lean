@@ -179,53 +179,22 @@ private theorem maskPorts (signalType : SignalType) :
   cases signalType with
   | bit =>
     rw [Mask.Naming.namingWith.eq_1]
-    erw [ports_mpr_of_eq (Mask.moduleStructure.eq_1 .bit)]
-    erw [ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_1
+    erw [ModuleNaming.ports_mpr_of_eq (Mask.moduleStructure.eq_1 .bit)]
+    erw [ModuleNaming.ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_1
       Mask.interface Mask.bitModuleStructure)]
     rfl
   | vector length element =>
     rw [Mask.Naming.namingWith.eq_2]
-    erw [ports_mpr_of_eq (Mask.moduleStructure.eq_1 (.vector length element))]
-    erw [ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_2
+    erw [ModuleNaming.ports_mpr_of_eq (Mask.moduleStructure.eq_1 (.vector length element))]
+    erw [ModuleNaming.ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_2
       Mask.interface Mask.bitModuleStructure length element)]
     rfl
   | tuple fields =>
     rw [Mask.Naming.namingWith.eq_3]
-    erw [ports_mpr_of_eq (Mask.moduleStructure.eq_1 (.tuple fields))]
-    erw [ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_3
+    erw [ModuleNaming.ports_mpr_of_eq (Mask.moduleStructure.eq_1 (.tuple fields))]
+    erw [ModuleNaming.ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_3
       Mask.interface Mask.bitModuleStructure fields)]
     rfl
-
-private theorem binaryPorts [operation : Composition.BinaryLeafwise.Operation]
-    [gate : Composition.BinaryLeafwise.BitGate operation]
-    (family scope : String) (bitNaming : ModuleNaming gate.certified.moduleStructure)
-    (signalType : SignalType) :
-    (Naming.BinaryLeafwise.namingWith family scope bitNaming signalType (.positional _)).ports =
-      Naming.BinaryLeafwise.ports signalType := by
-  cases signalType with
-  | bit =>
-    rw [Naming.BinaryLeafwise.namingWith.eq_1]
-    erw [ports_mpr_of_eq (Composition.BinaryLeafwise.moduleStructure.eq_1 .bit)]
-    erw [ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_1
-      Composition.BinaryLeafwise.interface Composition.BinaryLeafwise.bitModuleStructure)]
-    rfl
-  | vector length element =>
-    rw [Naming.BinaryLeafwise.namingWith.eq_2]
-    erw [ports_mpr_of_eq (Composition.BinaryLeafwise.moduleStructure.eq_1 (.vector length element))]
-    erw [ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_2
-      Composition.BinaryLeafwise.interface Composition.BinaryLeafwise.bitModuleStructure length element)]
-    rfl
-  | tuple fields =>
-    rw [Naming.BinaryLeafwise.namingWith.eq_3]
-    erw [ports_mpr_of_eq (Composition.BinaryLeafwise.moduleStructure.eq_1 (.tuple fields))]
-    erw [ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_3
-      Composition.BinaryLeafwise.interface Composition.BinaryLeafwise.bitModuleStructure fields)]
-    rfl
-
-private theorem bitwiseOrPorts (signalType : SignalType) :
-    (BitwiseOr.Naming.namingWith signalType (.positional _)).ports = BitwiseOr.Naming.ports signalType := by
-  unfold BitwiseOr.Naming.namingWith BitwiseOr.Naming.ports BitwiseOr.Naming.portsWithNaming
-  refine @binaryPorts ?_ ?_ ?_ ?_ ?_ signalType
 
 private theorem same (signalType : SignalType) :
     some (description signalType) = ofNaming (Mux.naming signalType) := by
@@ -252,7 +221,7 @@ private theorem unique (signalType : SignalType) : (description signalType).Uniq
   change child ∈ [_, _, _, _] at member
   simp only [List.mem_cons, List.not_mem_nil, or_false] at member
   rcases member with equal | equal | equal | equal <;> subst child <;>
-    constructor <;> simp only [maskPorts, bitwiseOrPorts] <;>
+    constructor <;> simp only [maskPorts, BitwiseOr.Naming.namingWith_ports] <;>
     exact of_decide_eq_true rfl
 
 theorem corresponds (signalType : SignalType) :

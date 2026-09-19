@@ -28,6 +28,33 @@ namespace Silean.Authoring.CircuitDescription
 
 open Silean Naming
 
+/-- Placing already-resolved sources never fails during connection
+finalization, even when the draft-producing function contains pattern matches
+or the child's port family has symbolic size. -/
+@[circuit_description]
+theorem Internal.finalizeConnections_map_of_sources {Index : Type}
+    (indices : List Index) (draft : Index → DraftConnection)
+    (source : Index → Source)
+    (isSource : ∀ index, (draft index).driver.origin = .source (source index)) :
+    Internal.finalizeConnections [] (indices.map draft) =
+      .ok (indices.map fun index =>
+        ({ port := (draft index).port, source := source index } : Connection)) := by
+  induction indices with
+  | nil => rfl
+  | cons head tail ih =>
+      have driver : (draft head).driver =
+          ({ origin := .source (source head) } : Net (draft head).port.signalType) := by
+        cases driverEq : (draft head).driver with
+        | mk origin =>
+            have originEq := isSource head
+            rw [driverEq] at originEq
+            cases originEq
+            rfl
+      simp only [List.map_cons, Internal.finalizeConnections,
+        Internal.finalizeConnection]
+      rw [driver]
+      simp only [Internal.resolveNet, ih]
+
 /-- Duplicate-free keys make a named list lossless on its entries. -/
 theorem namedEntry_unique {α : Type u} {β : Type v} (key : α → β)
     {entries : List α} (unique : (entries.map key).Nodup)
@@ -149,8 +176,9 @@ theorem Corresponds.source_names_unique {description : Description} {body : Modu
     {key : ModuleKey} {ports : ModulePortsNaming body.ports}
     {instanceName : body.instancePorts.Name → SourceName}
     {childNaming : (child : body.instancePorts.Name) → ModuleNaming (children child)}
+    {namedWires : List (Naming.NamedWire body)}
     (certificate : Corresponds description
-      (ModuleNaming.composite key ports instanceName childNaming)) :
+      (ModuleNaming.composite key ports instanceName childNaming namedWires)) :
     ports.inputs.names.Nodup ∧
       (body.instancePorts.names.values.map instanceName).Nodup ∧
       ∀ child, (childNaming child).ports.outputs.names.Nodup := by
@@ -447,10 +475,12 @@ variable {description : Description} {leftBody rightBody : ModuleBody}
   {rightName : rightBody.instancePorts.Name → SourceName}
   {leftNaming : (child : leftBody.instancePorts.Name) → ModuleNaming (leftChildren child)}
   {rightNaming : (child : rightBody.instancePorts.Name) → ModuleNaming (rightChildren child)}
+  {leftNamedWires : List (Naming.NamedWire leftBody)}
+  {rightNamedWires : List (Naming.NamedWire rightBody)}
   (leftCertificate : Corresponds description
-    (ModuleNaming.composite leftKey leftPorts leftName leftNaming))
+    (ModuleNaming.composite leftKey leftPorts leftName leftNaming leftNamedWires))
   (rightCertificate : Corresponds description
-    (ModuleNaming.composite rightKey rightPorts rightName rightNaming))
+    (ModuleNaming.composite rightKey rightPorts rightName rightNaming rightNamedWires))
 
 /-- Complete parent-input correspondence: names and signal types are preserved
 even though the two structural boundaries may use different label types. -/

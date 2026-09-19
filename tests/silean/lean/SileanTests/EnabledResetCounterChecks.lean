@@ -85,14 +85,16 @@ private def renders (width : Nat) (resetValue : Value width)
   ["public module EnabledResetCounter_3_0_1_0",
    "input enable : UInt<1>", "input reset : UInt<1>",
    "output value : UInt<1>[3]",
-   "inst increment of increment_structural_3",
-   "inst storage of EnabledResetRegister_v3_bit_0_1_0",
-   "connect increment.value, storage.value_out",
-   "connect storage.value, increment.result"]
+   "inst increment_0 of increment_structural_3",
+   "inst enabled_reset_register_0 of EnabledResetRegister_v3_bit_0_1_0",
+   "wire current : UInt<1>[3]",
+   "connect current, enabled_reset_register_0.value_out",
+   "connect increment_0.value, current",
+   "connect enabled_reset_register_0.value, increment_0.result"]
 
 #guard renders 0 bits0
   ["public module EnabledResetCounter_0",
    "output value : UInt<1>[0]",
-   "inst increment of increment_structural_0"]
+   "inst increment_0 of increment_structural_0"]
 
 end SileanTests.EnabledResetCounter

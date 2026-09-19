@@ -6,7 +6,8 @@ namespace Silean.Authoring
 
 `module_design` is the main design-side command for composite hardware. A
 single declaration combines a new or existing boundary, concrete child
-modules, typed wiring, and recursive emission naming. It expands through the
+modules, optional named internal wires, typed wiring, and recursive emission
+naming. It expands through the
 lower-level `module_ports`, `module_instances`, and `module_wiring` commands
 and then packages the result as a `Naming.NamedModule`.
 
@@ -39,12 +40,19 @@ syntax ident "(" term ")" "(" ident " := " term ")"
 declare_syntax_cat moduleDesignInstances
 syntax ident " { " moduleDesignInstanceEntry,* " }" : moduleDesignInstances
 
+declare_syntax_cat moduleDesignNamedWireEntry
+syntax ident " := " moduleWireSource : moduleDesignNamedWireEntry
+
+declare_syntax_cat moduleDesignNamedWires
+syntax "named_wires" " { " moduleDesignNamedWireEntry,* " }" : moduleDesignNamedWires
+
 declare_syntax_cat moduleDesignWiring
 syntax ident " { " moduleWireGroup* " }" : moduleDesignWiring
 
 /--
 Declare one complete composite hardware design: its typed boundary, concrete
-child designs, wiring, and recursive emission naming. An inline `ports`
+child designs, optional named internal wires, wiring, and recursive emission
+naming. An inline `ports`
 section generates the ordinary boundary declarations; a `boundary` section
 instead reuses an existing typed boundary and its naming. A reused boundary
 may additionally provide `namingWith` when the command has component-naming
@@ -61,12 +69,15 @@ module parameters automatically form its specialization key through
 available for exceptional identities. Port and fixed-instance names default
 to their labels; indexed child families require an explicit naming expression
 because their index need not have a canonical textual form.
+The optional `named_wires` section assigns waveform-oriented names to
+existing typed sources without changing structural wiring.
 Contracts and certifications deliberately remain separate declarations.
 -/
 syntax (name := moduleDesign)
   "module_design " ident moduleDesignHeader*
     (modulePortsNamingClause)? " where "
-    moduleDesignPorts moduleDesignInstances moduleDesignWiring : command
+    moduleDesignPorts moduleDesignInstances (moduleDesignNamedWires)?
+      moduleDesignWiring : command
 
 /-! ## Elaboration -/
 
@@ -163,6 +174,7 @@ elab_rules : command
       $[$namingClause:modulePortsNamingClause]? where
       $portsSection:moduleDesignPorts
       $instancesKeyword:ident { $instanceEntries:moduleDesignInstanceEntry,* }
+      $[$namedWiresSection:moduleDesignNamedWires]?
       $wiringKeyword:ident { $wiringGroups:moduleWireGroup* }) => do
     unless instancesKeyword.getId == `instances do
       throwErrorAt instancesKeyword "expected an `instances` section"
@@ -227,6 +239,7 @@ elab_rules : command
     let instancePortsName := mkIdentFrom designName `instancePorts
     let contextName := mkIdentFrom designName `context
     let wiringName := mkIdentFrom designName `wiring
+    let bodyName := mkIdentFrom designName `body
     let structureName := mkIdentFrom designName `moduleStructure
     let namingName := mkIdentFrom designName `naming
     let namingWithName := mkIdentFrom designName `namingWith
@@ -307,6 +320,25 @@ elab_rules : command
         for $contextName $arguments:term* where
         $wiringGroups:moduleWireGroup*
     )
+    let namedWireTerms : Array (TSyntax `term) ← match namedWiresSection with
+      | none => pure #[]
+      | some namedWiresSection => do
+          let `(moduleDesignNamedWires| named_wires {
+              $entries:moduleDesignNamedWireEntry,* }) := namedWiresSection
+            | throwUnsupportedSyntax
+          entries.getElems.mapM fun entry => do
+            let `(moduleDesignNamedWireEntry| $label:ident :=
+                $source:moduleWireSource) := entry
+              | throwUnsupportedSyntax
+            let contextTerm ← `($contextName $arguments:term*)
+            let sourceTerm ← elaborateModuleWireSource contextTerm source
+            let wireName := Syntax.mkStrLit label.getId.toString
+            `({ signalType := _
+                name := $wireName
+                source := $sourceTerm })
+    let namedWiresTerm ← `(
+      ([$namedWireTerms:term,*] :
+        List (Silean.Naming.NamedWire ($bodyName $arguments:term*))))
     elabCommand <| ← `(
       def $namingName $binders:bracketedBinder* :
           Silean.Naming.ModuleNaming ($structureName $arguments:term*) := by
@@ -315,6 +347,7 @@ elab_rules : command
           $portsNamingTerm
           ($instanceNamesName $arguments:term*)
           (fun $childNamingAlternatives:matchAlt*)
+          $namedWiresTerm
     )
     if let some customPortsNaming := customPortsNaming then
       let some clause := namingClause
@@ -341,6 +374,7 @@ elab_rules : command
             $customPortsNaming
             ($instanceNamesName $arguments:term*)
             (fun $customChildNamingAlternatives:matchAlt*)
+            $namedWiresTerm
       )
       elabCommand <| ← `(
         @[reducible] def $bundleWithName $binders:bracketedBinder*

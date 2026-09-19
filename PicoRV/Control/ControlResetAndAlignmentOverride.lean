@@ -1,126 +1,100 @@
-import PicoRV.Control.ControlAlignment
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.BitMux.BitMux
-import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Naming.PrimitiveNaming
+import PicoRV.Control.Internal.ControlResetAndAlignmentOverrideStructure
+import PicoRV.Authoring.CircuitLogic
 
 namespace PicoRV.Control
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
-/-! This module makes the final two priority layers before command completion
-visible. Reset first replaces the selected phase transition with a reset
-transition derived from the baseline. Alignment is checked from the original
-state and, when reset is inactive, overrides only the selected transition's
-phase with `trap`; its command intents and all other proposed fields survive. -/
+/-! # Reset and alignment override
 
-module_design ResetAndAlignmentOverride
-    (name := "picorv32_control_reset_and_alignment_override") where
-  boundary (ResetAndAlignmentOverride.ports)
-    (naming := ResetAndAlignmentOverride.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      ControlInputs.signalMap ControlInputs.schema,
-    baselineFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap ControlState.schema,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    fetchState := Silean.Modules.Constant.design (.vector 8 .bit)
-      (stateBits cpuStateFetch),
-    trapState := Silean.Modules.Constant.design (.vector 8 .bit)
-      (stateBits cpuStateTrap),
-    resetState := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap ControlState.schema,
-    resetTransition := Silean.Modules.NamedTupleCombiner.designWith
-      TransitionValue.signalMap TransitionValue.schema,
-    notResetn := Silean.Primitives.notDesign,
-    resetSelection := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    alignment := Alignment.design,
-    anyMisalignment := Silean.Primitives.orDesign,
-    alignmentEnabled := Silean.Primitives.andDesign,
-    selectedTransitionFields := Silean.Modules.NamedTupleSplitter.designWith
-      TransitionValue.signalMap TransitionValue.schema,
-    selectedStateFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap ControlState.schema,
-    alignmentState := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap ControlState.schema,
-    alignmentTransition := Silean.Modules.NamedTupleCombiner.designWith
-      TransitionValue.signalMap TransitionValue.schema,
-    result := Silean.Modules.Mux.designWith transitionType TransitionValue.schema }
-  wiring {
-  outputs { .transition := result.result }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.baselineFields) { .value := input.baseline }
-  instance (.falseBit) {}
-  instance (.fetchState) {}
-  instance (.trapState) {}
-  instance (.resetState) {
-    .cpu_state := fetchState.output,
-    .latched_store := falseBit.output,
-    .latched_stalu := falseBit.output,
-    .latched_branch := falseBit.output,
-    .latched_is_lu := falseBit.output,
-    .latched_is_lh := falseBit.output,
-    .latched_is_lb := falseBit.output,
-    .latched_rd := baselineFields[.latched_rd],
-    .mem_wordsize := baselineFields[.mem_wordsize],
-    .mem_do_prefetch := baselineFields[.mem_do_prefetch],
-    .mem_do_rinst := baselineFields[.mem_do_rinst],
-    .mem_do_rdata := baselineFields[.mem_do_rdata],
-    .mem_do_wdata := baselineFields[.mem_do_wdata],
-    .decoder_trigger := baselineFields[.decoder_trigger],
-    .decoder_pseudo_trigger := baselineFields[.decoder_pseudo_trigger],
-    .trap := baselineFields[.trap] }
-  instance (.resetTransition) {
-    .state := resetState.value,
-    .setRinst := falseBit.output,
-    .setRdata := falseBit.output,
-    .setWdata := falseBit.output }
-  instance (.notResetn) { .input := inputsFields[.resetn] }
-  instance (.resetSelection) {
-    .select := notResetn.output,
-    .whenFalse := input.selected,
-    .whenTrue := resetTransition.value }
-  instance (.alignment) {
-    .inputs := input.inputs,
-    .current := input.current }
-  instance (.anyMisalignment) {
-    .left := alignment.data,
-    .right := alignment.instruction }
-  instance (.alignmentEnabled) {
-    .left := inputsFields[.resetn],
-    .right := anyMisalignment.output }
-  instance (.selectedTransitionFields) { .value := resetSelection.result }
-  instance (.selectedStateFields) {
-    .value := selectedTransitionFields[.state] }
-  instance (.alignmentState) {
-    .cpu_state := trapState.output,
-    .latched_store := selectedStateFields[.latched_store],
-    .latched_stalu := selectedStateFields[.latched_stalu],
-    .latched_branch := selectedStateFields[.latched_branch],
-    .latched_is_lu := selectedStateFields[.latched_is_lu],
-    .latched_is_lh := selectedStateFields[.latched_is_lh],
-    .latched_is_lb := selectedStateFields[.latched_is_lb],
-    .latched_rd := selectedStateFields[.latched_rd],
-    .mem_wordsize := selectedStateFields[.mem_wordsize],
-    .mem_do_prefetch := selectedStateFields[.mem_do_prefetch],
-    .mem_do_rinst := selectedStateFields[.mem_do_rinst],
-    .mem_do_rdata := selectedStateFields[.mem_do_rdata],
-    .mem_do_wdata := selectedStateFields[.mem_do_wdata],
-    .decoder_trigger := selectedStateFields[.decoder_trigger],
-    .decoder_pseudo_trigger := selectedStateFields[.decoder_pseudo_trigger],
-    .trap := selectedStateFields[.trap] }
-  instance (.alignmentTransition) {
-    .state := alignmentState.value,
-    .setRinst := selectedTransitionFields[.setRinst],
-    .setRdata := selectedTransitionFields[.setRdata],
-    .setWdata := selectedTransitionFields[.setWdata] }
-  instance (.result) {
-    .select := alignmentEnabled.output,
-    .whenFalse := resetSelection.result,
-    .whenTrue := alignmentTransition.value }
-  }
+This module makes the final two priority layers before command completion
+visible. Reset first replaces the selected phase transition with one derived
+from the baseline. When reset is inactive, address misalignment overrides only
+the selected transition's phase with `trap`; its command intents and all other
+proposed fields survive. Alignment is deliberately checked from the original
+state. The expanded typed hierarchy and verification remain under `Internal/`.
+-/
+
+namespace ResetAndAlignmentOverride.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let baseline ← input "baseline" stateType
+  let selected ← input "selected" transitionType
+  let inputsFields ← split ControlInputs.layout inputs
+  let baselineFields ← split ControlState.layout baseline
+  let falseBit ← constant .bit false
+  let fetchState ← constant (.vector 8 .bit) (stateBits cpuStateFetch)
+  let trapState ← constant (.vector 8 .bit) (stateBits cpuStateTrap)
+
+  let resetState ← update stateMap ControlState.schema
+    baselineFields fun
+      | .cpu_state => some fetchState
+      | .latched_store | .latched_stalu | .latched_branch
+      | .latched_is_lu | .latched_is_lh | .latched_is_lb => some falseBit
+      | _ => none
+  let resetTransition ← combine
+    TransitionValue.signalMap TransitionValue.schema fun
+      | .state => resetState
+      | .setRinst | .setRdata | .setWdata => falseBit
+  let notResetn ← !! (inputsFields .resetn)
+  let resetSelection ← mux notResetn selected resetTransition
+
+  let alignment ← Alignment.place inputs current
+  let anyMisalignment ← alignment.data ||| alignment.instruction
+  let alignmentEnabled ← inputsFields .resetn &&& anyMisalignment
+  let selectedTransitionFields ← split TransitionValue.layout resetSelection
+  let selectedStateFields ← split ControlState.layout
+    (selectedTransitionFields .state)
+  let alignmentState ← update stateMap ControlState.schema
+    selectedStateFields fun
+      | .cpu_state => some trapState
+      | _ => none
+  let alignmentTransition ← combine
+    TransitionValue.signalMap TransitionValue.schema fun
+      | .state => alignmentState
+      | .setRinst => selectedTransitionFields .setRinst
+      | .setRdata => selectedTransitionFields .setRdata
+      | .setWdata => selectedTransitionFields .setWdata
+  output "transition" (← mux alignmentEnabled
+    resetSelection alignmentTransition)
+
+noncomputable def description : Description := build construction
+
+end ResetAndAlignmentOverride.Description
+
+namespace ResetAndAlignmentOverride
+
+structure PlacedOutputs where
+  transition : Net transitionType
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current baseline : Net stateType)
+    (selected : Net transitionType) : Builder PlacedOutputs := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .baseline => baseline
+    | .selected => selected
+  pure ⟨child .transition⟩
+
+noncomputable def place (inputs : Net inputsType)
+    (current baseline : Net stateType) (selected : Net transitionType) :
+    Builder PlacedOutputs := do
+  let child ← placeIndexed "reset_alignment_override" design fun
+    | .inputs => inputs
+    | .current => current
+    | .baseline => baseline
+    | .selected => selected
+  pure ⟨child .transition⟩
+
+attribute [circuit_description] placeNamed place
+
+end ResetAndAlignmentOverride
 
 end PicoRV.Control

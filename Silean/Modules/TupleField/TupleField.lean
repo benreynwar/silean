@@ -10,7 +10,9 @@ open Silean.Authoring
 
 /-! Select one field from a named tuple. The field label itself carries the
 evidence for the selected signal type, so hardware descriptions never need to
-translate a name into a positional tuple index. -/
+translate a name into a positional tuple index. The dependent field type and
+its cast are most visible in the typed `module_design`; a fixed builder form
+would only hide that relationship behind another representation. -/
 
 module_design TupleField (signals : SignalMap) (field : signals.Label)
     (specialization := [.signalType signals.tupleType,

@@ -136,53 +136,17 @@ private theorem same (signalType : SignalType)
     (resetValue : signalType.Denote) :
     some (description signalType resetValue) =
       ofNaming (EnabledResetRegister.naming signalType resetValue) := by
-  simp only [description, construction, build, buildResult,
-    Mux.placeNamed, ResetRegister.placeNamed,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-      [.select, .whenFalse, .whenTrue] by rfl]
-  rw [show (inferInstance : Enumeration ResetRegister.Input).values =
-      [.value, .reset] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet,
-    Authoring.CircuitDescription.Internal.findWire?,
-    Authoring.CircuitDescription.Internal.replaceWire]
+  simp only [circuit_description, description, construction,
+    ResetRegister.place]
+  simp [circuit_description, enumeration]
   rfl
 
 private theorem unique (signalType : SignalType)
     (resetValue : signalType.Denote) :
     (description signalType resetValue).UniqueNames := by
-  simp only [description, construction, build, buildResult,
-    Mux.placeNamed, ResetRegister.placeNamed,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-      [.select, .whenFalse, .whenTrue] by rfl]
-  rw [show (inferInstance : Enumeration ResetRegister.Input).values =
-      [.value, .reset] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet,
-    Authoring.CircuitDescription.Internal.findWire?,
-    Authoring.CircuitDescription.Internal.replaceWire]
+  simp only [circuit_description, description, construction,
+    ResetRegister.place]
+  simp [circuit_description, enumeration]
   refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
   intro child member
   change child ∈ [_, _] at member

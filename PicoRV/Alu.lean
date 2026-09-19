@@ -1,20 +1,10 @@
 import Silean.Foundation.BitVector
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
-import Silean.Modules.AddSub.AddSub
-import Silean.Modules.BitwiseAnd.BitwiseAnd
-import Silean.Modules.BitwiseOr.BitwiseOr
-import Silean.Modules.BitwiseXor.BitwiseXor
-import Silean.Modules.Constant.Constant
-import Silean.Modules.Equality.Equality
-import Silean.Modules.Mux.Mux
-import Silean.Naming.PrimitiveNaming
-import Silean.Naming.SignalAdapterNaming
-import Silean.Primitives.Not
-import Silean.Primitives.Or
-import Silean.Primitives.Xor
+import PicoRV.Authoring.CircuitLogic
+import PicoRV.Internal.AluStructure
 
 namespace PicoRV.Alu
 
@@ -25,28 +15,107 @@ open Silean.Authoring
 combinational PicoRV32 ALU. The boundary names and operation-selection
 behavior follow the selected source configuration. -/
 
-abbrev Word := Fin 32 → Bool
 
-module_ports ports where
-  input reg_op1 : .vector 32 .bit,
-  input reg_op2 : .vector 32 .bit,
-  input instr_sub : .bit,
-  input instr_beq : .bit,
-  input instr_bne : .bit,
-  input instr_bge : .bit,
-  input instr_bgeu : .bit,
-  input is_slti_blt_slt : .bit,
-  input is_sltiu_bltu_sltu : .bit,
-  input is_lui_auipc_jal_jalr_addi_add_sub : .bit,
-  input is_compare : .bit,
-  input instr_xori : .bit,
-  input instr_xor : .bit,
-  input instr_ori : .bit,
-  input instr_or : .bit,
-  input instr_andi : .bit,
-  input instr_and : .bit,
-  output alu_out : .vector 32 .bit,
-  output alu_out_0 : .bit
+/-! ## Authored hardware -/
+
+namespace Description
+
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
+
+noncomputable def construction : Builder Unit := do
+  let regOp1 ← input "reg_op1" wordType
+  let regOp2 ← input "reg_op2" wordType
+  let instrSub ← input "instr_sub" .bit
+  let instrBeq ← input "instr_beq" .bit
+  let instrBne ← input "instr_bne" .bit
+  let instrBge ← input "instr_bge" .bit
+  let instrBgeu ← input "instr_bgeu" .bit
+  let isSltiBltSlt ← input "is_slti_blt_slt" .bit
+  let isSltiuBltuSltu ← input "is_sltiu_bltu_sltu" .bit
+  let arithmeticSelected ← input "is_lui_auipc_jal_jalr_addi_add_sub" .bit
+  let isCompare ← input "is_compare" .bit
+  let instrXori ← input "instr_xori" .bit
+  let instrXor ← input "instr_xor" .bit
+  let instrOri ← input "instr_ori" .bit
+  let instrOr ← input "instr_or" .bit
+  let instrAndi ← input "instr_andi" .bit
+  let instrAnd ← input "instr_and" .bit
+
+  let leftBits ← splitVector 32 .bit regOp1
+  let rightBits ← splitVector 32 .bit regOp2
+  let subtractMode ← instrSub ||| isCompare
+  let arithmetic ← Silean.Modules.AddSub.place regOp1 regOp2 subtractMode
+  let equal ← regOp1 === regOp2
+  let xorValue ← regOp1 ^^^ regOp2
+  let orValue ← regOp1 ||| regOp2
+  let andValue ← regOp1 &&& regOp2
+  let zeroBit ← constant .bit zeroBitValue
+  let zeroWord ← constant wordType zeroWordValue
+  let unsignedLess ← !! arithmetic.carryOut
+  let signDifference ← leftBits (Fin.last 31) ^^^ rightBits (Fin.last 31)
+  let signedLess ← mux signDifference unsignedLess (leftBits (Fin.last 31))
+  let notEqual ← !! equal
+  let notSignedLess ← !! signedLess
+  let notUnsignedLess ← !! unsignedLess
+
+  let comparison ← mux instrBeq
+    (← mux instrBne
+      (← mux instrBge
+        (← mux instrBgeu
+          (← mux isSltiBltSlt
+            (← mux isSltiuBltuSltu zeroBit unsignedLess)
+            signedLess)
+          notUnsignedLess)
+        notSignedLess)
+      notEqual)
+    equal
+  let comparisonWord ← Silean.Authoring.CircuitLogic.combine wordCombiner
+    fun index => if (show Fin 32 from index) = 0 then comparison else zeroBit
+  let xorSelected ← instrXori ||| instrXor
+  let orSelected ← instrOri ||| instrOr
+  let andSelected ← instrAndi ||| instrAnd
+  let selected ← mux arithmeticSelected
+    (← mux isCompare
+      (← mux xorSelected
+        (← mux orSelected
+          (← mux andSelected zeroWord andValue)
+          orValue)
+        xorValue)
+      comparisonWord)
+    arithmetic.result
+
+  output "alu_out" selected
+  output "alu_out_0" comparison
+
+noncomputable def description : Description := build construction
+
+end Description
+
+/-! ## Placement -/
+
+abbrev InputNets :=
+  (input : ports.inputs.Label) →
+    Authoring.CircuitDescription.Net (ports.inputs.signalType input)
+
+structure PlacedOutputs where
+  aluOut : Authoring.CircuitDescription.Net wordType
+  aluOut0 : Authoring.CircuitDescription.Net .bit
+
+/-- Place an ALU using the next conventional indexed name. -/
+noncomputable def place (inputs : InputNets) :
+    Authoring.CircuitDescription.Builder PlacedOutputs := do
+  let child ← Authoring.CircuitDescription.placeIndexed "alu" design inputs
+  pure { aluOut := child .alu_out, aluOut0 := child .alu_out_0 }
+
+/-- Place an ALU under an explicitly chosen structural name. -/
+noncomputable def placeNamed (name : Naming.SourceName) (inputs : InputNets) :
+    Authoring.CircuitDescription.Builder PlacedOutputs := do
+  let child ← Authoring.CircuitDescription.placeNamed name design inputs
+  pure { aluOut := child .alu_out, aluOut0 := child .alu_out_0 }
+
+attribute [circuit_description] place placeNamed
 
 def wordOfNat (value : Nat) : Word := Silean.BitVector.ofNat 32 value
 
@@ -253,157 +322,4 @@ module_cycle_contract cycleContract for ports where
     · exact aluOutEqual
     · exact aluOut0Equal
 
-/-! ## Hardware structure -/
-
-abbrev wordType : SignalType := .vector 32 .bit
-
-def wordSplitter : Silean.Composition.SignalSplitter := .vector 32 .bit
-def wordCombiner : Silean.Composition.SignalCombiner := .vector 32 .bit
-
-def zeroBitValue : Bool := false
-def zeroWordValue : Word := wordOfNat 0
-
 end PicoRV.Alu
-
-namespace PicoRV
-
-open Silean
-open Silean.Authoring
-
-module_design Alu (name := "picorv32_alu") where
-  boundary (Alu.ports) (naming := Alu.Naming.ports)
-  instances {
-    -- Expose operand sign bits and share one arithmetic path.
-    leftSplit := Naming.SignalAdapter.splitterDesign Alu.wordSplitter,
-    rightSplit := Naming.SignalAdapter.splitterDesign Alu.wordSplitter,
-    subtractMode := Silean.Primitives.orDesign,
-    addSub := Silean.Modules.AddSub.design 32,
-    -- Compute equality and bitwise candidates in parallel.
-    equality := Silean.Modules.Equality.design Alu.wordType,
-    bitwiseXor := Silean.Modules.BitwiseXor.design Alu.wordType,
-    bitwiseOr := Silean.Modules.BitwiseOr.design Alu.wordType,
-    bitwiseAnd := Silean.Modules.BitwiseAnd.design Alu.wordType,
-    zeroBit := Silean.Modules.Constant.design .bit Alu.zeroBitValue,
-    zeroWord := Silean.Modules.Constant.design Alu.wordType Alu.zeroWordValue,
-    -- Derive comparison flags from equality, signs, and subtraction carry.
-    unsignedLess := Silean.Primitives.notDesign,
-    signDifference := Silean.Primitives.xorDesign,
-    signedLess := Silean.Modules.Mux.design .bit,
-    notEqual := Silean.Primitives.notDesign,
-    notSignedLess := Silean.Primitives.notDesign,
-    notUnsignedLess := Silean.Primitives.notDesign,
-    -- Select comparison results in source priority order.
-    selectUnsignedLess := Silean.Modules.Mux.design .bit,
-    selectSignedLess := Silean.Modules.Mux.design .bit,
-    selectUnsignedGreaterEqual := Silean.Modules.Mux.design .bit,
-    selectSignedGreaterEqual := Silean.Modules.Mux.design .bit,
-    selectNotEqual := Silean.Modules.Mux.design .bit,
-    selectEqual := Silean.Modules.Mux.design .bit,
-    comparisonWord := Naming.SignalAdapter.combinerDesign Alu.wordCombiner,
-    -- Combine instruction selectors and select the final word result.
-    xorSelected := Silean.Primitives.orDesign,
-    orSelected := Silean.Primitives.orDesign,
-    andSelected := Silean.Primitives.orDesign,
-    selectAnd := Silean.Modules.Mux.design Alu.wordType,
-    selectOr := Silean.Modules.Mux.design Alu.wordType,
-    selectXor := Silean.Modules.Mux.design Alu.wordType,
-    selectComparison := Silean.Modules.Mux.design Alu.wordType,
-    selectArithmetic := Silean.Modules.Mux.design Alu.wordType }
-  wiring {
-    outputs {
-      .alu_out := selectArithmetic.result,
-      .alu_out_0 := selectEqual.result }
-    instance (.leftSplit) { .value := input.reg_op1 }
-    instance (.rightSplit) { .value := input.reg_op2 }
-    instance (.subtractMode) {
-      .left := input.instr_sub,
-      .right := input.is_compare }
-    instance (.addSub) {
-      .left := input.reg_op1,
-      .right := input.reg_op2,
-      .subtract := subtractMode.output }
-    instance (.equality) {
-      .left := input.reg_op1,
-      .right := input.reg_op2 }
-    instance (.bitwiseXor) {
-      .left := input.reg_op1,
-      .right := input.reg_op2 }
-    instance (.bitwiseOr) {
-      .left := input.reg_op1,
-      .right := input.reg_op2 }
-    instance (.bitwiseAnd) {
-      .left := input.reg_op1,
-      .right := input.reg_op2 }
-    instance (.zeroBit) {}
-    instance (.zeroWord) {}
-    instance (.unsignedLess) { .input := addSub.carryOut }
-    instance (.signDifference) {
-      .left := leftSplit[Fin.last 31],
-      .right := rightSplit[Fin.last 31] }
-    instance (.signedLess) {
-      .select := signDifference.output,
-      .whenFalse := unsignedLess.output,
-      .whenTrue := leftSplit[Fin.last 31] }
-    instance (.notEqual) { .input := equality.result }
-    instance (.notSignedLess) { .input := signedLess.result }
-    instance (.notUnsignedLess) { .input := unsignedLess.output }
-    instance (.selectUnsignedLess) {
-      .select := input.is_sltiu_bltu_sltu,
-      .whenFalse := zeroBit.output,
-      .whenTrue := unsignedLess.output }
-    instance (.selectSignedLess) {
-      .select := input.is_slti_blt_slt,
-      .whenFalse := selectUnsignedLess.result,
-      .whenTrue := signedLess.result }
-    instance (.selectUnsignedGreaterEqual) {
-      .select := input.instr_bgeu,
-      .whenFalse := selectSignedLess.result,
-      .whenTrue := notUnsignedLess.output }
-    instance (.selectSignedGreaterEqual) {
-      .select := input.instr_bge,
-      .whenFalse := selectUnsignedGreaterEqual.result,
-      .whenTrue := notSignedLess.output }
-    instance (.selectNotEqual) {
-      .select := input.instr_bne,
-      .whenFalse := selectSignedGreaterEqual.result,
-      .whenTrue := notEqual.output }
-    instance (.selectEqual) {
-      .select := input.instr_beq,
-      .whenFalse := selectNotEqual.result,
-      .whenTrue := equality.result }
-    instance (.comparisonWord) {
-      index := from (if (show Fin 32 from index) = 0 then
-        c.instanceOutput .selectEqual .result
-      else c.instanceOutput .zeroBit .output) }
-    instance (.xorSelected) {
-      .left := input.instr_xori,
-      .right := input.instr_xor }
-    instance (.orSelected) {
-      .left := input.instr_ori,
-      .right := input.instr_or }
-    instance (.andSelected) {
-      .left := input.instr_andi,
-      .right := input.instr_and }
-    instance (.selectAnd) {
-      .select := andSelected.output,
-      .whenFalse := zeroWord.output,
-      .whenTrue := bitwiseAnd.result }
-    instance (.selectOr) {
-      .select := orSelected.output,
-      .whenFalse := selectAnd.result,
-      .whenTrue := bitwiseOr.result }
-    instance (.selectXor) {
-      .select := xorSelected.output,
-      .whenFalse := selectOr.result,
-      .whenTrue := bitwiseXor.result }
-    instance (.selectComparison) {
-      .select := input.is_compare,
-      .whenFalse := selectXor.result,
-      .whenTrue := comparisonWord.value }
-    instance (.selectArithmetic) {
-      .select := input.is_lui_auipc_jal_jalr_addi_add_sub,
-      .whenFalse := selectComparison.result,
-      .whenTrue := addSub.result }
-  }
-
-end PicoRV

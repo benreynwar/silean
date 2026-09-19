@@ -1,86 +1,75 @@
-import PicoRV.Datapath.DatapathNextContracts
-import Silean.Authoring.ModuleDesign
+import PicoRV.Authoring.CircuitLogic
+import PicoRV.Datapath.Internal.DatapathFetchUpdateStructure
 import Silean.Modules.Add.Add
-import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Modules.VectorLayout.VectorLayout
-import Silean.Naming.PrimitiveNaming
 
 namespace PicoRV.Datapath
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
-def FetchUpdate.clearLowLayout (index : Fin 32) :
-    Silean.Modules.VectorLayout.BitSource 32 :=
-  if _zero : index.val = 0 then .constant false else .input index
+/-! # Fetch datapath update
 
-/-! Fetch commits the prospective PC, optionally selecting the aligned
-registered branch target first. A current decoder trigger then computes the
-following sequential or JAL PC from that same selected current PC. -/
-module_design FetchUpdate (name := "picorv32_datapath_fetch_update") where
-  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      DatapathInputs.signalMap DatapathInputs.schema,
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    four := Silean.Modules.Constant.design (.vector 32 .bit) (wordOfNat 4),
-    branchStored := Silean.Primitives.andDesign,
-    branchSource := Silean.Modules.Mux.design (.vector 32 .bit),
-    alignedBranch := Silean.Modules.VectorLayout.design 32 32 FetchUpdate.clearLowLayout,
-    currentPc := Silean.Modules.Mux.design (.vector 32 .bit),
-    sequentialPc := Silean.Modules.Add.design 32,
-    jalPc := Silean.Modules.Add.design 32,
-    decodedPc := Silean.Modules.Mux.design (.vector 32 .bit),
-    nextPc := Silean.Modules.Mux.design (.vector 32 .bit),
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap DatapathState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.currentFields) { .value := input.current }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.falseBit) {}
-  instance (.four) {}
-  instance (.branchStored) {
-    .left := inputsFields[.latched_branch],
-    .right := inputsFields[.latched_store] }
-  instance (.branchSource) {
-    .select := inputsFields[.latched_stalu],
-    .whenFalse := currentFields[.reg_out],
-    .whenTrue := currentFields[.alu_out_q] }
-  instance (.alignedBranch) { .input := branchSource.result }
-  instance (.currentPc) {
-    .select := branchStored.output,
-    .whenFalse := currentFields[.reg_next_pc],
-    .whenTrue := alignedBranch.output }
-  instance (.sequentialPc) {
-    .left := currentPc.result, .right := four.output,
-    .carryIn := falseBit.output }
-  instance (.jalPc) {
-    .left := currentPc.result, .right := inputsFields[.decoded_imm_j],
-    .carryIn := falseBit.output }
-  instance (.decodedPc) {
-    .select := inputsFields[.instr_jal],
-    .whenFalse := sequentialPc.result,
-    .whenTrue := jalPc.result }
-  instance (.nextPc) {
-    .select := inputsFields[.decoder_trigger],
-    .whenFalse := currentPc.result,
-    .whenTrue := decodedPc.result }
-  instance (.result) {
-    .reg_pc := currentPc.result,
-    .reg_next_pc := nextPc.result,
-    .reg_op1 := updatedFields[.reg_op1],
-    .reg_op2 := updatedFields[.reg_op2],
-    .reg_out := updatedFields[.reg_out],
-    .reg_sh := updatedFields[.reg_sh],
-    .alu_out_q := updatedFields[.alu_out_q] }
-  }
+Fetch first commits the prospective PC, optionally selecting the aligned
+registered branch target. A current decoder trigger then computes the following
+sequential or JAL PC from that same selected current PC. -/
+
+namespace FetchUpdate.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split DatapathInputs.layout inputs
+  let currentFields ← split DatapathState.layout current
+  let updatedFields ← split DatapathState.layout updated
+  let falseBit ← constant .bit false
+  let four ← constant (.vector 32 .bit) (wordOfNat 4)
+  let branchStored ← inputsFields .latched_branch &&& inputsFields .latched_store
+  let branchSource ← mux (inputsFields .latched_stalu)
+    (currentFields .reg_out) (currentFields .alu_out_q)
+  let alignedBranch ← Silean.Modules.VectorLayout.place
+    FetchUpdate.clearLowLayout branchSource
+  let currentPc ← mux branchStored (currentFields .reg_next_pc) alignedBranch
+  let sequentialPc ← Silean.Modules.Add.place currentPc four falseBit
+  let jalPc ← Silean.Modules.Add.place
+    currentPc (inputsFields .decoded_imm_j) falseBit
+  let decodedPc ← mux (inputsFields .instr_jal)
+    sequentialPc.result jalPc.result
+  let nextPc ← mux (inputsFields .decoder_trigger) currentPc decodedPc
+  output "state" (← update stateMap DatapathState.schema updatedFields fun
+    | .reg_pc => some currentPc
+    | .reg_next_pc => some nextPc
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end FetchUpdate.Description
+
+namespace FetchUpdate
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "datapath_fetch_update" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end FetchUpdate
 
 end PicoRV.Datapath

@@ -15,8 +15,11 @@ module_design EnabledRegister (signalType : SignalType)
     input enable : .bit,
     output q (schema := typeNaming) : signalType }
   instances {
-    selection := Modules.Mux.design signalType,
-    storage := Modules.Register.design signalType }
+    selection (name := .indexed "mux" 0) := Modules.Mux.design signalType,
+    storage (name := .indexed "register" 0) :=
+      Modules.Register.design signalType }
+  named_wires {
+    stored := storage.output }
   wiring {
     outputs {
       .q := storage.output }
@@ -35,10 +38,12 @@ namespace Silean.Modules.EnabledRegister.Internal
 open Silean
 
 @[simp] theorem selection_instance_name (signalType : SignalType) :
-    EnabledRegister.Naming.instanceNames signalType .selection = "selection" := rfl
+    EnabledRegister.Naming.instanceNames signalType .selection =
+      .indexed "mux" 0 := rfl
 
 @[simp] theorem storage_instance_name (signalType : SignalType) :
-    EnabledRegister.Naming.instanceNames signalType .storage = "storage" := rfl
+    EnabledRegister.Naming.instanceNames signalType .storage =
+      .indexed "register" 0 := rfl
 
 @[simp] theorem selection_child_ports (signalType : SignalType) :
     ((EnabledRegister.body signalType).instancePorts.ports .selection) =

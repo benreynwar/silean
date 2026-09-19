@@ -1,4 +1,5 @@
-import PicoRV.PicoRVSchedule
+import PicoRV.PicoRVTheorems
+import PicoRV.Internal.PicoRVVerification
 import Silean.FIRRTL
 
 namespace PicoRVTests.Top
@@ -11,9 +12,9 @@ boundary audit checks the source inventory independently. -/
 
 example (output : PicoRV.PicoRV.Output) :
     Silean.Contracts.Cycle.Certification.Layer.sourceAvailable (fun _ : PicoRV.PicoRV.Input => True)
-      (PicoRV.PicoRV.outputSchedule output).finalAvailability
+      (PicoRV.PicoRV.Internal.outputSchedule output).finalAvailability
       (PicoRV.PicoRV.body.wiring.moduleOutput output) :=
-  (PicoRV.PicoRV.outputSchedule output).finished
+  (PicoRV.PicoRV.Internal.outputSchedule output).finished
 
 example : PicoRV.PicoRV.moduleStructure.HasAtMostOneSolution :=
   PicoRV.PicoRV.hasAtMostOneSolution

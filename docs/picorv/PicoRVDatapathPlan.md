@@ -189,7 +189,7 @@ complete aggregate result in terms of the corresponding natural function:
 
 - baseline output equals the old state with `alu_out_q` replaced;
 - every phase comparator is exact over the full eight-bit value;
-- each phase update equals its `Datapath.lean` helper;
+- each phase update equals its `DatapathContract.lean` helper;
 - the phase mux chain equals `normalNextState`; and
 - reset override equals `nextState` once supplied the selected normal state.
 
@@ -291,7 +291,8 @@ The completed migration followed this sequence:
    structure;
 2. replace the Datapath blackbox with the newly certified structure;
 3. replace the register-file blackbox with its existing certified structure;
-4. update `PicoRVSchedule.childContracts` to use those certifications;
+4. update the top-level internal verification's child contracts to use those
+   certifications;
 5. recheck complete output/state schedules and `HasAtMostOneSolution`;
 6. render and lower the mixed hierarchy; and
 7. audit the then-mixed recursive structure before the remaining Memory and

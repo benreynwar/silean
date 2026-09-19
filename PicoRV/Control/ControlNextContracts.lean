@@ -1,5 +1,5 @@
 import Silean.Contracts.Cycle.CycleBlackbox
-import PicoRV.Control
+import PicoRV.ControlContract
 
 namespace PicoRV.Control
 
@@ -8,7 +8,7 @@ open Silean.Authoring
 
 /-! Contracts for the combinational children used to construct
 `PicoRVControlNext`. Each boundary speaks in the named aggregate types from
-`Control.lean`; packing is representation, while the contract result is one of
+`ControlContract.lean`; packing is representation, while the contract result is one of
 the source-level transition functions. -/
 
 namespace PhaseDecode

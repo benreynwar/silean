@@ -1,4 +1,6 @@
 import PicoRV.Datapath.Internal.DatapathMemoryUpdateVerification
+import PicoRV.Datapath.Internal.DatapathMemoryUpdateCoreCorrespondence
+import PicoRV.Datapath.Internal.DatapathMemoryUpdateSpecializationCorrespondence
 
 /-! # Datapath memory-update theorems
 
@@ -11,6 +13,12 @@ namespace PicoRV.Datapath
 open Silean
 
 namespace MemoryUpdateCore
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 theorem outputs_of_allowed {step : cycleContract.Step}
     (allowed : cycleContract.Allows step) :
@@ -33,6 +41,12 @@ end MemoryUpdateCore
 
 namespace StoreUpdate
 
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
+
 theorem outputs_of_allowed {step : cycleContract.Step}
     (allowed : cycleContract.Allows step) :
     step.outputs .state = stateMap.pack
@@ -54,6 +68,12 @@ theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
 end StoreUpdate
 
 namespace LoadUpdate
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 theorem outputs_of_allowed {step : cycleContract.Step}
     (allowed : cycleContract.Allows step) :

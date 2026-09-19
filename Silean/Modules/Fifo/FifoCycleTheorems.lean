@@ -1,4 +1,5 @@
 import Silean.Modules.Fifo.Internal.FifoCycleVerification
+import Silean.Modules.Fifo.Internal.FifoCorrespondence
 
 /-! # Pointer FIFO cycle theorems
 
@@ -10,6 +11,20 @@ latency-independent FIFO refinement.
 namespace Silean.Modules.Fifo
 
 open Silean
+
+namespace Description
+
+open Naming Authoring.CircuitDescription
+
+/-- The reader-facing FIFO description elaborates to the certified typed
+hierarchy, including the two named pointer-advance feedback wires. -/
+theorem authored_definition_corresponds (element : SignalType)
+    (addressWidth : Nat) :
+    Corresponds (description element addressWidth)
+      (Fifo.naming element addressWidth) :=
+  Internal.corresponds element addressWidth
+
+end Description
 
 /-- The pointer/register-bank hierarchy implements its exact cycle contract. -/
 theorem implements_cycle_contract (element : SignalType)

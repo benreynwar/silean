@@ -1,10 +1,23 @@
 import PicoRV.Control.Internal.ControlPhaseDecodeVerification
+import PicoRV.Control.Internal.ControlPhaseDecodeCorrespondence
 
 /-! # Control phase-decoder theorems -/
 
 namespace PicoRV.Control.PhaseDecode
 
 open Silean
+
+namespace Description
+
+open Silean.Naming Silean.Authoring.CircuitDescription
+
+/-- The reader-facing phase comparisons elaborate to the certified typed
+hierarchy with the same boundary, children, wiring, and names. -/
+theorem authored_definition_corresponds :
+    Corresponds description PhaseDecode.naming :=
+  Internal.corresponds
+
+end Description
 
 theorem outputs_of_allowed {step : cycleContract.Step}
     (allowed : cycleContract.Allows step) :

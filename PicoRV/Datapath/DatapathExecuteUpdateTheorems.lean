@@ -1,4 +1,5 @@
 import PicoRV.Datapath.Internal.DatapathExecuteUpdateVerification
+import PicoRV.Datapath.Internal.DatapathExecuteUpdateCorrespondence
 
 /-! # Datapath Execute Update theorems
 
@@ -9,6 +10,12 @@ witness construction remain under the Internal directory.
 namespace PicoRV.Datapath.ExecuteUpdate
 
 open Silean
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 theorem outputs_of_allowed {step : cycleContract.Step}
     (allowed : cycleContract.Allows step) :

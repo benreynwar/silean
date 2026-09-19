@@ -1,4 +1,5 @@
 import PicoRV.Control.Internal.ControlTrapTransitionVerification
+import PicoRV.Control.Internal.ControlTrapTransitionCorrespondence
 
 /-! # Trap Transition theorems
 
@@ -9,6 +10,13 @@ and certification witness remain under Internal.
 namespace PicoRV.Control.TrapTransition
 
 open Silean
+
+/-- The concise authored definition and expanded typed hierarchy describe the
+same ports, children, wiring, and emitted names. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 /-- Every contract-allowed step returns the source-level transition. -/
 theorem outputs_of_allowed {step : cycleContract.Step}

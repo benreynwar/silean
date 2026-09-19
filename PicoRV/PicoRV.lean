@@ -1,9 +1,9 @@
 import Silean.Authoring.ModuleDesign
-import PicoRV.ControlTheorems
-import PicoRV.DatapathTheorems
-import PicoRV.DecoderTheorems
-import PicoRV.MemoryTheorems
-import PicoRV.RegsTheorems
+import PicoRV.Control
+import PicoRV.Datapath
+import PicoRV.Decoder
+import PicoRV.Memory
+import PicoRV.Regs
 
 namespace PicoRV.PicoRV
 
@@ -36,7 +36,10 @@ namespace PicoRV
 open Silean
 open Silean.Authoring
 
-/-! The direct children follow the reviewed source-region split. -/
+/-! The direct children follow the reviewed source-region split. This
+top-level integration shell deliberately keeps an explicit `module_design`:
+the complete named port map is the architecture readers need to audit, while a
+builder description would reproduce the same map as a second representation. -/
 module_design PicoRV where
   boundary (PicoRV.ports) (naming := PicoRV.Naming.ports)
   instances {

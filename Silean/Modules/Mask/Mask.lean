@@ -600,4 +600,6 @@ noncomputable def place (value : Net signalType)
     | .mask => enabled
   pure (child .result)
 
+attribute [circuit_description] place
+
 end Silean.Modules.Mask

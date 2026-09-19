@@ -1,4 +1,13 @@
+import Lean
+
 namespace Silean
+
+/-! `enumeration` is the opt-in simplifier set for reducing concrete finite
+label types to their ordered constructor lists. Keeping this separate from the
+global simp set lets dependent structural proofs choose when lists should be
+expanded. -/
+
+register_simp_attr enumeration
 
 /-! Constructive positions and finite executable enumerations. -/
 
@@ -391,6 +400,10 @@ structure EnumeratedMap (Value : Type v) where
   Key := Key
   keys := inferInstance
   value := value
+
+@[simp] theorem EnumeratedMap.of_value {Value : Type v} (KeyType : Type u)
+    [Enumeration KeyType] (value : KeyType → Value) (key : KeyType) :
+    (EnumeratedMap.of KeyType value).value key = value key := rfl
 
 /- The private map below is checked documentation, not part of the public API. -/
 

@@ -1,6 +1,7 @@
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
+import Silean.Authoring.CircuitDescriptionSoundness
 import Silean.Modules.EqualsConstant.EqualsConstant
 import Silean.Modules.Equality.EqualityTheorems
 
@@ -101,3 +102,34 @@ module_cycle_certification certification (signalType : SignalType)
   implements := implements signalType constant
 
 end Silean.Modules.EqualsConstant
+
+/-! ## Authored-description correspondence -/
+
+namespace Silean.Modules.EqualsConstant.Description.Internal
+
+open Silean Naming Authoring.CircuitDescription
+
+private theorem same (signalType : SignalType)
+    (constant : signalType.Denote) :
+    some (description signalType constant) =
+      ofNaming (EqualsConstant.naming signalType constant) := by
+  rfl
+
+private theorem unique (signalType : SignalType)
+    (constant : signalType.Denote) :
+    (description signalType constant).UniqueNames := by
+  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
+  intro child member
+  change child ∈ [_, _] at member
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
+  rcases member with equal | equal <;> subst child <;>
+    constructor <;> simp only [Equality.Naming.naming_ports] <;>
+    exact of_decide_eq_true rfl
+
+theorem corresponds (signalType : SignalType)
+    (constant : signalType.Denote) :
+    Corresponds (description signalType constant)
+      (EqualsConstant.naming signalType constant) :=
+  ⟨same signalType constant, unique signalType constant⟩
+
+end Silean.Modules.EqualsConstant.Description.Internal

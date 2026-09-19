@@ -66,7 +66,7 @@ private def parseParam (param : TSyntax `moduleWiringParam) :
       }
   | _ => throwUnsupportedSyntax
 
-private def elaborateSource (contextName : TSyntax `ident)
+def elaborateModuleWireSource (contextName : TSyntax `term)
     (source : TSyntax `moduleWireSource) : CommandElabM (TSyntax `term) := do
   match source with
   | `(moduleWireSource| $qualified:ident) =>
@@ -98,7 +98,7 @@ private def outputAlternative (contextName : TSyntax `ident)
     CommandElabM (TSyntax ``Lean.Parser.Term.matchAlt) := do
   let `(moduleWireEntry| $sink:term := $source:moduleWireSource) := entry
     | throwUnsupportedSyntax
-  let source ← elaborateSource contextName source
+  let source ← elaborateModuleWireSource contextName source
   `(matchAltExpr| | $sink => $source)
 
 private def inputAlternative (contextName : TSyntax `ident)
@@ -106,7 +106,7 @@ private def inputAlternative (contextName : TSyntax `ident)
     CommandElabM (TSyntax ``Lean.Parser.Term.matchAlt) := do
   let `(moduleWireEntry| $sink:term := $source:moduleWireSource) := entry
     | throwUnsupportedSyntax
-  let source ← elaborateSource contextName source
+  let source ← elaborateModuleWireSource contextName source
   `(matchAltExpr| | $instancePattern, $sink => $source)
 
 elab_rules : command

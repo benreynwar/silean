@@ -3,6 +3,7 @@ import Silean.Modules.Constant.Constant
 import Silean.Modules.FullAdder.FullAdder
 import Silean.Modules.VectorConcat.VectorConcat
 import Silean.Naming.SignalAdapterNaming
+import Silean.Authoring.CircuitDescription
 
 namespace Silean.Modules.Add
 
@@ -14,7 +15,12 @@ This is a combinational adder for LSB-first bit vectors. Its contract states
 ordinary binary addition independently of the recursive ripple-carry hardware
 shown below. The schedules and inductive certification are in
 `Internal/AddVerification.lean`; supported structural guarantees are in
-`AddTheorems.lean`. -/
+`AddTheorems.lean`.
+
+The hierarchy changes recursively with `width`: the successor case contains
+the complete lower-width adder plus one full adder. Ordinary Lean recursion is
+therefore the primary hardware definition; a fixed `CircuitDescription`
+version would only duplicate that programmatic construction. -/
 
 inductive Input | left | right | carryIn
 deriving Enumeration
@@ -331,6 +337,27 @@ def naming : (width : Nat) → ModuleNaming (Modules.Add.moduleStructure width)
           | .highBit => Silean.Naming.SignalAdapter.combiner Modules.Add.highCombiner
           | .concat => VectorConcat.naming .bit width 1)
 
+/-- The recursive ripple implementation retains the adder's declared boundary
+naming at every width. -/
+theorem naming_ports (width : Nat) : (naming width).ports = ports width := by
+  cases width with
+  | zero =>
+      rw [naming.eq_1]
+      erw [ModuleNaming.ports_mpr_of_eq (by
+        rw [Modules.Add.moduleStructure.eq_def])]
+      rfl
+  | succ width =>
+      rw [naming.eq_2]
+      erw [ModuleNaming.ports_mpr_of_eq (by
+        rw [Modules.Add.moduleStructure.eq_def])]
+      rfl
+
+/-- The emitted boundary names of every fixed-width adder are collision-free. -/
+theorem portNames_nodup (width : Nat) :
+    (naming width).ports.names.Nodup := by
+  rw [naming_ports]
+  exact of_decide_eq_true rfl
+
 end Silean.Modules.Add.Naming
 
 namespace Silean.Modules.Add
@@ -339,5 +366,35 @@ namespace Silean.Modules.Add
   ports := ports width
   moduleStructure := moduleStructure width
   naming := Naming.naming width
+
+/-! ## Placement -/
+
+open Silean.Authoring.CircuitDescription
+
+/-- The result vector and carry bit produced by a placed adder. -/
+structure PlacedOutputs (width : Nat) where
+  result : Net (.vector width .bit)
+  carryOut : Net .bit
+
+/-- Place a fixed-width adder under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (left right : Net (.vector width .bit)) (carryIn : Net .bit) :
+    Builder (PlacedOutputs width) := do
+  let child ← Authoring.CircuitDescription.placeNamed name (design width) fun
+    | .left => left
+    | .right => right
+    | .carryIn => carryIn
+  pure { result := child .result, carryOut := child .carryOut }
+
+/-- Place a fixed-width adder using the next conventional indexed name. -/
+noncomputable def place (left right : Net (.vector width .bit))
+    (carryIn : Net .bit) : Builder (PlacedOutputs width) := do
+  let child ← placeIndexed "add" (design width) fun
+    | .left => left
+    | .right => right
+    | .carryIn => carryIn
+  pure { result := child .result, carryOut := child .carryOut }
+
+attribute [circuit_description] placeNamed place
 
 end Silean.Modules.Add

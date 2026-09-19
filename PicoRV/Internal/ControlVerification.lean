@@ -1,4 +1,4 @@
-import PicoRV.ControlStructure
+import PicoRV.Internal.ControlStructure
 import PicoRV.Control.ControlBitLaws
 import PicoRV.Control.Internal.ControlNextVerification
 import Silean.Authoring.ModuleChildCertifications

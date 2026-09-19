@@ -1,4 +1,4 @@
-import PicoRV.Datapath
+import PicoRV.DatapathContract
 
 namespace PicoRV.Datapath
 
@@ -7,7 +7,7 @@ open Silean.Authoring
 
 /-! Combinational contracts used to construct `PicoRVDatapathNext`. Their
 boundaries carry the shared named input and state aggregates, while their
-results are stated using the natural transition functions in `Datapath.lean`.
+results are stated using the natural transition functions in `DatapathContract.lean`.
 -/
 
 namespace PhaseDecode

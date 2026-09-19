@@ -140,4 +140,23 @@ noncomputable def placeNamed (name : SourceName)
     outputData := child .outputData
     inputReady := child .inputReady }
 
+/-- Place a positive-depth serial FIFO using the next conventional indexed
+name. -/
+noncomputable def place (depth : Nat) (positive : 0 < depth)
+    (inputValid : Net .bit) (inputData : Net signalType)
+    (outputReady reset : Net .bit) :
+    Builder (OneEntryFifo.PlacedOutputs signalType) := do
+  let child ← placeIndexed "serial_depth_fifo"
+    (design signalType depth positive) fun
+      | .inputValid => inputValid
+      | .inputData => inputData
+      | .outputReady => outputReady
+      | .reset => reset
+  pure {
+    outputValid := child .outputValid
+    outputData := child .outputData
+    inputReady := child .inputReady }
+
+attribute [circuit_description] placeNamed place
+
 end Silean.Modules.SerialDepthFifo

@@ -1,5 +1,6 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
@@ -12,7 +13,9 @@ open Silean.Authoring
 /-! A combinational reorganization of a bit vector. Every output bit selects
 one input bit or a Boolean constant. This covers permutations, duplication,
 truncation, extension, and insertion of fixed bits without embedding those
-layouts in bespoke wiring code. -/
+layouts in bespoke wiring code. Because `layout` programmatically generates an
+arbitrary output family, the indexed `module_design` is the primary hardware
+definition; a builder version would just repeat that generator. -/
 
 namespace VectorLayout
 
@@ -100,6 +103,26 @@ namespace Silean.Modules.VectorLayout
 
 open Silean
 open Silean.Authoring
+open Authoring.CircuitDescription
+
+/-! ## Placement -/
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (layout : Fin outputWidth → BitSource inputWidth)
+    (input : Net (.vector inputWidth .bit)) :
+    Builder (Net (.vector outputWidth .bit)) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design inputWidth outputWidth layout) fun | .input => input
+  pure (child .output)
+
+noncomputable def place (layout : Fin outputWidth → BitSource inputWidth)
+    (input : Net (.vector inputWidth .bit)) :
+    Builder (Net (.vector outputWidth .bit)) := do
+  let child ← placeIndexed "vector_layout"
+    (design inputWidth outputWidth layout) fun | .input => input
+  pure (child .output)
+
+attribute [circuit_description] placeNamed place
 
 module_cycle_contract cycleContract (inputWidth : Nat) (outputWidth : Nat)
     (layout : Fin outputWidth → BitSource inputWidth)

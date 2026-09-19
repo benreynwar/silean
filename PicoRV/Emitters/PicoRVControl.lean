@@ -1,5 +1,5 @@
 import Silean.FIRRTL.Emit
-import PicoRV.ControlTheorems
+import PicoRV.Control
 
 def main (args : List String) : IO Unit :=
   Silean.FIRRTL.emitMain "emit-picorv-control" args

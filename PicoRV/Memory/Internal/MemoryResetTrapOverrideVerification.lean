@@ -4,8 +4,9 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Modules.BitMux.BitMuxTheorems
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Internal.MuxVerification
+import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 import Silean.Primitives.Not
 import Silean.Primitives.Or
@@ -25,7 +26,7 @@ module_child_certifications childContracts for body where
   falseBit := Silean.Modules.Constant.certification .bit false,
   idleState := Silean.Modules.Constant.certification (.vector 2 .bit) (stateOfNat 0),
   overridePhase := Silean.Modules.Mux.certification (.vector 2 .bit),
-  overrideValid := Silean.Modules.Mux.certification .bit,
+  overrideValid := Silean.Modules.BitMux.certification,
   overrideValue := Silean.Modules.NamedTupleCombiner.certification stateMap,
   selected := Silean.Modules.Mux.certification stateType
 
@@ -36,7 +37,8 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     .notResetn => Silean.Primitives.NotRule.apply,
     {.resetOrTrap, .clearValid} => Silean.Primitives.OrRule.apply,
     {.falseBit, .idleState} => Silean.Primitives.ConstantRule.apply,
-    {.overridePhase, .overrideValid} => Silean.Modules.Mux.Rule.select,
+    .overridePhase => Silean.Modules.Mux.Rule.select,
+    .overrideValid => Silean.Modules.BitMux.Rule.select,
     .overrideValue => Silean.Modules.NamedTupleCombiner.Rule.apply,
     .selected => Silean.Modules.Mux.Rule.select]
   state := []
@@ -138,7 +140,7 @@ private theorem implements :
   have validValue : hierStep.childOutputs .overrideValid .result =
       bif !memoryInputs.resetn || memoryInputs.mem_ready
         then false else captured .mem_valid := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .overrideValid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [clearValidValue, capturedFieldsValue, falseValue] at equation

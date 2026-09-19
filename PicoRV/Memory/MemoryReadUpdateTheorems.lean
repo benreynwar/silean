@@ -1,4 +1,5 @@
 import PicoRV.Memory.Internal.MemoryReadUpdateVerification
+import PicoRV.Memory.Internal.MemoryReadUpdateCorrespondence
 
 /-! # Memory Read Update theorems
 
@@ -9,6 +10,12 @@ witness construction remain under the Internal directory.
 namespace PicoRV.Memory.ReadUpdate
 
 open Silean
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 theorem outputs_of_allowed {step : cycleContract.Step}
     (allowed : cycleContract.Allows step) :

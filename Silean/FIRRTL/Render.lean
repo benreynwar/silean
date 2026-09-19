@@ -236,17 +236,30 @@ private def compositeStatements {body : ModuleBody}
     (ports : ModulePortsNaming body.ports)
     (instanceName : body.instancePorts.Name → SourceName)
     (childNaming : (name : body.instancePorts.Name) →
-      ModuleNaming (children name)) : List String :=
+      ModuleNaming (children name))
+    (namedWires : List (NamedWire body)) : List String :=
   let instanceStatements := body.instancePorts.names.values.flatMap fun child =>
     [s!"inst {renderSourceName (instanceName child)} of {renderModuleKey (childNaming child).key}",
      s!"connect {renderSourceName (instanceName child)}.clock, clock"]
+  let wireStatements := namedWires.flatMap fun wire =>
+    let naming := sourceTypeNaming ports childNaming wire.source
+    s!"wire {renderSourceName wire.name} : {renderSignalType wire.signalType naming}" ::
+      renderConnection wire.signalType (renderSourceName wire.name) naming
+        (sourceReference ports instanceName childNaming wire.source) naming
+  let routedSource := fun {signalType} (source :
+      SignalSource body.ports body.instancePorts signalType) =>
+    let reference := sourceReference ports instanceName childNaming source
+    match namedWires.find? (fun wire =>
+        sourceReference ports instanceName childNaming wire.source == reference) with
+    | some wire => renderSourceName wire.name
+    | none => reference
   let connections := (connectionOccurrences body).flatMap fun connection =>
     renderConnection connection.signalType
       (sinkReference ports instanceName childNaming connection.sink)
       (sinkTypeNaming ports childNaming connection.sink)
-      (sourceReference ports instanceName childNaming connection.driver)
+      (routedSource connection.driver)
       (sourceTypeNaming ports childNaming connection.driver)
-  instanceStatements ++ connections
+  instanceStatements ++ wireStatements ++ connections
 
 private def renderModuleBody :
     (naming : ModuleNaming moduleStructure) → RenderResult String
@@ -262,10 +275,11 @@ private def renderModuleBody :
   | .combiner combiner _ ports => do
       validateLocalNames ports.names
       pure (indentLines (renderPorts ports ++ combinerStatements combiner ports))
-  | @ModuleNaming.composite body children _ ports instanceName childNaming => do
-      validateLocalNames (ports.names ++ body.instancePorts.names.values.map instanceName)
+  | @ModuleNaming.composite body children _ ports instanceName childNaming namedWires => do
+      validateLocalNames (ports.names ++ body.instancePorts.names.values.map instanceName ++
+        namedWires.map (fun wire => wire.name))
       pure (indentLines (renderPorts ports ++
-        compositeStatements ports instanceName childNaming))
+        compositeStatements ports instanceName childNaming namedWires))
 
 private def isBlackbox : ModuleNaming moduleStructure → Bool
   | .blackbox .. => true

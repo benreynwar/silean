@@ -10,7 +10,10 @@ namespace Silean.Modules.BitwiseXor
 open Silean
 
 /-! Generic bitwise XOR, instantiated from the shared certified binary
-leafwise construction and the one-bit XOR primitive. -/
+leafwise construction and the one-bit XOR primitive. The hierarchy follows
+the recursive shape of `SignalType`, so the shared `BinaryLeafwise`
+construction remains its primary definition instead of being duplicated by a
+fixed `CircuitDescription`. -/
 
 @[reducible] private def operation : Composition.BinaryLeafwise.Operation where
   apply := SignalType.bitwiseXor
@@ -109,6 +112,31 @@ def naming (signalType : SignalType) :
     ModuleNaming (Modules.BitwiseXor.moduleStructure signalType) :=
   namingWith signalType (.positional signalType)
 
+/-- Recursive implementation details do not change the requested XOR boundary
+naming. -/
+theorem namingWith_ports (signalType : SignalType)
+    (typeNaming : SignalTypeNaming signalType) :
+    (namingWith signalType typeNaming).ports =
+      portsWithNaming signalType typeNaming := by
+  change
+    (@Silean.Naming.BinaryLeafwise.namingWith operationInstance gateInstance
+      "bitwise_xor" "xor" Silean.Naming.Primitive.xor signalType
+      typeNaming).ports = portsWithNaming signalType typeNaming
+  rw [@Silean.Naming.BinaryLeafwise.namingWith_ports
+    operationInstance gateInstance]
+  rfl
+
+/-- Positional XOR naming has the declared positional boundary. -/
+theorem naming_ports (signalType : SignalType) :
+    (naming signalType).ports = ports signalType :=
+  namingWith_ports signalType (.positional signalType)
+
+/-- The emitted boundary names of bitwise XOR are collision-free. -/
+theorem portNames_nodup (signalType : SignalType) :
+    (naming signalType).ports.names.Nodup := by
+  rw [naming_ports]
+  exact of_decide_eq_true rfl
+
 end Naming
 
 @[reducible] def designWith (signalType : SignalType)
@@ -120,6 +148,17 @@ end Naming
 @[reducible] def design (signalType : SignalType) : Silean.Naming.NamedModule :=
   designWith signalType (.positional signalType)
 
+/-- Place a bitwise XOR under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (left right : Authoring.CircuitDescription.Net signalType) :
+    Authoring.CircuitDescription.Builder
+      (Authoring.CircuitDescription.Net signalType) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design signalType) fun
+      | .left => left
+      | .right => right
+  pure (child .result)
+
 /-- Place a bitwise XOR of two equally typed nets in a circuit description. -/
 noncomputable def place (left right : Authoring.CircuitDescription.Net signalType) :
     Authoring.CircuitDescription.Builder
@@ -129,5 +168,7 @@ noncomputable def place (left right : Authoring.CircuitDescription.Net signalTyp
       | .left => left
       | .right => right
   pure (child .result)
+
+attribute [circuit_description] placeNamed place
 
 end Silean.Modules.BitwiseXor

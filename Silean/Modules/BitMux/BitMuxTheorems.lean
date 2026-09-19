@@ -10,6 +10,18 @@ namespace Silean.Modules.BitMux
 
 open Silean
 
+namespace Description
+
+open Naming Authoring.CircuitDescription
+
+/-- The reader-facing circuit description elaborates to the certified typed
+bit-mux hierarchy, with all boundary and child names preserved. -/
+theorem authored_definition_corresponds :
+    Corresponds description BitMux.naming :=
+  Internal.corresponds
+
+end Description
+
 /-- Every realizable boundary step selects the requested input. -/
 theorem result_of_realization {step : moduleStructure.Step}
     (realizes : moduleStructure.Realizes step) :

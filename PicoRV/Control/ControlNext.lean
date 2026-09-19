@@ -10,141 +10,89 @@ import PicoRV.Control.ControlResetAndAlignmentOverride
 import PicoRV.Control.ControlStoreTransition
 import PicoRV.Control.ControlShiftTransition
 import PicoRV.Control.ControlTrapTransition
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Naming.PrimitiveNaming
+import PicoRV.Control.Internal.ControlNextStructure
+import PicoRV.Authoring.CircuitLogic
 
 namespace PicoRV.Control
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
-/-! Structural assembly of one complete control-state update. The hierarchy
-mirrors the source assignment order:
+/-! # Complete control-state update
 
-1. compute unconditional baseline assignments;
-2. decode the old phase and select exactly one phase transition;
-3. apply reset and alignment priorities;
-4. clear completed commands and apply same-cycle command intents.
+This description exposes the source-level priority layers of one control
+cycle. It first computes the unconditional baseline, selects the transition
+for the old CPU phase, applies reset and alignment overrides, and finally
+finishes or starts memory commands. Its children use conventional indexed
+names; the Lean bindings below carry the explanatory names. The expanded typed
+hierarchy and verification remain under `Internal/`. -/
 
-Every phase child is concrete. Their public contracts remain the source-level
-transition functions, so this assembly depends on semantic behavior rather
-than the children’s internal gate structure. -/
+namespace ControlNext.Description
 
-module_design ControlNext (name := "picorv32_control_next") where
-  boundary (ControlNext.ports) (naming := ControlNext.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      ControlInputs.signalMap ControlInputs.schema,
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap ControlState.schema,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    baseline := Baseline.design,
-    phaseDecode := PhaseDecode.design,
-    trap := TrapTransition.design,
-    fetch := FetchTransition.design,
-    loadRs1 := LoadRs1Transition.design,
-    loadRs2 := LoadRs2Transition.design,
-    execute := ExecuteTransition.design,
-    shift := ShiftTransition.design,
-    store := StoreTransition.design,
-    load := LoadTransition.design,
-    defaultTransition := Silean.Modules.NamedTupleCombiner.designWith
-      TransitionValue.signalMap TransitionValue.schema,
-    selectLoad := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    selectStore := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    selectShift := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    selectExecute := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    selectLoadRs2 := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    selectLoadRs1 := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    selectFetch := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    selectTrap := Silean.Modules.Mux.designWith transitionType TransitionValue.schema,
-    override := ResetAndAlignmentOverride.design,
-    notResetn := Silean.Primitives.notDesign,
-    clearCommands := Silean.Primitives.orDesign,
-    commandFinish := CommandFinish.design }
-  wiring {
-  outputs { .state := commandFinish.state }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.currentFields) { .value := input.current }
-  instance (.falseBit) {}
-  instance (.baseline) { .inputs := input.inputs, .current := input.current }
-  instance (.phaseDecode) { .cpu_state := currentFields[.cpu_state] }
-  instance (.trap) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.fetch) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.loadRs1) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.loadRs2) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.execute) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.shift) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.store) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.load) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.defaultTransition) {
-    .state := baseline.state,
-    .setRinst := falseBit.output,
-    .setRdata := falseBit.output,
-    .setWdata := falseBit.output }
-  instance (.selectLoad) {
-    .select := phaseDecode.load,
-    .whenFalse := defaultTransition.value,
-    .whenTrue := load.transition }
-  instance (.selectStore) {
-    .select := phaseDecode.store,
-    .whenFalse := selectLoad.result,
-    .whenTrue := store.transition }
-  instance (.selectShift) {
-    .select := phaseDecode.shift,
-    .whenFalse := selectStore.result,
-    .whenTrue := shift.transition }
-  instance (.selectExecute) {
-    .select := phaseDecode.execute,
-    .whenFalse := selectShift.result,
-    .whenTrue := execute.transition }
-  instance (.selectLoadRs2) {
-    .select := phaseDecode.loadRs2,
-    .whenFalse := selectExecute.result,
-    .whenTrue := loadRs2.transition }
-  instance (.selectLoadRs1) {
-    .select := phaseDecode.loadRs1,
-    .whenFalse := selectLoadRs2.result,
-    .whenTrue := loadRs1.transition }
-  instance (.selectFetch) {
-    .select := phaseDecode.fetch,
-    .whenFalse := selectLoadRs1.result,
-    .whenTrue := fetch.transition }
-  instance (.selectTrap) {
-    .select := phaseDecode.trap,
-    .whenFalse := selectFetch.result,
-    .whenTrue := trap.transition }
-  instance (.override) {
-    .inputs := input.inputs,
-    .current := input.current,
-    .baseline := baseline.state,
-    .selected := selectTrap.result }
-  instance (.notResetn) { .input := inputsFields[.resetn] }
-  instance (.clearCommands) {
-    .left := notResetn.output,
-    .right := inputsFields[.mem_done] }
-  instance (.commandFinish) {
-    .clear := clearCommands.output,
-    .transition := override.transition }
-  }
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let inputsFields ← split ControlInputs.layout inputs
+  let currentFields ← split ControlState.layout current
+  let falseBit ← constant .bit false
+
+  let baseline ← Baseline.place inputs current
+  let phase ← PhaseDecode.place (currentFields .cpu_state)
+  let trap ← TrapTransition.place inputs current baseline
+  let fetch ← FetchTransition.place inputs current baseline
+  let loadRs1 ← LoadRs1Transition.place inputs current baseline
+  let loadRs2 ← LoadRs2Transition.place inputs current baseline
+  let execute ← ExecuteTransition.place inputs current baseline
+  let shift ← ShiftTransition.place inputs current baseline
+  let store ← StoreTransition.place inputs current baseline
+  let load ← LoadTransition.place inputs current baseline
+
+  let defaultTransition ← combine
+    TransitionValue.signalMap TransitionValue.schema fun
+      | .state => baseline
+      | .setRinst | .setRdata | .setWdata => falseBit
+  let selected ← mux phase.load defaultTransition load.transition
+  let selected ← mux phase.store selected store.transition
+  let selected ← mux phase.shift selected shift.transition
+  let selected ← mux phase.execute selected execute.transition
+  let selected ← mux phase.loadRs2 selected loadRs2.transition
+  let selected ← mux phase.loadRs1 selected loadRs1.transition
+  let selected ← mux phase.fetch selected fetch.transition
+  let selected ← mux phase.trap selected trap.transition
+
+  let overridden ← ResetAndAlignmentOverride.place
+    inputs current baseline selected
+  let clearCommands ← (← !! (inputsFields .resetn)) |||
+    (inputsFields .mem_done)
+  let state ← CommandFinish.place clearCommands overridden.transition
+  output "state" state
+
+noncomputable def description : Description := build construction
+
+end ControlNext.Description
+
+namespace ControlNext
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType) (current : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← placeIndexed "control_next" design fun
+    | .inputs => inputs
+    | .current => current
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end ControlNext
 
 end PicoRV.Control

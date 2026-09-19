@@ -1,4 +1,4 @@
-import PicoRV.Decoder
+import PicoRV.Internal.DecoderStructure
 import PicoRV.Decoder.DecoderCaptureStageTheorems
 import PicoRV.Decoder.DecoderResolveStageTheorems
 import Silean.Authoring.ModuleChildCertifications

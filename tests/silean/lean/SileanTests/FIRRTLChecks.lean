@@ -33,7 +33,7 @@ private def excludesAll (result : RenderResult String) (fragments : List String)
 
 #guard containsAll (renderCircuit Modules.BitMux.naming)
   ["circuit BitMux", "public module BitMux",
-   "inst chooseFalse of and_bit", "connect combine.left, chooseFalse.out"]
+   "inst and_0 of and_bit", "connect or_0.left, and_0.out"]
 
 #guard containsAll (renderCircuit Modules.FullAdder.naming)
   ["circuit FullAdder", "public module FullAdder",
@@ -58,8 +58,8 @@ private def opaqueNotNaming :
 #guard containsAll (renderCircuit
   (Modules.EnabledRegister.naming (.tuple (.cons .bit (.cons .bit .nil)))))
   ["public module EnabledRegister_t_bit_bit_unit",
-   "inst selection of Mux_t_bit_bit_unit",
-   "connect storage.clock, clock", "{ _0 : UInt<1>, _1 : UInt<1> }"]
+   "inst mux_0 of Mux_t_bit_bit_unit",
+   "connect register_0.clock, clock", "{ _0 : UInt<1>, _1 : UInt<1> }"]
 
 signal_schema NamedPair where
   valid : SignalSchema.bit,
@@ -217,9 +217,63 @@ module_design SameNamedAggregate where
     Silean.Emitters.StructuredPayload.type
     Silean.Emitters.StructuredPayload.naming))
   ["{ a : UInt<1>[3], b : { c : UInt<1>, d : { e : UInt<1>, f : UInt<1> }[2] } }",
-   "connect output_data.a, outputDataMux.result._0",
+   "connect output_data.a, mux_0.result._0",
    "connect dataStorage.data._1._0, input_data.b.c",
-   "connect outputDataMux.whenFalse._1._1[1]._0, input_data.b.d[1].e",
-   "connect outputDataMux.whenTrue, dataStorage.q"]
+   "connect mux_0.whenFalse._1._1[1]._0, input_data.b.d[1].e",
+   "connect mux_0.whenTrue, storedData"]
+
+private abbrev namedWireWord : SignalType := .vector 4 .bit
+
+module_design NamedWireAggregate where
+  ports {
+    input source : namedWireWord,
+    output result : namedWireWord }
+  instances {
+    storage := Modules.Register.design namedWireWord }
+  named_wires {
+    storedValue := storage.output }
+  wiring {
+    outputs { .result := storage.output }
+    instance (.storage) { .input := input.source }
+  }
+
+private noncomputable def namedWireAggregateDescription :=
+    Authoring.CircuitDescription.build do
+  let source ← Authoring.CircuitDescription.input "source" namedWireWord
+  let storage ← Authoring.CircuitDescription.placeNamed "storage"
+    (Modules.Register.design namedWireWord) (fun | .input => source)
+  wire storedValue : namedWireWord ← pure (storage .output)
+  Authoring.CircuitDescription.output "result" storedValue
+
+-- The authoring name and the production naming metadata describe the same
+-- typed source; neither changes the module body.
+example : some namedWireAggregateDescription =
+    Authoring.CircuitDescription.ofNaming NamedWireAggregate.naming := by
+  rfl
+
+-- Aggregate aliases retain their complete FIRRTL type, and consumers are
+-- routed through the readable name so it remains useful in lowered output.
+#guard containsAll (renderRootModule NamedWireAggregate.naming)
+  ["wire storedValue : UInt<1>[4]",
+   "connect storedValue, storage.out",
+   "connect result, storedValue"]
+
+module_design DuplicateNamedWires where
+  ports {
+    input source : .bit,
+    output result : .bit }
+  instances {
+    storage := Modules.Register.design .bit }
+  named_wires {
+    observed := storage.output,
+    observed := input.source }
+  wiring {
+    outputs { .result := storage.output }
+    instance (.storage) { .input := input.source }
+  }
+
+#guard match renderRootModule DuplicateNamedWires.naming with
+  | .error message => contains message "duplicate FIRRTL component name 'observed'"
+  | .ok _ => false
 
 end SileanTests.FIRRTL

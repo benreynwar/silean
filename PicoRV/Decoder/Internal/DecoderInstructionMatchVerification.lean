@@ -1,4 +1,4 @@
-import PicoRV.Decoder.DecoderInstructionMatchStructure
+import PicoRV.Decoder.Internal.DecoderInstructionMatchStructure
 import PicoRV.Decoder.DecoderInstructionFieldsTheorems
 import PicoRV.Decoder.DecoderInstructionMatchGateTheorems
 import Silean.Authoring.ModuleChildCertifications

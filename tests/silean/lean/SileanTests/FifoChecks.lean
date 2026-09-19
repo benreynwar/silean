@@ -158,17 +158,17 @@ private def renders (addressWidth : Nat) (fragments : List String) : Bool :=
   ["public module Fifo_bit_2",
    "input input_valid : UInt<1>", "input reset : UInt<1>",
    "output output_valid : UInt<1>", "output input_ready : UInt<1>",
-   "inst readCounter of EnabledResetCounter_3",
-   "inst writeCounter of EnabledResetCounter_3",
-   "inst control of PointerControl_2",
-   "inst storage of RegisterBank_bit_2_1",
-   "connect control.readPointer, readCounter.value",
-   "connect storage.write_enable, control.writeAdvance"]
+   "inst readCounter of EnabledResetCounter_3_0_0_0",
+   "inst writeCounter of EnabledResetCounter_3_0_0_0",
+   "inst fifo_pointer_control_0 of PointerControl_2",
+   "inst register_bank_0 of RegisterBank_bit_2_1",
+   "connect fifo_pointer_control_0.readPointer, readCounter.value",
+   "connect register_bank_0.write_enable, writeAdvance"]
 
 #guard renders 0
   ["public module Fifo_bit_0",
-   "inst control of PointerControl_0",
-   "inst storage of RegisterBank_bit_0_1"]
+   "inst fifo_pointer_control_0 of PointerControl_0",
+   "inst register_bank_0 of RegisterBank_bit_0_1"]
 
 #guard match renderCircuit
     (Silean.Modules.Fifo.Naming.namingWith

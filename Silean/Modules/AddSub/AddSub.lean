@@ -1,9 +1,11 @@
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
+import Silean.Authoring.CircuitLogic
 import Silean.Foundation.BitVector
 import Silean.Modules.Add.Add
 import Silean.Modules.BitwiseXor.BitwiseXor
 import Silean.Naming.SignalAdapterNaming
+import Silean.Modules.AddSub.Internal.AddSubStructure
 
 namespace Silean.Modules.AddSub
 
@@ -16,13 +18,6 @@ The behavioral contract below uses direct carry/borrow recursion. The hardware
 separately implements subtraction as `left + ~right + 1`. Structural
 certification is in `Internal/AddSubVerification.lean`; the supported proof
 boundary is `AddSubTheorems.lean`. -/
-
-module_ports ports (width : Nat) where
-  input left : .vector width .bit,
-  input right : .vector width .bit,
-  input subtract : .bit,
-  output result : .vector width .bit,
-  output carryOut : .bit
 
 private def sumBit (left right carry : Bool) : Bool :=
   Primitives.xorValue (Primitives.xorValue left right) carry
@@ -233,41 +228,58 @@ theorem carry_eq_noBorrow {width : Nat}
 
 end Behavior
 
-/-! ## Hardware structure -/
+/-! ## Authored hardware -/
 
-def subtractVector (width : Nat) : Composition.SignalCombiner :=
-  .vector width .bit
+namespace Description
+
+open Authoring.CircuitDescription
+open Authoring.CircuitLogic
+open scoped Authoring.CircuitLogic
+
+noncomputable def construction (width : Nat) : Builder Unit := do
+  let left ← input "left" (.vector width .bit)
+  let right ← input "right" (.vector width .bit)
+  let subtract ← input "subtract" .bit
+  wire transformedRight ← right ^^^ (←
+    combine (subtractVector width) fun _ => subtract)
+  let added ← Add.place left transformedRight subtract
+  output "result" added.result
+  output "carryOut" added.carryOut
+
+noncomputable def description (width : Nat) : Description :=
+  build (construction width)
+
+end Description
+
+/-! ## Placement -/
+
+open Authoring.CircuitDescription
+
+/-- Outputs produced by a placed add/subtract unit. -/
+structure PlacedOutputs (width : Nat) where
+  result : Net (.vector width .bit)
+  carryOut : Net .bit
+
+/-- Place an add/subtract unit under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Naming.SourceName)
+    (left right : Net (.vector width .bit)) (subtract : Net .bit) :
+    Builder (PlacedOutputs width) := do
+  let child ← Authoring.CircuitDescription.placeNamed name (design width) fun
+    | .left => left
+    | .right => right
+    | .subtract => subtract
+  pure { result := child .result, carryOut := child .carryOut }
+
+/-- Place an add/subtract unit using the next conventional indexed name. -/
+noncomputable def place
+    (left right : Net (.vector width .bit)) (subtract : Net .bit) :
+    Builder (PlacedOutputs width) := do
+  let child ← placeIndexed "add_sub" (design width) fun
+    | .left => left
+    | .right => right
+    | .subtract => subtract
+  pure { result := child .result, carryOut := child .carryOut }
+
+attribute [circuit_description] placeNamed place
 
 end Silean.Modules.AddSub
-
-namespace Silean.Modules
-
-open Silean
-open Silean.Authoring
-
-module_design AddSub (width : Nat) where
-  boundary (AddSub.ports width) (naming := AddSub.Naming.ports width)
-  instances {
-    -- Broadcasts `subtract` to every bit position.
-    broadcastSubtract := Silean.Naming.SignalAdapter.combinerDesign
-      (subtractVector width),
-    -- Complements the right operand exactly in subtraction mode.
-    transformRight := BitwiseXor.design (.vector width .bit),
-    -- Adds the transformed operand and the subtraction carry-in.
-    add := Add.design width }
-  wiring {
-    outputs {
-      .result := add.result,
-      .carryOut := add.carryOut }
-    instance (.broadcastSubtract) {
-      _ := input.subtract }
-    instance (.transformRight) {
-      .left := input.right,
-      .right := broadcastSubtract.value }
-    instance (.add) {
-      .left := input.left,
-      .right := transformRight.result,
-      .carryIn := input.subtract }
-  }
-
-end Silean.Modules

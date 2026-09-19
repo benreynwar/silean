@@ -43,6 +43,8 @@ noncomputable def place (left right : Net .bit) : Builder PlacedOutputs := do
     | .right => right
   pure { sum := child .sum, carry := child .carry }
 
+attribute [circuit_description] place
+
 /-! ## Exact cycle behavior -/
 
 def sumValue (left right : Bool) : Bool := Primitives.xorValue left right

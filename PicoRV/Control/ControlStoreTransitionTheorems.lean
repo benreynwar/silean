@@ -1,4 +1,5 @@
 import PicoRV.Control.Internal.ControlStoreTransitionVerification
+import PicoRV.Control.Internal.ControlStoreTransitionCorrespondence
 
 /-! # Store Transition theorems
 
@@ -9,6 +10,12 @@ and certification witness remain under Internal.
 namespace PicoRV.Control.StoreTransition
 
 open Silean
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 /-- Every contract-allowed step returns the source-level transition. -/
 theorem outputs_of_allowed {step : cycleContract.Step}

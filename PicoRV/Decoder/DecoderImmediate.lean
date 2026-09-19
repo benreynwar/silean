@@ -1,15 +1,12 @@
 import PicoRV.Decoder.DecoderTypes
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
 import Silean.Authoring.ModulePorts
 import Silean.Foundation.SignalLayout
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
-import Silean.Modules.VectorLayout.VectorLayout
-import Silean.Modules.Mux.Mux
-import Silean.Modules.Constant.Constant
-import Silean.Naming.PrimitiveNaming
-import Silean.Naming.SignalAdapterNaming
+import PicoRV.Authoring.CircuitLogic
+import PicoRV.Decoder.Internal.DecoderImmediateStructure
 
 namespace PicoRV.Decoder.Immediate
 
@@ -23,45 +20,12 @@ means that the resolve stage must retain its existing immediate. The hardware
 boundary exposes this as `valid` plus `value`; the value is zero when invalid
 and must not be consumed. Selection order matches the source `case (1'b1)`. -/
 
-module_ports ports where
-  input word : .vector 32 .bit,
-  input decoded_imm_j : .vector 32 .bit,
-  input instr_jal : .bit,
-  input instr_lui : .bit,
-  input instr_auipc : .bit,
-  input instr_jalr : .bit,
-  input is_lb_lh_lw_lbu_lhu : .bit,
-  input is_alu_reg_imm : .bit,
-  input is_beq_bne_blt_bge_bltu_bgeu : .bit,
-  input is_sb_sh_sw : .bit,
-  output valid : .bit,
-  output value : .vector 32 .bit
-
 /-! ## Immediate layouts
 
 These layouts are the concrete wiring for the four immediates decoded directly
 from the instruction word. The lemmas below connect that bit-level wiring to
 the arithmetic definitions in `DecoderTypes`, keeping those readable
 definitions as the behavioral specification. -/
-
-def immediateILayout (index : Fin 32) : Silean.Modules.VectorLayout.BitSource 32 :=
-  if _low : index.val < 12 then .input ⟨index.val + 20, by omega⟩
-  else .input ⟨31, by omega⟩
-
-def immediateULayout (index : Fin 32) : Silean.Modules.VectorLayout.BitSource 32 :=
-  if _low : index.val < 12 then .constant false else .input index
-
-def immediateSLayout (index : Fin 32) : Silean.Modules.VectorLayout.BitSource 32 :=
-  if _low : index.val < 5 then .input ⟨index.val + 7, by omega⟩
-  else if _middle : index.val < 12 then .input ⟨index.val + 20, by omega⟩
-  else .input ⟨31, by omega⟩
-
-def immediateBLayout (index : Fin 32) : Silean.Modules.VectorLayout.BitSource 32 :=
-  if _zero : index.val = 0 then .constant false
-  else if _low : index.val < 5 then .input ⟨index.val + 7, by omega⟩
-  else if _middle : index.val < 11 then .input ⟨index.val + 20, by omega⟩
-  else if _eleven : index.val = 11 then .input ⟨7, by omega⟩
-  else .input ⟨31, by omega⟩
 
 private theorem field_testBit (word : Word) (low width index : Nat)
     (inField : index < width) (inWord : index + low < 32) :
@@ -301,97 +265,81 @@ theorem immediateB_layout (word : Word) :
             simpa [field31, Nat.testBit_zero] using
               (field_testBit word 31 1 0 (by omega) (by omega)).symm
 
-end PicoRV.Decoder.Immediate
-
-namespace PicoRV.Decoder
-
-open Silean
-open Silean.Authoring
-
-/-! ## Hardware structure
+/-! ## Authored hardware
 
 Four vector layouts construct the immediates encoded in the instruction word.
-OR gates form the instruction-class selectors and validity result. Five muxes,
-ordered from the lowest-priority S immediate through the highest-priority J
-immediate, implement the source decoder's priority order. -/
+The OR expressions name the instruction classes; the mux chain is written in
+the source decoder's priority order, from the lowest-priority S immediate to
+the highest-priority J immediate. -/
 
-module_design Immediate (name := "picorv32_decoder_immediate") where
-  boundary (Immediate.ports) (naming := Immediate.Naming.ports)
-  instances {
-    immediateI := Silean.Modules.VectorLayout.design 32 32 Immediate.immediateILayout,
-    immediateU := Silean.Modules.VectorLayout.design 32 32 Immediate.immediateULayout,
-    immediateS := Silean.Modules.VectorLayout.design 32 32 Immediate.immediateSLayout,
-    immediateB := Silean.Modules.VectorLayout.design 32 32 Immediate.immediateBLayout,
-    uSelected := Silean.Primitives.orDesign,
-    iSelectedPartial := Silean.Primitives.orDesign,
-    iSelected := Silean.Primitives.orDesign,
-    lowerValid := Silean.Primitives.orDesign,
-    iOrLowerValid := Silean.Primitives.orDesign,
-    uOrLowerValid := Silean.Primitives.orDesign,
-    validGate := Silean.Primitives.orDesign,
-    zero := Silean.Modules.Constant.design (.vector 32 .bit) (fun _ => false),
-    selectS := Silean.Modules.Mux.design (.vector 32 .bit),
-    selectB := Silean.Modules.Mux.design (.vector 32 .bit),
-    selectI := Silean.Modules.Mux.design (.vector 32 .bit),
-    selectU := Silean.Modules.Mux.design (.vector 32 .bit),
-    selectJ := Silean.Modules.Mux.design (.vector 32 .bit) }
-  wiring {
-  outputs {
-    .valid := validGate.output,
-    .value := selectJ.result }
-  instance (.immediateI) {
-    .input := input.word }
-  instance (.immediateU) {
-    .input := input.word }
-  instance (.immediateS) {
-    .input := input.word }
-  instance (.immediateB) {
-    .input := input.word }
-  instance (.uSelected) {
-    .left := input.instr_lui,
-    .right := input.instr_auipc }
-  instance (.iSelectedPartial) {
-    .left := input.instr_jalr,
-    .right := input.is_lb_lh_lw_lbu_lhu }
-  instance (.iSelected) {
-    .left := iSelectedPartial.output,
-    .right := input.is_alu_reg_imm }
-  instance (.lowerValid) {
-    .left := input.is_beq_bne_blt_bge_bltu_bgeu,
-    .right := input.is_sb_sh_sw }
-  instance (.iOrLowerValid) {
-    .left := iSelected.output,
-    .right := lowerValid.output }
-  instance (.uOrLowerValid) {
-    .left := uSelected.output,
-    .right := iOrLowerValid.output }
-  instance (.validGate) {
-    .left := input.instr_jal,
-    .right := uOrLowerValid.output }
-  instance (.zero) {}
-  instance (.selectS) {
-    .select := input.is_sb_sh_sw,
-    .whenFalse := zero.output,
-    .whenTrue := immediateS.output }
-  instance (.selectB) {
-    .select := input.is_beq_bne_blt_bge_bltu_bgeu,
-    .whenFalse := selectS.result,
-    .whenTrue := immediateB.output }
-  instance (.selectI) {
-    .select := iSelected.output,
-    .whenFalse := selectB.result,
-    .whenTrue := immediateI.output }
-  instance (.selectU) {
-    .select := uSelected.output,
-    .whenFalse := selectI.result,
-    .whenTrue := immediateU.output }
-  instance (.selectJ) {
-    .select := input.instr_jal,
-    .whenFalse := selectU.result,
-    .whenTrue := input.decoded_imm_j }
-  }
+namespace Description
 
-end PicoRV.Decoder
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
+
+noncomputable def construction : Builder Unit := do
+  let word ← input "word" (.vector 32 .bit)
+  let decodedImmJ ← input "decoded_imm_j" (.vector 32 .bit)
+  let instrJal ← input "instr_jal" .bit
+  let instrLui ← input "instr_lui" .bit
+  let instrAuipc ← input "instr_auipc" .bit
+  let instrJalr ← input "instr_jalr" .bit
+  let isLoad ← input "is_lb_lh_lw_lbu_lhu" .bit
+  let isAluImmediate ← input "is_alu_reg_imm" .bit
+  let isBranch ← input "is_beq_bne_blt_bge_bltu_bgeu" .bit
+  let isStore ← input "is_sb_sh_sw" .bit
+
+  let immediateI ← Silean.Modules.VectorLayout.place immediateILayout word
+  let immediateU ← Silean.Modules.VectorLayout.place immediateULayout word
+  let immediateS ← Silean.Modules.VectorLayout.place immediateSLayout word
+  let immediateB ← Silean.Modules.VectorLayout.place immediateBLayout word
+  let uSelected ← instrLui ||| instrAuipc
+  let iSelected ← (← instrJalr ||| isLoad) ||| isAluImmediate
+  let lowerValid ← isBranch ||| isStore
+  let valid ← instrJal ||| (← uSelected ||| (← iSelected ||| lowerValid))
+  let zero ← constant (.vector 32 .bit) (fun _ => false)
+  let value ← mux instrJal
+    (← mux uSelected
+      (← mux iSelected
+        (← mux isBranch
+          (← mux isStore zero immediateS)
+          immediateB)
+        immediateI)
+      immediateU)
+    decodedImmJ
+
+  output "valid" valid
+  output "value" value
+
+noncomputable def description : Description := build construction
+
+end Description
+
+/-! ## Placement -/
+
+abbrev InputNets :=
+  (input : ports.inputs.Label) →
+    Authoring.CircuitDescription.Net (ports.inputs.signalType input)
+
+structure PlacedOutputs where
+  valid : Authoring.CircuitDescription.Net .bit
+  value : Authoring.CircuitDescription.Net (.vector 32 .bit)
+
+noncomputable def place (inputs : InputNets) :
+    Authoring.CircuitDescription.Builder PlacedOutputs := do
+  let child ← Authoring.CircuitDescription.placeIndexed
+    "decoder_immediate" design inputs
+  pure { valid := child .valid, value := child .value }
+
+noncomputable def placeNamed (name : Naming.SourceName) (inputs : InputNets) :
+    Authoring.CircuitDescription.Builder PlacedOutputs := do
+  let child ← Authoring.CircuitDescription.placeNamed name design inputs
+  pure { valid := child .valid, value := child .value }
+
+attribute [circuit_description] place placeNamed
+
+end PicoRV.Decoder.Immediate
 
 namespace PicoRV.Decoder.Immediate
 

@@ -1,4 +1,5 @@
 import PicoRV.Memory.Internal.MemoryResponseVerification
+import PicoRV.Memory.Internal.MemoryResponseCorrespondence
 
 /-! # Memory Response theorems
 
@@ -9,6 +10,12 @@ witness construction remain under the Internal directory.
 namespace PicoRV.Memory.Response
 
 open Silean
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 /-- Completion and response data exposed by an allowed boundary step. -/
 theorem outputs_of_allowed {step : cycleContract.Step}

@@ -1,10 +1,10 @@
-import Silean.Authoring.CircuitDescription
+import Silean.Authoring.CircuitLogic
+import Silean.Authoring.CircuitSelection
 import Silean.Authoring.ModuleCycleContract
 import Silean.Contracts.Fifo.FifoCycleBehavior
 import Silean.Interfaces.FifoPorts
 import Silean.Modules.OneEntryFifo.Internal.OneEntryFifoStructure
 import Silean.Naming.FifoPortsNaming
-import Silean.Primitives.Or
 
 /-! # One-entry fall-through FIFO
 
@@ -21,30 +21,26 @@ namespace Silean.Modules.OneEntryFifo.Description
 
 open Silean
 open Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
 noncomputable def construction (signalType : SignalType) : Builder Unit := do
   let inputValid ← input "input_valid" .bit
   let inputData ← input "input_data" signalType
   let outputReady ← input "output_ready" .bit
   let reset ← input "reset" .bit
-  let storedValid ← wire "stored_valid" .bit
-  let storedData ← wire "stored_data" signalType
-  let storageUpdate ← wire "storage_update" .bit
-  let valid ← Modules.EnabledResetRegister.placeNamed (signalType := .bit)
-    "validStorage" false inputValid storageUpdate reset
-  let data ← Modules.EnabledRegister.placeNamed "dataStorage"
-    inputData storageUpdate
-  let (inputReady, update) ← Modules.OneEntryFifo.Control.placeNamed
-    "control" storedValid outputReady
-  let outputValid ← Primitives.Or.placeNamed "outputValidOr"
-    storedValid inputValid
-  let outputData ← Modules.Mux.placeNamed "outputDataMux"
-    storedValid inputData storedData
-  assign storedValid valid
-  assign storedData data
+  wire storedValid : .bit
+  wire storedData : signalType
+  wire storageUpdate : .bit
+  assign storedValid (← Modules.EnabledResetRegister.placeNamed (signalType := .bit)
+    "validStorage" false inputValid storageUpdate reset)
+  assign storedData (← Modules.EnabledRegister.placeNamed "dataStorage"
+    inputData storageUpdate)
+  let (inputReady, update) ← Modules.OneEntryFifo.Control.place
+    storedValid outputReady
   assign storageUpdate update
-  output "output_valid" outputValid
-  output "output_data" outputData
+  output "output_valid" (← storedValid ||| inputValid)
+  output "output_data" (← mux storedValid inputData storedData)
   output "input_ready" inputReady
 
 noncomputable def description (signalType : SignalType) : Description :=
@@ -91,6 +87,25 @@ noncomputable def placeNamed (name : Silean.Naming.SourceName)
     outputValid := child .outputValid
     outputData := child .outputData
     inputReady := child .inputReady }
+
+/-- Place a one-entry FIFO using the next conventional indexed name. -/
+noncomputable def place
+    (inputValid : Authoring.CircuitDescription.Net .bit)
+    (inputData : Authoring.CircuitDescription.Net signalType)
+    (outputReady reset : Authoring.CircuitDescription.Net .bit) :
+    Authoring.CircuitDescription.Builder (PlacedOutputs signalType) := do
+  let child ← Authoring.CircuitDescription.placeIndexed "one_entry_fifo"
+    (design signalType) fun
+      | .inputValid => inputValid
+      | .inputData => inputData
+      | .outputReady => outputReady
+      | .reset => reset
+  pure {
+    outputValid := child .outputValid
+    outputData := child .outputData
+    inputReady := child .inputReady }
+
+attribute [circuit_description] placeNamed place
 
 /-! ## Exact cycle behavior -/
 

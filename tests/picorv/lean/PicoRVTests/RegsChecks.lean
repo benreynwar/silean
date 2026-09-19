@@ -74,8 +74,8 @@ private def contains (text fragment : String) : Bool :=
        "input cpuregs_wrdata : UInt<1>[32]",
        "output cpuregs_rs1 : UInt<1>[32]",
        "output cpuregs_rs2 : UInt<1>[32]",
-       "inst bank",
-       "inst rs1Mux",
-       "inst rs2Mux"].all (contains text)
+       "inst register_bank_0",
+       "inst mux_0",
+       "inst mux_1"].all (contains text)
 
 end PicoRVTests.Regs

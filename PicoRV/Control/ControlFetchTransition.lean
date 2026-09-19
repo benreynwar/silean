@@ -1,125 +1,94 @@
-import PicoRV.Control.ControlNextContracts
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Naming.PrimitiveNaming
+import PicoRV.Control.Internal.ControlFetchTransitionStructure
+import PicoRV.Authoring.CircuitLogic
 
 namespace PicoRV.Control
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
-/-! Fetch deliberately reads the pre-edge `decoder_trigger`. The common state
+/-! # Fetch transition
+
+Fetch deliberately reads the pre-edge `decoder_trigger`. The common state
 captures the destination register and clears transient metadata. An absent
 decode requests an instruction and stays in fetch. A present decode selects
 JAL (reissue instruction read and mark a branch) or the ordinary/JALR path
-(enter load-RS1 and enable prefetch except for JALR). -/
+(enter load-RS1 and enable prefetch except for JALR). The expanded typed
+hierarchy and verification remain under `Internal/`. -/
 
-module_design FetchTransition (name := "picorv32_control_fetch_transition") where
-  boundary (PhaseTransition.ports) (naming := PhaseTransition.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      ControlInputs.signalMap ControlInputs.schema,
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap ControlState.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap ControlState.schema,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    trueBit := Silean.Modules.Constant.design .bit true,
-    wordSize := Silean.Modules.Constant.design (.vector 2 .bit) (twoBitsOfNat 0),
-    loadRs1State := Silean.Modules.Constant.design (.vector 8 .bit)
-      (stateBits cpuStateLdRs1),
-    notDecoder := Silean.Primitives.notDesign,
-    notJalr := Silean.Primitives.notDesign,
-    commonState := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap ControlState.schema,
-    commonFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap ControlState.schema,
-    jalState := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap ControlState.schema,
-    ordinaryState := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap ControlState.schema,
-    decodedState := Silean.Modules.Mux.designWith stateType ControlState.schema,
-    finalState := Silean.Modules.Mux.designWith stateType ControlState.schema,
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      TransitionValue.signalMap TransitionValue.schema }
-  wiring {
-  outputs { .transition := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.currentFields) { .value := input.current }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.falseBit) {}
-  instance (.trueBit) {}
-  instance (.wordSize) {}
-  instance (.loadRs1State) {}
-  instance (.notDecoder) { .input := currentFields[.decoder_trigger] }
-  instance (.notJalr) { .input := inputsFields[.instr_jalr] }
-  instance (.commonState) {
-    .cpu_state := updatedFields[.cpu_state],
-    .latched_store := falseBit.output,
-    .latched_stalu := falseBit.output,
-    .latched_branch := falseBit.output,
-    .latched_is_lu := falseBit.output,
-    .latched_is_lh := falseBit.output,
-    .latched_is_lb := falseBit.output,
-    .latched_rd := inputsFields[.decoded_rd],
-    .mem_wordsize := wordSize.output,
-    .mem_do_prefetch := updatedFields[.mem_do_prefetch],
-    .mem_do_rinst := notDecoder.output,
-    .mem_do_rdata := updatedFields[.mem_do_rdata],
-    .mem_do_wdata := updatedFields[.mem_do_wdata],
-    .decoder_trigger := updatedFields[.decoder_trigger],
-    .decoder_pseudo_trigger := updatedFields[.decoder_pseudo_trigger],
-    .trap := updatedFields[.trap] }
-  instance (.commonFields) { .value := commonState.value }
-  instance (.jalState) {
-    .cpu_state := commonFields[.cpu_state],
-    .latched_store := commonFields[.latched_store],
-    .latched_stalu := commonFields[.latched_stalu],
-    .latched_branch := trueBit.output,
-    .latched_is_lu := commonFields[.latched_is_lu],
-    .latched_is_lh := commonFields[.latched_is_lh],
-    .latched_is_lb := commonFields[.latched_is_lb],
-    .latched_rd := commonFields[.latched_rd],
-    .mem_wordsize := commonFields[.mem_wordsize],
-    .mem_do_prefetch := commonFields[.mem_do_prefetch],
-    .mem_do_rinst := trueBit.output,
-    .mem_do_rdata := commonFields[.mem_do_rdata],
-    .mem_do_wdata := commonFields[.mem_do_wdata],
-    .decoder_trigger := commonFields[.decoder_trigger],
-    .decoder_pseudo_trigger := commonFields[.decoder_pseudo_trigger],
-    .trap := commonFields[.trap] }
-  instance (.ordinaryState) {
-    .cpu_state := loadRs1State.output,
-    .latched_store := commonFields[.latched_store],
-    .latched_stalu := commonFields[.latched_stalu],
-    .latched_branch := commonFields[.latched_branch],
-    .latched_is_lu := commonFields[.latched_is_lu],
-    .latched_is_lh := commonFields[.latched_is_lh],
-    .latched_is_lb := commonFields[.latched_is_lb],
-    .latched_rd := commonFields[.latched_rd],
-    .mem_wordsize := commonFields[.mem_wordsize],
-    .mem_do_prefetch := notJalr.output,
-    .mem_do_rinst := falseBit.output,
-    .mem_do_rdata := commonFields[.mem_do_rdata],
-    .mem_do_wdata := commonFields[.mem_do_wdata],
-    .decoder_trigger := commonFields[.decoder_trigger],
-    .decoder_pseudo_trigger := commonFields[.decoder_pseudo_trigger],
-    .trap := commonFields[.trap] }
-  instance (.decodedState) {
-    .select := inputsFields[.instr_jal],
-    .whenFalse := ordinaryState.value,
-    .whenTrue := jalState.value }
-  instance (.finalState) {
-    .select := notDecoder.output,
-    .whenFalse := decodedState.result,
-    .whenTrue := commonState.value }
-  instance (.result) {
-    .state := finalState.result,
-    .setRinst := falseBit.output,
-    .setRdata := falseBit.output,
-    .setWdata := falseBit.output }
-  }
+namespace FetchTransition.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split ControlInputs.layout inputs
+  let currentFields ← split ControlState.layout current
+  let updatedFields ← split ControlState.layout updated
+  let falseBit ← constant .bit false
+  let trueBit ← constant .bit true
+  let wordSize ← constant (.vector 2 .bit) (twoBitsOfNat 0)
+  let loadRs1State ← constant (.vector 8 .bit) (stateBits cpuStateLdRs1)
+  let notDecoder ← !! (currentFields .decoder_trigger)
+  let notJalr ← !! (inputsFields .instr_jalr)
+
+  let commonState ← update stateMap ControlState.schema
+    updatedFields fun
+      | .latched_store | .latched_stalu | .latched_branch
+      | .latched_is_lu | .latched_is_lh | .latched_is_lb => some falseBit
+      | .latched_rd => some (inputsFields .decoded_rd)
+      | .mem_wordsize => some wordSize
+      | .mem_do_rinst => some notDecoder
+      | _ => none
+  let commonFields ← split ControlState.layout commonState
+  let jalState ← update stateMap ControlState.schema
+    commonFields fun
+      | .latched_branch | .mem_do_rinst => some trueBit
+      | _ => none
+  let ordinaryState ← update stateMap ControlState.schema
+    commonFields fun
+      | .cpu_state => some loadRs1State
+      | .mem_do_prefetch => some notJalr
+      | .mem_do_rinst => some falseBit
+      | _ => none
+  let decodedState ← mux (inputsFields .instr_jal) ordinaryState jalState
+  let finalState ← mux notDecoder decodedState commonState
+  let result ← combine TransitionValue.signalMap
+    TransitionValue.schema fun
+      | .state => finalState
+      | .setRinst | .setRdata | .setWdata => falseBit
+  output "transition" result
+
+noncomputable def description : Description := build construction
+
+end FetchTransition.Description
+
+namespace FetchTransition
+
+structure PlacedOutputs where
+  transition : Net transitionType
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder PlacedOutputs := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure ⟨child .transition⟩
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder PlacedOutputs := do
+  let child ← placeIndexed "fetch_transition" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure ⟨child .transition⟩
+
+attribute [circuit_description] placeNamed place
+
+end FetchTransition
 
 end PicoRV.Control

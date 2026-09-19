@@ -1,3 +1,4 @@
+import PicoRV.Control
 import PicoRV.Internal.ControlVerification
 import PicoRV.Control.ControlNextTheorems
 

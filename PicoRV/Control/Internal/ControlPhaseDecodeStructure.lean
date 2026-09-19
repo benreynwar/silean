@@ -1,0 +1,51 @@
+import PicoRV.Control.ControlNextContracts
+import Silean.Authoring.ModuleDesign
+import Silean.Modules.EqualsConstant.EqualsConstant
+
+/-! Expanded typed structure for the reader-facing control phase decoder. -/
+
+namespace PicoRV.Control
+
+open Silean
+open Silean.Authoring
+
+module_design PhaseDecode (name := "picorv32_control_phase_decode") where
+  boundary (PhaseDecode.ports) (naming := PhaseDecode.Naming.ports)
+  instances {
+    trap (name := .indexed "equals_constant" 0) := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
+      (stateBits cpuStateTrap),
+    fetch (name := .indexed "equals_constant" 1) := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
+      (stateBits cpuStateFetch),
+    loadRs1 (name := .indexed "equals_constant" 2) := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
+      (stateBits cpuStateLdRs1),
+    loadRs2 (name := .indexed "equals_constant" 3) := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
+      (stateBits cpuStateLdRs2),
+    execute (name := .indexed "equals_constant" 4) := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
+      (stateBits cpuStateExec),
+    shift (name := .indexed "equals_constant" 5) := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
+      (stateBits cpuStateShift),
+    store (name := .indexed "equals_constant" 6) := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
+      (stateBits cpuStateStmem),
+    load (name := .indexed "equals_constant" 7) := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
+      (stateBits cpuStateLdmem) }
+  wiring {
+  outputs {
+    .trap := trap.result,
+    .fetch := fetch.result,
+    .loadRs1 := loadRs1.result,
+    .loadRs2 := loadRs2.result,
+    .execute := execute.result,
+    .shift := shift.result,
+    .store := store.result,
+    .load := load.result }
+  instance (.trap) { .value := input.cpu_state }
+  instance (.fetch) { .value := input.cpu_state }
+  instance (.loadRs1) { .value := input.cpu_state }
+  instance (.loadRs2) { .value := input.cpu_state }
+  instance (.execute) { .value := input.cpu_state }
+  instance (.shift) { .value := input.cpu_state }
+  instance (.store) { .value := input.cpu_state }
+  instance (.load) { .value := input.cpu_state }
+  }
+
+end PicoRV.Control

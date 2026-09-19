@@ -22,6 +22,7 @@ Silean/Modules/Foo/
 |- FooTheorems.lean
 `- Internal/
    |- FooStructure.lean
+   |- FooCorrespondence.lean  (when useful as a separate check)
    `- FooVerification.lean
 ```
 
@@ -51,10 +52,98 @@ noncomputable def description : Description :=
   build construction
 ```
 
-Authors should use documented placement helpers such as `place` or
-`placeNamed` rather than manually assembling a child's description. Placement
-helpers retain the child's production `design`, including its structure and
-naming, and give parent descriptions a compact hardware-oriented vocabulary.
+Authors should use a child's documented `place` helper rather than manually
+assembling its description. Placement helpers retain the child's production
+`design`, including its structure and naming, and give parent descriptions a
+compact hardware-oriented vocabulary. `placeNamed` is an explicit opt-in for
+the uncommon case where a caller-chosen instance name is useful; it is not the
+default spelling.
+
+Every reusable module should keep `Foo.place` as its explicit, dependable
+placement API. A focused authoring-vocabulary module may additionally expose a
+short name for a commonly used, expression-like module. For example,
+`Authoring.CircuitLogic.constant` delegates to `Modules.Constant.place` and is
+available only to files that open that authoring vocabulary. Less common
+placements should continue to use `Foo.place`; project-specific code may
+provide its own similarly scoped vocabulary without adding project policy to
+Silean's global module namespaces.
+
+The authored definition should use the project’s hardware notation when it is
+available. In particular, prefer `!!`, `&&&`, `^^^`, `|||`, and `===` to
+spelling out primitive or recursive logic placement. These operators return
+builder actions, so a result used only once should normally be embedded with a
+nested `←` instead of receiving a temporary name:
+
+```lean
+output "result" (← (left &&& (← !! select)) ||| (right &&& select))
+```
+
+For a named aggregate declared with `signal_schema`, use its generated
+`layout` when exposing fields. The ordinary form uses a conventional indexed
+splitter name; use `splitNamed` only when the structural instance name itself
+is meaningful:
+
+```lean
+let inputsFields ← split ControlInputs.layout inputs
+let currentFields ← split ControlState.layout current
+```
+
+The ordinary forms of structural operations do not accept instance names:
+use `split`, `splitVector`, `combine`, `update`, `mux`, and `register` with
+their data arguments. They choose conventional indexed names. Their
+`splitNamed`, `splitVectorNamed`, `combineNamed`, `updateNamed`, `muxNamed`,
+and `registerNamed` counterparts exist only for the uncommon case where an
+explicit structural name is clearly useful. In particular, do not preserve an
+incidental name merely because it appeared in an older expanded declaration.
+
+`mux select whenFalse whenTrue` chooses the bit-specific or aggregate mux from
+its result type automatically.
+
+Use `let` when a result fans out to multiple consumers or when its name is a
+meaningful part of explaining the circuit. Do not introduce a sequence of
+one-use `let` bindings merely to mirror the expanded child list.
+
+When such a meaningful intermediate should also be recognizable in generated
+FIRRTL and debugging waveforms, declare it as a `wire`:
+
+```lean
+wire addressesEqual ← readAddress === writeAddress
+let inputReady ← !! (← addressesEqual &&& full)
+```
+
+An immediately driven wire may state its signal type explicitly when that is
+helpful: `wire addressesEqual : .bit ← ...`. A forward-declared wire uses
+`wire result : .bit` and receives its driver later through `assign`. In every
+form, the wire's spelling is retained as emission metadata. It does not add a
+structural endpoint or equation. Use wires when the name helps explain or
+debug the circuit. Boundary ports are already named and should not be repeated
+as wires.
+
+Likewise, `Foo.place` is the default for placing a module. Use
+`Foo.placeNamed` only when the chosen instance name carries information that
+the child module and its position do not already provide, or when it is an
+intentional stable debugging name. For example, names can usefully distinguish
+two instances of the same counter as `readCounter` and `writeCounter`; naming a
+sole `Lookahead` child `lookahead` adds no information. During migration, an
+incidental name from the old expanded declaration is not by itself a reason to
+use `placeNamed` and make the reader-facing circuit verbose. The expanded
+`module_design` should follow the authored definition's placement order and
+names. A reader-facing `wire` is mirrored there with a `named_wires` section
+identifying the same typed structural source:
+
+```lean
+named_wires {
+  addressesEqual := addressEquality.result }
+```
+
+This metadata participates in authored-definition correspondence checking and
+FIRRTL name validation, while `wiring` remains the complete structural
+circuit. The project Makefile passes `--preserve-values=named` to firtool so
+these names survive into generated SystemVerilog; direct firtool invocations
+must do the same. Aggregate wires are flattened during lowering but retain the
+authored name as their common prefix. When an existing name really must remain
+stable, make that exception explicit rather than obscuring every logic
+expression with manual naming.
 
 The builder description is not a second semantics and is not used directly by
 certification or FIRRTL emission. The production representation remains the
@@ -78,9 +167,13 @@ The two declarations must not be allowed to drift:
 `module_design` may remain the primary authoring form when the builder would
 hide rather than clarify the construction. Typical exceptions are recursive
 module families, indexed or programmatically generated hierarchies, and
-generic composition mechanisms. The main file should briefly explain such an
-exception. Avoid introducing a builder description merely to reproduce a
-large generated structure less clearly.
+generic composition mechanisms. A top-level integration shell may also keep
+an explicit `module_design` when its main explanatory content is the complete
+named port map between a small number of architectural children; translating
+that map into builder closures would be a second equally large representation,
+not a clearer circuit. The main file should briefly explain every exception.
+Avoid introducing a builder description merely to reproduce a generated
+structure or architectural connection table less clearly.
 
 ## `Foo.lean`: definition and contract
 
@@ -200,7 +293,8 @@ certificate. It normally contains:
 - output and state proof schedules;
 - the relation between contract state and structural state;
 - existence, uniqueness, and contract-implementation arguments;
-- detailed authored-description correspondence proofs; and
+- detailed authored-description correspondence proofs, unless kept in a
+  separate `Internal/FooCorrespondence.lean` compilation unit; and
 - construction of `certification` and `certified`.
 
 Proof-local declarations should be `private` whenever they are used only in
@@ -212,6 +306,22 @@ marks that status.
 verification file, they are intentional public results. The former is the
 compositional interface used when `Foo` is a child; the latter packages the
 structure, contract, and certificate for general consumption.
+
+Correspondence proofs should normalize builder implementation details through
+the dedicated `circuit_description` simp set. A proof may explicitly add the
+few child placement helpers used by its module:
+
+```lean
+simp only [circuit_description, description, construction,
+  ChildA.place, ChildB.place]
+```
+
+Do not repeat the definitions of `build`, monadic bind, draft finalization,
+wire resolution, and connection finalization in every module proof. Those are
+owned by the authoring layer. Keep module-specific enumeration and port-name
+facts explicit after normalization. For a sufficiently large module, put
+correspondence and behavioral certification in separate, descriptively named
+internal files so each independent check remains a small compilation unit.
 
 ## The public boundary
 

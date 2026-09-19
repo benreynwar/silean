@@ -1,163 +1,232 @@
-import PicoRV.Datapath.DatapathNextContracts
-import Silean.Authoring.ModuleDesign
+import PicoRV.Authoring.CircuitLogic
+import PicoRV.Datapath.Internal.DatapathBasicUpdatesStructure
 import Silean.Modules.Add.Add
-import Silean.Modules.Constant.Constant
 import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Modules.VectorLayout.VectorLayout
+
+/-! # Basic datapath update stages
+
+These descriptions cover phase decoding and the small state-update layers used
+by the complete datapath transition. They show only the fields owned by each
+layer; expanded typed structures and certification remain under `Internal/`.
+-/
 
 namespace PicoRV.Datapath
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
 
-module_design PhaseDecode (name := "picorv32_datapath_phase_decode") where
-  boundary (PhaseDecode.ports) (naming := PhaseDecode.Naming.ports)
-  instances {
-    fetchMatch := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
-      (stateBits cpuStateFetch),
-    loadRs1Match := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
-      (stateBits cpuStateLdRs1),
-    loadRs2Match := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
-      (stateBits cpuStateLdRs2),
-    executeMatch := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
-      (stateBits cpuStateExec),
-    shiftMatch := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
-      (stateBits cpuStateShift),
-    storeMatch := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
-      (stateBits cpuStateStmem),
-    loadMatch := Silean.Modules.EqualsConstant.design (.vector 8 .bit)
-      (stateBits cpuStateLdmem) }
-  wiring {
-  outputs {
-    .fetch := fetchMatch.result,
-    .loadRs1 := loadRs1Match.result,
-    .loadRs2 := loadRs2Match.result,
-    .execute := executeMatch.result,
-    .shift := shiftMatch.result,
-    .store := storeMatch.result,
-    .load := loadMatch.result }
-  instance (.fetchMatch) { .value := input.cpu_state }
-  instance (.loadRs1Match) { .value := input.cpu_state }
-  instance (.loadRs2Match) { .value := input.cpu_state }
-  instance (.executeMatch) { .value := input.cpu_state }
-  instance (.shiftMatch) { .value := input.cpu_state }
-  instance (.storeMatch) { .value := input.cpu_state }
-  instance (.loadMatch) { .value := input.cpu_state }
-  }
+namespace PhaseDecode.Description
 
-module_design Baseline (name := "picorv32_datapath_baseline") where
-  boundary (Baseline.ports) (naming := Baseline.Naming.ports)
-  instances {
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap DatapathState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.currentFields) { .value := input.current }
-  instance (.result) {
-    .reg_pc := currentFields[.reg_pc],
-    .reg_next_pc := currentFields[.reg_next_pc],
-    .reg_op1 := currentFields[.reg_op1],
-    .reg_op2 := currentFields[.reg_op2],
-    .reg_out := currentFields[.reg_out],
-    .reg_sh := currentFields[.reg_sh],
-    .alu_out_q := input.alu_out }
-  }
+noncomputable def construction : Builder Unit := do
+  let state ← input "cpu_state" (.vector 8 .bit)
+  let fetch ← Silean.Modules.EqualsConstant.place state (stateBits cpuStateFetch)
+  let loadRs1 ← Silean.Modules.EqualsConstant.place state (stateBits cpuStateLdRs1)
+  let loadRs2 ← Silean.Modules.EqualsConstant.place state (stateBits cpuStateLdRs2)
+  let execute ← Silean.Modules.EqualsConstant.place state (stateBits cpuStateExec)
+  let shift ← Silean.Modules.EqualsConstant.place state (stateBits cpuStateShift)
+  let store ← Silean.Modules.EqualsConstant.place state (stateBits cpuStateStmem)
+  let load ← Silean.Modules.EqualsConstant.place state (stateBits cpuStateLdmem)
+  output "fetch" fetch
+  output "loadRs1" loadRs1
+  output "loadRs2" loadRs2
+  output "execute" execute
+  output "shift" shift
+  output "store" store
+  output "load" load
 
-def LoadRs2Update.lowFiveLayout (index : Fin 5) :
-    Silean.Modules.VectorLayout.BitSource 32 := .input ⟨index.val, by omega⟩
+noncomputable def description : Description := build construction
 
-module_design LoadRs2Update (name := "picorv32_datapath_load_rs2_update") where
-  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      DatapathInputs.signalMap DatapathInputs.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    lowFive := Silean.Modules.VectorLayout.design 32 5 LoadRs2Update.lowFiveLayout,
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap DatapathState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.lowFive) { .input := inputsFields[.cpuregs_rs2] }
-  instance (.result) {
-    .reg_pc := updatedFields[.reg_pc],
-    .reg_next_pc := updatedFields[.reg_next_pc],
-    .reg_op1 := updatedFields[.reg_op1],
-    .reg_op2 := inputsFields[.cpuregs_rs2],
-    .reg_out := updatedFields[.reg_out],
-    .reg_sh := lowFive.output,
-    .alu_out_q := updatedFields[.alu_out_q] }
-  }
+end PhaseDecode.Description
 
-module_design ExecuteUpdate (name := "picorv32_datapath_execute_update") where
-  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      DatapathInputs.signalMap DatapathInputs.schema,
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    target := Silean.Modules.Add.design 32,
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap DatapathState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.currentFields) { .value := input.current }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.falseBit) {}
-  instance (.target) {
-    .left := currentFields[.reg_pc],
-    .right := inputsFields[.decoded_imm],
-    .carryIn := falseBit.output }
-  instance (.result) {
-    .reg_pc := updatedFields[.reg_pc],
-    .reg_next_pc := updatedFields[.reg_next_pc],
-    .reg_op1 := updatedFields[.reg_op1],
-    .reg_op2 := updatedFields[.reg_op2],
-    .reg_out := target.result,
-    .reg_sh := updatedFields[.reg_sh],
-    .alu_out_q := updatedFields[.alu_out_q] }
-  }
+namespace PhaseDecode
 
-module_design ResetOverride (name := "picorv32_datapath_reset_override") where
-  boundary (ResetOverride.ports) (naming := ResetOverride.Naming.ports)
-  instances {
-    selectedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    zeroWord := Silean.Modules.Constant.design (.vector 32 .bit) (wordOfNat 0),
-    pc := Silean.Modules.Mux.design (.vector 32 .bit),
-    nextPc := Silean.Modules.Mux.design (.vector 32 .bit),
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap DatapathState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.selectedFields) { .value := input.selected }
-  instance (.zeroWord) {}
-  instance (.pc) {
-    .select := input.resetn,
-    .whenFalse := zeroWord.output,
-    .whenTrue := selectedFields[.reg_pc] }
-  instance (.nextPc) {
-    .select := input.resetn,
-    .whenFalse := zeroWord.output,
-    .whenTrue := selectedFields[.reg_next_pc] }
-  instance (.result) {
-    .reg_pc := pc.result,
-    .reg_next_pc := nextPc.result,
-    .reg_op1 := selectedFields[.reg_op1],
-    .reg_op2 := selectedFields[.reg_op2],
-    .reg_out := selectedFields[.reg_out],
-    .reg_sh := selectedFields[.reg_sh],
-    .alu_out_q := selectedFields[.alu_out_q] }
-  }
+structure PlacedOutputs where
+  fetch : Net .bit
+  loadRs1 : Net .bit
+  loadRs2 : Net .bit
+  execute : Net .bit
+  shift : Net .bit
+  store : Net .bit
+  load : Net .bit
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (state : Net (.vector 8 .bit)) : Builder PlacedOutputs := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .cpu_state => state
+  pure ⟨child .fetch, child .loadRs1, child .loadRs2, child .execute,
+    child .shift, child .store, child .load⟩
+
+noncomputable def place (state : Net (.vector 8 .bit)) :
+    Builder PlacedOutputs := do
+  let child ← placeIndexed "datapath_phase_decode" design fun
+    | .cpu_state => state
+  pure ⟨child .fetch, child .loadRs1, child .loadRs2, child .execute,
+    child .shift, child .store, child .load⟩
+
+attribute [circuit_description] placeNamed place
+
+end PhaseDecode
+
+namespace Baseline.Description
+
+noncomputable def construction : Builder Unit := do
+  let current ← input "current" stateType
+  let aluOut ← input "alu_out" (.vector 32 .bit)
+  let fields ← split DatapathState.layout current
+  output "state" (← update stateMap DatapathState.schema fields fun
+    | .alu_out_q => some aluOut
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end Baseline.Description
+
+namespace Baseline
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (current : Net stateType) (aluOut : Net (.vector 32 .bit)) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .current => current
+    | .alu_out => aluOut
+  pure (child .state)
+
+noncomputable def place (current : Net stateType)
+    (aluOut : Net (.vector 32 .bit)) : Builder (Net stateType) := do
+  let child ← placeIndexed "datapath_baseline" design fun
+    | .current => current
+    | .alu_out => aluOut
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end Baseline
+
+namespace LoadRs2Update.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let _current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split DatapathInputs.layout inputs
+  let updatedFields ← split DatapathState.layout updated
+  let lowFive ← Silean.Modules.VectorLayout.place
+    LoadRs2Update.lowFiveLayout (inputsFields .cpuregs_rs2)
+  output "state" (← update stateMap DatapathState.schema updatedFields fun
+    | .reg_op2 => some (inputsFields .cpuregs_rs2)
+    | .reg_sh => some lowFive
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end LoadRs2Update.Description
+
+namespace LoadRs2Update
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "datapath_load_rs2_update" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end LoadRs2Update
+
+namespace ExecuteUpdate.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split DatapathInputs.layout inputs
+  let currentFields ← split DatapathState.layout current
+  let updatedFields ← split DatapathState.layout updated
+  let falseBit ← constant .bit false
+  let target ← Silean.Modules.Add.place
+    (currentFields .reg_pc) (inputsFields .decoded_imm) falseBit
+  output "state" (← update stateMap DatapathState.schema updatedFields fun
+    | .reg_out => some target.result
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end ExecuteUpdate.Description
+
+namespace ExecuteUpdate
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "datapath_execute_update" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end ExecuteUpdate
+
+namespace ResetOverride.Description
+
+noncomputable def construction : Builder Unit := do
+  let resetn ← input "resetn" .bit
+  let selected ← input "selected" stateType
+  let fields ← split DatapathState.layout selected
+  let zeroWord ← constant (.vector 32 .bit) (wordOfNat 0)
+  let pc ← mux resetn zeroWord (fields .reg_pc)
+  let nextPc ← mux resetn zeroWord (fields .reg_next_pc)
+  output "state" (← update stateMap DatapathState.schema fields fun
+    | .reg_pc => some pc
+    | .reg_next_pc => some nextPc
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end ResetOverride.Description
+
+namespace ResetOverride
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (resetn : Net .bit) (selected : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .resetn => resetn
+    | .selected => selected
+  pure (child .state)
+
+noncomputable def place (resetn : Net .bit) (selected : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← placeIndexed "datapath_reset_override" design fun
+    | .resetn => resetn
+    | .selected => selected
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end ResetOverride
 
 end PicoRV.Datapath

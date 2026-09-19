@@ -135,68 +135,27 @@ open Silean Naming Authoring.CircuitDescription
 private theorem same (width : Nat) (resetValue : Value width) :
     some (description width resetValue) =
       ofNaming (EnabledResetCounter.naming width resetValue) := by
-  simp only [description, construction, build, buildResult,
-    Increment.placeNamed, EnabledResetRegister.placeNamed,
-    EnabledResetRegister.design,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration Increment.Input).values = [.value] by rfl]
-  rw [show (inferInstance : Enumeration EnabledResetRegister.Input).values =
-    [.value, .enable, .reset] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet,
-    Authoring.CircuitDescription.Internal.findWire?,
-    Authoring.CircuitDescription.Internal.replaceWire]
+  simp only [circuit_description, description, construction,
+    Increment.place, EnabledResetRegister.place,
+    EnabledResetRegister.design]
+  simp [circuit_description, enumeration]
   unfold moduleStructure naming
   simp only [id_eq]
   rw [ofNaming_composite]
   unfold ofCompositeNaming portList
-  rw [show (inferInstance : Enumeration Input).values = [.enable, .reset] by rfl]
-  rw [show (inferInstance : Enumeration Output).values = [.value] by rfl]
-  rw [show (inferInstance : Enumeration Instance).values =
-    [.increment, .storage] by rfl]
-  simp only [List.map_cons, List.map_nil]
-  rw [show ((body width resetValue).instancePorts.ports .increment).inputs.labels.values =
-    [.value] by rfl]
-  rw [show ((body width resetValue).instancePorts.ports .storage).inputs.labels.values =
-    [.value, .enable, .reset] by rfl]
+  simp only [enumeration, List.map_cons, List.map_nil]
   dsimp [Naming.ports, body, context, instancePorts, structuralChildren, wiring,
     sourceDescription, Increment.design, EnabledResetRegister.design,
     EndpointContext.moduleInput, EndpointContext.instanceOutput]
-  simp [Naming.portsWithNaming, inputMap, outputMap, ports]
+  simp [inputMap, outputMap, ports]
+  rfl
 
 private theorem unique (width : Nat) (resetValue : Value width) :
     (description width resetValue).UniqueNames := by
-  simp only [description, construction, build, buildResult,
-    Increment.placeNamed, EnabledResetRegister.placeNamed,
-    EnabledResetRegister.design,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration Increment.Input).values = [.value] by rfl]
-  rw [show (inferInstance : Enumeration EnabledResetRegister.Input).values =
-    [.value, .enable, .reset] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet,
-    Authoring.CircuitDescription.Internal.findWire?,
-    Authoring.CircuitDescription.Internal.replaceWire]
+  simp only [circuit_description, description, construction,
+    Increment.place, EnabledResetRegister.place,
+    EnabledResetRegister.design]
+  simp [circuit_description, enumeration]
   refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
   intro child member
   change child ∈ [_, _] at member

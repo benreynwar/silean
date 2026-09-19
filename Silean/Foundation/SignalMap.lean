@@ -97,8 +97,11 @@ theorem SignalMap.set_other
 
 inductive NoSignal
 
-instance : Enumeration NoSignal :=
+@[reducible] instance : Enumeration NoSignal :=
   Enumeration.empty fun signal => nomatch signal
+
+@[enumeration] theorem noSignalEnumerationValues :
+    (inferInstance : Enumeration NoSignal).values = [] := rfl
 
 def emptySignalMap : SignalMap :=
   EnumeratedMap.of NoSignal fun signal => nomatch signal

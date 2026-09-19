@@ -1,54 +1,57 @@
+import Silean.Authoring.CircuitLogic
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
-import Silean.Naming.PrimitiveNaming
-import Silean.Primitives.AndPrimitive
-import Silean.Primitives.NotPrimitive
-import Silean.Primitives.OrPrimitive
+import Silean.Modules.BitMux.Internal.BitMuxStructure
 
-namespace Silean.Modules
+/-! # One-bit multiplexer
 
-open Silean
-open Silean.Authoring
-
-/-! A one-bit combinational mux built directly from Boolean gates. -/
-
-module_design BitMux where
-  ports {
-    input select : .bit,
-    input whenFalse : .bit,
-    input whenTrue : .bit,
-    output result : .bit }
-  instances {
-    -- Produces the complement of `select`.
-    invertSelect := Primitives.notDesign,
-    -- Passes `whenFalse` only when `select` is low.
-    chooseFalse := Primitives.andDesign,
-    -- Passes `whenTrue` only when `select` is high.
-    chooseTrue := Primitives.andDesign,
-    -- Combines the mutually exclusive selected values.
-    combine := Primitives.orDesign }
-  wiring {
-    outputs {
-      .result := combine.output }
-    instance (.invertSelect) {
-      .input := input.select }
-    instance (.chooseFalse) {
-      .left := input.whenFalse,
-      .right := invertSelect.output }
-    instance (.chooseTrue) {
-      .left := input.whenTrue,
-      .right := input.select }
-    instance (.combine) {
-      .left := chooseFalse.output,
-      .right := chooseTrue.output }
-  }
-
-end Silean.Modules
+The authored circuit spells out the four Boolean gates. The exact cycle
+contract below states the simpler selection behavior independently of that
+implementation. Expanded typed wiring and certification remain under
+`Internal/`.
+-/
 
 namespace Silean.Modules.BitMux
 
 open Silean
 open Silean.Authoring
+open Authoring.CircuitDescription
+open scoped Authoring.CircuitLogic
+
+namespace Description
+
+noncomputable def construction : Builder Unit := do
+  let select ← input "select" .bit
+  let whenFalse ← input "whenFalse" .bit
+  let whenTrue ← input "whenTrue" .bit
+  output "result" (←
+    (← whenFalse &&& (← !! select)) ||| (← whenTrue &&& select))
+
+noncomputable def description : Description := build construction
+
+end Description
+
+/-! ## Placement -/
+
+/-- Place a bit mux under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Naming.SourceName)
+    (select whenFalse whenTrue : Net .bit) : Builder (Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeNamed name design fun
+    | .select => select
+    | .whenFalse => whenFalse
+    | .whenTrue => whenTrue
+  pure (child .result)
+
+/-- Place a bit mux using the next conventional indexed name. -/
+noncomputable def place (select whenFalse whenTrue : Net .bit) :
+    Builder (Net .bit) := do
+  let child ← placeIndexed "bit_mux" design fun
+    | .select => select
+    | .whenFalse => whenFalse
+    | .whenTrue => whenTrue
+  pure (child .result)
+
+attribute [circuit_description] placeNamed place
+
 
 module_cycle_contract cycleContract for ports where
   state := emptySignalMap

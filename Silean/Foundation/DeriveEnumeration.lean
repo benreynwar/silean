@@ -30,10 +30,15 @@ private def deriveEnumeration (declNames : Array Name) : CommandElabM Bool := do
     let values ← `([$[$constructors],*])
     let locate ← `(fun value => match value with $alternatives:matchAlt*)
     elabCommand <| ← withFreshMacroScope `(
-      instance : Enumeration @$(mkCIdent declName) where
+      @[reducible] instance : Enumeration @$(mkCIdent declName) where
         values := $values
         nodup := by simp
         locate := $locate
+    )
+    elabCommand <| ← withFreshMacroScope `(
+      set_option linter.unusedSectionVars false in
+      @[enumeration] private theorem derivedEnumerationValues :
+          (inferInstance : Enumeration @$(mkCIdent declName)).values = $values := rfl
     )
   return true
 

@@ -1,4 +1,5 @@
 import PicoRV.Control.Internal.ControlAlignmentVerification
+import PicoRV.Control.Internal.ControlAlignmentCorrespondence
 
 /-! # Control alignment theorems
 
@@ -9,6 +10,13 @@ under Internal.
 namespace PicoRV.Control.Alignment
 
 open Silean
+
+/-- The concise authored definition and expanded typed hierarchy describe the
+same ports, children, wiring, and emitted names. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 theorem outputs_of_allowed {step : cycleContract.Step}
     (allowed : cycleContract.Allows step) :

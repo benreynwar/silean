@@ -5,7 +5,7 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.Internal.MuxVerification
+import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.VectorLayout.VectorLayoutTheorems
 import Silean.Modules.VectorSlice.VectorSliceTheorems
 

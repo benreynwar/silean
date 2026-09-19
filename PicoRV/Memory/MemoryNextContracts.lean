@@ -1,4 +1,4 @@
-import PicoRV.Memory
+import PicoRV.MemoryContract
 
 namespace PicoRV.Memory
 
@@ -7,7 +7,8 @@ open Silean.Authoring
 
 /-! Combinational contracts used to construct `PicoRVMemoryNext`. Each
 aggregate result is stated directly using the natural transition functions in
-`Memory.lean`; the structural children implement the source assignment layers. -/
+`MemoryContract.lean`; the structural children implement the source assignment
+layers. -/
 
 namespace ResponseCapture
 

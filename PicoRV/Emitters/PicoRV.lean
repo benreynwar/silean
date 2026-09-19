@@ -1,5 +1,5 @@
 import Silean.FIRRTL.Emit
-import PicoRV.PicoRVSchedule
+import PicoRV.PicoRV
 
 def main (args : List String) : IO Unit :=
   Silean.FIRRTL.emitMain "emit-picorv" args

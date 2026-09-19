@@ -64,7 +64,7 @@ contract:
    intents are then applied, so a command may be reasserted on the same edge.
    There is intentionally no corresponding `setPrefetch` intent.
 
-The `Transition` record in `Control.lean` is not incidental proof machinery.
+The `Transition` record in `ControlContract.lean` is not incidental proof machinery.
 It records the source distinction between ordinary nonblocking state updates
 and the three blocking `set_mem_do_*` temporaries. It should remain the
 semantic interface used to explain the hardware.
@@ -241,7 +241,7 @@ The Verilog comparison produced three decisions, now adopted as follows:
    Verilog decoder's legal environment, while proving separately that reachable
    decoder outputs satisfy that environment.
 
-Only the first item required a change to `Control.lean`. None of these decisions
+Only the first item required a change to `ControlContract.lean`. None of these decisions
 changes the enabled, reset-reachable behavior of the configured core.
 
 ## Remaining contract audit before structural work

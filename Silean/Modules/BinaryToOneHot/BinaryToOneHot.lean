@@ -354,4 +354,24 @@ namespace Silean.Modules.BinaryToOneHot
   moduleStructure := moduleStructure width
   naming := Naming.naming width
 
+/-! ## Placement -/
+
+open Silean
+open Silean.Authoring.CircuitDescription
+
+noncomputable def placeNamed (name : Naming.SourceName) (width : Nat)
+    (value : Net (.vector width .bit)) :
+    Builder (Net (.vector (size width) .bit)) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name
+    (design width) fun | .value => value
+  pure (child .result)
+
+noncomputable def place (width : Nat) (value : Net (.vector width .bit)) :
+    Builder (Net (.vector (size width) .bit)) := do
+  let child ← placeIndexed "binary_to_one_hot" (design width) fun
+    | .value => value
+  pure (child .result)
+
+attribute [circuit_description] placeNamed place
+
 end Silean.Modules.BinaryToOneHot

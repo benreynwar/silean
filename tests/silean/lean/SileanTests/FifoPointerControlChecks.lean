@@ -126,6 +126,10 @@ example : Contracts.Cycle.Implements (moduleStructure 2) (cycleContract 2)
     (certification 2).stateCorresponds :=
   implements_contract 2
 
+example : Authoring.CircuitDescription.Corresponds
+    (Description.description 2) (naming 2) :=
+  Description.authored_definition_corresponds 2
+
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
@@ -136,17 +140,20 @@ private def renders (addressWidth : Nat) (fragments : List String) : Bool :=
 
 #guard renders 2
   ["public module PointerControl_2",
-   "inst readSplit of split_aggregate_v3_bit",
-   "inst readAddressCombiner of combine_aggregate_v2_bit",
-   "inst addressEquality of equality_structural_v2_bit",
-   "inst wrapEquality of eq_bit",
-   "inst emptyGate of and_bit",
-   "inst fullGate of and_bit"]
+   "inst splitter_0 of split_aggregate_v3_bit",
+   "inst combiner_0 of combine_aggregate_v2_bit",
+   "inst equality_0 of equality_structural_v2_bit",
+   "inst eq_0 of eq_bit",
+   "wire addressesEqual : UInt<1>",
+   "wire wrapsEqual : UInt<1>",
+   "inst and_0 of and_bit",
+   "inst and_1 of and_bit"]
 
 #guard renders 0
   ["public module PointerControl_0",
    "input readPointer : UInt<1>[1]",
    "output readAddress : UInt<1>[0]",
-   "inst addressEquality of equality_structural_v0_bit"]
+   "inst equality_0 of equality_structural_v0_bit",
+   "wire addressesEqual : UInt<1>"]
 
 end SileanTests.FifoPointerControl

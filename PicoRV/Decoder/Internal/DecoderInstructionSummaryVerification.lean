@@ -1,4 +1,4 @@
-import PicoRV.Decoder.DecoderInstructionSummaryStructure
+import PicoRV.Decoder.Internal.DecoderInstructionSummaryStructure
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules

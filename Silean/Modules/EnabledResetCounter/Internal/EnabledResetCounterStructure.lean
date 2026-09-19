@@ -44,9 +44,12 @@ module_design EnabledResetCounter (width : Nat)
     (naming := EnabledResetCounter.Naming.ports width)
     (namingWith := EnabledResetCounter.Naming.portsWithNaming width typeNaming)
   instances {
-    increment := Increment.design width,
-    storage := EnabledResetRegister.design
+    increment (name := .indexed "increment" 0) := Increment.design width,
+    storage (name := .indexed "enabled_reset_register" 0) :=
+      EnabledResetRegister.design
       (EnabledResetCounter.valueType width) resetValue }
+  named_wires {
+    current := storage.value }
   wiring {
     outputs {
       .value := storage.value }
@@ -67,12 +70,12 @@ open Silean
 @[simp] theorem increment_instance_name (width : Nat)
     (resetValue : Value width) :
     EnabledResetCounter.Naming.instanceNames width resetValue .increment =
-      "increment" := rfl
+      .indexed "increment" 0 := rfl
 
 @[simp] theorem storage_instance_name (width : Nat)
     (resetValue : Value width) :
     EnabledResetCounter.Naming.instanceNames width resetValue .storage =
-      "storage" := rfl
+      .indexed "enabled_reset_register" 0 := rfl
 
 @[simp] theorem increment_child_ports (width : Nat)
     (resetValue : Value width) :

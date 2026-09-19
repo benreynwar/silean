@@ -3,6 +3,7 @@ import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.Eq
 import Silean.Composition.SignalLogic
+import Silean.Authoring.CircuitDescription
 
 namespace Silean.Modules.Equality
 
@@ -308,6 +309,33 @@ def naming (signalType : SignalType) :
     ModuleNaming (Modules.Equality.moduleStructure signalType) :=
   namingWith signalType (.positional signalType)
 
+/-- Recursive equality implementation details do not change its declared
+boundary naming. -/
+theorem naming_ports (signalType : SignalType) :
+    (naming signalType).ports = ports signalType := by
+  unfold naming
+  cases signalType with
+  | bit =>
+      rw [namingWith.eq_1]
+      erw [ModuleNaming.ports_mpr_of_eq Modules.Equality.moduleStructure.eq_1]
+      rfl
+  | vector length element =>
+      rw [namingWith.eq_2]
+      erw [ModuleNaming.ports_mpr_of_eq
+        (Modules.Equality.moduleStructure.eq_2 length element)]
+      rfl
+  | tuple fields =>
+      rw [namingWith.eq_3]
+      erw [ModuleNaming.ports_mpr_of_eq
+        (Modules.Equality.moduleStructure.eq_3 fields)]
+      rfl
+
+/-- The emitted boundary names of structural equality are collision-free. -/
+theorem portNames_nodup (signalType : SignalType) :
+    (naming signalType).ports.names.Nodup := by
+  rw [naming_ports]
+  exact of_decide_eq_true rfl
+
 end Silean.Modules.Equality.Naming
 
 namespace Silean.Modules.Equality
@@ -316,5 +344,27 @@ namespace Silean.Modules.Equality
   ports := ports signalType
   moduleStructure := moduleStructure signalType
   naming := Naming.naming signalType
+
+/-! ## Placement -/
+
+open Silean.Authoring.CircuitDescription
+
+/-- Place structural equality under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Silean.Naming.SourceName)
+    (left right : Net signalType) : Builder (Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design signalType) fun
+      | .left => left
+      | .right => right
+  pure (child .result)
+
+/-- Place structural equality using the next conventional indexed name. -/
+noncomputable def place (left right : Net signalType) : Builder (Net .bit) := do
+  let child ← placeIndexed "equality" (design signalType) fun
+    | .left => left
+    | .right => right
+  pure (child .result)
+
+attribute [circuit_description] placeNamed place
 
 end Silean.Modules.Equality

@@ -5,7 +5,8 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.Add.AddTheorems
-import Silean.Modules.Mux.Internal.MuxVerification
+import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 import Silean.Modules.VectorLayout.VectorLayoutTheorems
 import Silean.Primitives.And
@@ -28,7 +29,7 @@ module_child_certifications childContracts for body where
   zeroWord := Silean.Modules.Constant.certification (.vector 32 .bit) (wordOfNat 0),
   notPrefetch := Silean.Primitives.notCertified.certification,
   progress := Silean.Primitives.orCertified.certification,
-  active := Silean.Modules.Mux.certification .bit,
+  active := Silean.Modules.BitMux.certification,
   notActive := Silean.Primitives.notCertified.certification,
   effectiveAddress := Silean.Modules.Add.certification 32,
   effectiveOp1 := Silean.Modules.Mux.certification (.vector 32 .bit),
@@ -51,7 +52,7 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     {.falseBit, .zeroWord} => Silean.Primitives.ConstantRule.apply,
     .notPrefetch => Silean.Primitives.NotRule.apply,
     .progress => Silean.Primitives.OrRule.apply,
-    .active => Silean.Modules.Mux.Rule.select,
+    .active => Silean.Modules.BitMux.Rule.select,
     .notActive => Silean.Primitives.NotRule.apply,
     .effectiveAddress => Silean.Modules.Add.Rule.apply,
     {.effectiveOp1, .selectedOp1} => Silean.Modules.Mux.Rule.select,
@@ -171,7 +172,7 @@ private theorem implements :
   have activeValue : hierStep.childOutputs .active .result =
       (bif inputs .isLoad then datapathInputs.mem_do_rdata
       else datapathInputs.mem_do_wdata) := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .active).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [inputField .mem_do_rdata, inputField .mem_do_wdata] at equation

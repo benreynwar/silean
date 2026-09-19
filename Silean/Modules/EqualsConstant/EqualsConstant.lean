@@ -1,56 +1,55 @@
+import Silean.Authoring.CircuitLogic
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
 import Silean.Modules.Equality.Equality
-
-namespace Silean.Modules
-
-open Silean
-open Silean.Authoring
+import Silean.Modules.EqualsConstant.Internal.EqualsConstantStructure
 
 /-! # Comparison with a constant
 
-This combinational circuit compares an input signal with a fixed value. Its
-authored hardware and exact contract are here, certification construction is
-under `Internal/`, and `EqualsConstantTheorems.lean` is the public proof
-interface. -/
-
-namespace EqualsConstant
-
-module_ports ports (signalType : SignalType)
-    with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
-      .positional signalType) where
-  input value (schema := typeNaming) : signalType,
-  output result : .bit
-
-end EqualsConstant
-
-module_design EqualsConstant (signalType : SignalType)
-    (constant : signalType.Denote)
-    (specialization := .signalType signalType ::
-      Constant.Naming.parameters signalType constant) where
-  boundary (EqualsConstant.ports signalType)
-    (naming := EqualsConstant.Naming.ports signalType)
-  instances {
-    -- Produces the fixed comparison operand.
-    constantValue := Constant.design signalType constant,
-    -- Compares the input with the fixed operand.
-    equality := Equality.design signalType }
-  wiring {
-    outputs {
-      .result := equality.result }
-    instance (.constantValue) {}
-    instance (.equality) {
-      .left := input.value,
-      .right := constantValue.output }
-  }
-
-end Silean.Modules
+The authored hardware places one constant source and one structural equality
+child. The exact contract states only the resulting comparison. Expanded typed
+wiring and certification remain under `Internal/`, while
+`EqualsConstantTheorems.lean` is the public proof interface. -/
 
 namespace Silean.Modules.EqualsConstant
 
 open Silean
 open Silean.Authoring
+open Authoring.CircuitDescription
+open Authoring.CircuitLogic
+open scoped Authoring.CircuitLogic
+
+namespace Description
+
+noncomputable def construction (signalType : SignalType)
+    (fixedValue : signalType.Denote) : Builder Unit := do
+  let value ← input "value" signalType
+  output "result" (← value === (← constant signalType fixedValue))
+
+noncomputable def description (signalType : SignalType)
+    (constant : signalType.Denote) : Description :=
+  build (construction signalType constant)
+
+end Description
+
+/-! ## Placement -/
+
+/-- Place a constant comparison under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Naming.SourceName)
+    (value : Net signalType) (constant : signalType.Denote) :
+    Builder (Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design signalType constant) fun | .value => value
+  pure (child .result)
+
+/-- Place a constant comparison using the next conventional indexed name. -/
+noncomputable def place (value : Net signalType)
+    (constant : signalType.Denote) : Builder (Net .bit) := do
+  let child ← placeIndexed "equals_constant"
+    (design signalType constant) fun | .value => value
+  pure (child .result)
+
+attribute [circuit_description] placeNamed place
 
 def namingWith {signalType : SignalType} (constant : signalType.Denote)
     (typeNaming : Silean.Naming.SignalTypeNaming signalType) :

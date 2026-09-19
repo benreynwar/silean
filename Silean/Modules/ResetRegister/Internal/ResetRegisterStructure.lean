@@ -29,9 +29,11 @@ module_design ResetRegister (signalType : SignalType)
     (naming := ResetRegister.Naming.ports signalType)
     (namingWith := ResetRegister.Naming.portsWithNaming signalType typeNaming)
   instances {
-    resetValue := Modules.Constant.design signalType resetValue,
-    selection := Modules.Mux.design signalType,
-    storage := Modules.Register.design signalType }
+    resetValue (name := .indexed "constant" 0) :=
+      Modules.Constant.design signalType resetValue,
+    selection (name := .indexed "mux" 0) := Modules.Mux.design signalType,
+    storage (name := .indexed "register" 0) :=
+      Modules.Register.design signalType }
   wiring {
     outputs {
       .value := storage.output }
@@ -53,17 +55,17 @@ open Silean
 @[simp] theorem resetValue_instance_name (signalType : SignalType)
     (resetValue : signalType.Denote) :
     ResetRegister.Naming.instanceNames signalType resetValue .resetValue =
-      "resetValue" := rfl
+      .indexed "constant" 0 := rfl
 
 @[simp] theorem selection_instance_name (signalType : SignalType)
     (resetValue : signalType.Denote) :
     ResetRegister.Naming.instanceNames signalType resetValue .selection =
-      "selection" := rfl
+      .indexed "mux" 0 := rfl
 
 @[simp] theorem storage_instance_name (signalType : SignalType)
     (resetValue : signalType.Denote) :
     ResetRegister.Naming.instanceNames signalType resetValue .storage =
-      "storage" := rfl
+      .indexed "register" 0 := rfl
 
 @[simp] theorem resetValue_child_ports (signalType : SignalType)
     (resetValue : signalType.Denote) :

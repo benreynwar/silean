@@ -1,3 +1,4 @@
+import PicoRV.Memory
 import PicoRV.Internal.MemoryVerification
 import PicoRV.Memory.MemoryNextTheorems
 

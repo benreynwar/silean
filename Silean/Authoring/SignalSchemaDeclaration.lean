@@ -8,7 +8,8 @@ namespace Silean.Authoring
 `signal_schema` declares a reusable named tuple of signals. From a list of
 named component schemas it generates the field label type and enumeration, the
 corresponding `SignalMap` and tuple `SignalType`, typed access to each field's
-schema, and the aggregate `SignalSchema` used for emission naming.
+schema, the aggregate `SignalSchema` used for emission naming, and a `layout`
+bundling the map and schema for ordinary authoring operations.
 
 This keeps a logical aggregate's shape, field labels, and emitted hierarchy in
 one declaration. The generated signal type can be used anywhere an ordinary
@@ -28,9 +29,9 @@ syntax ident " : " term : signalSchemaField
 
 /-- Declare a reusable named-tuple schema. Field terms are themselves schemas,
 so declarations compose naturally and may be parameterized. The declaration
-generates `Field`, `signalMap`, `signalType`, `field`, and `schema`: typed field
-labels, their labelled shapes, the aggregate shape, typed access to each field's
-schema, and the aggregate naming tree. -/
+generates `Field`, `signalMap`, `signalType`, `field`, `schema`, and `layout`:
+typed field labels, their labelled shapes, the aggregate shape, typed access to
+each field's schema, its naming tree, and the usual bundled authoring view. -/
 syntax (name := signalSchema)
   "signal_schema " ident signalSchemaParam* " where "
     signalSchemaField,* : command
@@ -91,7 +92,7 @@ elab_rules : command
     let arguments := parsedParams.map (·.argument)
     let fields ← fieldSyntax.getElems.mapM parseField
     let labels := fields.map (·.label.getId)
-    for reserved in [`Field, `signalMap, `signalType, `field, `schema] do
+    for reserved in [`Field, `signalMap, `signalType, `field, `schema, `layout] do
       if labels.contains reserved then
         throwErrorAt schemaName
           "a schema field cannot use the reserved name `{reserved}`"
@@ -108,6 +109,7 @@ elab_rules : command
     let signalTypeName := mkIdentFrom schemaName `signalType
     let fieldNameValue := mkIdentFrom schemaName `field
     let schemaValueName := mkIdentFrom schemaName `schema
+    let layoutValueName := mkIdentFrom schemaName `layout
     let signalMapName := mkIdentFrom schemaName `signalMap
     elabCommand <| ← `(namespace $schemaName)
     elabCommand <| ← `(
@@ -134,6 +136,12 @@ elab_rules : command
       def $schemaValueName $binders:bracketedBinder* :
           Silean.Authoring.SignalSchema ($signalTypeName $arguments:term*) :=
         .tuple $namingFieldsValue
+    )
+    elabCommand <| ← `(
+      @[reducible] def $layoutValueName $binders:bracketedBinder* :
+          Silean.Authoring.SignalLayout where
+        signalMap := $signalMapName $arguments:term*
+        schema := $schemaValueName $arguments:term*
     )
     elabCommand <| ← `(end $schemaName)
 

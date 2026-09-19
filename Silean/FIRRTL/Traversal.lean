@@ -45,7 +45,7 @@ structure InstanceOccurrence where
 def instanceOccurrences :
     (naming : ModuleNaming moduleStructure) → List InstanceOccurrence
   | .primitive .. | .blackbox .. | .splitter .. | .combiner .. => []
-  | @ModuleNaming.composite body _ _ _ instanceName childNaming =>
+  | @ModuleNaming.composite body _ _ _ instanceName childNaming _ =>
       body.instancePorts.names.values.map fun name =>
         ⟨instanceName name, (childNaming name).key⟩
 
@@ -63,8 +63,8 @@ private def collectOccurrencesAt (path : List SourceName) :
       [⟨path, ⟨_, _, .splitter splitter key ports⟩⟩]
   | .combiner combiner key ports =>
       [⟨path, ⟨_, _, .combiner combiner key ports⟩⟩]
-  | @ModuleNaming.composite body children key ports instanceName childNaming =>
-      ⟨path, ⟨_, _, .composite key ports instanceName childNaming⟩⟩ ::
+  | @ModuleNaming.composite body children key ports instanceName childNaming namedWires =>
+      ⟨path, ⟨_, _, .composite key ports instanceName childNaming namedWires⟩⟩ ::
         body.instancePorts.names.values.flatMap (fun child =>
           collectOccurrencesAt (path ++ [instanceName child]) (childNaming child))
 
@@ -91,12 +91,12 @@ private def collectDefinitionsInto (definitions : List NamedModule) :
       insertDefinition definitions ⟨_, _, .splitter splitter key ports⟩
   | .combiner combiner key ports =>
       insertDefinition definitions ⟨_, _, .combiner combiner key ports⟩
-  | @ModuleNaming.composite body children key ports instanceName childNaming =>
+  | @ModuleNaming.composite body children key ports instanceName childNaming namedWires =>
       let withChildren := body.instancePorts.names.values.foldl
         (fun collected child => collectDefinitionsInto collected (childNaming child))
         definitions
       insertDefinition withChildren
-        ⟨_, _, .composite key ports instanceName childNaming⟩
+        ⟨_, _, .composite key ports instanceName childNaming namedWires⟩
 
 def collectDefinitions (naming : ModuleNaming moduleStructure) : List NamedModule :=
   collectDefinitionsInto [] naming

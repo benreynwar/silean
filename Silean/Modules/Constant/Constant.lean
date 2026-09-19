@@ -636,4 +636,6 @@ noncomputable def place (signalType : SignalType) (value : signalType.Denote) :
     fun impossible => nomatch impossible
   pure (child .output)
 
+attribute [circuit_description] placeNamed place
+
 end Silean.Modules.Constant

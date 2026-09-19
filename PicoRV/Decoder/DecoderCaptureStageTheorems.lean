@@ -1,4 +1,5 @@
 import PicoRV.Decoder.Internal.DecoderCaptureStageVerification
+import PicoRV.Decoder.Internal.DecoderCaptureStageCorrespondence
 
 /-! # Decoder capture-stage theorems
 
@@ -10,6 +11,12 @@ state remain under `Internal/`.
 namespace PicoRV.Decoder.CaptureStage
 
 open Silean
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 section AllowedStep
 

@@ -1,4 +1,5 @@
 import PicoRV.Decoder.Internal.DecoderImmediateVerification
+import PicoRV.Decoder.Internal.DecoderImmediateCorrespondence
 
 /-! # Immediate-decoder theorems
 
@@ -9,6 +10,12 @@ child-level structural proof remain under `Internal/`.
 namespace PicoRV.Decoder.Immediate
 
 open Silean
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 /-- Every contract-allowed step returns the immediate decoder's pure result. -/
 theorem outputs_of_allowed {step : cycleContract.Step}

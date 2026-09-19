@@ -1,4 +1,4 @@
-import PicoRV.Memory
+import PicoRV.MemoryContract
 
 namespace PicoRV.Memory
 

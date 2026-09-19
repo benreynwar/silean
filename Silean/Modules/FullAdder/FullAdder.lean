@@ -1,8 +1,7 @@
-import Silean.Authoring.CircuitDescription
+import Silean.Authoring.CircuitLogic
 import Silean.Authoring.ModuleCycleContract
 import Silean.Modules.FullAdder.Internal.FullAdderStructure
 import Silean.Modules.HalfAdder.HalfAdder
-import Silean.Primitives.Or
 
 /-! # Full adder
 
@@ -19,6 +18,7 @@ namespace Silean.Modules.FullAdder
 open Silean
 open Silean.Authoring
 open Authoring.CircuitDescription
+open scoped Authoring.CircuitLogic
 
 namespace Description
 
@@ -29,11 +29,38 @@ noncomputable def construction : Builder Unit := do
   let operands ← HalfAdder.place left right
   let carry ← HalfAdder.place operands.sum carryIn
   output "sum" carry.sum
-  output "carryOut" (← Primitives.Or.place operands.carry carry.carry)
+  output "carryOut" (← operands.carry ||| carry.carry)
 
 noncomputable def description : Description := build construction
 
 end Description
+
+/-! ## Placement -/
+
+/-- The two nets produced by a placed full adder. -/
+structure PlacedOutputs where
+  sum : Net .bit
+  carryOut : Net .bit
+
+/-- Place a full adder under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Naming.SourceName)
+    (left right carryIn : Net .bit) : Builder PlacedOutputs := do
+  let child ← Authoring.CircuitDescription.placeNamed name design fun
+    | .left => left
+    | .right => right
+    | .carryIn => carryIn
+  pure { sum := child .sum, carryOut := child .carryOut }
+
+/-- Place a full adder using the next conventional indexed name. -/
+noncomputable def place (left right carryIn : Net .bit) :
+    Builder PlacedOutputs := do
+  let child ← placeIndexed "full_adder" design fun
+    | .left => left
+    | .right => right
+    | .carryIn => carryIn
+  pure { sum := child .sum, carryOut := child .carryOut }
+
+attribute [circuit_description] placeNamed place
 
 /-! ## Exact cycle behavior -/
 

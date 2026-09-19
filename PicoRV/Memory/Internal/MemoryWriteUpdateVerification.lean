@@ -4,8 +4,9 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Modules.BitMux.BitMuxTheorems
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Internal.MuxVerification
+import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 import Silean.Primitives.And
 
@@ -22,7 +23,7 @@ module_child_certifications childContracts for body where
   transfer := Silean.Primitives.andCertified.certification,
   falseBit := Silean.Modules.Constant.certification .bit false,
   idleState := Silean.Modules.Constant.certification (.vector 2 .bit) (stateOfNat 0),
-  valid := Silean.Modules.Mux.certification .bit,
+  valid := Silean.Modules.BitMux.certification,
   phase := Silean.Modules.Mux.certification (.vector 2 .bit),
   result := Silean.Modules.NamedTupleCombiner.certification stateMap
 
@@ -33,7 +34,8 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
       Silean.Modules.NamedTupleSplitter.Rule.apply,
     .transfer => Silean.Primitives.AndRule.apply,
     {.falseBit, .idleState} => Silean.Primitives.ConstantRule.apply,
-    {.valid, .phase} => Silean.Modules.Mux.Rule.select,
+    .valid => Silean.Modules.BitMux.Rule.select,
+    .phase => Silean.Modules.Mux.Rule.select,
     .result => Silean.Modules.NamedTupleCombiner.Rule.apply]
   state := []
 
@@ -111,7 +113,7 @@ private theorem implements :
     ((childMatch .idleState).ruleHolds Silean.Primitives.ConstantRule.apply)
   have validValue : hierStep.childOutputs .valid .result =
       bif memXfer memoryInputs current then false else updated .mem_valid := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .valid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [transferValue, updatedFieldsValue, falseValue] at equation

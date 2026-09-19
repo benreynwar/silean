@@ -4,4 +4,4 @@ import PicoRV.DatapathTheorems
 import PicoRV.DecoderTheorems
 import PicoRV.MemoryTheorems
 import PicoRV.RegsTheorems
-import PicoRV.PicoRVSchedule
+import PicoRV.PicoRVTheorems

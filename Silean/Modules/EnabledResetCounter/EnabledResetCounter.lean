@@ -24,10 +24,10 @@ noncomputable def construction (width : Nat) (resetValue : Value width) :
     Builder Unit := do
   let enable ← input "enable" .bit
   let reset ← input "reset" .bit
-  let current ← wire "current" (valueType width)
-  let incremented ← Modules.Increment.placeNamed "increment" current
-  let stored ← Modules.EnabledResetRegister.placeNamed
-    (signalType := valueType width) "storage" resetValue incremented enable reset
+  wire current : valueType width
+  let stored ← Modules.EnabledResetRegister.place
+    (signalType := valueType width) resetValue
+    (← Modules.Increment.place current) enable reset
   assign current stored
   output "value" stored
 
@@ -62,6 +62,8 @@ noncomputable def place (resetValue : Value width) (enable reset : Net .bit) :
     | .enable => enable
     | .reset => reset
   pure (child .value)
+
+attribute [circuit_description] placeNamed place
 
 /-! ## Exact cycle behavior -/
 

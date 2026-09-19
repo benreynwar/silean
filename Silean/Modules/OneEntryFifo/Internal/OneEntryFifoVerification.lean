@@ -264,98 +264,33 @@ namespace Silean.Modules.OneEntryFifo.Description.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
-set_option maxHeartbeats 1000000 in
 private theorem same (signalType : SignalType) :
     some (description signalType) =
       ofNaming (OneEntryFifo.naming signalType) := by
-  simp only [description, construction, build, buildResult,
+  simp only [circuit_description, description, construction,
     EnabledResetRegister.placeNamed, EnabledRegister.placeNamed,
-    OneEntryFifo.Control.placeNamed, Primitives.Or.placeNamed, Mux.placeNamed,
-    EnabledResetRegister.design, EnabledRegister.design,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  simp only [show (inferInstance : Enumeration EnabledResetRegister.Input).values =
-      [.value, .enable, .reset] by rfl,
-    show (inferInstance : Enumeration EnabledRegister.Input).values =
-      [.data, .enable] by rfl,
-    show (inferInstance : Enumeration Control.Input).values =
-      [.storedValid, .downstreamReady] by rfl,
-    show (inferInstance : Enumeration Primitives.BinaryInput).values =
-      [.left, .right] by rfl,
-    show (inferInstance : Enumeration Mux.Input).values =
-      [.select, .whenFalse, .whenTrue] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet,
-    Authoring.CircuitDescription.Internal.findWire?,
-    Authoring.CircuitDescription.Internal.replaceWire]
+    OneEntryFifo.Control.place,
+    EnabledResetRegister.design, EnabledRegister.design]
+  simp [circuit_description, enumeration]
   unfold moduleStructure naming
   simp only [id_eq]
   rw [ofNaming_composite]
   unfold ofCompositeNaming portList
-  rw [show (inferInstance : Enumeration Interfaces.Fifo.Input).values =
-    [.inputValid, .inputData, .outputReady, .reset] by rfl]
-  rw [show (inferInstance : Enumeration Interfaces.Fifo.Output).values =
-    [.outputValid, .outputData, .inputReady] by rfl]
-  rw [show (inferInstance : Enumeration Instance).values =
-    [.validStorage, .dataStorage, .control, .outputValidOr, .outputDataMux] by rfl]
-  simp only [List.map_cons, List.map_nil]
-  rw [show ((body signalType).instancePorts.ports
-      .validStorage).inputs.labels.values = [.value, .enable, .reset] by rfl]
-  rw [show ((body signalType).instancePorts.ports
-      .dataStorage).inputs.labels.values = [.data, .enable] by rfl]
-  rw [show ((body signalType).instancePorts.ports
-      .control).inputs.labels.values = [.storedValid, .downstreamReady] by rfl]
-  rw [show ((body signalType).instancePorts.ports
-      .outputValidOr).inputs.labels.values = [.left, .right] by rfl]
-  rw [show ((body signalType).instancePorts.ports
-      .outputDataMux).inputs.labels.values = [.select, .whenFalse, .whenTrue] by rfl]
+  simp only [enumeration, List.map_cons, List.map_nil]
   dsimp [body, context, instancePorts, structuralChildren, wiring,
     sourceDescription, EnabledResetRegister.design, EnabledRegister.design,
     EndpointContext.moduleInput, EndpointContext.instanceOutput]
   simp [Naming.FifoPorts.ports, Naming.FifoPorts.portsWithNaming,
     Interfaces.Fifo.inputMap, Interfaces.Fifo.outputMap]
+  rfl
 
-set_option maxHeartbeats 1000000 in
 private theorem unique (signalType : SignalType) :
     (description signalType).UniqueNames := by
-  simp only [description, construction, build, buildResult,
+  simp only [circuit_description, description, construction,
     EnabledResetRegister.placeNamed, EnabledRegister.placeNamed,
-    OneEntryFifo.Control.placeNamed, Primitives.Or.placeNamed, Mux.placeNamed,
-    EnabledResetRegister.design, EnabledRegister.design,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  simp only [show (inferInstance : Enumeration EnabledResetRegister.Input).values =
-      [.value, .enable, .reset] by rfl,
-    show (inferInstance : Enumeration EnabledRegister.Input).values =
-      [.data, .enable] by rfl,
-    show (inferInstance : Enumeration Control.Input).values =
-      [.storedValid, .downstreamReady] by rfl,
-    show (inferInstance : Enumeration Primitives.BinaryInput).values =
-      [.left, .right] by rfl,
-    show (inferInstance : Enumeration Mux.Input).values =
-      [.select, .whenFalse, .whenTrue] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet,
-    Authoring.CircuitDescription.Internal.findWire?,
-    Authoring.CircuitDescription.Internal.replaceWire]
+    OneEntryFifo.Control.place,
+    EnabledResetRegister.design, EnabledRegister.design]
+  simp [circuit_description, enumeration]
   refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
   intro child member
   change child ∈ [_, _, _, _, _] at member

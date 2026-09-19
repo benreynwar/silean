@@ -1,4 +1,5 @@
 import PicoRV.Decoder.Internal.DecoderInstructionMatchGateVerification
+import PicoRV.Decoder.Internal.DecoderInstructionMatchGateCorrespondence
 
 /-! # Instruction-match gate theorems
 
@@ -9,6 +10,12 @@ gate. Its two-gate structural proof remains under `Internal/`.
 namespace PicoRV.Decoder.InstructionMatch.MatchGate.Structure
 
 open Silean
+
+/-- The concise authored gate expands to the certified two-AND hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 /-- An allowed match-gate step returns the conjunction of all conditions. -/
 theorem result_of_allowed {step : cycleContract.Step}

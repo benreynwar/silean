@@ -1,324 +1,344 @@
-import PicoRV.Memory.MemoryNextContracts
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.Constant.Constant
+import PicoRV.Authoring.CircuitLogic
+import PicoRV.Memory.Internal.MemoryBasicUpdatesStructure
 import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Primitives.And
-import Silean.Primitives.Not
-import Silean.Primitives.Or
+
+/-! # Memory state-update stages
+
+These small combinational modules are the source-ordered layers used by the
+complete memory transition. Each description exposes the relevant state fields,
+computes one local decision, and updates only the fields owned by that layer.
+The expanded typed structures and their verification live under `Internal/`.
+-/
 
 namespace PicoRV.Memory
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
-module_design ResponseCapture (name := "picorv32_memory_response_capture") where
-  boundary (ResponseCapture.ports) (naming := ResponseCapture.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      MemoryInputs.signalMap MemoryInputs.schema,
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap MemoryState.schema,
-    transfer := Silean.Primitives.andDesign,
-    response := Silean.Modules.Mux.design (.vector 32 .bit),
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap MemoryState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.currentFields) { .value := input.current }
-  instance (.transfer) {
-    .left := currentFields[.mem_valid],
-    .right := inputsFields[.mem_ready] }
-  instance (.response) {
-    .select := transfer.output,
-    .whenFalse := currentFields[.mem_rdata_q],
-    .whenTrue := inputsFields[.mem_rdata] }
-  instance (.result) {
-    .mem_state := currentFields[.mem_state],
-    .mem_valid := currentFields[.mem_valid],
-    .mem_instr := currentFields[.mem_instr],
-    .mem_addr := currentFields[.mem_addr],
-    .mem_wdata := currentFields[.mem_wdata],
-    .mem_wstrb := currentFields[.mem_wstrb],
-    .mem_rdata_q := response.result }
-  }
+namespace ResponseCapture.Description
 
-module_design PhaseDecode (name := "picorv32_memory_phase_decode") where
-  boundary (PhaseDecode.ports) (naming := PhaseDecode.Naming.ports)
-  instances {
-    idleMatch := Silean.Modules.EqualsConstant.design (.vector 2 .bit) (stateOfNat 0),
-    readMatch := Silean.Modules.EqualsConstant.design (.vector 2 .bit) (stateOfNat 1),
-    writeMatch := Silean.Modules.EqualsConstant.design (.vector 2 .bit) (stateOfNat 2),
-    prefetchedMatch := Silean.Modules.EqualsConstant.design (.vector 2 .bit) (stateOfNat 3) }
-  wiring {
-  outputs {
-    .idle := idleMatch.result,
-    .read := readMatch.result,
-    .write := writeMatch.result,
-    .prefetched := prefetchedMatch.result }
-  instance (.idleMatch) { .value := input.mem_state }
-  instance (.readMatch) { .value := input.mem_state }
-  instance (.writeMatch) { .value := input.mem_state }
-  instance (.prefetchedMatch) { .value := input.mem_state }
-  }
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let inputsFields ← split MemoryInputs.layout inputs
+  let currentFields ← split MemoryState.layout current
+  let transfer ← currentFields .mem_valid &&& inputsFields .mem_ready
+  let response ← mux transfer
+    (currentFields .mem_rdata_q) (inputsFields .mem_rdata)
+  output "state" (← update stateMap MemoryState.schema currentFields fun
+    | .mem_rdata_q => some response
+    | _ => none)
 
-module_design IdleUpdate (name := "picorv32_memory_idle_update") where
-  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      MemoryInputs.signalMap MemoryInputs.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap MemoryState.schema,
-    instructionCommand := Silean.Primitives.orDesign,
-    readCommand := Silean.Primitives.orDesign,
-    trueBit := Silean.Modules.Constant.design .bit true,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    zeroMask := Silean.Modules.Constant.design (.vector 4 .bit) (maskOfNat 0),
-    readState := Silean.Modules.Constant.design (.vector 2 .bit) (stateOfNat 1),
-    writeState := Silean.Modules.Constant.design (.vector 2 .bit) (stateOfNat 2),
-    readValid := Silean.Modules.Mux.design .bit,
-    readInstr := Silean.Modules.Mux.design .bit,
-    readMask := Silean.Modules.Mux.design (.vector 4 .bit),
-    readPhase := Silean.Modules.Mux.design (.vector 2 .bit),
-    finalValid := Silean.Modules.Mux.design .bit,
-    finalInstr := Silean.Modules.Mux.design .bit,
-    finalPhase := Silean.Modules.Mux.design (.vector 2 .bit),
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap MemoryState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.instructionCommand) {
-    .left := inputsFields[.mem_do_prefetch],
-    .right := inputsFields[.mem_do_rinst] }
-  instance (.readCommand) {
-    .left := instructionCommand.output,
-    .right := inputsFields[.mem_do_rdata] }
-  instance (.trueBit) {}
-  instance (.falseBit) {}
-  instance (.zeroMask) {}
-  instance (.readState) {}
-  instance (.writeState) {}
-  instance (.readValid) {
-    .select := readCommand.output,
-    .whenFalse := updatedFields[.mem_valid],
-    .whenTrue := trueBit.output }
-  instance (.readInstr) {
-    .select := readCommand.output,
-    .whenFalse := updatedFields[.mem_instr],
-    .whenTrue := instructionCommand.output }
-  instance (.readMask) {
-    .select := readCommand.output,
-    .whenFalse := updatedFields[.mem_wstrb],
-    .whenTrue := zeroMask.output }
-  instance (.readPhase) {
-    .select := readCommand.output,
-    .whenFalse := updatedFields[.mem_state],
-    .whenTrue := readState.output }
-  instance (.finalValid) {
-    .select := inputsFields[.mem_do_wdata],
-    .whenFalse := readValid.result,
-    .whenTrue := trueBit.output }
-  instance (.finalInstr) {
-    .select := inputsFields[.mem_do_wdata],
-    .whenFalse := readInstr.result,
-    .whenTrue := falseBit.output }
-  instance (.finalPhase) {
-    .select := inputsFields[.mem_do_wdata],
-    .whenFalse := readPhase.result,
-    .whenTrue := writeState.output }
-  instance (.result) {
-    .mem_state := finalPhase.result,
-    .mem_valid := finalValid.result,
-    .mem_instr := finalInstr.result,
-    .mem_addr := updatedFields[.mem_addr],
-    .mem_wdata := updatedFields[.mem_wdata],
-    .mem_wstrb := readMask.result,
-    .mem_rdata_q := updatedFields[.mem_rdata_q] }
-  }
+noncomputable def description : Description := build construction
 
-module_design ReadUpdate (name := "picorv32_memory_read_update") where
-  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      MemoryInputs.signalMap MemoryInputs.schema,
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap MemoryState.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap MemoryState.schema,
-    transfer := Silean.Primitives.andDesign,
-    activeRead := Silean.Primitives.orDesign,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    idleState := Silean.Modules.Constant.design (.vector 2 .bit) (stateOfNat 0),
-    prefetchedState := Silean.Modules.Constant.design (.vector 2 .bit) (stateOfNat 3),
-    completedPhase := Silean.Modules.Mux.design (.vector 2 .bit),
-    valid := Silean.Modules.Mux.design .bit,
-    phase := Silean.Modules.Mux.design (.vector 2 .bit),
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap MemoryState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.currentFields) { .value := input.current }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.transfer) {
-    .left := currentFields[.mem_valid],
-    .right := inputsFields[.mem_ready] }
-  instance (.activeRead) {
-    .left := inputsFields[.mem_do_rinst],
-    .right := inputsFields[.mem_do_rdata] }
-  instance (.falseBit) {}
-  instance (.idleState) {}
-  instance (.prefetchedState) {}
-  instance (.completedPhase) {
-    .select := activeRead.output,
-    .whenFalse := prefetchedState.output,
-    .whenTrue := idleState.output }
-  instance (.valid) {
-    .select := transfer.output,
-    .whenFalse := updatedFields[.mem_valid],
-    .whenTrue := falseBit.output }
-  instance (.phase) {
-    .select := transfer.output,
-    .whenFalse := updatedFields[.mem_state],
-    .whenTrue := completedPhase.result }
-  instance (.result) {
-    .mem_state := phase.result,
-    .mem_valid := valid.result,
-    .mem_instr := updatedFields[.mem_instr],
-    .mem_addr := updatedFields[.mem_addr],
-    .mem_wdata := updatedFields[.mem_wdata],
-    .mem_wstrb := updatedFields[.mem_wstrb],
-    .mem_rdata_q := updatedFields[.mem_rdata_q] }
-  }
+end ResponseCapture.Description
 
-module_design WriteUpdate (name := "picorv32_memory_write_update") where
-  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      MemoryInputs.signalMap MemoryInputs.schema,
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap MemoryState.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap MemoryState.schema,
-    transfer := Silean.Primitives.andDesign,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    idleState := Silean.Modules.Constant.design (.vector 2 .bit) (stateOfNat 0),
-    valid := Silean.Modules.Mux.design .bit,
-    phase := Silean.Modules.Mux.design (.vector 2 .bit),
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap MemoryState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.currentFields) { .value := input.current }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.transfer) {
-    .left := currentFields[.mem_valid],
-    .right := inputsFields[.mem_ready] }
-  instance (.falseBit) {}
-  instance (.idleState) {}
-  instance (.valid) {
-    .select := transfer.output,
-    .whenFalse := updatedFields[.mem_valid],
-    .whenTrue := falseBit.output }
-  instance (.phase) {
-    .select := transfer.output,
-    .whenFalse := updatedFields[.mem_state],
-    .whenTrue := idleState.output }
-  instance (.result) {
-    .mem_state := phase.result,
-    .mem_valid := valid.result,
-    .mem_instr := updatedFields[.mem_instr],
-    .mem_addr := updatedFields[.mem_addr],
-    .mem_wdata := updatedFields[.mem_wdata],
-    .mem_wstrb := updatedFields[.mem_wstrb],
-    .mem_rdata_q := updatedFields[.mem_rdata_q] }
-  }
+namespace ResponseCapture
 
-module_design PrefetchedUpdate (name := "picorv32_memory_prefetched_update") where
-  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      MemoryInputs.signalMap MemoryInputs.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap MemoryState.schema,
-    idleState := Silean.Modules.Constant.design (.vector 2 .bit) (stateOfNat 0),
-    phase := Silean.Modules.Mux.design (.vector 2 .bit),
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap MemoryState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.idleState) {}
-  instance (.phase) {
-    .select := inputsFields[.mem_do_rinst],
-    .whenFalse := updatedFields[.mem_state],
-    .whenTrue := idleState.output }
-  instance (.result) {
-    .mem_state := phase.result,
-    .mem_valid := updatedFields[.mem_valid],
-    .mem_instr := updatedFields[.mem_instr],
-    .mem_addr := updatedFields[.mem_addr],
-    .mem_wdata := updatedFields[.mem_wdata],
-    .mem_wstrb := updatedFields[.mem_wstrb],
-    .mem_rdata_q := updatedFields[.mem_rdata_q] }
-  }
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+  pure (child .state)
 
-module_design ResetTrapOverride (name := "picorv32_memory_reset_trap_override") where
-  boundary (ResetTrapOverride.ports) (naming := ResetTrapOverride.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      MemoryInputs.signalMap MemoryInputs.schema,
-    capturedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap MemoryState.schema,
-    notResetn := Silean.Primitives.notDesign,
-    resetOrTrap := Silean.Primitives.orDesign,
-    clearValid := Silean.Primitives.orDesign,
-    falseBit := Silean.Modules.Constant.design .bit false,
-    idleState := Silean.Modules.Constant.design (.vector 2 .bit) (stateOfNat 0),
-    overridePhase := Silean.Modules.Mux.design (.vector 2 .bit),
-    overrideValid := Silean.Modules.Mux.design .bit,
-    overrideValue := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap MemoryState.schema,
-    selected := Silean.Modules.Mux.design stateType }
-  wiring {
-  outputs { .state := selected.result }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.capturedFields) { .value := input.captured }
-  instance (.notResetn) { .input := inputsFields[.resetn] }
-  instance (.resetOrTrap) {
-    .left := notResetn.output,
-    .right := inputsFields[.trap] }
-  instance (.clearValid) {
-    .left := notResetn.output,
-    .right := inputsFields[.mem_ready] }
-  instance (.falseBit) {}
-  instance (.idleState) {}
-  instance (.overridePhase) {
-    .select := inputsFields[.resetn],
-    .whenFalse := idleState.output,
-    .whenTrue := capturedFields[.mem_state] }
-  instance (.overrideValid) {
-    .select := clearValid.output,
-    .whenFalse := capturedFields[.mem_valid],
-    .whenTrue := falseBit.output }
-  instance (.overrideValue) {
-    .mem_state := overridePhase.result,
-    .mem_valid := overrideValid.result,
-    .mem_instr := capturedFields[.mem_instr],
-    .mem_addr := capturedFields[.mem_addr],
-    .mem_wdata := capturedFields[.mem_wdata],
-    .mem_wstrb := capturedFields[.mem_wstrb],
-    .mem_rdata_q := capturedFields[.mem_rdata_q] }
-  instance (.selected) {
-    .select := resetOrTrap.output,
-    .whenFalse := input.normal,
-    .whenTrue := overrideValue.value }
-  }
+noncomputable def place (inputs : Net inputsType) (current : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← placeIndexed "memory_response_capture" design fun
+    | .inputs => inputs
+    | .current => current
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end ResponseCapture
+
+namespace PhaseDecode.Description
+
+noncomputable def construction : Builder Unit := do
+  let state ← input "mem_state" (.vector 2 .bit)
+  let idle ← Silean.Modules.EqualsConstant.place state (stateOfNat 0)
+  let read ← Silean.Modules.EqualsConstant.place state (stateOfNat 1)
+  let write ← Silean.Modules.EqualsConstant.place state (stateOfNat 2)
+  let prefetched ← Silean.Modules.EqualsConstant.place state (stateOfNat 3)
+  output "idle" idle
+  output "read" read
+  output "write" write
+  output "prefetched" prefetched
+
+noncomputable def description : Description := build construction
+
+end PhaseDecode.Description
+
+namespace PhaseDecode
+
+structure PlacedOutputs where
+  idle : Net .bit
+  read : Net .bit
+  write : Net .bit
+  prefetched : Net .bit
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (state : Net (.vector 2 .bit)) : Builder PlacedOutputs := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .mem_state => state
+  pure ⟨child .idle, child .read, child .write, child .prefetched⟩
+
+noncomputable def place (state : Net (.vector 2 .bit)) :
+    Builder PlacedOutputs := do
+  let child ← placeIndexed "memory_phase_decode" design fun
+    | .mem_state => state
+  pure ⟨child .idle, child .read, child .write, child .prefetched⟩
+
+attribute [circuit_description] placeNamed place
+
+end PhaseDecode
+
+namespace IdleUpdate.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let _current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split MemoryInputs.layout inputs
+  let updatedFields ← split MemoryState.layout updated
+  let instructionCommand ←
+    inputsFields .mem_do_prefetch ||| inputsFields .mem_do_rinst
+  let readCommand ← instructionCommand ||| inputsFields .mem_do_rdata
+  let trueBit ← constant .bit true
+  let falseBit ← constant .bit false
+  let zeroMask ← constant (.vector 4 .bit) (maskOfNat 0)
+  let readState ← constant (.vector 2 .bit) (stateOfNat 1)
+  let writeState ← constant (.vector 2 .bit) (stateOfNat 2)
+  let readValid ← mux readCommand (updatedFields .mem_valid) trueBit
+  let readInstr ← mux readCommand (updatedFields .mem_instr) instructionCommand
+  let readMask ← mux readCommand (updatedFields .mem_wstrb) zeroMask
+  let readPhase ← mux readCommand (updatedFields .mem_state) readState
+  let finalValid ← mux (inputsFields .mem_do_wdata) readValid trueBit
+  let finalInstr ← mux (inputsFields .mem_do_wdata) readInstr falseBit
+  let finalPhase ← mux (inputsFields .mem_do_wdata) readPhase writeState
+  output "state" (← update stateMap MemoryState.schema updatedFields fun
+    | .mem_state => some finalPhase
+    | .mem_valid => some finalValid
+    | .mem_instr => some finalInstr
+    | .mem_wstrb => some readMask
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end IdleUpdate.Description
+
+namespace IdleUpdate
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "memory_idle_update" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end IdleUpdate
+
+namespace ReadUpdate.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split MemoryInputs.layout inputs
+  let currentFields ← split MemoryState.layout current
+  let updatedFields ← split MemoryState.layout updated
+  let transfer ← currentFields .mem_valid &&& inputsFields .mem_ready
+  let activeRead ← inputsFields .mem_do_rinst ||| inputsFields .mem_do_rdata
+  let falseBit ← constant .bit false
+  let idleState ← constant (.vector 2 .bit) (stateOfNat 0)
+  let prefetchedState ← constant (.vector 2 .bit) (stateOfNat 3)
+  let completedPhase ← mux activeRead prefetchedState idleState
+  let valid ← mux transfer (updatedFields .mem_valid) falseBit
+  let phase ← mux transfer (updatedFields .mem_state) completedPhase
+  output "state" (← update stateMap MemoryState.schema updatedFields fun
+    | .mem_state => some phase
+    | .mem_valid => some valid
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end ReadUpdate.Description
+
+namespace ReadUpdate
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "memory_read_update" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end ReadUpdate
+
+namespace WriteUpdate.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split MemoryInputs.layout inputs
+  let currentFields ← split MemoryState.layout current
+  let updatedFields ← split MemoryState.layout updated
+  let transfer ← currentFields .mem_valid &&& inputsFields .mem_ready
+  let falseBit ← constant .bit false
+  let idleState ← constant (.vector 2 .bit) (stateOfNat 0)
+  let valid ← mux transfer (updatedFields .mem_valid) falseBit
+  let phase ← mux transfer (updatedFields .mem_state) idleState
+  output "state" (← update stateMap MemoryState.schema updatedFields fun
+    | .mem_state => some phase
+    | .mem_valid => some valid
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end WriteUpdate.Description
+
+namespace WriteUpdate
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "memory_write_update" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end WriteUpdate
+
+namespace PrefetchedUpdate.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let _current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split MemoryInputs.layout inputs
+  let updatedFields ← split MemoryState.layout updated
+  let idleState ← constant (.vector 2 .bit) (stateOfNat 0)
+  let phase ← mux (inputsFields .mem_do_rinst)
+    (updatedFields .mem_state) idleState
+  output "state" (← update stateMap MemoryState.schema updatedFields fun
+    | .mem_state => some phase
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end PrefetchedUpdate.Description
+
+namespace PrefetchedUpdate
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "memory_prefetched_update" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end PrefetchedUpdate
+
+namespace ResetTrapOverride.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let captured ← input "captured" stateType
+  let normal ← input "normal" stateType
+  let inputsFields ← split MemoryInputs.layout inputs
+  let capturedFields ← split MemoryState.layout captured
+  let notResetn ← !! (inputsFields .resetn)
+  let resetOrTrap ← notResetn ||| inputsFields .trap
+  let clearValid ← notResetn ||| inputsFields .mem_ready
+  let falseBit ← constant .bit false
+  let idleState ← constant (.vector 2 .bit) (stateOfNat 0)
+  let overridePhase ← mux (inputsFields .resetn)
+    idleState (capturedFields .mem_state)
+  let overrideValid ← mux clearValid (capturedFields .mem_valid) falseBit
+  let overrideValue ← update stateMap MemoryState.schema capturedFields fun
+    | .mem_state => some overridePhase
+    | .mem_valid => some overrideValid
+    | _ => none
+  output "state" (← mux resetOrTrap normal overrideValue)
+
+noncomputable def description : Description := build construction
+
+end ResetTrapOverride.Description
+
+namespace ResetTrapOverride
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (captured normal : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .captured => captured
+    | .normal => normal
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (captured normal : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "memory_reset_trap_override" design fun
+    | .inputs => inputs
+    | .captured => captured
+    | .normal => normal
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end ResetTrapOverride
 
 end PicoRV.Memory

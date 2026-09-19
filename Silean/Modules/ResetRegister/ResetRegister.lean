@@ -1,4 +1,5 @@
-import Silean.Authoring.CircuitDescription
+import Silean.Authoring.CircuitLogic
+import Silean.Authoring.CircuitSelection
 import Silean.Authoring.ModuleCycleContract
 import Silean.Modules.ResetRegister.Internal.ResetRegisterStructure
 
@@ -18,16 +19,15 @@ namespace Silean.Modules.ResetRegister.Description
 
 open Silean
 open Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitLogic
 
 /-- The reset value, mux, and register that make up a reset register. -/
 noncomputable def construction (signalType : SignalType)
     (resetValue : signalType.Denote) : Builder Unit := do
   let value <- input "value" signalType
   let reset <- input "reset" .bit
-  let constant <- Modules.Constant.placeNamed "resetValue" signalType resetValue
-  let selected <- Modules.Mux.placeNamed "selection" reset value constant
-  let stored <- Modules.Register.placeNamed "storage" selected
-  output "value_out" stored
+  output "value_out"
+    (← Modules.Register.place (← mux reset value (← constant signalType resetValue)))
 
 noncomputable def description (signalType : SignalType)
     (resetValue : signalType.Denote) : Description :=
@@ -60,6 +60,8 @@ noncomputable def place (resetValue : signalType.Denote)
     | .value => value
     | .reset => reset
   pure (child .value)
+
+attribute [circuit_description] placeNamed place
 
 /-! ## Exact cycle behavior -/
 

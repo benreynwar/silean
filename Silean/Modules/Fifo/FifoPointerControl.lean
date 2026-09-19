@@ -1,11 +1,12 @@
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitLogic
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Modules.Equality.Equality
 import Silean.Primitives
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Composition.SignalLogic
+import Silean.Modules.Fifo.Internal.FifoPointerControlStructure
 
 namespace Silean.Modules.Fifo.PointerControl
 
@@ -16,15 +17,6 @@ open Contracts.Cycle.Certification.Layer
 /-! Combinational control for a FIFO built from a power-of-two register bank.
 It derives storage addresses, empty/full status, valid/ready signals, and
 pointer advances from extended read and write pointers. -/
-
-abbrev Pointer (addressWidth : Nat) := Fin (addressWidth + 1) → Bool
-abbrev Address (addressWidth : Nat) := Fin addressWidth → Bool
-
-@[reducible] def pointerType (addressWidth : Nat) : SignalType :=
-  .vector (addressWidth + 1) .bit
-
-@[reducible] def addressType (addressWidth : Nat) : SignalType :=
-  .vector addressWidth .bit
 
 def pointerAddress (pointer : Pointer addressWidth) : Address addressWidth :=
   fun index => pointer index.castSucc
@@ -61,18 +53,6 @@ def readAdvance (readPointer writePointer : Pointer addressWidth)
 def writeAdvance (readPointer writePointer : Pointer addressWidth)
     (upstreamValid : Bool) : Bool :=
   upstreamValid && inputReady readPointer writePointer
-
-module_ports ports (addressWidth : Nat) where
-  input readPointer : pointerType addressWidth,
-  input writePointer : pointerType addressWidth,
-  input inputValid : .bit,
-  input outputReady : .bit,
-  output readAddress : addressType addressWidth,
-  output writeAddress : addressType addressWidth,
-  output inputReady : .bit,
-  output outputValid : .bit,
-  output readAdvance : .bit,
-  output writeAdvance : .bit
 
 module_cycle_contract cycleContract (addressWidth : Nat) for ports addressWidth where
   state := emptySignalMap
@@ -235,76 +215,94 @@ theorem writeAdvance_eq_true_iff (readPointer writePointer : Pointer addressWidt
       upstreamValid = true ∧ inputReady readPointer writePointer = true := by
   simp [writeAdvance]
 
-def pointerSplitter (addressWidth : Nat) : Composition.SignalSplitter :=
-  .vector (addressWidth + 1) .bit
+/-! ## Authored hardware -/
 
-def addressCombiner (addressWidth : Nat) : Composition.SignalCombiner :=
-  .vector addressWidth .bit
+namespace Description
+
+open Authoring.CircuitDescription
+open Authoring.CircuitLogic
+open scoped Authoring.CircuitLogic
+
+noncomputable def construction (addressWidth : Nat) : Builder Unit := do
+  let readPointer ← input "readPointer" (pointerType addressWidth)
+  let writePointer ← input "writePointer" (pointerType addressWidth)
+  let inputValid ← input "inputValid" .bit
+  let outputReady ← input "outputReady" .bit
+
+  let readSplit ← split (pointerSplitter addressWidth) readPointer
+  let writeSplit ← split (pointerSplitter addressWidth) writePointer
+  let readAddress ← combine (addressCombiner addressWidth)
+    (fun index => readSplit index.castSucc)
+  let writeAddress ← combine (addressCombiner addressWidth)
+    (fun index => writeSplit index.castSucc)
+  let readWrap : Net .bit := readSplit (Fin.last addressWidth)
+  let writeWrap : Net .bit := writeSplit (Fin.last addressWidth)
+
+  wire addressesEqual ← readAddress === writeAddress
+  wire wrapsEqual ← readWrap === writeWrap
+  let inputReady ← !! (← addressesEqual &&& (← !! wrapsEqual))
+  let outputValid ← !! (← addressesEqual &&& wrapsEqual)
+
+  output "readAddress" readAddress
+  output "writeAddress" writeAddress
+  output "inputReady" inputReady
+  output "outputValid" outputValid
+  output "readAdvance" (← outputValid &&& outputReady)
+  output "writeAdvance" (← inputValid &&& inputReady)
+
+noncomputable def description (addressWidth : Nat) : Description :=
+  build (construction addressWidth)
+
+end Description
+
+/-! ## Placement -/
+
+open Authoring.CircuitDescription
+
+/-- Outputs produced by a placed pointer controller. -/
+structure PlacedOutputs (addressWidth : Nat) where
+  readAddress : Net (addressType addressWidth)
+  writeAddress : Net (addressType addressWidth)
+  inputReady : Net .bit
+  outputValid : Net .bit
+  readAdvance : Net .bit
+  writeAdvance : Net .bit
+
+/-- Place a pointer controller under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Naming.SourceName)
+    (readPointer writePointer : Net (pointerType addressWidth))
+    (inputValid outputReady : Net .bit) : Builder (PlacedOutputs addressWidth) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design addressWidth) fun
+      | .readPointer => readPointer
+      | .writePointer => writePointer
+      | .inputValid => inputValid
+      | .outputReady => outputReady
+  pure {
+    readAddress := child .readAddress
+    writeAddress := child .writeAddress
+    inputReady := child .inputReady
+    outputValid := child .outputValid
+    readAdvance := child .readAdvance
+    writeAdvance := child .writeAdvance }
+
+/-- Place a pointer controller using the next conventional indexed name. -/
+noncomputable def place
+    (readPointer writePointer : Net (pointerType addressWidth))
+    (inputValid outputReady : Net .bit) : Builder (PlacedOutputs addressWidth) := do
+  let child ← placeIndexed "fifo_pointer_control" (design addressWidth) fun
+    | .readPointer => readPointer
+    | .writePointer => writePointer
+    | .inputValid => inputValid
+    | .outputReady => outputReady
+  pure {
+    readAddress := child .readAddress
+    writeAddress := child .writeAddress
+    inputReady := child .inputReady
+    outputValid := child .outputValid
+    readAdvance := child .readAdvance
+    writeAdvance := child .writeAdvance }
+
+attribute [circuit_description] placeNamed place
+
 end Silean.Modules.Fifo.PointerControl
-
-namespace Silean.Modules.Fifo
-
-open Silean
-open Silean.Authoring
-
-module_design PointerControl (addressWidth : Nat) where
-  boundary (PointerControl.ports addressWidth)
-    (naming := PointerControl.Naming.ports addressWidth)
-  instances {
-    -- Split each extended pointer into address and wrap bits.
-    readSplit := Naming.SignalAdapter.splitterDesign
-      (PointerControl.pointerSplitter addressWidth),
-    writeSplit := Naming.SignalAdapter.splitterDesign
-      (PointerControl.pointerSplitter addressWidth),
-    -- Reassemble the low bits as storage addresses.
-    readAddress (name := "readAddressCombiner") := Naming.SignalAdapter.combinerDesign
-      (PointerControl.addressCombiner addressWidth),
-    writeAddress (name := "writeAddressCombiner") := Naming.SignalAdapter.combinerDesign
-      (PointerControl.addressCombiner addressWidth),
-    -- Derive empty, full, ready, valid, and transfer conditions.
-    addressEquality := Equality.design
-      (PointerControl.addressType addressWidth),
-    wrapEquality := Primitives.eqDesign,
-    wrapDifference := Primitives.notDesign,
-    emptyGate := Primitives.andDesign,
-    fullGate := Primitives.andDesign,
-    readyInverter := Primitives.notDesign,
-    validInverter := Primitives.notDesign,
-    readGate := Primitives.andDesign,
-    writeGate := Primitives.andDesign }
-  wiring {
-    outputs {
-      .readAddress := readAddress.value,
-      .writeAddress := writeAddress.value,
-      .inputReady := readyInverter.output,
-      .outputValid := validInverter.output,
-      .readAdvance := readGate.output,
-      .writeAdvance := writeGate.output }
-    instance (.readSplit) { .value := input.readPointer }
-    instance (.writeSplit) { .value := input.writePointer }
-    instance (.readAddress) { index := readSplit[index.castSucc] }
-    instance (.writeAddress) { index := writeSplit[index.castSucc] }
-    instance (.addressEquality) {
-      .left := readAddress.value,
-      .right := writeAddress.value }
-    instance (.wrapEquality) {
-      .left := readSplit[Fin.last addressWidth],
-      .right := writeSplit[Fin.last addressWidth] }
-    instance (.wrapDifference) { .input := wrapEquality.output }
-    instance (.emptyGate) {
-      .left := addressEquality.result,
-      .right := wrapEquality.output }
-    instance (.fullGate) {
-      .left := addressEquality.result,
-      .right := wrapDifference.output }
-    instance (.readyInverter) { .input := fullGate.output }
-    instance (.validInverter) { .input := emptyGate.output }
-    instance (.readGate) {
-      .left := validInverter.output,
-      .right := input.outputReady }
-    instance (.writeGate) {
-      .left := input.inputValid,
-      .right := readyInverter.output }
-  }
-
-end Silean.Modules.Fifo

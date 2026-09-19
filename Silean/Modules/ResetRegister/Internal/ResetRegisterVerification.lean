@@ -137,71 +137,34 @@ private theorem same (signalType : SignalType)
     (resetValue : signalType.Denote) :
     some (description signalType resetValue) =
       ofNaming (ResetRegister.naming signalType resetValue) := by
-  simp only [description, construction, build, buildResult,
-    Constant.placeNamed, Constant.design, Constant.designWith,
-    Mux.placeNamed, Register.placeNamed, Register.design, Register.designWith,
-    Naming.ModuleNaming.ports_withPorts,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-    [.select, .whenFalse, .whenTrue] by rfl]
-  rw [show (inferInstance : Enumeration NoSignal).values = [] by rfl]
-  rw [show (inferInstance : Enumeration Primitives.UnaryInput).values = [.input] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet]
+  simp only [circuit_description, description, construction,
+    Constant.design, Constant.designWith,
+    Register.place, Register.design, Register.designWith,
+    Naming.ModuleNaming.ports_withPorts]
+  simp [circuit_description, enumeration]
   unfold moduleStructure
   unfold naming
   simp only [id_eq]
   rw [ofNaming_composite]
   unfold ofCompositeNaming
   unfold portList
-  rw [show (inferInstance : Enumeration Input).values = [.value, .reset] by rfl]
-  rw [show (inferInstance : Enumeration Output).values = [.value] by rfl]
-  rw [show (inferInstance : Enumeration Instance).values =
-    [.resetValue, .selection, .storage] by rfl]
-  simp only [List.map_cons, List.map_nil]
-  rw [show (inferInstance : Enumeration NoSignal).values = [] by rfl]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-    [.select, .whenFalse, .whenTrue] by rfl]
+  simp only [enumeration, List.map_cons, List.map_nil]
   rw [show ((body signalType resetValue).instancePorts.ports
       .storage).inputs.labels.values = [.input] by rfl]
   dsimp [Naming.ports, body, context, instancePorts, structuralChildren, wiring,
     sourceDescription, Constant.design, Constant.designWith,
     Register.design, Register.designWith, EndpointContext.moduleInput,
     EndpointContext.instanceOutput]
-  simp [Naming.portsWithNaming, inputMap, outputMap, ports]
+  simp [enumeration, inputMap, outputMap, ports]
 
 private theorem unique (signalType : SignalType)
     (resetValue : signalType.Denote) :
     (description signalType resetValue).UniqueNames := by
-  simp only [description, construction, build, buildResult,
-    Constant.placeNamed, Constant.design, Constant.designWith,
-    Mux.placeNamed, Register.placeNamed, Register.design, Register.designWith,
-    Naming.ModuleNaming.ports_withPorts,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-    [.select, .whenFalse, .whenTrue] by rfl]
-  rw [show (inferInstance : Enumeration NoSignal).values = [] by rfl]
-  rw [show (inferInstance : Enumeration Primitives.UnaryInput).values = [.input] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet]
+  simp only [circuit_description, description, construction,
+    Constant.design, Constant.designWith,
+    Register.place, Register.design, Register.designWith,
+    Naming.ModuleNaming.ports_withPorts]
+  simp [circuit_description, enumeration]
   refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
   intro child member
   change child ∈ [_, _, _] at member

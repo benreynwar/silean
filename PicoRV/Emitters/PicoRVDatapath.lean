@@ -1,5 +1,5 @@
 import Silean.FIRRTL.Emit
-import PicoRV.DatapathTheorems
+import PicoRV.Datapath
 
 def main (args : List String) : IO Unit :=
   Silean.FIRRTL.emitMain "emit-picorv-datapath" args

@@ -1,5 +1,5 @@
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.CircuitDescription
+import Silean.Authoring.CircuitSelection
 import Silean.Modules.EnabledResetRegister.Internal.EnabledResetRegisterStructure
 import Silean.Modules.Mux.Mux
 import Silean.Modules.ResetRegister.ResetRegister
@@ -17,18 +17,18 @@ namespace Silean.Modules.EnabledResetRegister.Description
 
 open Silean
 open Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitLogic
 
-/-- A Verilog-style description of the feedback path. `stored` is a draft-only
-wire: finalization resolves it to the reset register's output before the
-description is compared with the typed production structure. -/
+/-- A Verilog-style description of the feedback path. Finalization resolves
+the forward-declared `stored` wire to the reset register's output while
+retaining its name for emission and correspondence checking. -/
 noncomputable def construction (signalType : SignalType)
     (resetValue : signalType.Denote) : Builder Unit := do
   let value <- input "value" signalType
   let enable <- input "enable" .bit
   let reset <- input "reset" .bit
-  let stored <- wire "stored" signalType
-  let selected <- Mux.placeNamed "selection" enable stored value
-  let current <- ResetRegister.placeNamed "storage" resetValue selected reset
+  wire stored : signalType
+  let current <- ResetRegister.place resetValue (← mux enable stored value) reset
   assign stored current
   output "value_out" current
 
@@ -67,6 +67,8 @@ noncomputable def place (resetValue : signalType.Denote)
       | .enable => enable
       | .reset => reset
   pure (child .value)
+
+attribute [circuit_description] placeNamed place
 
 /-! ## Exact cycle behavior -/
 

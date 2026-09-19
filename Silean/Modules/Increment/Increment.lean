@@ -430,4 +430,6 @@ noncomputable def place (value : Net (.vector width .bit)) :
     | .value => value
   pure (child .result)
 
+attribute [circuit_description] placeNamed place
+
 end Silean.Modules.Increment

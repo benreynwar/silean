@@ -1,4 +1,5 @@
 import PicoRV.Memory.Internal.MemoryLookaheadVerification
+import PicoRV.Memory.Internal.MemoryLookaheadCorrespondence
 
 /-! # Memory Lookahead theorems
 
@@ -9,6 +10,12 @@ witness construction remain under the Internal directory.
 namespace PicoRV.Memory.Lookahead
 
 open Silean
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 /-- All five look-ahead outputs exposed by an allowed boundary step. -/
 theorem outputs_of_allowed {step : cycleContract.Step}

@@ -12,7 +12,7 @@ buffering paths and make returned data belong to the cycle in which
 `mem_valid && mem_ready` is true.
 
 The goal is a closed, stateful `PicoRVMemory` structure universally certified
-against the existing contract in `Memory.lean`. This is a cycle-accurate
+against the existing contract in `MemoryContract.lean`. This is a cycle-accurate
 implementation of the core side of PicoRV32's memory protocol. It is not a
 memory model and does not impose latency, address-map, or response assumptions
 on the external environment.

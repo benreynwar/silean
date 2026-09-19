@@ -1,4 +1,5 @@
 import PicoRV.Control.Internal.ControlNextVerification
+import PicoRV.Control.Internal.ControlNextCorrespondence
 import PicoRV.Control.ControlAlignmentTheorems
 import PicoRV.Control.ControlBaselineTheorems
 import PicoRV.Control.ControlCommandFinishTheorems
@@ -20,6 +21,12 @@ hierarchy. Its phase children, schedule, and structural proof remain internal.
 -/
 
 namespace PicoRV.Control.ControlNext
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 open Silean
 

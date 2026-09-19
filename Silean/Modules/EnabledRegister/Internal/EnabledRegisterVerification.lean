@@ -120,65 +120,25 @@ open Silean Naming Authoring.CircuitDescription
 private theorem same (signalType : SignalType) :
     some (description signalType) =
       ofNaming (EnabledRegister.naming signalType) := by
-  simp only [description, construction, build, buildResult,
-    Mux.placeNamed, Register.placeNamed, Register.design, Register.designWith,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-    [.select, .whenFalse, .whenTrue] by rfl]
-  rw [show (inferInstance : Enumeration Primitives.UnaryInput).values = [.input] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet,
-    Authoring.CircuitDescription.Internal.findWire?,
-    Authoring.CircuitDescription.Internal.replaceWire]
+  simp only [circuit_description, description, construction,
+    Register.place, Register.design, Register.designWith]
+  simp [circuit_description, enumeration]
   unfold moduleStructure naming
   simp only [id_eq]
   rw [ofNaming_composite]
   unfold ofCompositeNaming portList
-  rw [show (inferInstance : Enumeration Input).values = [.data, .enable] by rfl]
-  rw [show (inferInstance : Enumeration Output).values = [.q] by rfl]
-  rw [show (inferInstance : Enumeration Instance).values = [.selection, .storage] by rfl]
-  simp only [List.map_cons, List.map_nil]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-    [.select, .whenFalse, .whenTrue] by rfl]
-  rw [show ((body signalType).instancePorts.ports .storage).inputs.labels.values =
-    [.input] by rfl]
+  simp only [enumeration, List.map_cons, List.map_nil]
   dsimp [Naming.ports, body, context, instancePorts, structuralChildren, wiring,
     sourceDescription, Register.design, Register.designWith,
     EndpointContext.moduleInput, EndpointContext.instanceOutput]
-  simp [Naming.portsWithNaming, inputMap, outputMap, ports]
+  simp [inputMap, outputMap, ports]
+  rfl
 
 private theorem unique (signalType : SignalType) :
     (description signalType).UniqueNames := by
-  simp only [description, construction, build, buildResult,
-    Mux.placeNamed, Register.placeNamed, Register.design, Register.designWith,
-    Authoring.CircuitDescription.placeNamed,
-    Authoring.CircuitDescription.input, Authoring.CircuitDescription.output,
-    Authoring.CircuitDescription.wire, Authoring.CircuitDescription.assign,
-    Authoring.CircuitDescription.bind_apply,
-    Authoring.CircuitDescription.pure_apply]
-  rw [show (inferInstance : Enumeration Mux.Input).values =
-    [.select, .whenFalse, .whenTrue] by rfl]
-  rw [show (inferInstance : Enumeration Primitives.UnaryInput).values = [.input] by rfl]
-  simp [Authoring.CircuitDescription.Internal.finalizeDraft,
-    Authoring.CircuitDescription.Internal.validateWireDrivers,
-    Authoring.CircuitDescription.Internal.validateWireSources,
-    Authoring.CircuitDescription.Internal.finalizeConnections,
-    Authoring.CircuitDescription.Internal.finalizeConnection,
-    Authoring.CircuitDescription.Internal.finalizeChildren,
-    Authoring.CircuitDescription.Internal.finalizeChild,
-    Authoring.CircuitDescription.Internal.resolveNet,
-    Authoring.CircuitDescription.Internal.findWire?,
-    Authoring.CircuitDescription.Internal.replaceWire]
+  simp only [circuit_description, description, construction,
+    Register.place, Register.design, Register.designWith]
+  simp [circuit_description, enumeration]
   refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
   intro child member
   change child ∈ [_, _] at member

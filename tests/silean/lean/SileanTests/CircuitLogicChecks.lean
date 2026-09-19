@@ -60,9 +60,9 @@ private noncomputable def notOrDescription := build do
   let inverted ← !! left
   output "result" (← inverted ||| right)
 
--- The other two operators place Not and BitwiseOr respectively.
+-- On bits, the other two operators place primitive Not and OR gates.
 example : notOrDescription.children.map (fun child => child.name) =
-    [.indexed "not" 0, .indexed "bitwise_or" 0] := rfl
+    [.indexed "not" 0, .indexed "or" 0] := rfl
 
 end SileanTests.CircuitLogic
 
@@ -121,61 +121,65 @@ namespace SileanTests.CircuitLogic.Wires
 open Silean
 open Silean.Authoring.CircuitDescription
 
-/-! These examples exercise the draft-only wire layer. A successful build
-contains ordinary resolved `Source` values; invalid drafts retain a precise
-error through `buildResult`. -/
+/-! These examples exercise forward-declared wires. A successful build retains
+their names but contains only resolved `Source` values; invalid drafts retain a
+precise error through `buildResult`. -/
 
 private def directWire := buildResult do
   let source <- input "source" .bit
-  let result <- wire "result" .bit
+  wire result : .bit
   assign result source
   output "result" result
 
--- A declared wire disappears after its unique driver is resolved.
+-- A forward-declared wire resolves to its unique source and retains its name.
 example : directWire = .ok
     { inputs := [{ name := "source", signalType := .bit }]
-      outputs := [⟨⟨"result", .bit⟩, .input "source"⟩] } := by
+      outputs := [⟨⟨"result", .bit⟩, .input "source"⟩]
+      namedWires := [⟨"result", .bit, .input "source"⟩] } := by
   rfl
 
 private def wireChain := buildResult do
   let source <- input "source" .bit
-  let first <- wire "first" .bit
-  let second <- wire "second" .bit
+  wire first : .bit
+  wire second : .bit
   assign first source
   assign second first
   output "result" second
 
--- Alias chains resolve transitively to the underlying input or child output.
+-- Wire chains resolve transitively while retaining each declared name.
 example : wireChain = .ok
     { inputs := [{ name := "source", signalType := .bit }]
-      outputs := [⟨⟨"result", .bit⟩, .input "source"⟩] } := by
+      outputs := [⟨⟨"result", .bit⟩, .input "source"⟩]
+      namedWires := [⟨"first", .bit, .input "source"⟩,
+        ⟨"second", .bit, .input "source"⟩] } := by
   rfl
 
 -- Every declared wire must have exactly one driver, even if it is unused.
 example : (buildResult do
-    let _ <- wire "missing" .bit
-    pure ()) = .error (.undrivenWire "missing") := by
+    wire missing : .bit
+    output "result" missing) = .error (.undrivenWire "missing") := by
   rfl
 
 example : (buildResult do
     let source <- input "source" .bit
-    let result <- wire "result" .bit
+    wire result : .bit
     assign result source
     assign result source) = .error (.multiplyDrivenWire "result") := by
   rfl
 
 example : (buildResult do
-    let _ <- wire "same" .bit
-    let _ <- wire "same" .bit
-    pure ()) = .error .duplicateWireName := by
+    let _ ← Silean.Authoring.CircuitDescription.wire "same" .bit
+    wire same : .bit
+    output "result" same) = .error .duplicateWireName := by
   rfl
 
 -- A cycle made only from wire aliases has no structural source to resolve to.
 example : (buildResult do
-    let first <- wire "first" .bit
-    let second <- wire "second" .bit
+    wire first : .bit
+    wire second : .bit
     assign first second
-    assign second first) = .error .wireAliasCycle := by
+    assign second first
+    output "result" first) = .error .wireAliasCycle := by
   rfl
 
 -- Inputs and child outputs are sources, not legal assignment destinations.
@@ -185,3 +189,46 @@ example : (buildResult do
   rfl
 
 end SileanTests.CircuitLogic.Wires
+
+namespace SileanTests.CircuitLogic.ImmediateWires
+
+open Silean
+open Silean.Authoring.CircuitDescription
+open scoped Silean.Authoring.CircuitLogic
+
+private noncomputable def immediateWire := buildResult do
+  let source ← input "source" .bit
+  wire inverted ← !! source
+  output "result" inverted
+
+-- The inferred form binds the net and records the binder spelling against its
+-- resolved source without inserting another child or structural endpoint.
+example : immediateWire = .ok
+    { inputs := [{ name := "source", signalType := .bit }]
+      outputs := [⟨⟨"result", .bit⟩, .child (.indexed "not" 0) "out"⟩]
+      children := [{
+        name := .indexed "not" 0
+        module := Silean.Primitives.notDesign
+        inputs := [⟨⟨"in", .bit⟩, .input "source"⟩] }]
+      namedWires := [⟨"inverted", .bit, .child (.indexed "not" 0) "out"⟩] } := by
+  rfl
+
+-- The annotated immediate form checks the declared signal type.
+example : (buildResult do
+    let source ← input "source" .bit
+    wire observed : .bit ← pure source
+    output "result" observed) = .ok
+      { inputs := [⟨"source", .bit⟩]
+        outputs := [⟨⟨"result", .bit⟩, .input "source"⟩]
+        namedWires := [⟨"observed", .bit, .input "source"⟩] } := by
+  rfl
+
+-- Duplicate wire names are rejected across immediate declarations.
+example : (buildResult do
+    let source ← input "source" .bit
+    wire observed ← pure source
+    wire observed ← pure observed
+    output "result" observed) = .error .duplicateWireName := by
+  rfl
+
+end SileanTests.CircuitLogic.ImmediateWires

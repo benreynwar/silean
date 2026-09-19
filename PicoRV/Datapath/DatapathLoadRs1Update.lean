@@ -1,116 +1,94 @@
-import PicoRV.Datapath.DatapathNextContracts
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import PicoRV.Authoring.CircuitLogic
+import PicoRV.Datapath.Internal.DatapathLoadRs1UpdateStructure
 import Silean.Modules.VectorLayout.VectorLayout
 
 namespace PicoRV.Datapath
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
 
-def LoadRs1Update.lowFiveLayout (index : Fin 5) :
-    Silean.Modules.VectorLayout.BitSource 32 := .input ⟨index.val, by omega⟩
+/-! # First-operand capture
 
-/-! Operand capture with the exact source priority. The mux chains are built
-from the default case upward, ending with `instr_trap`, so overlaps have the
-same meaning as the Verilog `case (1'b1)`. -/
-module_design LoadRs1Update (name := "picorv32_datapath_load_rs1_update") where
-  boundary (StateUpdate.ports) (naming := StateUpdate.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      DatapathInputs.signalMap DatapathInputs.schema,
-    currentFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    updatedFields := Silean.Modules.NamedTupleSplitter.designWith
-      stateMap DatapathState.schema,
-    zeroWord := Silean.Modules.Constant.design (.vector 32 .bit) (wordOfNat 0),
-    lowFiveRs2 := Silean.Modules.VectorLayout.design 32 5 LoadRs1Update.lowFiveLayout,
-    luiOperand := Silean.Modules.Mux.design (.vector 32 .bit),
-    selectedOp1 := Silean.Modules.Mux.design (.vector 32 .bit),
-    trapOp1 := Silean.Modules.Mux.design (.vector 32 .bit),
-    op2Immediate := Silean.Modules.Mux.design (.vector 32 .bit),
-    op2Shift := Silean.Modules.Mux.design (.vector 32 .bit),
-    op2Load := Silean.Modules.Mux.design (.vector 32 .bit),
-    op2Lui := Silean.Modules.Mux.design (.vector 32 .bit),
-    trapOp2 := Silean.Modules.Mux.design (.vector 32 .bit),
-    shiftImmediate := Silean.Modules.Mux.design (.vector 5 .bit),
-    shiftLoad := Silean.Modules.Mux.design (.vector 5 .bit),
-    shiftLui := Silean.Modules.Mux.design (.vector 5 .bit),
-    trapShift := Silean.Modules.Mux.design (.vector 5 .bit),
-    finalShift := Silean.Modules.Mux.design (.vector 5 .bit),
-    result := Silean.Modules.NamedTupleCombiner.designWith
-      stateMap DatapathState.schema }
-  wiring {
-  outputs { .state := result.value }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.currentFields) { .value := input.current }
-  instance (.updatedFields) { .value := input.updated }
-  instance (.zeroWord) {}
-  instance (.lowFiveRs2) { .input := inputsFields[.cpuregs_rs2] }
-  instance (.luiOperand) {
-    .select := inputsFields[.instr_lui],
-    .whenFalse := currentFields[.reg_pc],
-    .whenTrue := zeroWord.output }
-  instance (.selectedOp1) {
-    .select := inputsFields[.is_lui_auipc_jal],
-    .whenFalse := inputsFields[.cpuregs_rs1],
-    .whenTrue := luiOperand.result }
-  instance (.trapOp1) {
-    .select := inputsFields[.instr_trap],
-    .whenFalse := selectedOp1.result,
-    .whenTrue := updatedFields[.reg_op1] }
+The mux chains are written from the default case upward and end with the trap
+case. That order is the priority of the Verilog `case (1'b1)` when decoder
+predicates overlap. -/
 
-  instance (.op2Immediate) {
-    .select := inputsFields[.is_jalr_addi_slti_sltiu_xori_ori_andi],
-    .whenFalse := inputsFields[.cpuregs_rs2],
-    .whenTrue := inputsFields[.decoded_imm] }
-  instance (.op2Shift) {
-    .select := inputsFields[.is_slli_srli_srai],
-    .whenFalse := op2Immediate.result,
-    .whenTrue := updatedFields[.reg_op2] }
-  instance (.op2Load) {
-    .select := inputsFields[.is_lb_lh_lw_lbu_lhu],
-    .whenFalse := op2Shift.result,
-    .whenTrue := updatedFields[.reg_op2] }
-  instance (.op2Lui) {
-    .select := inputsFields[.is_lui_auipc_jal],
-    .whenFalse := op2Load.result,
-    .whenTrue := inputsFields[.decoded_imm] }
-  instance (.trapOp2) {
-    .select := inputsFields[.instr_trap],
-    .whenFalse := op2Lui.result,
-    .whenTrue := updatedFields[.reg_op2] }
+namespace LoadRs1Update.Description
 
-  instance (.shiftImmediate) {
-    .select := inputsFields[.is_jalr_addi_slti_sltiu_xori_ori_andi],
-    .whenFalse := lowFiveRs2.output,
-    .whenTrue := updatedFields[.reg_sh] }
-  instance (.shiftLoad) {
-    .select := inputsFields[.is_slli_srli_srai],
-    .whenFalse := shiftImmediate.result,
-    .whenTrue := inputsFields[.decoded_rs2] }
-  instance (.shiftLui) {
-    .select := inputsFields[.is_lb_lh_lw_lbu_lhu],
-    .whenFalse := shiftLoad.result,
-    .whenTrue := updatedFields[.reg_sh] }
-  instance (.trapShift) {
-    .select := inputsFields[.is_lui_auipc_jal],
-    .whenFalse := shiftLui.result,
-    .whenTrue := updatedFields[.reg_sh] }
-  instance (.finalShift) {
-    .select := inputsFields[.instr_trap],
-    .whenFalse := trapShift.result,
-    .whenTrue := updatedFields[.reg_sh] }
-  instance (.result) {
-    .reg_pc := updatedFields[.reg_pc],
-    .reg_next_pc := updatedFields[.reg_next_pc],
-    .reg_op1 := trapOp1.result,
-    .reg_op2 := trapOp2.result,
-    .reg_out := updatedFields[.reg_out],
-    .reg_sh := finalShift.result,
-    .alu_out_q := updatedFields[.alu_out_q] }
-  }
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let updated ← input "updated" stateType
+  let inputsFields ← split DatapathInputs.layout inputs
+  let currentFields ← split DatapathState.layout current
+  let updatedFields ← split DatapathState.layout updated
+  let zeroWord ← constant (.vector 32 .bit) (wordOfNat 0)
+  let lowFiveRs2 ← Silean.Modules.VectorLayout.place
+    LoadRs1Update.lowFiveLayout (inputsFields .cpuregs_rs2)
+
+  let luiOperand ← mux (inputsFields .instr_lui) (currentFields .reg_pc) zeroWord
+  let selectedOp1 ← mux (inputsFields .is_lui_auipc_jal)
+    (inputsFields .cpuregs_rs1) luiOperand
+  let selectedOp1 ← mux (inputsFields .instr_trap)
+    selectedOp1 (updatedFields .reg_op1)
+
+  let selectedOp2 ← mux
+    (inputsFields .is_jalr_addi_slti_sltiu_xori_ori_andi)
+    (inputsFields .cpuregs_rs2) (inputsFields .decoded_imm)
+  let selectedOp2 ← mux (inputsFields .is_slli_srli_srai)
+    selectedOp2 (updatedFields .reg_op2)
+  let selectedOp2 ← mux (inputsFields .is_lb_lh_lw_lbu_lhu)
+    selectedOp2 (updatedFields .reg_op2)
+  let selectedOp2 ← mux (inputsFields .is_lui_auipc_jal)
+    selectedOp2 (inputsFields .decoded_imm)
+  let selectedOp2 ← mux (inputsFields .instr_trap)
+    selectedOp2 (updatedFields .reg_op2)
+
+  let selectedShift ← mux
+    (inputsFields .is_jalr_addi_slti_sltiu_xori_ori_andi)
+    lowFiveRs2 (updatedFields .reg_sh)
+  let selectedShift ← mux (inputsFields .is_slli_srli_srai)
+    selectedShift (inputsFields .decoded_rs2)
+  let selectedShift ← mux (inputsFields .is_lb_lh_lw_lbu_lhu)
+    selectedShift (updatedFields .reg_sh)
+  let selectedShift ← mux (inputsFields .is_lui_auipc_jal)
+    selectedShift (updatedFields .reg_sh)
+  let selectedShift ← mux (inputsFields .instr_trap)
+    selectedShift (updatedFields .reg_sh)
+
+  output "state" (← update stateMap DatapathState.schema updatedFields fun
+    | .reg_op1 => some selectedOp1
+    | .reg_op2 => some selectedOp2
+    | .reg_sh => some selectedShift
+    | _ => none)
+
+noncomputable def description : Description := build construction
+
+end LoadRs1Update.Description
+
+namespace LoadRs1Update
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current updated : Net stateType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType)
+    (current updated : Net stateType) : Builder (Net stateType) := do
+  let child ← placeIndexed "datapath_load_rs1_update" design fun
+    | .inputs => inputs
+    | .current => current
+    | .updated => updated
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end LoadRs1Update
 
 end PicoRV.Datapath

@@ -51,6 +51,11 @@ namespace LeafwiseInterface
   keys := interface.outputs
   value := fun _ => signalType
 
+@[simp] theorem LeafwiseInterface.outputMap_signalType
+    (interface : LeafwiseInterface) (signalType : SignalType)
+    (output : interface.Output) :
+    (interface.outputMap signalType).signalType output = signalType := rfl
+
 @[reducible] def stateMap (interface : LeafwiseInterface)
     (signalType : SignalType) : SignalMap where
   Key := interface.State

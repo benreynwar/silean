@@ -6,7 +6,10 @@ namespace Silean.Modules.VectorSplit
 
 open Silean
 
-/-! Split a vector into its low-index left portion and remaining right portion. -/
+/-! Split a vector into its low-index left portion and remaining right portion.
+The circuit is a pair of dependent index mappings between generic adapters;
+the typed `module_design` is therefore clearer than a second fixed builder
+description. -/
 
 def leftPart (value : Fin (leftWidth + rightWidth) → α) : Fin leftWidth → α :=
   fun index => value (Fin.castAdd rightWidth index)

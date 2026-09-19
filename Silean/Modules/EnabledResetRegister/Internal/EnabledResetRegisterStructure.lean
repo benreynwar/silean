@@ -30,8 +30,11 @@ module_design EnabledResetRegister (signalType : SignalType)
     (namingWith := EnabledResetRegister.Naming.portsWithNaming
       signalType typeNaming)
   instances {
-    selection := Modules.Mux.design signalType,
-    storage := Modules.ResetRegister.design signalType resetValue }
+    selection (name := .indexed "mux" 0) := Modules.Mux.design signalType,
+    storage (name := .indexed "reset_register" 0) :=
+      Modules.ResetRegister.design signalType resetValue }
+  named_wires {
+    stored := storage.value }
   wiring {
     outputs {
       .value := storage.value }

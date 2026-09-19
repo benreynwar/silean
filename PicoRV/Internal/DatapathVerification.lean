@@ -1,4 +1,4 @@
-import PicoRV.DatapathStructure
+import PicoRV.Internal.DatapathStructure
 import PicoRV.AluTheorems
 import PicoRV.Datapath.Internal.DatapathNextVerification
 import Silean.Authoring.ModuleChildCertifications
@@ -7,7 +7,7 @@ import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.Add.AddTheorems
 import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.Internal.MuxVerification
+import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 import Silean.Modules.Register.RegisterTheorems
 import Silean.Modules.VectorLayout.VectorLayoutTheorems

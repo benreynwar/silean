@@ -35,17 +35,30 @@ open Silean
 open Silean.Authoring
 open Authoring.CircuitDescription
 
+/-- Supplying positional aggregate names recovers the canonical mux naming. -/
+@[simp] theorem namingWith_positional (signalType : SignalType) :
+    namingWith signalType (.positional signalType) = naming signalType := by
+  rfl
+
 /-! ## Placement -/
+
+/-- Place a mux under a caller-chosen instance name and aggregate naming. -/
+noncomputable def placeNamedWith (name : Silean.Naming.SourceName)
+    (typeNaming : Silean.Naming.SignalTypeNaming signalType)
+    (select : Net .bit) (whenFalse whenTrue : Net signalType) :
+    Builder (Net signalType) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (designWith signalType typeNaming) fun
+      | .select => select
+      | .whenFalse => whenFalse
+      | .whenTrue => whenTrue
+  pure (child .result)
 
 /-- Place a mux under a caller-chosen instance name. -/
 noncomputable def placeNamed (name : Silean.Naming.SourceName)
     (select : Net .bit) (whenFalse whenTrue : Net signalType) :
-    Builder (Net signalType) := do
-  let child ← Authoring.CircuitDescription.placeNamed name (design signalType) fun
-    | .select => select
-    | .whenFalse => whenFalse
-    | .whenTrue => whenTrue
-  pure (child .result)
+    Builder (Net signalType) :=
+  placeNamedWith name (.positional signalType) select whenFalse whenTrue
 
 /-- Place a mux using the next conventional indexed mux name. -/
 noncomputable def place (select : Net .bit)
@@ -55,6 +68,8 @@ noncomputable def place (select : Net .bit)
     | .whenFalse => whenFalse
     | .whenTrue => whenTrue
   pure (child .result)
+
+attribute [circuit_description] placeNamedWith placeNamed place
 
 /-! ## Exact cycle behavior -/
 

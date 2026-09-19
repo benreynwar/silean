@@ -7,7 +7,7 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.BinaryToOneHot.BinaryToOneHotTheorems
 import Silean.Modules.Constant.Constant
 import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.Internal.MuxVerification
+import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 import Silean.Modules.VectorLayout.VectorLayoutTheorems
 import Silean.Modules.VectorSlice.VectorSliceTheorems

@@ -42,7 +42,7 @@ private def contains (text fragment : String) : Bool :=
   | .error _ => false
   | .ok text => ["public module EqualsConstant",
       "input value : UInt<1>[3]", "output result : UInt<1>",
-      "inst constantValue", "inst equality",
-      "connect equality.right, constantValue.value"].all (contains text)
+      "inst constant_0", "inst equality_0",
+      "connect equality_0.right, constant_0.value"].all (contains text)
 
 end SileanTests.EqualsConstant

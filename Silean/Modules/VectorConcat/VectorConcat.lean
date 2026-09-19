@@ -7,7 +7,10 @@ namespace Silean.Modules.VectorConcat
 open Silean
 
 /-! Concatenates two vectors of the same element type, with the left vector at
-the lower result indices. -/
+the lower result indices. Its wiring is an index-family transformation rather
+than a fixed list of scalar connections. The typed `module_design` keeps that
+mapping explicit, so it remains the primary definition instead of duplicating
+it with a builder description. -/
 
 def concat (left : Fin leftWidth → α) (right : Fin rightWidth → α) :
     Fin (leftWidth + rightWidth) → α :=

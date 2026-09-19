@@ -1,4 +1,5 @@
 import Silean.Modules.Fifo.Internal.FifoPointerControlVerification
+import Silean.Modules.Fifo.Internal.FifoPointerControlCorrespondence
 
 /-! # FIFO pointer-control theorems
 
@@ -9,6 +10,19 @@ adapter hierarchy and its rule schedules remain under `Internal/`.
 namespace Silean.Modules.Fifo.PointerControl
 
 open Silean
+
+namespace Description
+
+open Naming Authoring.CircuitDescription
+
+/-- The reader-facing pointer-control description elaborates to the certified
+typed hierarchy, including its meaningful waveform wire names. -/
+theorem authored_definition_corresponds (addressWidth : Nat) :
+    Corresponds (description addressWidth)
+      (PointerControl.naming addressWidth) :=
+  Internal.corresponds addressWidth
+
+end Description
 
 /-- Every realizable pointer-control step has the complete combinational
 behavior specified in `FifoPointerControl.lean`. -/

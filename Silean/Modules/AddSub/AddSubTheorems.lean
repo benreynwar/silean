@@ -10,6 +10,18 @@ namespace Silean.Modules.AddSub
 
 open Silean
 
+namespace Description
+
+open Naming Authoring.CircuitDescription
+
+/-- The reader-facing add/subtract circuit elaborates to the certified typed
+hierarchy with the same boundary, children, wiring, and names. -/
+theorem authored_definition_corresponds (width : Nat) :
+    Corresponds (description width) (AddSub.naming width) :=
+  Internal.corresponds width
+
+end Description
+
 /-- Every realizable add/subtract step has the complete behavior selected by
 its `subtract` input. -/
 theorem behavior_of_realization (width : Nat)

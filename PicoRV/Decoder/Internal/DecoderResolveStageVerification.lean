@@ -1,4 +1,4 @@
-import PicoRV.Decoder.DecoderResolveStageStructure
+import PicoRV.Decoder.Internal.DecoderResolveStageStructure
 import PicoRV.Decoder.DecoderImmediateTheorems
 import PicoRV.Decoder.DecoderInstructionMatchTheorems
 import PicoRV.Decoder.DecoderInstructionSummaryTheorems

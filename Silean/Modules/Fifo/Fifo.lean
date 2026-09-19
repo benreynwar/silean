@@ -1,108 +1,95 @@
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.EnabledResetCounter.EnabledResetCounter
-import Silean.Interfaces.FifoPorts
-import Silean.Modules.Fifo.FifoPointerControl
-import Silean.Modules.RegisterBank.RegisterBank
-import Silean.Naming.FifoPortsNaming
+import Silean.Authoring.CircuitDescription
+import Silean.Modules.Fifo.Internal.FifoStructure
 
 namespace Silean.Modules.Fifo
 
 open Silean Silean.Interfaces.Fifo
 
-/-- A FIFO with `2 ^ addressWidth` entries of `element`, built from a register
+/-! A FIFO with `2 ^ addressWidth` entries of `element`, built from a register
 bank with read and write pointers.
 
 The extra high bit in each pointer distinguishes a full buffer from an empty
 one when their address bits are equal. Reset is synchronous; invalid storage
 contents do not need to be cleared. -/
 
-abbrev Pointer (addressWidth : Nat) :=
-  EnabledResetCounter.Value (addressWidth + 1)
+open Authoring.CircuitDescription
 
-/-- Both counters start at the first entry, making the FIFO empty. -/
-def zeroPointer (addressWidth : Nat) : Pointer addressWidth := fun _ => false
+/-! ## Authored hardware -/
 
-end Silean.Modules.Fifo
+namespace Description
 
-namespace Silean.Modules
+noncomputable def construction (element : SignalType) (addressWidth : Nat) :
+    Builder Unit := do
+  let inputValid ← input "input_valid" .bit
+  let inputData ← input "input_data" element
+  let outputReady ← input "output_ready" .bit
+  let reset ← input "reset" .bit
 
-open Silean
-open Silean.Authoring
-open Silean.Interfaces.Fifo
+  wire readAdvance : .bit
+  wire writeAdvance : .bit
+  let readCounter ← EnabledResetCounter.placeNamed "readCounter"
+    (zeroPointer addressWidth) readAdvance reset
+  let writeCounter ← EnabledResetCounter.placeNamed "writeCounter"
+    (zeroPointer addressWidth) writeAdvance reset
+  let control ← PointerControl.place
+    readCounter writeCounter inputValid outputReady
+  assign readAdvance control.readAdvance
+  assign writeAdvance control.writeAdvance
+  let storage ← RegisterBank.place
+    (element := element) (addressWidth := addressWidth) (readCount := 1)
+    control.writeAdvance control.writeAddress inputData
+    (fun _ => control.readAddress)
 
-/-! ## Hardware structure -/
+  output "output_valid" control.outputValid
+  output "output_data" (storage.readValue 0)
+  output "input_ready" control.inputReady
 
-module_design Fifo (element : SignalType) (addressWidth : Nat) where
-  boundary (Interfaces.Fifo.ports element)
-    (naming := Naming.FifoPorts.ports element)
-  instances {
-    -- Tracks the entry currently presented at the output.
-    readCounter :=
-      EnabledResetCounter.design (addressWidth + 1)
-        (Fifo.zeroPointer addressWidth),
-    -- Tracks the entry where the next accepted input will be stored.
-    writeCounter :=
-      EnabledResetCounter.design (addressWidth + 1)
-        (Fifo.zeroPointer addressWidth),
-    -- Derives handshake decisions and storage addresses from the pointers.
-    control :=
-      Fifo.PointerControl.design addressWidth,
-    -- Holds all FIFO data entries and provides the asynchronous read port.
-    storage := RegisterBank.design element addressWidth 1 }
-  wiring {
-    outputs {
-      .outputValid := control.outputValid,
-      .outputData := storage[.readValue 0],
-      .inputReady := control.inputReady }
-    instance (.readCounter) {
-      .enable := control.readAdvance,
-      .reset := input.reset }
-    instance (.writeCounter) {
-      .enable := control.writeAdvance,
-      .reset := input.reset }
-    instance (.control) {
-      .readPointer := readCounter.value,
-      .writePointer := writeCounter.value,
-      .inputValid := input.inputValid,
-      .outputReady := input.outputReady }
-    instance (.storage) {
-      .writeEnable := control.writeAdvance,
-      .writeAddress := control.writeAddress,
-      .writeValue := input.inputData,
-      .readAddress 0 := control.readAddress }
-  }
+noncomputable def description (element : SignalType) (addressWidth : Nat) :
+    Description :=
+  build (construction element addressWidth)
 
-namespace Fifo.Naming
+end Description
 
-open Silean.Naming
+/-! ## Placement -/
 
-/-- Attach authored payload names to the FIFO boundary and recursively to its
-storage hierarchy without changing the canonical FIFO structure. -/
-def namingWith (element : SignalType) (addressWidth : Nat)
-    (elementNaming : SignalTypeNaming element) :
-    ModuleNaming (Fifo.moduleStructure element addressWidth) := by
-  unfold Fifo.moduleStructure
-  exact .composite
-    ⟨"Fifo", "", [.signalType element, .natural addressWidth]⟩
-    (Silean.Naming.FifoPorts.portsWithNaming element elementNaming)
-    (instanceNames element addressWidth)
-    (fun
-      | .readCounter => EnabledResetCounter.naming (addressWidth + 1)
-          (Fifo.zeroPointer addressWidth)
-      | .writeCounter => EnabledResetCounter.naming (addressWidth + 1)
-          (Fifo.zeroPointer addressWidth)
-      | .control => Fifo.PointerControl.naming addressWidth
-      | .storage => RegisterBank.Naming.namingWith element addressWidth 1
-          elementNaming)
+/-- Boundary outputs produced by a placed register-bank FIFO. -/
+structure PlacedOutputs (element : SignalType) where
+  outputValid : Net .bit
+  outputData : Net element
+  inputReady : Net .bit
 
-end Fifo.Naming
+/-- Place a FIFO under a caller-chosen instance name. -/
+noncomputable def placeNamed (name : Naming.SourceName)
+    (addressWidth : Nat) (inputValid : Net .bit) (inputData : Net element)
+    (outputReady reset : Net .bit) : Builder (PlacedOutputs element) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design element addressWidth) fun
+      | .inputValid => inputValid
+      | .inputData => inputData
+      | .outputReady => outputReady
+      | .reset => reset
+  pure {
+    outputValid := child .outputValid
+    outputData := child .outputData
+    inputReady := child .inputReady }
 
-end Silean.Modules
+/-- Place a FIFO using the next conventional indexed name. -/
+noncomputable def place (addressWidth : Nat)
+    (inputValid : Net .bit) (inputData : Net element)
+    (outputReady reset : Net .bit) : Builder (PlacedOutputs element) := do
+  let child ← placeIndexed "fifo" (design element addressWidth) fun
+    | .inputValid => inputValid
+    | .inputData => inputData
+    | .outputReady => outputReady
+    | .reset => reset
+  pure {
+    outputValid := child .outputValid
+    outputData := child .outputData
+    inputReady := child .inputReady }
 
-namespace Silean.Modules.Fifo
+attribute [circuit_description] placeNamed place
 
-open Silean Silean.Interfaces.Fifo
 open Contracts.Cycle.Certification.Layer
 
 /-! ## Exact cycle behavior -/

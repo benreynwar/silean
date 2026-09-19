@@ -24,9 +24,14 @@ module_design OneEntryFifo (signalType : SignalType) where
   instances {
     validStorage := EnabledResetRegister.design .bit false,
     dataStorage := EnabledRegister.design signalType,
-    control := OneEntryFifo.Control.design,
-    outputValidOr := Primitives.orDesign,
-    outputDataMux := Mux.design signalType }
+    control (name := .indexed "one_entry_fifo_control" 0) :=
+      OneEntryFifo.Control.design,
+    outputValidOr (name := .indexed "or" 0) := Primitives.orDesign,
+    outputDataMux (name := .indexed "mux" 0) := Mux.design signalType }
+  named_wires {
+    storedValid := validStorage.value,
+    storedData := dataStorage.q,
+    storageUpdate := control.storageUpdate }
   wiring {
     outputs {
       .outputValid := outputValidOr.output,
@@ -64,14 +69,15 @@ namespace Silean.Modules.OneEntryFifo.Internal
       "dataStorage" := rfl
 
 @[simp] theorem control_instance_name (signalType : SignalType) :
-    OneEntryFifo.Naming.instanceNames signalType .control = "control" := rfl
+    OneEntryFifo.Naming.instanceNames signalType .control =
+      .indexed "one_entry_fifo_control" 0 := rfl
 
 @[simp] theorem outputValidOr_instance_name (signalType : SignalType) :
     OneEntryFifo.Naming.instanceNames signalType .outputValidOr =
-      "outputValidOr" := rfl
+      .indexed "or" 0 := rfl
 
 @[simp] theorem outputDataMux_instance_name (signalType : SignalType) :
     OneEntryFifo.Naming.instanceNames signalType .outputDataMux =
-      "outputDataMux" := rfl
+      .indexed "mux" 0 := rfl
 
 end Silean.Modules.OneEntryFifo.Internal

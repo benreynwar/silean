@@ -1,3 +1,4 @@
+import PicoRV.Datapath
 import PicoRV.Internal.DatapathVerification
 import PicoRV.Datapath.DatapathNextTheorems
 

@@ -6,7 +6,7 @@ import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.AddSub.AddSubTheorems
 import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.Internal.MuxVerification
+import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 import Silean.Modules.VectorLayout.VectorLayoutTheorems
 import Silean.Primitives.Or

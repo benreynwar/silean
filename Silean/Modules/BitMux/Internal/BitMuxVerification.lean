@@ -1,6 +1,7 @@
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
+import Silean.Authoring.CircuitDescriptionSoundness
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.BitMux.BitMux
 import Silean.Primitives.And
@@ -96,3 +97,25 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end Silean.Modules.BitMux
+
+/-! ## Authored-description correspondence -/
+
+namespace Silean.Modules.BitMux.Description.Internal
+
+open Silean Naming Authoring.CircuitDescription
+
+private theorem same : some description = ofNaming BitMux.naming := by
+  rfl
+
+private theorem unique : description.UniqueNames := by
+  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
+  intro child member
+  change child ∈ [_, _, _, _] at member
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
+  rcases member with equal | equal | equal | equal <;> subst child <;>
+    constructor <;> exact of_decide_eq_true rfl
+
+theorem corresponds : Corresponds description BitMux.naming :=
+  ⟨same, unique⟩
+
+end Silean.Modules.BitMux.Description.Internal

@@ -1,4 +1,4 @@
-import PicoRV.Control
+import PicoRV.ControlContract
 import Silean.Modules.Equality.Equality
 
 namespace PicoRV.Control

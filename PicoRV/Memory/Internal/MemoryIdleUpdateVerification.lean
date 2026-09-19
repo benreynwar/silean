@@ -4,8 +4,9 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
+import Silean.Modules.BitMux.BitMuxTheorems
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Internal.MuxVerification
+import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 import Silean.Primitives.Or
 
@@ -25,12 +26,12 @@ module_child_certifications childContracts for body where
   zeroMask := Silean.Modules.Constant.certification (.vector 4 .bit) (maskOfNat 0),
   readState := Silean.Modules.Constant.certification (.vector 2 .bit) (stateOfNat 1),
   writeState := Silean.Modules.Constant.certification (.vector 2 .bit) (stateOfNat 2),
-  readValid := Silean.Modules.Mux.certification .bit,
-  readInstr := Silean.Modules.Mux.certification .bit,
+  readValid := Silean.Modules.BitMux.certification,
+  readInstr := Silean.Modules.BitMux.certification,
   readMask := Silean.Modules.Mux.certification (.vector 4 .bit),
   readPhase := Silean.Modules.Mux.certification (.vector 2 .bit),
-  finalValid := Silean.Modules.Mux.certification .bit,
-  finalInstr := Silean.Modules.Mux.certification .bit,
+  finalValid := Silean.Modules.BitMux.certification,
+  finalInstr := Silean.Modules.BitMux.certification,
   finalPhase := Silean.Modules.Mux.certification (.vector 2 .bit),
   result := Silean.Modules.NamedTupleCombiner.certification stateMap
 
@@ -42,8 +43,10 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     .readCommand => Silean.Primitives.OrRule.apply,
     {.trueBit, .falseBit, .zeroMask, .readState, .writeState} =>
       Silean.Primitives.ConstantRule.apply,
-    {.readValid, .readInstr, .readMask, .readPhase} => Silean.Modules.Mux.Rule.select,
-    {.finalValid, .finalInstr, .finalPhase} => Silean.Modules.Mux.Rule.select,
+    {.readValid, .readInstr} => Silean.Modules.BitMux.Rule.select,
+    {.readMask, .readPhase} => Silean.Modules.Mux.Rule.select,
+    {.finalValid, .finalInstr} => Silean.Modules.BitMux.Rule.select,
+    .finalPhase => Silean.Modules.Mux.Rule.select,
     .result => Silean.Modules.NamedTupleCombiner.Rule.apply]
   state := []
 
@@ -142,7 +145,7 @@ private theorem implements :
   have readValidValue : hierStep.childOutputs .readValid .result =
       bif memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst ||
           memoryInputs.mem_do_rdata then true else updated .mem_valid := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .readValid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [readValue, updatedFieldsValue, trueValue] at equation
@@ -152,7 +155,7 @@ private theorem implements :
           memoryInputs.mem_do_rdata
         then memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst
         else updated .mem_instr := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .readInstr).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [readValue, updatedFieldsValue, instructionValue] at equation
@@ -177,7 +180,7 @@ private theorem implements :
       bif memoryInputs.mem_do_wdata then true else
         bif memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst ||
             memoryInputs.mem_do_rdata then true else updated .mem_valid := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .finalValid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [fieldValue .mem_do_wdata, readValidValue, trueValue] at equation
@@ -188,7 +191,7 @@ private theorem implements :
             memoryInputs.mem_do_rdata
           then memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst
           else updated .mem_instr := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .finalInstr).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [fieldValue .mem_do_wdata, readInstrValue, falseValue] at equation

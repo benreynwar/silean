@@ -1,9 +1,6 @@
-import Silean.Authoring.CircuitDescription
+import Silean.Authoring.CircuitLogic
 import Silean.Authoring.ModuleCycleContract
 import Silean.Modules.OneEntryFifo.Control.Internal.OneEntryFifoControlStructure
-import Silean.Primitives.Eq
-import Silean.Primitives.Not
-import Silean.Primitives.Or
 
 /-! # One-entry FIFO control
 
@@ -21,16 +18,13 @@ namespace Silean.Modules.OneEntryFifo.Control.Description
 
 open Silean
 open Silean.Authoring.CircuitDescription
+open scoped Silean.Authoring.CircuitLogic
 
 noncomputable def construction : Builder Unit := do
   let storedValid ← input "storedValid" .bit
   let downstreamReady ← input "downstreamReady" .bit
-  let empty ← Primitives.Not.placeNamed "invertValid" storedValid
-  let upstreamReady ← Primitives.Or.placeNamed "readyOr" downstreamReady empty
-  let storageUpdate ← Primitives.Eq.placeNamed "updateEq"
-    downstreamReady storedValid
-  output "upstreamReady" upstreamReady
-  output "storageUpdate" storageUpdate
+  output "upstreamReady" (← downstreamReady ||| (← !! storedValid))
+  output "storageUpdate" (← downstreamReady === storedValid)
 
 noncomputable def description : Description :=
   build construction
@@ -54,6 +48,17 @@ noncomputable def placeNamed (name : Silean.Naming.SourceName)
     | .storedValid => storedValid
     | .downstreamReady => downstreamReady
   pure (child .upstreamReady, child .storageUpdate)
+
+/-- Place the FIFO control child using the next conventional indexed name.
+The result is `(upstreamReady, storageUpdate)`. -/
+noncomputable def place (storedValid downstreamReady : Net .bit) :
+    Builder (Net .bit × Net .bit) := do
+  let child ← placeIndexed "one_entry_fifo_control" design fun
+    | .storedValid => storedValid
+    | .downstreamReady => downstreamReady
+  pure (child .upstreamReady, child .storageUpdate)
+
+attribute [circuit_description] placeNamed place
 
 /-! ## Exact combinational behavior -/
 

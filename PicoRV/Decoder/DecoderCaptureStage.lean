@@ -1,17 +1,8 @@
 import PicoRV.Decoder.DecoderTypes
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
-import Silean.Authoring.ModulePorts
-import Silean.Authoring.SignalSchemaDeclaration
-import Silean.Modules.VectorSlice.VectorSlice
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.EnabledRegister.EnabledRegister
-import Silean.Modules.EnabledResetRegister.EnabledResetRegister
-import Silean.Modules.Constant.Constant
-import Silean.Modules.VectorLayout.VectorLayout
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Naming.SignalAdapterNaming
-import Silean.Naming.PrimitiveNaming
+import Silean.Authoring.CircuitDescription
+import PicoRV.Authoring.CircuitLogic
+import PicoRV.Decoder.Internal.DecoderCaptureStageStructure
 
 namespace PicoRV.Decoder.CaptureStage
 
@@ -23,202 +14,111 @@ open PicoRV.Decoder
 register addresses, and the J immediate when an instruction read completes.
 Only the branch-class register is reset in the selected PicoRV32 source. -/
 
-module_ports ports where
-  input resetn : .bit,
-  input mem_do_rinst : .bit,
-  input mem_done : .bit,
-  input mem_rdata_latched : .vector 32 .bit,
-  output instr_lui : .bit,
-  output instr_auipc : .bit,
-  output instr_jal : .bit,
-  output instr_jalr : .bit,
-  output decoded_rd : .vector 5 .bit,
-  output decoded_rs1 : .vector 5 .bit,
-  output decoded_rs2 : .vector 5 .bit,
-  output decoded_imm_j : .vector 32 .bit,
-  output compressed_instr : .bit,
-  output is_beq_bne_blt_bge_bltu_bgeu : .bit,
-  output is_lb_lh_lw_lbu_lhu : .bit,
-  output is_sb_sh_sw : .bit,
-  output is_alu_reg_imm : .bit,
-  output is_alu_reg_reg : .bit
+/-! ## Authored hardware
 
-/-- The capture stage exposes its entire current state as its outputs. -/
-@[reducible] def stateMap : SignalMap := outputMap
+The thirteen non-reset fields share one aggregate enabled register. The
+branch-class flag uses a separate enabled/reset register because the source's
+final reset block overrides only that assignment. -/
 
-def bits (width value : Nat) : Fin width → Bool :=
-  fun index => value.testBit index.val
+namespace Description
 
-/-- PicoRV32's J-immediate bit layout. Bit zero is fixed low, bits 1–10 come
-from instruction bits 21–30, bit 11 comes from bit 20, bits 12–19 are copied,
-and bits 20–31 repeat the sign bit. -/
-def immediateJLayout (index : Fin 32) : Silean.Modules.VectorLayout.BitSource 32 :=
-  if _zero : index.val = 0 then .constant false
-  else if _low : index.val ≤ 10 then .input ⟨index.val + 20, by omega⟩
-  else if _eleven : index.val = 11 then .input ⟨20, by omega⟩
-  else if _middle : index.val ≤ 19 then .input index
-  else .input ⟨31, by omega⟩
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
-/-! ## Hardware structure
+noncomputable def construction : Builder Unit := do
+  let resetn ← input "resetn" .bit
+  let memDoRinst ← input "mem_do_rinst" .bit
+  let memDone ← input "mem_done" .bit
+  let word ← input "mem_rdata_latched" (.vector 32 .bit)
+  let captureEnable ← memDoRinst &&& memDone
+  let reset ← !! resetn
+  let opcode ← Silean.Modules.VectorSlice.place
+    (element := .bit) (prefixWidth := 0) (width := 7) (suffixWidth := 25) word
+  let funct3 ← Silean.Modules.VectorSlice.place
+    (element := .bit) (prefixWidth := 12) (width := 3) (suffixWidth := 17) word
+  let decodedRd ← Silean.Modules.VectorSlice.place
+    (element := .bit) (prefixWidth := 7) (width := 5) (suffixWidth := 20) word
+  let decodedRs1 ← Silean.Modules.VectorSlice.place
+    (element := .bit) (prefixWidth := 15) (width := 5) (suffixWidth := 12) word
+  let decodedRs2 ← Silean.Modules.VectorSlice.place
+    (element := .bit) (prefixWidth := 20) (width := 5) (suffixWidth := 7) word
+  let opcodeLui ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x37)
+  let opcodeAuipc ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x17)
+  let opcodeJal ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x6f)
+  let opcodeJalr ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x67)
+  let opcodeBranch ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x63)
+  let opcodeLoad ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x03)
+  let opcodeStore ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x23)
+  let opcodeAluImm ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x13)
+  let opcodeAluReg ← Silean.Modules.EqualsConstant.place opcode (bits 7 0x33)
+  let funct3Zero ← Silean.Modules.EqualsConstant.place funct3 (bits 3 0)
+  let jalr ← opcodeJalr &&& funct3Zero
+  let zero ← constant .bit false
+  let immediate ← Silean.Modules.VectorLayout.place immediateJLayout word
+  let storedNext ← combine storedMap Stored.schema fun
+    | .instr_lui => opcodeLui
+    | .instr_auipc => opcodeAuipc
+    | .instr_jal => opcodeJal
+    | .instr_jalr => jalr
+    | .decoded_rd => decodedRd
+    | .decoded_rs1 => decodedRs1
+    | .decoded_rs2 => decodedRs2
+    | .decoded_imm_j => immediate
+    | .compressed_instr => zero
+    | .is_lb_lh_lw_lbu_lhu => opcodeLoad
+    | .is_sb_sh_sw => opcodeStore
+    | .is_alu_reg_imm => opcodeAluImm
+    | .is_alu_reg_reg => opcodeAluReg
+  let stored ← Silean.Modules.EnabledRegister.placeWith Stored.schema
+    storedNext captureEnable
+  let storedOutputs ← split Stored.layout stored
+  let branch ← Silean.Modules.EnabledResetRegister.place (signalType := .bit)
+    false opcodeBranch captureEnable reset
 
-The source's thirteen non-reset fields share one aggregate enabled register.
-The branch-class flag uses a separate enabled/reset register because the final
-reset block overrides only that assignment. -/
+  output "instr_lui" (storedOutputs .instr_lui)
+  output "instr_auipc" (storedOutputs .instr_auipc)
+  output "instr_jal" (storedOutputs .instr_jal)
+  output "instr_jalr" (storedOutputs .instr_jalr)
+  output "decoded_rd" (storedOutputs .decoded_rd)
+  output "decoded_rs1" (storedOutputs .decoded_rs1)
+  output "decoded_rs2" (storedOutputs .decoded_rs2)
+  output "decoded_imm_j" (storedOutputs .decoded_imm_j)
+  output "compressed_instr" (storedOutputs .compressed_instr)
+  output "is_beq_bne_blt_bge_bltu_bgeu" branch
+  output "is_lb_lh_lw_lbu_lhu" (storedOutputs .is_lb_lh_lw_lbu_lhu)
+  output "is_sb_sh_sw" (storedOutputs .is_sb_sh_sw)
+  output "is_alu_reg_imm" (storedOutputs .is_alu_reg_imm)
+  output "is_alu_reg_reg" (storedOutputs .is_alu_reg_reg)
 
-signal_schema Stored where
-  instr_lui : Silean.Authoring.SignalSchema.bit,
-  instr_auipc : Silean.Authoring.SignalSchema.bit,
-  instr_jal : Silean.Authoring.SignalSchema.bit,
-  instr_jalr : Silean.Authoring.SignalSchema.bit,
-  decoded_rd : Silean.Authoring.SignalSchema.vector 5 Silean.Authoring.SignalSchema.bit,
-  decoded_rs1 : Silean.Authoring.SignalSchema.vector 5 Silean.Authoring.SignalSchema.bit,
-  decoded_rs2 : Silean.Authoring.SignalSchema.vector 5 Silean.Authoring.SignalSchema.bit,
-  decoded_imm_j : Silean.Authoring.SignalSchema.vector 32 Silean.Authoring.SignalSchema.bit,
-  compressed_instr : Silean.Authoring.SignalSchema.bit,
-  is_lb_lh_lw_lbu_lhu : Silean.Authoring.SignalSchema.bit,
-  is_sb_sh_sw : Silean.Authoring.SignalSchema.bit,
-  is_alu_reg_imm : Silean.Authoring.SignalSchema.bit,
-  is_alu_reg_reg : Silean.Authoring.SignalSchema.bit
+noncomputable def description : Description := build construction
 
-abbrev StoredField := Stored.Field
+end Description
 
-@[reducible] def storedMap : SignalMap :=
-  Stored.signalMap
+/- The expanded typed structure lives under `Internal`; this description is
+the reader-facing hardware definition. -/
 
-def storedType : SignalType := storedMap.tupleType
+/-! ## Placement -/
 
-end PicoRV.Decoder.CaptureStage
+abbrev InputNets :=
+  (input : ports.inputs.Label) →
+    Authoring.CircuitDescription.Net (ports.inputs.signalType input)
 
-namespace PicoRV.Decoder
+abbrev OutputNets :=
+  (output : ports.outputs.Label) →
+    Authoring.CircuitDescription.Net (ports.outputs.signalType output)
 
-open Silean
-open Silean.Authoring
+/-- Place the capture stage using the next conventional indexed name. -/
+noncomputable def place (inputs : InputNets) :
+    Authoring.CircuitDescription.Builder OutputNets :=
+  Authoring.CircuitDescription.placeIndexed "decoder_capture_stage" design inputs
 
-module_design CaptureStage (name := "picorv32_decoder_capture") where
-  boundary (CaptureStage.ports) (naming := CaptureStage.Naming.ports)
-  instances {
-    captureEnable := Silean.Primitives.andDesign,
-    reset := Silean.Primitives.notDesign,
-    opcode := Silean.Modules.VectorSlice.design .bit 0 7 25,
-    funct3 := Silean.Modules.VectorSlice.design .bit 12 3 17,
-    decodedRd := Silean.Modules.VectorSlice.design .bit 7 5 20,
-    decodedRs1 := Silean.Modules.VectorSlice.design .bit 15 5 12,
-    decodedRs2 := Silean.Modules.VectorSlice.design .bit 20 5 7,
-    opcodeLui := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x37),
-    opcodeAuipc := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x17),
-    opcodeJal := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x6f),
-    opcodeJalr := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x67),
-    opcodeBranch := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x63),
-    opcodeLoad := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x03),
-    opcodeStore := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x23),
-    opcodeAluImm := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x13),
-    opcodeAluReg := Silean.Modules.EqualsConstant.design
-      (.vector 7 .bit) (CaptureStage.bits 7 0x33),
-    funct3Zero := Silean.Modules.EqualsConstant.design
-      (.vector 3 .bit) (CaptureStage.bits 3 0),
-    jalr := Silean.Primitives.andDesign,
-    zero := Silean.Modules.Constant.design .bit false,
-    immediate := Silean.Modules.VectorLayout.design 32 32 CaptureStage.immediateJLayout,
-    storedNext := Silean.Modules.NamedTupleCombiner.designWith
-      CaptureStage.storedMap CaptureStage.Stored.schema,
-    stored := Silean.Modules.EnabledRegister.designWith CaptureStage.storedType
-      CaptureStage.Stored.schema,
-    storedOutputs := Silean.Modules.NamedTupleSplitter.designWith
-      CaptureStage.storedMap CaptureStage.Stored.schema,
-    branch := Silean.Modules.EnabledResetRegister.design .bit false }
-  wiring {
-  outputs {
-    .instr_lui := storedOutputs[.instr_lui],
-    .instr_auipc := storedOutputs[.instr_auipc],
-    .instr_jal := storedOutputs[.instr_jal],
-    .instr_jalr := storedOutputs[.instr_jalr],
-    .decoded_rd := storedOutputs[.decoded_rd],
-    .decoded_rs1 := storedOutputs[.decoded_rs1],
-    .decoded_rs2 := storedOutputs[.decoded_rs2],
-    .decoded_imm_j := storedOutputs[.decoded_imm_j],
-    .compressed_instr := storedOutputs[.compressed_instr],
-    .is_beq_bne_blt_bge_bltu_bgeu := branch.value,
-    .is_lb_lh_lw_lbu_lhu := storedOutputs[.is_lb_lh_lw_lbu_lhu],
-    .is_sb_sh_sw := storedOutputs[.is_sb_sh_sw],
-    .is_alu_reg_imm := storedOutputs[.is_alu_reg_imm],
-    .is_alu_reg_reg := storedOutputs[.is_alu_reg_reg] }
-  instance (.captureEnable) {
-    .left := input.mem_do_rinst,
-    .right := input.mem_done }
-  instance (.reset) {
-    .input := input.resetn }
-  instance (.opcode) {
-    .value := input.mem_rdata_latched }
-  instance (.funct3) {
-    .value := input.mem_rdata_latched }
-  instance (.decodedRd) {
-    .value := input.mem_rdata_latched }
-  instance (.decodedRs1) {
-    .value := input.mem_rdata_latched }
-  instance (.decodedRs2) {
-    .value := input.mem_rdata_latched }
-  instance (.opcodeLui) {
-    .value := opcode.result }
-  instance (.opcodeAuipc) {
-    .value := opcode.result }
-  instance (.opcodeJal) {
-    .value := opcode.result }
-  instance (.opcodeJalr) {
-    .value := opcode.result }
-  instance (.opcodeBranch) {
-    .value := opcode.result }
-  instance (.opcodeLoad) {
-    .value := opcode.result }
-  instance (.opcodeStore) {
-    .value := opcode.result }
-  instance (.opcodeAluImm) {
-    .value := opcode.result }
-  instance (.opcodeAluReg) {
-    .value := opcode.result }
-  instance (.funct3Zero) {
-    .value := funct3.result }
-  instance (.jalr) {
-    .left := opcodeJalr.result,
-    .right := funct3Zero.result }
-  instance (.zero) {}
-  instance (.immediate) {
-    .input := input.mem_rdata_latched }
-  instance (.storedNext) {
-    .instr_lui := opcodeLui.result,
-    .instr_auipc := opcodeAuipc.result,
-    .instr_jal := opcodeJal.result,
-    .instr_jalr := jalr.output,
-    .decoded_rd := decodedRd.result,
-    .decoded_rs1 := decodedRs1.result,
-    .decoded_rs2 := decodedRs2.result,
-    .decoded_imm_j := immediate.output,
-    .compressed_instr := zero.output,
-    .is_lb_lh_lw_lbu_lhu := opcodeLoad.result,
-    .is_sb_sh_sw := opcodeStore.result,
-    .is_alu_reg_imm := opcodeAluImm.result,
-    .is_alu_reg_reg := opcodeAluReg.result }
-  instance (.stored) {
-    .data := storedNext.value,
-    .enable := captureEnable.output }
-  instance (.storedOutputs) {
-    .value := stored.q }
-  instance (.branch) {
-    .value := opcodeBranch.result,
-    .enable := captureEnable.output,
-    .reset := reset.output }
-  }
+/-- Place the capture stage under an explicit structural instance name. -/
+noncomputable def placeNamed (name : Naming.SourceName) (inputs : InputNets) :
+    Authoring.CircuitDescription.Builder OutputNets :=
+  Authoring.CircuitDescription.placeNamed name design inputs
 
-end PicoRV.Decoder
-
-namespace PicoRV.Decoder.CaptureStage
+attribute [circuit_description] place placeNamed
 
 /-! ## Behavioral contract -/
 

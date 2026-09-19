@@ -1,100 +1,74 @@
+import PicoRV.Authoring.CircuitLogic
 import PicoRV.Datapath.DatapathBasicUpdates
 import PicoRV.Datapath.DatapathFetchUpdate
 import PicoRV.Datapath.DatapathLoadRs1Update
 import PicoRV.Datapath.DatapathMemoryUpdate
 import PicoRV.Datapath.DatapathShiftUpdate
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import PicoRV.Datapath.Internal.DatapathNextStructure
 
 namespace PicoRV.Datapath
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
 
-/-! Complete combinational datapath transition. Phase selection follows the
-source order and is total over arbitrary eight-bit values; an unknown phase
-retains the ALU-capture baseline. Reset overrides only the two PC fields after
-that selection. -/
-module_design Next (name := "picorv32_datapath_next") where
-  boundary (Next.ports) (naming := Next.Naming.ports)
-  instances {
-    inputsFields := Silean.Modules.NamedTupleSplitter.designWith
-      DatapathInputs.signalMap DatapathInputs.schema,
-    baseline := Baseline.design,
-    phaseDecode := PhaseDecode.design,
-    fetch := FetchUpdate.design,
-    loadRs1 := LoadRs1Update.design,
-    loadRs2 := LoadRs2Update.design,
-    execute := ExecuteUpdate.design,
-    shift := ShiftUpdate.design,
-    store := StoreUpdate.design,
-    load := LoadUpdate.design,
-    selectLoad := Silean.Modules.Mux.design stateType,
-    selectStore := Silean.Modules.Mux.design stateType,
-    selectShift := Silean.Modules.Mux.design stateType,
-    selectExecute := Silean.Modules.Mux.design stateType,
-    selectLoadRs2 := Silean.Modules.Mux.design stateType,
-    selectLoadRs1 := Silean.Modules.Mux.design stateType,
-    selectFetch := Silean.Modules.Mux.design stateType,
-    resetOverride := ResetOverride.design }
-  wiring {
-  outputs { .state := resetOverride.state }
-  instance (.inputsFields) { .value := input.inputs }
-  instance (.baseline) { .current := input.current, .alu_out := input.alu_out }
-  instance (.phaseDecode) { .cpu_state := inputsFields[.cpu_state] }
-  instance (.fetch) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.loadRs1) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.loadRs2) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.execute) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.shift) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.store) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.load) {
-    .inputs := input.inputs, .current := input.current,
-    .updated := baseline.state }
-  instance (.selectLoad) {
-    .select := phaseDecode.load,
-    .whenFalse := baseline.state,
-    .whenTrue := load.state }
-  instance (.selectStore) {
-    .select := phaseDecode.store,
-    .whenFalse := selectLoad.result,
-    .whenTrue := store.state }
-  instance (.selectShift) {
-    .select := phaseDecode.shift,
-    .whenFalse := selectStore.result,
-    .whenTrue := shift.state }
-  instance (.selectExecute) {
-    .select := phaseDecode.execute,
-    .whenFalse := selectShift.result,
-    .whenTrue := execute.state }
-  instance (.selectLoadRs2) {
-    .select := phaseDecode.loadRs2,
-    .whenFalse := selectExecute.result,
-    .whenTrue := loadRs2.state }
-  instance (.selectLoadRs1) {
-    .select := phaseDecode.loadRs1,
-    .whenFalse := selectLoadRs2.result,
-    .whenTrue := loadRs1.state }
-  instance (.selectFetch) {
-    .select := phaseDecode.fetch,
-    .whenFalse := selectLoadRs1.result,
-    .whenTrue := fetch.state }
-  instance (.resetOverride) {
-    .resetn := inputsFields[.resetn],
-    .selected := selectFetch.result }
-  }
+/-! # Complete datapath-state update
+
+Every phase candidate starts from the ALU-capture baseline. The old CPU phase
+then selects one candidate in source priority order; an unknown phase retains
+the baseline. Reset overrides only the two PC fields after that selection. -/
+
+namespace Next.Description
+
+noncomputable def construction : Builder Unit := do
+  let inputs ← input "inputs" inputsType
+  let current ← input "current" stateType
+  let aluOut ← input "alu_out" (.vector 32 .bit)
+  let inputsFields ← split DatapathInputs.layout inputs
+  let baseline ← Baseline.place current aluOut
+  let phase ← PhaseDecode.place (inputsFields .cpu_state)
+  let fetch ← FetchUpdate.place inputs current baseline
+  let loadRs1 ← LoadRs1Update.place inputs current baseline
+  let loadRs2 ← LoadRs2Update.place inputs current baseline
+  let execute ← ExecuteUpdate.place inputs current baseline
+  let shift ← ShiftUpdate.place inputs current baseline
+  let store ← StoreUpdate.place inputs current baseline
+  let load ← LoadUpdate.place inputs current baseline
+  let selected ← mux phase.load baseline load
+  let selected ← mux phase.store selected store
+  let selected ← mux phase.shift selected shift
+  let selected ← mux phase.execute selected execute
+  let selected ← mux phase.loadRs2 selected loadRs2
+  let selected ← mux phase.loadRs1 selected loadRs1
+  let selected ← mux phase.fetch selected fetch
+  output "state" (← ResetOverride.place (inputsFields .resetn) selected)
+
+noncomputable def description : Description := build construction
+
+end Next.Description
+
+namespace Next
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (inputs : Net inputsType) (current : Net stateType)
+    (aluOut : Net (.vector 32 .bit)) : Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .inputs => inputs
+    | .current => current
+    | .alu_out => aluOut
+  pure (child .state)
+
+noncomputable def place (inputs : Net inputsType) (current : Net stateType)
+    (aluOut : Net (.vector 32 .bit)) : Builder (Net stateType) := do
+  let child ← placeIndexed "datapath_next" design fun
+    | .inputs => inputs
+    | .current => current
+    | .alu_out => aluOut
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+end Next
 
 end PicoRV.Datapath

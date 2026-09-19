@@ -2,7 +2,7 @@ import PicoRV.Decoder.DecoderImmediateTheorems
 import PicoRV.Decoder.DecoderInstructionMatchTheorems
 import PicoRV.Decoder.DecoderInstructionSummaryTheorems
 import PicoRV.Decoder.DecoderResolveStage
-import PicoRV.Decoder.DecoderResolveStageStructure
+import PicoRV.Decoder.Internal.DecoderResolveStageStructure
 import Silean.FIRRTL
 
 namespace PicoRVTests.DecoderResolveChildrenChecks

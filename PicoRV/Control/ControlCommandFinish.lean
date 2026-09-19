@@ -1,27 +1,72 @@
-import PicoRV.Control
-import Silean.Authoring.ModuleDesign
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Naming.PrimitiveNaming
+import PicoRV.Control.Internal.ControlCommandFinishStructure
+import PicoRV.Authoring.CircuitLogic
+import Silean.Authoring.ModuleCycleContract
 
 namespace PicoRV.Control.CommandFinish
 
 open Silean
 open Silean.Authoring
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
-/-! The final command-priority layer from PicoRV32's sequential control block.
-It receives a complete proposed transition. When `clear` is high it first
-clears all four memory commands, then reasserts the three commands represented
-by blocking `set_mem_do_*` intents. All non-command state fields pass through
-unchanged.
+/-! # Command finishing
 
-Keeping this as a separate combinational module makes the source assignment
-order explicit and gives the parent Control proof a natural semantic boundary:
-the result is exactly `Control.finishCommands`. -/
+The final command-priority layer receives a complete proposed transition. When
+`clear` is high it first clears all four memory commands, then reasserts the
+three commands represented by the blocking `set_mem_do_*` intents. Every
+other state field passes through unchanged.
 
-module_ports ports where
-  input clear : .bit,
-  input transition (schema := TransitionValue.schema) : transitionType,
-  output state (schema := ControlState.schema) : stateType
+The concise definition below makes that priority visible. The expanded typed
+hierarchy and its certification remain under `Internal/`. -/
+
+namespace Description
+
+noncomputable def construction : Builder Unit := do
+  let clear ← input "clear" .bit
+  let transition ← input "transition" transitionType
+  let transitionFields ← split TransitionValue.layout transition
+  let stateFields ← split ControlState.layout (transitionFields .state)
+  let notClear ← !! clear
+  let keepPrefetch ← stateFields .mem_do_prefetch &&& notClear
+  let finishRinst ←
+    (← stateFields .mem_do_rinst &&& notClear) ||| transitionFields .setRinst
+  let finishRdata ←
+    (← stateFields .mem_do_rdata &&& notClear) ||| transitionFields .setRdata
+  let finishWdata ←
+    (← stateFields .mem_do_wdata &&& notClear) ||| transitionFields .setWdata
+  let result ← update stateMap ControlState.schema stateFields fun
+    | .mem_do_prefetch => some keepPrefetch
+    | .mem_do_rinst => some finishRinst
+    | .mem_do_rdata => some finishRdata
+    | .mem_do_wdata => some finishWdata
+    | _ => none
+  output "state" result
+
+noncomputable def description : Description := build construction
+
+end Description
+
+/-! ## Placement -/
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (clear : Net .bit) (transition : Net transitionType) :
+    Builder (Net stateType) := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
+    | .clear => clear
+    | .transition => transition
+  pure (child .state)
+
+noncomputable def place (clear : Net .bit) (transition : Net transitionType) :
+    Builder (Net stateType) := do
+  let child ← placeIndexed "command_finish" design fun
+    | .clear => clear
+    | .transition => transition
+  pure (child .state)
+
+attribute [circuit_description] placeNamed place
+
+/-! ## Exact cycle behavior -/
 
 def outputState (inputs : inputMap.Values) : stateMap.Values :=
   finishCommands (inputs .clear) (Transition.unpack (inputs .transition))
@@ -55,81 +100,3 @@ module_cycle_contract cycleContract for ports where
     exact equal
 
 end PicoRV.Control.CommandFinish
-
-namespace PicoRV.Control
-
-open Silean
-open Silean.Authoring
-
-/-! ## Hardware structure
-
-The two splitters expose the transition and its proposed state. Four AND gates
-retain existing commands only when clearing is disabled. Three OR gates then
-apply the set-command intents. The final named-tuple combiner passes every
-other state field through unchanged. -/
-
-module_design CommandFinish (name := "picorv32_control_command_finish") where
-  boundary (CommandFinish.ports) (naming := CommandFinish.Naming.ports)
-  instances {
-    transitionFields := Silean.Modules.NamedTupleSplitter.designWith
-      TransitionValue.signalMap TransitionValue.schema,
-    stateFields := Silean.Modules.NamedTupleSplitter.designWith stateMap ControlState.schema,
-    notClear := Silean.Primitives.notDesign,
-    keepPrefetch := Silean.Primitives.andDesign,
-    keepRinst := Silean.Primitives.andDesign,
-    keepRdata := Silean.Primitives.andDesign,
-    keepWdata := Silean.Primitives.andDesign,
-    finishRinst := Silean.Primitives.orDesign,
-    finishRdata := Silean.Primitives.orDesign,
-    finishWdata := Silean.Primitives.orDesign,
-    result := Silean.Modules.NamedTupleCombiner.designWith stateMap ControlState.schema }
-  wiring {
-  outputs {
-    .state := result.value }
-  instance (.transitionFields) {
-    .value := input.transition }
-  instance (.stateFields) {
-    .value := transitionFields[.state] }
-  instance (.notClear) {
-    .input := input.clear }
-  instance (.keepPrefetch) {
-    .left := stateFields[.mem_do_prefetch],
-    .right := notClear.output }
-  instance (.keepRinst) {
-    .left := stateFields[.mem_do_rinst],
-    .right := notClear.output }
-  instance (.keepRdata) {
-    .left := stateFields[.mem_do_rdata],
-    .right := notClear.output }
-  instance (.keepWdata) {
-    .left := stateFields[.mem_do_wdata],
-    .right := notClear.output }
-  instance (.finishRinst) {
-    .left := keepRinst.output,
-    .right := transitionFields[.setRinst] }
-  instance (.finishRdata) {
-    .left := keepRdata.output,
-    .right := transitionFields[.setRdata] }
-  instance (.finishWdata) {
-    .left := keepWdata.output,
-    .right := transitionFields[.setWdata] }
-  instance (.result) {
-    .cpu_state := stateFields[.cpu_state],
-    .latched_store := stateFields[.latched_store],
-    .latched_stalu := stateFields[.latched_stalu],
-    .latched_branch := stateFields[.latched_branch],
-    .latched_is_lu := stateFields[.latched_is_lu],
-    .latched_is_lh := stateFields[.latched_is_lh],
-    .latched_is_lb := stateFields[.latched_is_lb],
-    .latched_rd := stateFields[.latched_rd],
-    .mem_wordsize := stateFields[.mem_wordsize],
-    .mem_do_prefetch := keepPrefetch.output,
-    .mem_do_rinst := finishRinst.output,
-    .mem_do_rdata := finishRdata.output,
-    .mem_do_wdata := finishWdata.output,
-    .decoder_trigger := stateFields[.decoder_trigger],
-    .decoder_pseudo_trigger := stateFields[.decoder_pseudo_trigger],
-    .trap := stateFields[.trap] }
-  }
-
-end PicoRV.Control

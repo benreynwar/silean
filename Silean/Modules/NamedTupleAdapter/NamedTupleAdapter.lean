@@ -1,5 +1,6 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Naming.SignalAdapterNaming
 
@@ -10,7 +11,12 @@ open Silean
 /-! A named-tuple combiner presents a `SignalMap`'s labels as separate inputs
 and packs their values into the corresponding tuple. Its sole child is the
 canonical positional tuple combiner; the wrapper adds readable labels, not
-hardware logic. -/
+hardware logic.
+
+The boundary itself is an arbitrary dependent `SignalMap` family. The typed
+`module_design` directly expresses that generated family; reproducing it with
+individually declared builder ports would be less direct, so no second fixed
+`CircuitDescription` is maintained. -/
 
 @[reducible] def ports (signals : SignalMap) : ModulePorts :=
   ⟨signals, Composition.aggregateSignalMap signals.tupleType⟩
@@ -76,6 +82,44 @@ def namingWith (signals : SignalMap)
     Naming.NamedModule :=
   ⟨ports signals, moduleStructure signals, namingWith signals typeNaming⟩
 
+/-! ## Placement -/
+
+open Authoring.CircuitDescription
+
+/-- Place a named tuple combiner with caller-supplied aggregate naming. -/
+noncomputable def placeNamedWith (name : Naming.SourceName)
+    (signals : SignalMap) (typeNaming : Naming.SignalTypeNaming signals.tupleType)
+    (values : (label : signals.Label) → Net (signals.signalType label)) :
+    Builder (Net signals.tupleType) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (designWith signals typeNaming) values
+  pure (child .value)
+
+/-- Place a named tuple combiner with positional aggregate naming. -/
+noncomputable def placeNamed (name : Naming.SourceName) (signals : SignalMap)
+    (values : (label : signals.Label) → Net (signals.signalType label)) :
+    Builder (Net signals.tupleType) :=
+  placeNamedWith name signals (.positional signals.tupleType) values
+
+/-- Place a named tuple combiner with caller-supplied aggregate naming and a
+conventional indexed instance name. -/
+noncomputable def placeWith (signals : SignalMap)
+    (typeNaming : Naming.SignalTypeNaming signals.tupleType)
+    (values : (label : signals.Label) → Net (signals.signalType label)) :
+    Builder (Net signals.tupleType) := do
+  let child ← placeIndexed "named_tuple_combiner"
+    (designWith signals typeNaming) values
+  pure (child .value)
+
+/-- Place a named tuple combiner using a conventional indexed name. -/
+noncomputable def place (signals : SignalMap)
+    (values : (label : signals.Label) → Net (signals.signalType label)) :
+    Builder (Net signals.tupleType) := do
+  let child ← placeIndexed "named_tuple_combiner" (design signals) values
+  pure (child .value)
+
+attribute [circuit_description] placeNamedWith placeNamed placeWith place
+
 def combinedValue (signals : SignalMap) (values : signals.Values) :
     signals.tupleType.Denote :=
   signals.tupleFields.assemble (signals.allSelection.valueAt values)
@@ -128,7 +172,9 @@ open Silean
 
 /-! A named-tuple splitter accepts one tuple and exposes its fields using a
 `SignalMap`'s labels. Its sole child is the canonical positional tuple splitter;
-the wrapper only translates labels to their typed tuple positions. -/
+the wrapper only translates labels to their typed tuple positions. As with the
+combiner, the arbitrary dependent output family is clearer in `module_design`
+than as a duplicated fixed builder description. -/
 
 @[reducible] def ports (signals : SignalMap) : ModulePorts :=
   ⟨Composition.aggregateSignalMap signals.tupleType, signals⟩
@@ -193,6 +239,44 @@ def namingWith (signals : SignalMap)
     (typeNaming : Naming.SignalTypeNaming signals.tupleType) :
     Naming.NamedModule :=
   ⟨ports signals, moduleStructure signals, namingWith signals typeNaming⟩
+
+/-! ## Placement -/
+
+open Authoring.CircuitDescription
+
+/-- Place a named tuple splitter with caller-supplied aggregate naming. -/
+noncomputable def placeNamedWith (name : Naming.SourceName)
+    (signals : SignalMap) (typeNaming : Naming.SignalTypeNaming signals.tupleType)
+    (value : Net signals.tupleType) :
+    Builder ((label : signals.Label) → Net (signals.signalType label)) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (designWith signals typeNaming) fun | .value => value
+  pure child
+
+/-- Place a named tuple splitter with positional aggregate naming. -/
+noncomputable def placeNamed (name : Naming.SourceName) (signals : SignalMap)
+    (value : Net signals.tupleType) :
+    Builder ((label : signals.Label) → Net (signals.signalType label)) :=
+  placeNamedWith name signals (.positional signals.tupleType) value
+
+/-- Place a named tuple splitter with caller-supplied aggregate naming and a
+conventional indexed instance name. -/
+noncomputable def placeWith (signals : SignalMap)
+    (typeNaming : Naming.SignalTypeNaming signals.tupleType)
+    (value : Net signals.tupleType) :
+    Builder ((label : signals.Label) → Net (signals.signalType label)) := do
+  let child ← placeIndexed "named_tuple_splitter"
+    (designWith signals typeNaming) fun | .value => value
+  pure child
+
+/-- Place a named tuple splitter using a conventional indexed name. -/
+noncomputable def place (signals : SignalMap) (value : Net signals.tupleType) :
+    Builder ((label : signals.Label) → Net (signals.signalType label)) := do
+  let child ← placeIndexed "named_tuple_splitter" (design signals)
+    (fun | .value => value)
+  pure child
+
+attribute [circuit_description] placeNamedWith placeNamed placeWith place
 
 def splitValue (signals : SignalMap) (value : signals.tupleType.Denote) :
     signals.Values := fun label =>

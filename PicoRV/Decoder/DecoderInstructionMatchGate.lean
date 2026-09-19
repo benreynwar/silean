@@ -1,7 +1,7 @@
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
-import Silean.Naming.PrimitiveNaming
-import Silean.Primitives.And
+import Silean.Authoring.CircuitDescription
+import Silean.Authoring.CircuitLogic
+import PicoRV.Decoder.Internal.DecoderInstructionMatchGateStructure
 
 namespace PicoRV.Decoder.InstructionMatch.MatchGate
 
@@ -12,11 +12,44 @@ open Silean.Authoring
 class, its field match, and an optional qualifier. Keeping this two-gate detail
 behind a uniform boundary makes the instruction matcher hierarchy readable. -/
 
-module_ports ports where
-  input broad : .bit,
-  input field : .bit,
-  input qualifier : .bit,
-  output result : .bit
+/-! ## Authored hardware -/
+
+namespace Description
+
+open Silean.Authoring.CircuitDescription
+open scoped Silean.Authoring.CircuitLogic
+
+noncomputable def construction : Builder Unit := do
+  let broad ← input "broad" .bit
+  let field ← input "field" .bit
+  let qualifier ← input "qualifier" .bit
+  output "result" (← (← broad &&& field) &&& qualifier)
+
+noncomputable def description : Description := build construction
+
+end Description
+
+/-! ## Placement -/
+
+noncomputable def place (broad field qualifier : Authoring.CircuitDescription.Net .bit) :
+    Authoring.CircuitDescription.Builder (Authoring.CircuitDescription.Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeIndexed "instruction_match_gate"
+    Structure.design fun
+      | .broad => broad
+      | .field => field
+      | .qualifier => qualifier
+  pure (child .result)
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (broad field qualifier : Authoring.CircuitDescription.Net .bit) :
+    Authoring.CircuitDescription.Builder (Authoring.CircuitDescription.Net .bit) := do
+  let child ← Authoring.CircuitDescription.placeNamed name Structure.design fun
+    | .broad => broad
+    | .field => field
+    | .qualifier => qualifier
+  pure (child .result)
+
+attribute [circuit_description] place placeNamed
 
 def outputRule : Silean.Contracts.Cycle.CycleOutputRule ports emptySignalMap where
   readsInputs := .all inputMap
@@ -42,20 +75,5 @@ module_cycle_contract cycleContract for ports where
     funext output
     cases output
     exact equal
-
-module_design Structure (name := "PicoRVDecoderInstructionPredicate") where
-  boundary (ports) (naming := Naming.ports)
-  instances {
-    classAndField := Silean.Primitives.andDesign,
-    qualifiedResult := Silean.Primitives.andDesign }
-  wiring {
-  outputs { .result := qualifiedResult.output }
-  instance (.classAndField) {
-    .left := input.broad,
-    .right := input.field }
-  instance (.qualifiedResult) {
-    .left := classAndField.output,
-    .right := input.qualifier }
-  }
 
 end PicoRV.Decoder.InstructionMatch.MatchGate

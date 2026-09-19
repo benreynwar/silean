@@ -1,3 +1,4 @@
+import PicoRV.Decoder
 import PicoRV.Internal.DecoderVerification
 
 /-! # PicoRV decoder theorems
@@ -23,7 +24,7 @@ theorem outputs_of_allowed : step.outputs = outputValues step.currentState :=
     (allowed.1 .outputs)
 
 /-- The two decoder stages advance together according to the source-level
-transition function in `Decoder.lean`. -/
+transition function in `DecoderContract.lean`. -/
 theorem nextState_of_allowed :
     step.nextState = nextState (valuesOf step.inputs) step.currentState := by
   rw [allowed.2]

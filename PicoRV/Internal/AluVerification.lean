@@ -4,6 +4,7 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.AddSub.AddSubTheorems
+import Silean.Modules.BitMux.BitMuxTheorems
 import Silean.Modules.Equality.EqualityTheorems
 import Silean.Modules.Mux.MuxTheorems
 
@@ -88,16 +89,16 @@ module_child_certifications childContracts for body where
   zeroWord := Silean.Modules.Constant.certification wordType zeroWordValue,
   unsignedLess := Silean.Primitives.notCertified.certification,
   signDifference := Silean.Primitives.xorCertified.certification,
-  signedLess := Silean.Modules.Mux.certification .bit,
+  signedLess := Silean.Modules.BitMux.certification,
   notEqual := Silean.Primitives.notCertified.certification,
   notSignedLess := Silean.Primitives.notCertified.certification,
   notUnsignedLess := Silean.Primitives.notCertified.certification,
-  selectUnsignedLess := Silean.Modules.Mux.certification .bit,
-  selectSignedLess := Silean.Modules.Mux.certification .bit,
-  selectUnsignedGreaterEqual := Silean.Modules.Mux.certification .bit,
-  selectSignedGreaterEqual := Silean.Modules.Mux.certification .bit,
-  selectNotEqual := Silean.Modules.Mux.certification .bit,
-  selectEqual := Silean.Modules.Mux.certification .bit,
+  selectUnsignedLess := Silean.Modules.BitMux.certification,
+  selectSignedLess := Silean.Modules.BitMux.certification,
+  selectUnsignedGreaterEqual := Silean.Modules.BitMux.certification,
+  selectSignedGreaterEqual := Silean.Modules.BitMux.certification,
+  selectNotEqual := Silean.Modules.BitMux.certification,
+  selectEqual := Silean.Modules.BitMux.certification,
   comparisonWord := wordCombiner.certified.certification,
   xorSelected := Silean.Primitives.orCertified.certification,
   orSelected := Silean.Primitives.orCertified.certification,
@@ -125,16 +126,16 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
         .zeroWord => Silean.Primitives.ConstantRule.apply,
         .unsignedLess => Silean.Primitives.NotRule.apply,
         .signDifference => Silean.Primitives.XorRule.apply,
-        .signedLess => Silean.Modules.Mux.Rule.select,
+        .signedLess => Silean.Modules.BitMux.Rule.select,
         .notEqual => Silean.Primitives.NotRule.apply,
         .notSignedLess => Silean.Primitives.NotRule.apply,
         .notUnsignedLess => Silean.Primitives.NotRule.apply,
-        .selectUnsignedLess => Silean.Modules.Mux.Rule.select,
-        .selectSignedLess => Silean.Modules.Mux.Rule.select,
-        .selectUnsignedGreaterEqual => Silean.Modules.Mux.Rule.select,
-        .selectSignedGreaterEqual => Silean.Modules.Mux.Rule.select,
-        .selectNotEqual => Silean.Modules.Mux.Rule.select,
-        .selectEqual => Silean.Modules.Mux.Rule.select,
+        .selectUnsignedLess => Silean.Modules.BitMux.Rule.select,
+        .selectSignedLess => Silean.Modules.BitMux.Rule.select,
+        .selectUnsignedGreaterEqual => Silean.Modules.BitMux.Rule.select,
+        .selectSignedGreaterEqual => Silean.Modules.BitMux.Rule.select,
+        .selectNotEqual => Silean.Modules.BitMux.Rule.select,
+        .selectEqual => Silean.Modules.BitMux.Rule.select,
         .comparisonWord => Silean.Composition.SignalComponentRule.apply,
         .xorSelected => Silean.Primitives.OrRule.apply,
         .orSelected => Silean.Primitives.OrRule.apply,
@@ -224,7 +225,7 @@ private theorem implements :
   have zeroWordValueEquation : hierStep.childOutputs .zeroWord .output = wordOfNat 0 := by
     have equation := Silean.Modules.Constant.output_of_allowed wordType zeroWordValue
       (childMatch .zeroWord).allowed
-    simpa [zeroWordValue] using equation
+    simpa [zeroWordValue, wordOfNat] using equation
   have unsignedLessValue : hierStep.childOutputs .unsignedLess .output =
       sharedUnsignedLess (valuesOf hierStep.inputs) := by
     have equation := (Silean.Primitives.notOutputRule_holds_iff _ _ _).mp
@@ -241,7 +242,7 @@ private theorem implements :
       (primitiveXor_eq_boolXor _ _)
   have signedLessValue : hierStep.childOutputs .signedLess .result =
       sharedSignedLess (valuesOf hierStep.inputs) := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .signedLess).allowed
     normalize_child_hyp equation unfolding wiring, context
     have selected := mux_congr equation signDifferenceValue leftSign unsignedLessValue
@@ -270,14 +271,14 @@ private theorem implements :
     exact equation.trans (congrArg Bool.not unsignedLessValue)
   have selectUnsignedLessValue : hierStep.childOutputs .selectUnsignedLess .result =
       bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs) else false := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .selectUnsignedLess).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl unsignedLessValue zeroBitValueEquation
   have selectSignedLessValue : hierStep.childOutputs .selectSignedLess .result =
       bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
       else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs) else false := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .selectSignedLess).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl signedLessValue selectUnsignedLessValue
@@ -287,7 +288,7 @@ private theorem implements :
         else bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
         else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs)
         else false := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .selectUnsignedGreaterEqual).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notUnsignedLessValue selectSignedLessValue
@@ -298,7 +299,7 @@ private theorem implements :
         else bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
         else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs)
         else false := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .selectSignedGreaterEqual).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notSignedLessValue
@@ -310,13 +311,13 @@ private theorem implements :
       else bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
       else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs)
       else false := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .selectNotEqual).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notEqualValue selectSignedGreaterEqualValue
   have selectEqualValue : hierStep.childOutputs .selectEqual .result =
       comparisonOutput (valuesOf hierStep.inputs) := by
-    have equation := Silean.Modules.Mux.result_of_allowed .bit
+    have equation := Silean.Modules.BitMux.result_of_allowed
       (childMatch .selectEqual).allowed
     normalize_child_hyp equation unfolding wiring, context
     have equalityAsBool :

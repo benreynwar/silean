@@ -1,4 +1,5 @@
 import PicoRV.Internal.RegsVerification
+import PicoRV.Internal.RegsCorrespondence
 
 /-! # PicoRV register-file theorems
 
@@ -9,6 +10,12 @@ The structural proof and its child hierarchy remain under `Internal/`.
 namespace PicoRV.Regs
 
 open Silean
+
+/-- The concise authored definition expands to the production hierarchy. -/
+theorem authored_definition_corresponds :
+    Silean.Authoring.CircuitDescription.Corresponds
+      Description.description naming :=
+  Description.Internal.corresponds
 
 section AllowedStep
 

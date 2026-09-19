@@ -388,7 +388,7 @@ elab_rules : command
         match child with $structureAlternatives:matchAlt*
     )
     elabCommand <| ← `(
-      private def $instanceNamesIdent $binders:bracketedBinder*
+      @[reducible, simp] private def $instanceNamesIdent $binders:bracketedBinder*
           (child : ($instancePortsName $arguments:term*).Name) :
           Silean.Naming.SourceName :=
         match child with $nameAlternatives:matchAlt*

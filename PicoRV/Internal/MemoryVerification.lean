@@ -1,4 +1,4 @@
-import PicoRV.MemoryStructure
+import PicoRV.Internal.MemoryStructure
 import PicoRV.Memory.Internal.MemoryLookaheadVerification
 import PicoRV.Memory.Internal.MemoryNextVerification
 import PicoRV.Memory.Internal.MemoryReadFormattingVerification

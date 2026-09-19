@@ -1,14 +1,10 @@
 import Silean.Foundation.BitVector
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
 import Silean.Contracts.Cycle.CycleEvaluation
-import Silean.Modules.Constant.Constant
-import Silean.Modules.Equality.Equality
-import Silean.Modules.Mux.Mux
+import PicoRV.Authoring.CircuitLogic
+import PicoRV.Internal.RegsStructure
 import Silean.Modules.RegisterBank.RegisterBank
-import Silean.Naming.PrimitiveNaming
-import Silean.Primitives.And
-import Silean.Primitives.Not
 
 namespace PicoRV.Regs
 
@@ -19,19 +15,83 @@ open Silean.Authoring
 zero and ignores writes. The exact cycle contract is followed by a structural
 implementation around the generic two-read `RegisterBank`. -/
 
-abbrev Word := Fin 32 → Bool
-abbrev RegisterAddress := Fin 5 → Bool
 abbrev RegisterValues := Fin 32 → Word
 
-module_ports ports where
-  input resetn : .bit,
-  input decoded_rs1 : .vector 5 .bit,
-  input decoded_rs2 : .vector 5 .bit,
-  input cpuregs_write : .bit,
-  input latched_rd : .vector 5 .bit,
-  input cpuregs_wrdata : .vector 32 .bit,
-  output cpuregs_rs1 : .vector 32 .bit,
-  output cpuregs_rs2 : .vector 32 .bit
+/-! ## Authored hardware -/
+
+namespace Description
+
+open Silean.Authoring.CircuitDescription
+open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
+
+noncomputable def construction : Builder Unit := do
+  let resetn ← input "resetn" .bit
+  let decodedRs1 ← input "decoded_rs1" addressType
+  let decodedRs2 ← input "decoded_rs2" addressType
+  let cpuregsWrite ← input "cpuregs_write" .bit
+  let latchedRd ← input "latched_rd" addressType
+  let cpuregsWrdata ← input "cpuregs_wrdata" wordType
+
+  let zeroAddress ← constant addressType zeroAddressValue
+  let zeroWord ← constant wordType zeroWordValue
+  let rdNonzero ← !! (← latchedRd === zeroAddress)
+  let writeEnable ← (← resetn &&& cpuregsWrite) &&& rdNonzero
+  let bank ← Silean.Modules.RegisterBank.place
+    (element := wordType) (addressWidth := 5) (readCount := 2)
+    writeEnable latchedRd cpuregsWrdata fun
+      | 0 => decodedRs1
+      | 1 => decodedRs2
+
+  output "cpuregs_rs1"
+    (← mux (← decodedRs1 === zeroAddress) (bank.readValue 0) zeroWord)
+  output "cpuregs_rs2"
+    (← mux (← decodedRs2 === zeroAddress) (bank.readValue 1) zeroWord)
+
+noncomputable def description : Description :=
+  build construction
+
+end Description
+
+/-! ## Placement -/
+
+structure PlacedOutputs where
+  cpuregsRs1 : Authoring.CircuitDescription.Net wordType
+  cpuregsRs2 : Authoring.CircuitDescription.Net wordType
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (resetn : Authoring.CircuitDescription.Net .bit)
+    (decodedRs1 decodedRs2 : Authoring.CircuitDescription.Net addressType)
+    (cpuregsWrite : Authoring.CircuitDescription.Net .bit)
+    (latchedRd : Authoring.CircuitDescription.Net addressType)
+    (cpuregsWrdata : Authoring.CircuitDescription.Net wordType) :
+    Authoring.CircuitDescription.Builder PlacedOutputs := do
+  let child ← Authoring.CircuitDescription.placeNamed name design fun
+    | .resetn => resetn
+    | .decoded_rs1 => decodedRs1
+    | .decoded_rs2 => decodedRs2
+    | .cpuregs_write => cpuregsWrite
+    | .latched_rd => latchedRd
+    | .cpuregs_wrdata => cpuregsWrdata
+  pure { cpuregsRs1 := child .cpuregs_rs1, cpuregsRs2 := child .cpuregs_rs2 }
+
+noncomputable def place
+    (resetn : Authoring.CircuitDescription.Net .bit)
+    (decodedRs1 decodedRs2 : Authoring.CircuitDescription.Net addressType)
+    (cpuregsWrite : Authoring.CircuitDescription.Net .bit)
+    (latchedRd : Authoring.CircuitDescription.Net addressType)
+    (cpuregsWrdata : Authoring.CircuitDescription.Net wordType) :
+    Authoring.CircuitDescription.Builder PlacedOutputs := do
+  let child ← Authoring.CircuitDescription.placeIndexed "regs" design fun
+    | .resetn => resetn
+    | .decoded_rs1 => decodedRs1
+    | .decoded_rs2 => decodedRs2
+    | .cpuregs_write => cpuregsWrite
+    | .latched_rd => latchedRd
+    | .cpuregs_wrdata => cpuregsWrdata
+  pure { cpuregsRs1 := child .cpuregs_rs1, cpuregsRs2 := child .cpuregs_rs2 }
+
+attribute [circuit_description] placeNamed place
 
 inductive State
   /-- The 32 architectural integer registers. -/
@@ -212,76 +272,4 @@ theorem nextRegisters_other (resetn cpuregs_write : Bool)
     cases output
     exact equal
 
-/-! ## Hardware structure -/
-
-abbrev wordType : SignalType := .vector 32 .bit
-abbrev addressType : SignalType := .vector 5 .bit
-def zeroAddressValue : addressType.Denote := fun _ => false
-def zeroWordValue : wordType.Denote := fun _ => false
-
 end PicoRV.Regs
-
-namespace PicoRV
-
-open Silean
-open Silean.Authoring
-
-module_design Regs (name := "picorv32_regs") where
-  boundary (Regs.ports) (naming := Regs.Naming.ports)
-  instances {
-    -- The shared 32-entry storage with two independent read ports.
-    bank := Silean.Modules.RegisterBank.design Regs.wordType 5 2,
-    -- Shared constants used to protect architectural register zero.
-    zeroAddress := Silean.Modules.Constant.design Regs.addressType Regs.zeroAddressValue,
-    zeroWord := Silean.Modules.Constant.design Regs.wordType Regs.zeroWordValue,
-    -- Test all externally supplied register addresses against zero.
-    rs1Zero := Silean.Modules.Equality.design Regs.addressType,
-    rs2Zero := Silean.Modules.Equality.design Regs.addressType,
-    rdZero := Silean.Modules.Equality.design Regs.addressType,
-    -- Form resetn && cpuregs_write && (latched_rd != 0).
-    rdNonzero := Silean.Primitives.notDesign,
-    requestedWrite := Silean.Primitives.andDesign,
-    enabledWrite := Silean.Primitives.andDesign,
-    -- Select zero or the stored value for each architectural read.
-    rs1Mux := Silean.Modules.Mux.design Regs.wordType,
-    rs2Mux := Silean.Modules.Mux.design Regs.wordType }
-  wiring {
-    outputs {
-      .cpuregs_rs1 := rs1Mux.result,
-      .cpuregs_rs2 := rs2Mux.result }
-    instance (.bank) {
-      .readAddress 0 := input.decoded_rs1,
-      .readAddress 1 := input.decoded_rs2,
-      .writeEnable := enabledWrite.output,
-      .writeAddress := input.latched_rd,
-      .writeValue := input.cpuregs_wrdata }
-    instance (.zeroAddress) {}
-    instance (.zeroWord) {}
-    instance (.rs1Zero) {
-      .left := input.decoded_rs1,
-      .right := zeroAddress.output }
-    instance (.rs2Zero) {
-      .left := input.decoded_rs2,
-      .right := zeroAddress.output }
-    instance (.rdZero) {
-      .left := input.latched_rd,
-      .right := zeroAddress.output }
-    instance (.rdNonzero) {
-      .input := rdZero.result }
-    instance (.requestedWrite) {
-      .left := input.resetn,
-      .right := input.cpuregs_write }
-    instance (.enabledWrite) {
-      .left := requestedWrite.output,
-      .right := rdNonzero.output }
-    instance (.rs1Mux) {
-      .select := rs1Zero.result,
-      .whenFalse := bank[.readValue 0],
-      .whenTrue := zeroWord.output }
-    instance (.rs2Mux) {
-      .select := rs2Zero.result,
-      .whenFalse := bank[.readValue 1],
-      .whenTrue := zeroWord.output }
-  }
-
-end PicoRV

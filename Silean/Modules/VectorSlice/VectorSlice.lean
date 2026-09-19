@@ -1,5 +1,6 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModuleDesign
+import Silean.Authoring.CircuitDescription
 import Silean.Naming.SignalAdapterNaming
 
 namespace Silean.Modules.VectorSlice
@@ -7,7 +8,9 @@ namespace Silean.Modules.VectorSlice
 open Silean
 
 /-! Extract a contiguous vector range. `prefixWidth` elements precede the
-result and `suffixWidth` elements follow it. -/
+result and `suffixWidth` elements follow it. The circuit is a dependent index
+mapping between generic adapters, which the typed `module_design` states more
+directly than a duplicated builder description would. -/
 
 def slice (value : Fin (prefixWidth + width + suffixWidth) → α) : Fin width → α :=
   fun index => value (Fin.castAdd suffixWidth (Fin.natAdd prefixWidth index))
@@ -64,6 +67,27 @@ namespace Silean.Modules.VectorSlice
 
 open Silean
 open Silean.Authoring
+open Authoring.CircuitDescription
+
+/-! ## Placement -/
+
+noncomputable def placeNamed (name : Naming.SourceName)
+    (element : SignalType) (prefixWidth width suffixWidth : Nat)
+    (value : Net (.vector (prefixWidth + width + suffixWidth) element)) :
+    Builder (Net (.vector width element)) := do
+  let child ← Authoring.CircuitDescription.placeNamed name
+    (design element prefixWidth width suffixWidth) fun | .value => value
+  pure (child .result)
+
+noncomputable def place (element : SignalType)
+    (prefixWidth width suffixWidth : Nat)
+    (value : Net (.vector (prefixWidth + width + suffixWidth) element)) :
+    Builder (Net (.vector width element)) := do
+  let child ← placeIndexed "vector_slice"
+    (design element prefixWidth width suffixWidth) fun | .value => value
+  pure (child .result)
+
+attribute [circuit_description] placeNamed place
 
 def outputRule (element : SignalType) (prefixWidth width suffixWidth : Nat) :
     Contracts.Cycle.CycleOutputRule

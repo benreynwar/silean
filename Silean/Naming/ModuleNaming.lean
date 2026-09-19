@@ -119,6 +119,14 @@ structure ModulePortsNaming (ports : ModulePorts) where
 def ModulePortsNaming.names (naming : ModulePortsNaming ports) : List SourceName :=
   naming.inputs.names ++ naming.outputs.names
 
+/-- An optional human-facing name for a structural source inside a composite.
+This is emission metadata only: it does not add a node to `ModuleBody` or
+change the circuit's equations. -/
+structure NamedWire (body : ModuleBody) where
+  signalType : SignalType
+  name : SourceName
+  source : SignalSource body.ports body.instancePorts signalType
+
 /-! This is the one type-safe part of primitive emission metadata: an arbitrary
 open `Primitive` cannot be mislabeled as a supported FIRRTL operation. -/
 
@@ -156,7 +164,8 @@ inductive ModuleNaming : {ports : ModulePorts} → ModuleStructure ports → Typ
       (ports : ModulePortsNaming body.ports)
       (instanceName : body.instancePorts.Name → SourceName)
       (childNaming : (name : body.instancePorts.Name) →
-        ModuleNaming (children name)) :
+        ModuleNaming (children name))
+      (namedWires : List (NamedWire body) := []) :
       ModuleNaming (.composite body children)
 
 namespace ModuleNaming
@@ -166,7 +175,7 @@ def key : ModuleNaming moduleStructure → ModuleKey
   | .blackbox key _ _ => key
   | .splitter _ key _ => key
   | .combiner _ key _ => key
-  | .composite key _ _ _ => key
+  | .composite key _ _ _ _ => key
 
 def ports {modulePorts : ModulePorts}
     {moduleStructure : ModuleStructure modulePorts} :
@@ -175,7 +184,18 @@ def ports {modulePorts : ModulePorts}
   | .blackbox _ ports _ => ports
   | .splitter _ _ ports => ports
   | .combiner _ _ ports => ports
-  | .composite _ ports _ _ => ports
+  | .composite _ ports _ _ _ => ports
+
+/-- Transporting naming across equal structures at the same interface does
+not change the boundary-port naming. This keeps equality-proof details out of
+the naming implementations built on recursive structures. -/
+theorem ports_mpr_of_eq {ports : ModulePorts}
+    {left right : ModuleStructure ports} (equal : left = right)
+    (typeEqual : ModuleNaming left = ModuleNaming right)
+    (naming : ModuleNaming right) :
+    (typeEqual.mpr naming).ports = naming.ports := by
+  cases equal
+  rfl
 
 def withKey (newKey : ModuleKey) :
     (naming : ModuleNaming moduleStructure) → ModuleNaming moduleStructure
@@ -183,8 +203,8 @@ def withKey (newKey : ModuleKey) :
   | .blackbox _ ports state => .blackbox newKey ports state
   | .splitter adapter _ ports => .splitter adapter newKey ports
   | .combiner adapter _ ports => .combiner adapter newKey ports
-  | .composite _ ports instanceName childNaming =>
-      .composite newKey ports instanceName childNaming
+  | .composite _ ports instanceName childNaming namedWires =>
+      .composite newKey ports instanceName childNaming namedWires
 
 def withPorts {modulePorts : ModulePorts}
     (newPorts : ModulePortsNaming modulePorts) :
@@ -194,8 +214,8 @@ def withPorts {modulePorts : ModulePorts}
   | _, .blackbox key _ state => .blackbox key newPorts state
   | _, .splitter adapter key _ => .splitter adapter key newPorts
   | _, .combiner adapter key _ => .combiner adapter key newPorts
-  | _, .composite key _ instanceName childNaming =>
-      .composite key newPorts instanceName childNaming
+  | _, .composite key _ instanceName childNaming namedWires =>
+      .composite key newPorts instanceName childNaming namedWires
 
 @[simp] theorem ports_withPorts {modulePorts : ModulePorts}
     (newPorts : ModulePortsNaming modulePorts)

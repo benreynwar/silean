@@ -110,7 +110,7 @@ combinational logic, not contract state.
 The top-level `PicoRV/` library is a sibling client of the reusable `Silean/`
 library rather than a Silean example subdirectory. `PicoRV/PicoRV.lean` is the
 authoritative port map and wiring. It has
-exactly the five direct children above. `PicoRVSchedule.lean` contains a
+exactly the five direct children above. `Internal/PicoRVVerification.lean` contains a
 complete child-rule schedule and proves the simultaneous top-level equations
 have exactly one solution. `PicoRVTopChecks.lean` recursively verifies that no
 behavioral leaves remain. This is a checked composition boundary, not a CPU
@@ -323,7 +323,7 @@ weakest public observation unless a stronger theorem is requested.
 
 - `PicoRV/*.lean`: boundaries and contracts;
 - `PicoRV.lean`: exact top-level ports and wiring;
-- `PicoRVSchedule.lean`: proof schedule for the staged composition;
+- `Internal/PicoRVVerification.lean`: proof schedule for the staged composition;
 - `tests/picorv/lean/PicoRVTests/*Checks.lean`: focused behavioral and boundary
   checks; and
 - the configured upstream `picorv32.v`: final authority for source behavior.

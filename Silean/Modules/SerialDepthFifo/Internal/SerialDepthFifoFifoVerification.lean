@@ -1,5 +1,5 @@
 import Silean.Composition.FifoSerialRefinement
-import Silean.Modules.OneEntryFifo.Internal.OneEntryFifoFifoVerification
+import Silean.Modules.OneEntryFifo.OneEntryFifoFifoTheorems
 import Silean.Modules.SerialDepthFifo.SerialDepthFifoCycleTheorems
 
 /-! # Serial-depth FIFO refinement verification
@@ -20,7 +20,7 @@ private noncomputable def refinementFromAdditional (element : SignalType) :
       Contracts.Fifo.FifoCycleRefinement
         (certifiedCycleBehaviorFromAdditional element additionalDepth).certified
         (Silean.Contracts.Fifo.standardContract element (additionalDepth + 1))
-  | 0 => OneEntryFifo.Internal.cycleRefinement element
+  | 0 => OneEntryFifo.fifoRefinement element
   | additionalDepth + 1 => by
       change Contracts.Fifo.FifoCycleRefinement
         (Composition.FifoSerial.certifiedCycleBehavior
@@ -32,7 +32,7 @@ private noncomputable def refinementFromAdditional (element : SignalType) :
           (oneEntryCertified element)
           (certifiedCycleBehaviorFromAdditional element additionalDepth)
           1 (additionalDepth + 1)
-          (OneEntryFifo.Internal.cycleRefinement element)
+          (OneEntryFifo.fifoRefinement element)
           (refinementFromAdditional element additionalDepth)
 
 private noncomputable def fifoCertifiedFromAdditional (element : SignalType)

@@ -209,7 +209,7 @@ elab_rules : command
     match namingClause with
     | none =>
         elabCommand <| ← `(
-          def $namingPortsIdent $binders:bracketedBinder* : Silean.Naming.ModulePortsNaming
+          @[reducible] def $namingPortsIdent $binders:bracketedBinder* : Silean.Naming.ModulePortsNaming
               ($portsName $arguments:term*) where
             inputs := ⟨$inputNames⟩
             outputs := ⟨$outputNames⟩
@@ -228,7 +228,7 @@ elab_rules : command
         let namingBinders := parsedNamingParams.map (·.1)
         let defaultNamings := parsedNamingParams.map (·.2)
         elabCommand <| ← `(
-          def $namingWithIdent $binders:bracketedBinder* $namingBinders:bracketedBinder* :
+          @[reducible] def $namingWithIdent $binders:bracketedBinder* $namingBinders:bracketedBinder* :
               Silean.Naming.ModulePortsNaming ($portsName $arguments:term*) where
             inputs := ⟨$inputNames⟩
             outputs := ⟨$outputNames⟩
@@ -236,7 +236,7 @@ elab_rules : command
             outputTypes := $outputTypeNames
         )
         elabCommand <| ← `(
-          def $namingPortsIdent $binders:bracketedBinder* :
+          @[reducible] def $namingPortsIdent $binders:bracketedBinder* :
               Silean.Naming.ModulePortsNaming ($portsName $arguments:term*) :=
             $namingWithIdent $arguments:term* $defaultNamings:term*
         )
