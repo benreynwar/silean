@@ -1,6 +1,5 @@
 import PicoRV.Authoring.CircuitLogic
 import PicoRV.Datapath.Internal.DatapathMemoryUpdateStructure
-import Silean.Modules.Add.Add
 import Silean.Modules.VectorLayout.VectorLayout
 
 namespace PicoRV.Datapath
@@ -27,17 +26,16 @@ noncomputable def construction : Builder Unit := do
   let inputsFields ← split DatapathInputs.layout inputs
   let currentFields ← split DatapathState.layout current
   let updatedFields ← split DatapathState.layout updated
-  let falseBit ← constant .bit false
   let zeroWord ← constant (.vector 32 .bit) (wordOfNat 0)
   let notPrefetch ← !! (inputsFields .mem_do_prefetch)
   let progress ← notPrefetch ||| inputsFields .mem_done
   let active ← mux isLoad
     (inputsFields .mem_do_wdata) (inputsFields .mem_do_rdata)
   let notActive ← !! active
-  let effectiveAddress ← Silean.Modules.Add.place
-    (currentFields .reg_op1) (inputsFields .decoded_imm) falseBit
+  let effectiveAddress ←
+    (currentFields .reg_op1) +ust (inputsFields .decoded_imm)
   let effectiveOp1 ← mux notActive
-    (updatedFields .reg_op1) effectiveAddress.result
+    (updatedFields .reg_op1) effectiveAddress
   let selectedOp1 ← mux progress (updatedFields .reg_op1) effectiveOp1
   let signedHalf ← Silean.Modules.VectorLayout.place
     (MemoryUpdateCore.signExtendLayout 16) (inputsFields .mem_rdata_word)

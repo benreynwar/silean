@@ -1,6 +1,5 @@
 import PicoRV.Authoring.CircuitLogic
 import PicoRV.Datapath.Internal.DatapathBasicUpdatesStructure
-import Silean.Modules.Add.Add
 import Silean.Modules.EqualsConstant.EqualsConstant
 import Silean.Modules.VectorLayout.VectorLayout
 
@@ -17,6 +16,7 @@ open Silean
 open Silean.Authoring
 open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring.CircuitLogic
+open scoped Silean.Authoring.CircuitLogic
 
 namespace PhaseDecode.Description
 
@@ -156,11 +156,9 @@ noncomputable def construction : Builder Unit := do
   let inputsFields ← split DatapathInputs.layout inputs
   let currentFields ← split DatapathState.layout current
   let updatedFields ← split DatapathState.layout updated
-  let falseBit ← constant .bit false
-  let target ← Silean.Modules.Add.place
-    (currentFields .reg_pc) (inputsFields .decoded_imm) falseBit
+  let target ← (currentFields .reg_pc) +ust (inputsFields .decoded_imm)
   output "state" (← update stateMap DatapathState.schema updatedFields fun
-    | .reg_out => some target.result
+    | .reg_out => some target
     | _ => none)
 
 noncomputable def description : Description := build construction

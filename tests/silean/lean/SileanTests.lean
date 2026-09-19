@@ -28,6 +28,7 @@ import SileanTests.RegisterBankChecks
 import SileanTests.EnabledRegisterChecks
 import SileanTests.ModuleCycleEvaluationChecks
 import SileanTests.CircuitLogicChecks
+import SileanTests.CircuitArithmeticChecks
 import SileanTests.ModulePortsAuthoringChecks
 import SileanTests.ModuleInstancesAuthoringChecks
 import SileanTests.ModuleWiringAuthoringChecks

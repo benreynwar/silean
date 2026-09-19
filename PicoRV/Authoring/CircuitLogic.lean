@@ -1,4 +1,5 @@
 import Silean.Authoring.CircuitSelection
+import Silean.Authoring.CircuitArithmetic
 import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Modules.Register.Register

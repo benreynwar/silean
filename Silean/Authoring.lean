@@ -8,6 +8,7 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Authoring.SignalSchema
 import Silean.Authoring.SignalSchemaDeclaration
+import Silean.Authoring.CircuitArithmetic
 
 /-! # Hardware authoring commands
 
