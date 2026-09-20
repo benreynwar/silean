@@ -1,7 +1,7 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Composition.SignalAdapterImplementation
-import Silean.Modules.Register.Register
+import Silean.Modules.Register.Internal.RegisterStructure
 
 /-! Recursive certification machinery for the generic register family. -/
 
@@ -101,22 +101,6 @@ private theorem aggregateCoversChildren (splitter : Composition.SignalSplitter) 
     (aggregateRuleSchedules splitter).CoversChildren :=
   (aggregateDerivedRuleSchedules splitter).coversChildren
 
-private theorem outputRule_holds_iff (signalType : SignalType)
-    (inputs : (ports signalType).inputs.Values)
-    (state : (stateMap signalType).Values)
-    (outputs : (ports signalType).outputs.Values) :
-    (outputRule signalType).Holds inputs state outputs ↔
-      outputs .output = state .stored := by
-  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalGroup.all_matches]
-  constructor
-  · intro equal
-    exact congrFun equal .output
-  · intro equal
-    funext label
-    cases label
-    exact equal
-
 @[reducible] private def aggregateComponentContractState (splitter : Composition.SignalSplitter)
     (contractState : (stateMap splitter.aggregateType).Values)
     (component : splitter.ports.outputs.Label) :
@@ -193,26 +177,14 @@ private theorem aggregateImplements :
       splitter.combiner.outputValues
         ((aggregateBody splitter).wiring.childInputValues
           hierStep.inputs hierStep.childOutputs (.combiner .output)) := by
-    letI : Subsingleton
-        (aggregateChildContracts splitter (.combiner .output)).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      infer_instance
-    have combinerMatch :=
-      (Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-        (body := aggregateBody splitter) layerChildren hierStep satisfies
-          (.combiner .output) SignalMap.emptyValues)
+    derive_empty_state_child_match combinerMatch for (.combiner .output)
+      in aggregateBody splitter from layerChildren, hierStep, satisfies
     exact (Composition.SignalCombiner.outputRule_holds_iff splitter.combiner _ _ _).mp
       (combinerMatch.ruleHolds Composition.SignalComponentRule.apply)
   have splitOutputs : (hierStep.children (.splitter .unit)).outputs =
       splitter.outputValues (aggregateSplitterInputs splitter hierStep.inputs) := by
-    letI : Subsingleton
-        (aggregateChildContracts splitter (.splitter .unit)).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      infer_instance
-    have splitterMatch :=
-      (Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-        (body := aggregateBody splitter) layerChildren hierStep satisfies
-          (.splitter .unit) SignalMap.emptyValues)
+    derive_empty_state_child_match splitterMatch for (.splitter .unit)
+      in aggregateBody splitter from layerChildren, hierStep, satisfies
     have holds := (Composition.SignalSplitter.outputRule_holds_iff splitter _ _ _).mp
       (splitterMatch.ruleHolds Composition.SignalComponentRule.apply)
     have inputsEqual : (aggregateBody splitter).wiring.childInputValues

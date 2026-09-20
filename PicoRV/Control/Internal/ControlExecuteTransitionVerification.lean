@@ -164,16 +164,16 @@ private theorem implements :
     exact (congrFun inputsFieldsValue field).trans
       (congrFun (Inputs.toValues_unpack _).symm field)
 
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have trueValue := (Silean.Modules.Constant.outputRule_holds_iff .bit true _ _ _).mp
-    ((childMatch .trueBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have zeroRdValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 5 .bit) (fiveBitsOfNat 0) _ _ _).mp
-    ((childMatch .zeroRd).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have fetchStateValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateFetch) _ _ _).mp
-    ((childMatch .fetchState).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
+  have trueValue := Silean.Modules.Constant.output_of_allowed .bit true
+    (childMatch .trueBit).allowed
+  have zeroRdValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 5 .bit) (fiveBitsOfNat 0)
+    (childMatch .zeroRd).allowed
+  have fetchStateValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateFetch)
+    (childMatch .fetchState).allowed
 
   have branchPhaseValue : hierStep.childOutputs .branchPhase .result =
       bif controlInputs.mem_done then stateBits cpuStateFetch
@@ -186,8 +186,8 @@ private theorem implements :
 
   have branchDecoderValue : hierStep.childOutputs .branchDecoder .result =
       bif controlInputs.alu_out_0 then false else updated .decoder_trigger := by
-    have equation := (Silean.Modules.BitMux.selectRule_holds_iff _ _ _).mp
-      ((childMatch .branchDecoder).ruleHolds Silean.Modules.BitMux.Rule.select)
+    have equation := Silean.Modules.BitMux.result_of_allowed
+      (childMatch .branchDecoder).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (inputField .alu_out_0) falseValue
       (congrFun updatedFieldsValue .decoder_trigger))

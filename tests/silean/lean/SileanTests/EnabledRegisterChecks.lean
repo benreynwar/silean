@@ -1,4 +1,4 @@
-import Silean.Modules.EnabledRegister.EnabledRegisterTheorems
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
 import Silean.Semantics.StructuralExecution
 
 namespace SileanTests.EnabledRegister
@@ -83,10 +83,11 @@ example : ∃ contractState,
 /-! The two reader-facing correctness links are available without importing
 the structural proof files directly. -/
 
-example : Authoring.CircuitDescription.Corresponds
-    (Modules.EnabledRegister.Description.description .bit)
-    (Modules.EnabledRegister.naming .bit) :=
-  Modules.EnabledRegister.Description.authored_definition_corresponds .bit
+example :
+    (Modules.EnabledRegister.description .bit).ImplementsCycleContract
+      (Modules.EnabledRegister.cycleContract .bit)
+      (Modules.EnabledRegister.Naming.ports .bit) :=
+  Modules.EnabledRegister.construction_correct .bit
 
 example : Contracts.Cycle.Implements
     (Modules.EnabledRegister.moduleStructure .bit)

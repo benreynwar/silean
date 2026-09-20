@@ -80,10 +80,10 @@ private theorem implements :
       Silean.Modules.NamedTupleSplitter.splitValue stateMap
         (hierStep.inputs .updated) at equation
     exact equation.trans ((splitValue_eq_unpack _ _).trans (by rfl))
-  have trueValue := (Silean.Modules.Constant.outputRule_holds_iff .bit true _ _ _).mp
-    ((childMatch .trueBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have trueValue := Silean.Modules.Constant.output_of_allowed .bit true
+    (childMatch .trueBit).allowed
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
 
   have resultStateInputs : body.wiring.childInputValues hierStep.inputs
       hierStep.childOutputs .resultState = structuralState updated := by

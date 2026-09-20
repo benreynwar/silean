@@ -1,11 +1,11 @@
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
-import Silean.Authoring.CircuitDescriptionSoundness
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EnabledResetCounter.EnabledResetCounter
-import Silean.Modules.EnabledResetRegister.EnabledResetRegisterTheorems
-import Silean.Modules.Increment.IncrementTheorems
+import Silean.Modules.EnabledResetCounter.Internal.EnabledResetCounterStructure
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
+import Silean.Modules.Increment.IncrementDerived
 
 /-! Certification machinery for the authored enabled reset counter. -/
 
@@ -51,13 +51,8 @@ private theorem implements :
   have storageMatches :=
     childSolutionMatchesContract (body := body width resetValue)
       layerChildren hierStep satisfies .storage contractState corresponds
-  letI : Subsingleton (childContracts width resetValue .increment).state.Values := by
-    change Subsingleton emptySignalMap.Values
-    infer_instance
-  have incrementMatches :=
-    childSolutionMatchesContract_of_subsingletonState
-      (body := body width resetValue) layerChildren hierStep satisfies
-      .increment SignalMap.emptyValues
+  derive_empty_state_child_match incrementMatches for .increment
+    in body width resetValue from layerChildren, hierStep, satisfies
   have storageAllowed := storageMatches.allowed
   have storageNextCorresponds := storageMatches.nextCorresponds
   have boundary := satisfies.1
@@ -87,8 +82,8 @@ private theorem implements :
           (hierStep.children .increment).outputs .result
           else contractState .stored := by
       exact EnabledResetRegister.next_stored_of_allowed storageAllowed
-    have incremented := (Increment.outputRule_holds_iff width _ _ _).mp
-      (incrementMatches.ruleHolds Increment.Rule.apply)
+    have incremented :=
+      Increment.result_of_allowed width incrementMatches.allowed
     change (hierStep.children .increment).outputs .result =
       Increment.incrementValue width
         ((hierStep.children .storage).outputs .value)
@@ -128,7 +123,7 @@ module_cycle_certification certification (width : Nat)
 
 end Silean.Modules.EnabledResetCounter
 
-namespace Silean.Modules.EnabledResetCounter.Description.Internal
+namespace Silean.Modules.EnabledResetCounter.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
@@ -136,8 +131,7 @@ private theorem same (width : Nat) (resetValue : Value width) :
     some (description width resetValue) =
       ofNaming (EnabledResetCounter.naming width resetValue) := by
   simp only [circuit_description, description, construction,
-    Increment.place, EnabledResetRegister.place,
-    EnabledResetRegister.design]
+    Increment.place, EnabledResetRegister.place]
   simp [circuit_description, enumeration]
   unfold moduleStructure naming
   simp only [id_eq]
@@ -153,8 +147,7 @@ private theorem same (width : Nat) (resetValue : Value width) :
 private theorem unique (width : Nat) (resetValue : Value width) :
     (description width resetValue).UniqueNames := by
   simp only [circuit_description, description, construction,
-    Increment.place, EnabledResetRegister.place,
-    EnabledResetRegister.design]
+    Increment.place, EnabledResetRegister.place]
   simp [circuit_description, enumeration]
   refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
   intro child member
@@ -170,9 +163,24 @@ private theorem unique (width : Nat) (resetValue : Value width) :
       exact of_decide_eq_true rfl
     · exact of_decide_eq_true rfl
 
-theorem corresponds (width : Nat) (resetValue : Value width) :
+theorem description_corresponds (width : Nat) (resetValue : Value width) :
     Corresponds (description width resetValue)
       (EnabledResetCounter.naming width resetValue) :=
   ⟨same width resetValue, unique width resetValue⟩
 
-end Silean.Modules.EnabledResetCounter.Description.Internal
+open Authoring.CircuitDescription.Description
+
+theorem construction_correct (width : Nat) (resetValue : Value width) :
+    (description width resetValue).ImplementsCycleContract
+      (cycleContract width resetValue) (Naming.ports width) := by
+  have corresponds := description_corresponds width resetValue
+  unfold EnabledResetCounter.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := instancePorts width resetValue,
+      wiring := wiring width resetValue })
+    (children := structuralChildren width resetValue)
+    corresponds (certification width resetValue)
+
+end Silean.Modules.EnabledResetCounter.Internal

@@ -1,8 +1,8 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
-import Silean.Modules.Add.Add
+import Silean.Modules.Add.Internal.AddStructure
 import Silean.Modules.Constant.Constant
-import Silean.Modules.FullAdder.FullAdderTheorems
+import Silean.Modules.FullAdder.FullAdderDerived
 import Silean.Modules.VectorConcat.VectorConcatTheorems
 
 /-! Internal schedules and inductive certification for the recursive adder. -/
@@ -11,6 +11,60 @@ namespace Silean.Modules.Add
 
 open Silean
 open Contracts.Cycle.Certification.Layer
+
+namespace Internal
+
+private theorem sumBit_add_twice_carryBit (left right carry : Bool) :
+    (sumBit left right carry).toNat + 2 * (carryBit left right carry).toNat =
+      left.toNat + right.toNat + carry.toNat := by
+  cases left <;> cases right <;> cases carry <;> decide
+
+@[simp] private theorem toNat_lastCases (width : Nat) (high : Bool)
+    (lower : Fin width → Bool) :
+    BitVector.toNat (width + 1) (Fin.lastCases high lower) =
+      (if high then BitVector.cardinality width else 0) +
+        BitVector.toNat width lower := by
+  simp [BitVector.toNat]
+
+theorem addBits_numeric : ∀ (width : Nat) (left right : Fin width → Bool)
+    (carry : Bool),
+    BitVector.toNat width (addBits width left right carry).1 +
+        BitVector.cardinality width * (addBits width left right carry).2.toNat =
+      BitVector.toNat width left + BitVector.toNat width right + carry.toNat
+  | 0, _, _, carry => by simp [addBits, BitVector.toNat, BitVector.cardinality]
+  | width + 1, left, right, carry => by
+      have lower := addBits_numeric width
+        (fun index => left index.castSucc)
+        (fun index => right index.castSucc) carry
+      have high := sumBit_add_twice_carryBit
+        (left (Fin.last width)) (right (Fin.last width))
+        (addBits width (fun index => left index.castSucc)
+          (fun index => right index.castSucc) carry).2
+      have leftBound := BitVector.toNat_lt_cardinality width
+        (fun index => left index.castSucc)
+      have rightBound := BitVector.toNat_lt_cardinality width
+        (fun index => right index.castSucc)
+      have resultBound := BitVector.toNat_lt_cardinality width
+        (addBits width (fun index => left index.castSucc)
+          (fun index => right index.castSucc) carry).1
+      have lowerResultEta :
+          (fun index => (addBits width (fun index => left index.castSucc)
+            (fun index => right index.castSucc) carry).1 index) =
+          (addBits width (fun index => left index.castSucc)
+            (fun index => right index.castSucc) carry).1 := rfl
+      rw [BitVector.cardinality_eq_pow] at lower ⊢
+      rw [BitVector.cardinality_eq_pow] at leftBound rightBound resultBound
+      cases leftHigh : left (Fin.last width) <;>
+        cases rightHigh : right (Fin.last width) <;>
+        cases lowerCarry : (addBits width
+          (fun index => left index.castSucc)
+          (fun index => right index.castSucc) carry).2 <;>
+        simp [addBits, BitVector.toNat, leftHigh, rightHigh, lowerCarry,
+          lowerResultEta, sumBit, carryBit,
+          Primitives.xorValue] at lower high ⊢ <;>
+        omega
+
+end Internal
 
 private abbrev Implementation (width : Nat) :=
   Contracts.Cycle.ModuleCycleCertification (moduleStructure width) (cycleContract width)
@@ -50,7 +104,7 @@ private theorem baseImplements
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     dsimp only
     constructor
     · funext index
@@ -263,13 +317,26 @@ private theorem succImplements (width : Nat)
         hierStep.inputs hierStep.childOutputs .highBit) :=
     (Composition.SignalCombiner.outputRule_holds_iff highCombiner _ _ _).mp
       ((childMatches .highBit).ruleHolds Composition.SignalComponentRule.apply)
-  have lowerEquation := (outputRule_holds_iff width _
-    (childStates .lowerAdd) _).mp ((childMatches .lowerAdd).ruleHolds Rule.apply)
-  have highAdderBehavior :=
-    (childMatches .highAdder).boundaryFact FullAdder.Behavior.of_allowed
-  have concatEquation := (VectorConcat.outputRule_holds_iff .bit width 1
-    _ (childStates .concat) _).mp
-      ((childMatches .concat).ruleHolds VectorConcat.Rule.apply)
+  have lowerResultEquation :=
+    (childMatches .lowerAdd).boundaryOutput
+      (cycleContract.resultEquation width)
+  have lowerCarryEquation :=
+    (childMatches .lowerAdd).boundaryOutput
+      (cycleContract.carryOutEquation width)
+  have sumEquation :=
+    (childMatches .highAdder).boundaryOutput
+      FullAdder.cycleContract.sumEquation
+  have carryEquation :=
+    (childMatches .highAdder).boundaryOutput
+      FullAdder.cycleContract.carryOutEquation
+  have concatEquation := VectorConcat.result_of_allowed .bit width 1
+    (childMatches .concat).allowed
+  change (hierStep.children .concat).outputs .result =
+    VectorConcat.concat
+      ((succBody width).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs .concat .left)
+      ((succBody width).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs .concat .right) at concatEquation
   have lowerLeftInputsEquation : (succBody width).wiring.childInputValues
       hierStep.inputs hierStep.childOutputs .lowerLeft =
         lowerLeftInputs width (hierStep.children .leftSplit).outputs := by
@@ -301,10 +368,8 @@ private theorem succImplements (width : Nat)
     funext port; cases port <;> rfl
   rw [lowerLeftInputsEquation] at lowerLeftOutputs
   rw [lowerRightInputsEquation] at lowerRightOutputs
-  rw [lowerAddInputsEquation] at lowerEquation
-  rw [highAdderInputsEquation] at highAdderBehavior
-  have sumEquation := highAdderBehavior.sum
-  have carryEquation := highAdderBehavior.carryOut
+  rw [lowerAddInputsEquation] at lowerResultEquation lowerCarryEquation
+  rw [highAdderInputsEquation] at sumEquation carryEquation
   rw [highBitInputsEquation] at highBitOutputs
   rw [concatInputsEquation] at concatEquation
   have lowerLeftValue : (hierStep.children .lowerLeft).outputs .value =
@@ -335,13 +400,11 @@ private theorem succImplements (width : Nat)
       fun _ => (hierStep.children .highAdder).outputs .sum := by
     rw [congrFun highBitOutputs .value]
     rfl
-  have lowerResultEquation := lowerEquation.1
   change (hierStep.children .lowerAdd).outputs .result =
     (addBits width ((hierStep.children .lowerLeft).outputs .value)
       ((hierStep.children .lowerRight).outputs .value)
       (hierStep.inputs .carryIn)).1 at lowerResultEquation
   rw [lowerLeftValue, lowerRightValue] at lowerResultEquation
-  have lowerCarryEquation := lowerEquation.2
   change (hierStep.children .lowerAdd).outputs .carryOut =
     (addBits width ((hierStep.children .lowerLeft).outputs .value)
       ((hierStep.children .lowerRight).outputs .value)
@@ -365,7 +428,7 @@ private theorem succImplements (width : Nat)
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     dsimp only
     constructor
     · rw [show hierStep.outputs .result =

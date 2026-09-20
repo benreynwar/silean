@@ -1,6 +1,6 @@
 import Silean.Modules.Fifo.Fifo
 import Silean.Modules.Fifo.FifoPointerControlTheorems
-import Silean.Modules.EnabledResetCounter.EnabledResetCounterTheorems
+import Silean.Modules.EnabledResetCounter.EnabledResetCounterDerived
 import Silean.Modules.RegisterBank.RegisterBankTheorems
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Authoring.ModuleChildCertifications
@@ -121,12 +121,8 @@ private theorem implements :
   have storageMatches := childSolutionMatchesContract
     (body := body element addressWidth) layerChildren hierStep satisfies
       .storage (fun | .entries => contractState .entries) storageCorresponds
-  have controlMatches :=
-    letI : Subsingleton (childContracts element addressWidth .control).state.Values := by
-      change Subsingleton emptySignalMap.Values; infer_instance
-    childSolutionMatchesContract_of_subsingletonState
-      (body := body element addressWidth) layerChildren hierStep satisfies
-      .control SignalMap.emptyValues
+  derive_empty_state_child_match controlMatches for .control
+    in body element addressWidth from layerChildren, hierStep, satisfies
   have readNextCorresponds := readMatches.nextCorresponds
   have writeNextCorresponds := writeMatches.nextCorresponds
   have storageNextCorresponds := storageMatches.nextCorresponds

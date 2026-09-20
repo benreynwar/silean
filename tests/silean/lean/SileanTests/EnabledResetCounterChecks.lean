@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EnabledResetCounter.EnabledResetCounterTheorems
+import Silean.Modules.EnabledResetCounter.EnabledResetCounterDerived
 
 namespace SileanTests.EnabledResetCounter
 
@@ -63,9 +63,10 @@ noncomputable example : Contracts.Cycle.ModuleCycleCertified (ports 3) := certif
 /-! The readable feedback circuit is the certified production hierarchy, and
 that hierarchy implements the cycle contract used by the Step laws above. -/
 
-example : Authoring.CircuitDescription.Corresponds
-    (Description.description 3 bits3Two) (naming 3 bits3Two) :=
-  Description.authored_definition_corresponds 3 bits3Two
+example :
+    (description 3 bits3Two).ImplementsCycleContract
+      (cycleContract 3 bits3Two) (Naming.ports 3) :=
+  construction_correct 3 bits3Two
 
 example : Contracts.Cycle.Implements
     (moduleStructure 3 bits3Two) (cycleContract 3 bits3Two)

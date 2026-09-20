@@ -81,8 +81,8 @@ private theorem implements :
       controlInputs.mem_done := by
     rw [inputsFieldsValue]
     rfl
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
   have fetchCompletedValue : hierStep.childOutputs .fetchCompleted .output =
       ((current .mem_do_rinst : Bool) && controlInputs.mem_done) := by
     have equation := (Silean.Primitives.andOutputRule_holds_iff _ _ _).mp

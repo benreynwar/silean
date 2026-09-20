@@ -16,7 +16,7 @@ The extra operator character distinguishes builder actions from Lean's pure
 Boolean operations: `!!`, `&&&`, `^^^`, and `|||` place hardware.
 -/
 
-namespace Silean.Authoring.CircuitLogic
+namespace Silean.Authoring
 
 open Silean
 open CircuitDescription
@@ -179,4 +179,4 @@ attribute [circuit_description]
   Primitives.And.place Primitives.Or.place Primitives.Xor.place
   Primitives.Eq.place Primitives.Not.place
 
-end Silean.Authoring.CircuitLogic
+end Silean.Authoring

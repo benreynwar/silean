@@ -6,8 +6,8 @@ namespace PicoRV.Control
 open Silean
 open Silean.Authoring
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open PicoRV.Authoring
+open scoped Silean.Authoring
 
 /-! # Store transition
 

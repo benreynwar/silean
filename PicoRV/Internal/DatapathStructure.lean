@@ -2,12 +2,12 @@ import PicoRV.Alu
 import PicoRV.Datapath.DatapathFetchUpdate
 import PicoRV.Datapath.DatapathNext
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Add.Add
+import Silean.Modules.Add.AddDerived
 import Silean.Modules.Constant.Constant
 import Silean.Modules.EqualsConstant.EqualsConstant
 import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.Register.Register
+import Silean.Modules.Register.RegisterDerived
 import Silean.Modules.VectorLayout.VectorLayout
 import Silean.Primitives.And
 

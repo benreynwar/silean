@@ -4,7 +4,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Add.AddTheorems
+import Silean.Modules.Add.AddDerived
 import Silean.Modules.BitMux.BitMuxTheorems
 import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
@@ -190,9 +190,8 @@ private theorem implements :
     exact equation
   have addressValue : hierStep.childOutputs .effectiveAddress .result =
       addWords (current .reg_op1) datapathInputs.decoded_imm := by
-    have equation :=
-      (Silean.Modules.Add.Behavior.of_allowed 32
-        (childMatch .effectiveAddress).allowed).result
+    have equation := Silean.Modules.Add.cycleContract.result 32
+      (childMatch .effectiveAddress).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, inputField .decoded_imm, falseValue,
       ProofSupport.addBits_eq_addWords] at equation

@@ -275,8 +275,8 @@ the highest-priority J immediate. -/
 namespace Description
 
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open PicoRV.Authoring
+open scoped Silean.Authoring
 
 noncomputable def construction : Builder Unit := do
   let word ← input "word" (.vector 32 .bit)

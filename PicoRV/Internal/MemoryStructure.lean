@@ -4,7 +4,7 @@ import PicoRV.Memory.MemoryReadFormatting
 import PicoRV.Memory.MemoryResponse
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.Register.Register
+import Silean.Modules.Register.RegisterDerived
 
 namespace PicoRV
 

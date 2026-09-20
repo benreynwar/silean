@@ -7,7 +7,7 @@ import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.EqualsConstant.EqualsConstantTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.Register.RegisterTheorems
+import Silean.Modules.Register.RegisterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Or
 
@@ -125,8 +125,7 @@ private theorem implements :
 
   have storageOutputValue : hierStep.childOutputs .storage .output =
       stateMap.pack contractState := by
-    have equation := (Silean.Modules.Register.outputRule_holds_iff stateType _ _ _).mp
-      (storageMatch.ruleHolds Silean.Primitives.RegisterRule.observe)
+    have equation := Silean.Modules.Register.output_of_allowed storageMatch.allowed
     exact equation
   have stateFieldsValue : hierStep.childOutputs .stateFields = contractState := by
     have equation := (Silean.Modules.NamedTupleSplitter.outputRule_holds_iff
@@ -157,9 +156,9 @@ private theorem implements :
 
   have fetchPhaseValue : hierStep.childOutputs .fetchPhase .result =
       decide (phase contractState = cpuStateFetch) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 8 .bit) (stateBits cpuStateFetch) _ _ _).mp
-      (fetchPhaseMatch.ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 8 .bit) (stateBits cpuStateFetch)
+      fetchPhaseMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans <| ((congrArg
       (fun value => (Silean.SignalType.vector 8 .bit).equal value

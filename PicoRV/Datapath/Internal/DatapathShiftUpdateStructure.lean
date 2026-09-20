@@ -1,6 +1,6 @@
 import PicoRV.Datapath.DatapathNextContracts
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.AddSub.AddSub
+import Silean.Modules.AddSub.AddSubDerived
 import Silean.Modules.Constant.Constant
 import Silean.Modules.EqualsConstant.EqualsConstant
 import Silean.Modules.Mux.Mux

@@ -61,9 +61,8 @@ private theorem baseImplements
     change hierStep.outputs .result index = _
     have boundaryResult := boundary .result
     rw [congrFun boundaryResult index]
-    have constantRule := (Modules.Constant.outputRule_holds_iff
-      (.vector 1 .bit) baseValue _ SignalMap.emptyValues _).mp
-      ((childMatch .constant).ruleHolds Primitives.ConstantRule.apply)
+    have constantRule := Modules.Constant.output_of_allowed
+      (.vector 1 .bit) baseValue (childMatch .constant).allowed
     change (hierStep.children .constant).outputs .output index = _
     exact (congrFun constantRule index).trans (by
       simp [baseValue, oneHot, BitVector.toNat])
@@ -230,9 +229,14 @@ private theorem succImplements (width : Nat)
     (.vector (size width) .bit) _ SignalMap.emptyValues _).mp
       ((childMatch .upperMask).ruleHolds Modules.Mask.Rule.apply)
 
-  have concatEquation := (Modules.VectorConcat.outputRule_holds_iff
-    .bit (size width) (size width) _ SignalMap.emptyValues _).mp
-      ((childMatch .concat).ruleHolds Modules.VectorConcat.Rule.apply)
+  have concatEquation := Modules.VectorConcat.result_of_allowed
+    .bit (size width) (size width) (childMatch .concat).allowed
+  change hierStep.childOutputs .concat .result =
+    Modules.VectorConcat.concat
+      ((succBody width).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs .concat .left)
+      ((succBody width).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs .concat .right) at concatEquation
 
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor

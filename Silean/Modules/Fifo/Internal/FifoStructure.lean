@@ -1,6 +1,6 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Interfaces.FifoPorts
-import Silean.Modules.EnabledResetCounter.EnabledResetCounter
+import Silean.Modules.EnabledResetCounter.EnabledResetCounterDerived
 import Silean.Modules.Fifo.FifoPointerControl
 import Silean.Modules.RegisterBank.RegisterBank
 import Silean.Naming.FifoPortsNaming

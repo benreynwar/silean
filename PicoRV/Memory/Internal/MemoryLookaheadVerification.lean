@@ -202,9 +202,9 @@ private theorem implements :
     simpa [Memory.ProofSupport.splitValue_eq_unpack, current] using equation
   have idleValue : hierStep.childOutputs .idle .result =
       decide (stateNumber current = 0) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (stateOfNat 0) _ _ _).mp
-      ((childMatch .idle).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (stateOfNat 0)
+      (childMatch .idle).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, Memory.ProofSupport.equal_stateOfNat _ _ (by decide)]
       at equation
@@ -293,17 +293,17 @@ private theorem implements :
     exact equation
   have halfWordsizeValue : hierStep.childOutputs .halfWordsize .result =
       decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 1) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (stateOfNat 1) _ _ _).mp
-      ((childMatch .halfWordsize).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (stateOfNat 1)
+      (childMatch .halfWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [Memory.ProofSupport.equal_stateOfNat _ _ (by decide)] at equation
     exact equation
   have byteWordsizeValue : hierStep.childOutputs .byteWordsize .result =
       decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 2) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (stateOfNat 2) _ _ _).mp
-      ((childMatch .byteWordsize).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (stateOfNat 2)
+      (childMatch .byteWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [Memory.ProofSupport.equal_stateOfNat _ _ (by decide)] at equation
     exact equation
@@ -347,9 +347,9 @@ private theorem implements :
     exact equation.trans (highHalf_slice (inputs .reg_op1))
   have highHalfValue : hierStep.childOutputs .highHalf .result =
       inputs .reg_op1 1 := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 1 .bit) (fun _ => true) _ _ _).mp
-      ((childMatch .highHalf).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 1 .bit) (fun _ => true)
+      (childMatch .highHalf).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [highHalfBitValue, equal_single_true] at equation
     exact equation

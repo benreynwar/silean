@@ -5,11 +5,11 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Add.AddTheorems
+import Silean.Modules.Add.AddDerived
 import Silean.Modules.EqualsConstant.EqualsConstantTheorems
 import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.Register.RegisterTheorems
+import Silean.Modules.Register.RegisterDerived
 import Silean.Modules.VectorLayout.VectorLayoutTheorems
 import Silean.Primitives.And
 
@@ -163,8 +163,7 @@ private theorem implements :
     rfl
   have storageOutputValue : hierStep.childOutputs .storage .output =
       stateMap.pack contractState := by
-    exact (Silean.Modules.Register.outputRule_holds_iff stateType _ _ _).mp
-      (storageMatch.ruleHolds Silean.Primitives.RegisterRule.observe)
+    exact Silean.Modules.Register.output_of_allowed storageMatch.allowed
   have stateFieldsValue : hierStep.childOutputs .stateFields = contractState := by
     have equation := (Silean.Modules.NamedTupleSplitter.outputRule_holds_iff
       stateMap _ _ _).mp
@@ -259,9 +258,9 @@ private theorem implements :
 
   have fetchPhaseValue : hierStep.childOutputs .fetchPhase .result =
       decide (stateNumber datapathInputs = cpuStateFetch) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 8 .bit) (stateBits cpuStateFetch) _ _ _).mp
-      (fetchPhaseMatch.ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 8 .bit) (stateBits cpuStateFetch)
+      fetchPhaseMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [equalFetchState] at equation
     simpa [stateNumber, datapathInputs, inputsOfValues] using equation
@@ -275,7 +274,7 @@ private theorem implements :
     (fourMatch.ruleHolds Silean.Primitives.ConstantRule.apply)
   have linkValue : hierStep.childOutputs .linkValue .result =
       addWords (contractState .reg_pc) (wordOfNat 4) := by
-    have equation := (Silean.Modules.Add.Behavior.of_allowed 32 linkMatch.1).result
+    have equation := Silean.Modules.Add.cycleContract.result 32 linkMatch.1
     normalize_child_hyp equation unfolding wiring, context
     rw [stateFieldsValue, fourValue, falseValue,
       ProofSupport.addBits_eq_addWords] at equation

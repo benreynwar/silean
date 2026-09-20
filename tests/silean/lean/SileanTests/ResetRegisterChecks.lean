@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EnabledResetRegister.EnabledResetRegisterTheorems
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
 
 namespace SileanTests.ResetRegister
 
@@ -128,22 +128,23 @@ example : Contracts.Cycle.Implements
 /-! The reader-facing feedback description is checked against the production
 structure used by certification and FIRRTL emission. -/
 
-example : Authoring.CircuitDescription.Corresponds
-    (Modules.ResetRegister.Description.description .bit false)
-    (Modules.ResetRegister.naming .bit false) :=
-  Modules.ResetRegister.Description.authored_definition_corresponds .bit false
+example :
+    (Modules.ResetRegister.description .bit false).ImplementsCycleContract
+      (Modules.ResetRegister.cycleContract .bit false)
+      (Modules.ResetRegister.Naming.ports .bit) :=
+  Modules.ResetRegister.construction_correct .bit false
 
 example :
-    (Modules.EnabledResetRegister.Description.description .bit false).children.map
+    (Modules.EnabledResetRegister.description .bit false).children.map
       (fun child => child.name) =
         [SourceName.indexed "mux" 0, SourceName.indexed "reset_register" 0] := by
   rfl
 
-example : Authoring.CircuitDescription.Corresponds
-    (Modules.EnabledResetRegister.Description.description .bit false)
-    (Modules.EnabledResetRegister.naming .bit false) :=
-  Modules.EnabledResetRegister.Description.authored_definition_corresponds
-    .bit false
+example :
+    (Modules.EnabledResetRegister.description .bit false).ImplementsCycleContract
+      (Modules.EnabledResetRegister.cycleContract .bit false)
+      (Modules.EnabledResetRegister.Naming.ports .bit) :=
+  Modules.EnabledResetRegister.construction_correct .bit false
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

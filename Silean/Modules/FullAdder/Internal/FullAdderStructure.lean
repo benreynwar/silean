@@ -1,5 +1,6 @@
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.HalfAdder.HalfAdder
+import Silean.Modules.FullAdder.FullAdder
+import Silean.Modules.HalfAdder.HalfAdderDerived
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.OrPrimitive
 
@@ -13,12 +14,7 @@ behavior; the hardware implementation below is the standard composition of
 two half adders and one OR gate. -/
 
 module_design FullAdder where
-  ports {
-    input left : .bit,
-    input right : .bit,
-    input carryIn : .bit,
-    output sum : .bit,
-    output carryOut : .bit }
+  boundary (FullAdder.ports) (naming := FullAdder.Naming.ports)
 
   instances {
     -- Adds the two operand bits.

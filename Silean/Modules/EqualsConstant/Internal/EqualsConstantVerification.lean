@@ -54,13 +54,13 @@ private theorem implements : Contracts.Cycle.ImplementsSolutions
     layerChildren, hierStep, satisfies
   have constantOutput :
       (hierStep.children .constantValue).outputs .output = constant :=
-    (Constant.outputRule_holds_iff signalType constant _ _ _).mp
-      ((childMatch .constantValue).ruleHolds Primitives.ConstantRule.apply)
+    Constant.output_of_allowed signalType constant
+      (childMatch .constantValue).allowed
   have equalityOutput : (hierStep.children .equality).outputs .result =
       signalType.equal (hierStep.inputs .value)
         ((hierStep.children .constantValue).outputs .output) := by
-    have held := (Equality.outputRule_holds_iff signalType _ _ _).mp
-      ((childMatch .equality).ruleHolds Equality.Rule.apply)
+    have held := Equality.result_of_allowed signalType
+      (childMatch .equality).allowed
     have inputsEqual : (body signalType constant).wiring.childInputValues
         hierStep.inputs hierStep.childOutputs .equality =
           (fun | .left => hierStep.inputs .value

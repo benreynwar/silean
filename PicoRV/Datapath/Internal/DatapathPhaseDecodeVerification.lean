@@ -91,45 +91,45 @@ private theorem implements :
     (childSolutionMatchesCoveredContract layerChildren hierStep
       satisfies child).choose_spec
 
-  have fetchValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateFetch) _ _ _).mp
-    ((childMatch .fetchMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have fetchValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateFetch)
+    (childMatch .fetchMatch).allowed
   change hierStep.childOutputs .fetchMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateFetch) at fetchValue
-  have loadRs1Value := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateLdRs1) _ _ _).mp
-    ((childMatch .loadRs1Match).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have loadRs1Value := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateLdRs1)
+    (childMatch .loadRs1Match).allowed
   change hierStep.childOutputs .loadRs1Match .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateLdRs1) at loadRs1Value
-  have loadRs2Value := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateLdRs2) _ _ _).mp
-    ((childMatch .loadRs2Match).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have loadRs2Value := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateLdRs2)
+    (childMatch .loadRs2Match).allowed
   change hierStep.childOutputs .loadRs2Match .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateLdRs2) at loadRs2Value
-  have executeValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateExec) _ _ _).mp
-    ((childMatch .executeMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have executeValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateExec)
+    (childMatch .executeMatch).allowed
   change hierStep.childOutputs .executeMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateExec) at executeValue
-  have shiftValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateShift) _ _ _).mp
-    ((childMatch .shiftMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have shiftValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateShift)
+    (childMatch .shiftMatch).allowed
   change hierStep.childOutputs .shiftMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateShift) at shiftValue
-  have storeValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateStmem) _ _ _).mp
-    ((childMatch .storeMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have storeValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateStmem)
+    (childMatch .storeMatch).allowed
   change hierStep.childOutputs .storeMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateStmem) at storeValue
-  have loadValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateLdmem) _ _ _).mp
-    ((childMatch .loadMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have loadValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateLdmem)
+    (childMatch .loadMatch).allowed
   change hierStep.childOutputs .loadMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateLdmem) at loadValue

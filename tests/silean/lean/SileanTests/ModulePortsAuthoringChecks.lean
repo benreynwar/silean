@@ -16,6 +16,16 @@ example : inputMap.signalType .left = .bit := rfl
 example : outputMap.signalType .sum = .bit := rfl
 example : Naming.ports.inputs.name .carryIn = "carry_in" := rfl
 
+example (sum : Authoring.CircuitDescription.Net .bit) :
+    ports.OutputNets :=
+  { sum }
+
+noncomputable example (moduleStructure : ModuleStructure ports)
+    (naming : Naming.ModuleNaming moduleStructure)
+    (left carryIn : Authoring.CircuitDescription.Net .bit) :
+    Authoring.CircuitDescription.Builder ports.OutputNets :=
+  ports.placeIndexed "simple" moduleStructure naming left carryIn
+
 end Simple
 
 namespace Generic

@@ -15,7 +15,7 @@ The expanded typed structure and its verification are supporting machinery in
 namespace Silean.Modules.Mux.Description
 
 open Silean Naming Authoring.CircuitDescription
-open scoped Authoring.CircuitLogic
+open scoped Authoring
 
 /-- Ordinary do notation; existing children retain their full production identity. -/
 noncomputable def construction (signalType : SignalType) : Builder Unit := do

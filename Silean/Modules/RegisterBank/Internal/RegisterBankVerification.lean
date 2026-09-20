@@ -4,7 +4,7 @@ import Silean.Authoring.ModuleRuleSchedules
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Modules.BinaryToOneHot.BinaryToOneHotTheorems
 import Silean.Modules.CombMuxTree.CombMuxTreeTheorems
-import Silean.Modules.EnabledRegister.EnabledRegisterTheorems
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
 import Silean.Modules.RegisterBank.RegisterBank
 import Silean.Primitives.And
 
@@ -159,13 +159,8 @@ private theorem implements :
     intro index
     exact EnabledRegister.q_of_allowed (storageMatches index).allowed
 
-  letI decoderStateSubsingleton :
-      Subsingleton (childContracts element addressWidth readCount decoder).state.Values := by
-    change Subsingleton emptySignalMap.Values
-    infer_instance
-  have decoderMatches := childSolutionMatchesContract_of_subsingletonState
-    (body := body element addressWidth readCount) layerChildren hierStep satisfies
-    decoder SignalMap.emptyValues
+  derive_empty_state_child_match decoderMatches for decoder
+    in body element addressWidth readCount from layerChildren, hierStep, satisfies
   have decoderValue (index : Fin (entryCount addressWidth)) :
       (hierStep.children decoder).outputs .result index =
         BinaryToOneHot.oneHot addressWidth
@@ -177,14 +172,8 @@ private theorem implements :
         hierStep.inputs .writeAddress by rfl] at result
     exact result
 
-  letI splitStateSubsingleton :
-      Subsingleton
-        (childContracts element addressWidth readCount decodeSplit).state.Values := by
-    change Subsingleton emptySignalMap.Values
-    infer_instance
-  have splitMatches := childSolutionMatchesContract_of_subsingletonState
-    (body := body element addressWidth readCount) layerChildren hierStep satisfies
-    decodeSplit SignalMap.emptyValues
+  derive_empty_state_child_match splitMatches for decodeSplit
+    in body element addressWidth readCount from layerChildren, hierStep, satisfies
   have splitValue (index : Fin (entryCount addressWidth)) :
       (hierStep.children decodeSplit).outputs index =
         (hierStep.children decoder).outputs .result index := by
@@ -198,15 +187,8 @@ private theorem implements :
         (BinaryToOneHot.oneHot addressWidth
           (hierStep.inputs .writeAddress) index &&
           hierStep.inputs .writeEnable) := by
-    have gateStateSubsingleton :
-        Subsingleton (childContracts element addressWidth readCount (gate index)).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      infer_instance
-    have gateMatches :=
-      letI := gateStateSubsingleton
-      childSolutionMatchesContract_of_subsingletonState
-        (body := body element addressWidth readCount) layerChildren hierStep satisfies
-        (gate index) SignalMap.emptyValues
+    derive_empty_state_child_match gateMatches for (gate index)
+      in body element addressWidth readCount from layerChildren, hierStep, satisfies
     have held := gateMatches.ruleHolds Primitives.AndRule.apply
     change Primitives.andOutputRule.Holds _ SignalMap.emptyValues _ at held
     rw [Primitives.andOutputRule_holds_iff] at held
@@ -219,13 +201,8 @@ private theorem implements :
       splitValue index, decoderValue index] at held
     exact held.trans (Bool.and_comm _ _)
 
-  letI combineStateSubsingleton :
-      Subsingleton (childContracts element addressWidth readCount combine).state.Values := by
-    change Subsingleton emptySignalMap.Values
-    infer_instance
-  have combineMatches := childSolutionMatchesContract_of_subsingletonState
-    (body := body element addressWidth readCount) layerChildren hierStep satisfies
-    combine SignalMap.emptyValues
+  derive_empty_state_child_match combineMatches for combine
+    in body element addressWidth readCount from layerChildren, hierStep, satisfies
   have combineValue : (hierStep.children combine).outputs .value =
       fun index => (hierStep.children (storage index)).outputs .q := by
     have equal := (Composition.SignalCombiner.outputRule_holds_iff
@@ -238,13 +215,8 @@ private theorem implements :
       contractState .entries
         (BitVector.toIndex addressWidth
           (hierStep.inputs (.readAddress port))) := by
-    letI muxStateSubsingleton : Subsingleton
-        (childContracts element addressWidth readCount (readMux port)).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      infer_instance
-    have muxMatches := childSolutionMatchesContract_of_subsingletonState
-      (body := body element addressWidth readCount) layerChildren hierStep satisfies
-      (readMux port) SignalMap.emptyValues
+    derive_empty_state_child_match muxMatches for (readMux port)
+      in body element addressWidth readCount from layerChildren, hierStep, satisfies
     have held := muxMatches.ruleHolds CombMuxTree.Rule.apply
     change (CombMuxTree.outputRule element addressWidth).Holds
       ((body element addressWidth readCount).wiring.childInputValues

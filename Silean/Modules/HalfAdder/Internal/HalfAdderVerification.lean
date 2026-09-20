@@ -2,8 +2,9 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
-import Silean.Authoring.CircuitDescriptionSoundness
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Modules.HalfAdder.HalfAdder
+import Silean.Modules.HalfAdder.Internal.HalfAdderStructure
 import Silean.Primitives.And
 import Silean.Primitives.Xor
 
@@ -71,15 +72,6 @@ private theorem implements :
 
 end LayerCertification
 
-namespace Internal
-
-/-- Proof that the concrete half-adder hierarchy contains no opaque leaves. -/
-theorem noBlackboxesCertified :
-    ModuleStructure.NoBlackboxesCertified moduleStructure :=
-  ⟨rfl⟩
-
-end Internal
-
 /-! The half-adder wiring implements its contract for every pair of child
 structures implementing the XOR and AND boundary contracts. -/
 module_cycle_certification certification for moduleStructure via body
@@ -92,25 +84,11 @@ module_cycle_certification certification for moduleStructure via body
   stateCoverage := fun _ _ => ⟨SignalMap.emptyValues, trivial⟩,
   implements := implements
 
-namespace Internal
-
-/-- Proof-level bridge used by the reader-facing structural behavior theorem. -/
-theorem behavior_of_realization {step : moduleStructure.Step}
-    (realizes : moduleStructure.Realizes step) :
-    Behavior step.inputs step.outputs := by
-  obtain ⟨contractState, stateCorresponds⟩ :=
-    certification.hasCorrespondingState step.currentState
-  obtain ⟨_, allowed, _⟩ := certification.allows_of_realizes
-    contractState step stateCorresponds realizes
-  exact Behavior.of_allowed allowed
-
-end Internal
-
 end Silean.Modules.HalfAdder
 
 /-! ## Authored-description correspondence -/
 
-namespace Silean.Modules.HalfAdder.Description.Internal
+namespace Silean.Modules.HalfAdder.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
@@ -125,7 +103,21 @@ private theorem unique : description.UniqueNames := by
   rcases member with equal | equal <;> subst child <;>
     constructor <;> exact of_decide_eq_true rfl
 
-theorem corresponds : Corresponds description HalfAdder.naming :=
+theorem description_corresponds : Corresponds description HalfAdder.naming :=
   ⟨same, unique⟩
 
-end Silean.Modules.HalfAdder.Description.Internal
+open Authoring.CircuitDescription.Description
+
+/-- Generated proof of the implementation-independent claim exposed by the
+public HalfAdder implementation facade. -/
+theorem construction_correct :
+    ImplementsCycleContract HalfAdder.description cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold HalfAdder.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := { instancePorts := instancePorts, wiring := wiring })
+    (children := structuralChildren)
+    corresponds certification
+
+end Silean.Modules.HalfAdder.Internal

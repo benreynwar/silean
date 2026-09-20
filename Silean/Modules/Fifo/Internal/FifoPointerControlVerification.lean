@@ -153,9 +153,8 @@ private theorem implements :
   have writeAddressValue : writeAddress = pointerAddress writePointer := by
     rw [writeAddressSplit, writeSplitOutputs]
     rfl
-  have addressEqualityOutput :=
-    (Equality.outputRule_holds_iff (addressType addressWidth) _ _ _).mp
-      ((childMatches .addressEquality).ruleHolds Equality.Rule.apply)
+  have addressEqualityOutput := Equality.result_of_allowed
+    (addressType addressWidth) (childMatches .addressEquality).allowed
   change (hierStep.children .addressEquality).outputs .result =
     (addressType addressWidth).equal
       readAddress writeAddress at addressEqualityOutput

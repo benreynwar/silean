@@ -1,10 +1,10 @@
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
-import Silean.Authoring.CircuitDescriptionSoundness
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.ResetRegister.ResetRegister
-import Silean.Modules.Register.RegisterTheorems
+import Silean.Modules.ResetRegister.Internal.ResetRegisterStructure
+import Silean.Modules.Register.RegisterDerived
 import Silean.Modules.Mux.MuxTheorems
 
 /-! Certification machinery for the authored reset register. -/
@@ -50,21 +50,10 @@ private theorem implements :
       (cycleContract signalType resetValue)
       (stateCorresponds signalType resetValue layerChildren) := by
   intro contractState hierStep corresponds satisfies
-  have statelessChildState (child : Instance)
-      (h : child = .resetValue ∨ child = .selection) :
-      Subsingleton (childContracts signalType resetValue child).state.Values := by
-    rcases h with rfl | rfl <;>
-      change Subsingleton emptySignalMap.Values <;> infer_instance
-  have constantMatches :=
-    letI := statelessChildState .resetValue (Or.inl rfl)
-    childSolutionMatchesContract_of_subsingletonState
-      (body := body signalType resetValue) layerChildren hierStep satisfies
-      .resetValue SignalMap.emptyValues
-  have selectionMatches :=
-    letI := statelessChildState .selection (Or.inr rfl)
-    childSolutionMatchesContract_of_subsingletonState
-      (body := body signalType resetValue) layerChildren hierStep satisfies
-      .selection SignalMap.emptyValues
+  derive_empty_state_child_match constantMatches for .resetValue
+    in body signalType resetValue from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match selectionMatches for .selection
+    in body signalType resetValue from layerChildren, hierStep, satisfies
   have storageMatches :=
     childSolutionMatchesContract (body := body signalType resetValue)
       layerChildren hierStep satisfies .storage contractState corresponds
@@ -86,19 +75,17 @@ private theorem implements :
     change hierStep.outputs .value =
       (hierStep.children .storage).outputs .output at boundaryOutput
     exact boundaryOutput.trans
-      ((Register.outputRule_holds_iff signalType _ _ _).mp
-        (storageMatches.ruleHolds Primitives.RegisterRule.observe))
+      (Register.output_of_allowed storageMatches.allowed)
   · change nextState = (cycleContract signalType resetValue).stateRule.apply
       hierStep.inputs contractState
-    have selected := (Mux.selectRule_holds_iff signalType _ _ _).mp
-      (selectionMatches.ruleHolds Mux.Rule.select)
-    have constantValue := (Constant.outputRule_holds_iff signalType resetValue _ _ _).mp
-      (constantMatches.ruleHolds Primitives.ConstantRule.apply)
+    have selected := Mux.result_of_allowed signalType selectionMatches.allowed
+    have constantValue :=
+      Constant.output_of_allowed signalType resetValue constantMatches.allowed
     change (hierStep.children .resetValue).outputs .output =
       resetValue at constantValue
-    have storageNextValue : nextState .stored =
-        storageInputs .input := by
-      rfl
+    have storageNextValue :=
+      Register.next_stored_of_allowed storageMatches.allowed
+    change nextState .stored = storageInputs .input at storageNextValue
     change (hierStep.children .selection).outputs .result =
       bif hierStep.inputs .reset then
         (hierStep.children .resetValue).outputs .output
@@ -129,7 +116,7 @@ module_cycle_certification certification (signalType : SignalType)
 
 end Silean.Modules.ResetRegister
 
-namespace Silean.Modules.ResetRegister.Description.Internal
+namespace Silean.Modules.ResetRegister.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
@@ -190,10 +177,26 @@ private theorem unique (signalType : SignalType)
       exact of_decide_eq_true rfl
     · exact of_decide_eq_true rfl
 
-theorem corresponds (signalType : SignalType)
+theorem description_corresponds (signalType : SignalType)
     (resetValue : signalType.Denote) :
     Corresponds (description signalType resetValue)
       (ResetRegister.naming signalType resetValue) :=
   ⟨same signalType resetValue, unique signalType resetValue⟩
 
-end Silean.Modules.ResetRegister.Description.Internal
+open Authoring.CircuitDescription.Description
+
+theorem construction_correct (signalType : SignalType)
+    (resetValue : signalType.Denote) :
+    (description signalType resetValue).ImplementsCycleContract
+      (cycleContract signalType resetValue) (Naming.ports signalType) := by
+  have corresponds := description_corresponds signalType resetValue
+  unfold ResetRegister.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := instancePorts signalType resetValue,
+      wiring := wiring signalType resetValue })
+    (children := structuralChildren signalType resetValue)
+    corresponds (certification signalType resetValue)
+
+end Silean.Modules.ResetRegister.Internal

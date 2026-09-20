@@ -6,8 +6,8 @@ namespace PicoRV.Control
 open Silean
 open Silean.Authoring
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open PicoRV.Authoring
+open scoped Silean.Authoring
 
 /-! Trap is deliberately a distinct phase child even though its update is
 small. It retains the complete baseline state, asserts only `trap`, and emits

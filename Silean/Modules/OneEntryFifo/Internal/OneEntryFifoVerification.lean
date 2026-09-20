@@ -3,8 +3,8 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Authoring.CircuitDescriptionSoundness
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EnabledRegister.EnabledRegisterTheorems
-import Silean.Modules.EnabledResetRegister.EnabledResetRegisterTheorems
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
 import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControlTheorems
 import Silean.Modules.OneEntryFifo.OneEntryFifo
 import Silean.Modules.Mux.MuxTheorems
@@ -85,24 +85,12 @@ private theorem implements :
   have dataMatches := childSolutionMatchesContract
     (body := body signalType) layerChildren hierStep satisfies
     .dataStorage dataState dataCorresponds
-  have controlMatches :=
-    letI : Subsingleton (childContracts signalType .control).state.Values := by
-      change Subsingleton emptySignalMap.Values; infer_instance
-    childSolutionMatchesContract_of_subsingletonState
-      (body := body signalType) layerChildren hierStep satisfies
-      .control SignalMap.emptyValues
-  have validOrMatches :=
-    letI : Subsingleton (childContracts signalType .outputValidOr).state.Values := by
-      change Subsingleton emptySignalMap.Values; infer_instance
-    childSolutionMatchesContract_of_subsingletonState
-      (body := body signalType) layerChildren hierStep satisfies
-      .outputValidOr SignalMap.emptyValues
-  have muxMatches :=
-    letI : Subsingleton (childContracts signalType .outputDataMux).state.Values := by
-      change Subsingleton emptySignalMap.Values; infer_instance
-    childSolutionMatchesContract_of_subsingletonState
-      (body := body signalType) layerChildren hierStep satisfies
-      .outputDataMux SignalMap.emptyValues
+  derive_empty_state_child_match controlMatches for .control
+    in body signalType from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match validOrMatches for .outputValidOr
+    in body signalType from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match muxMatches for .outputDataMux
+    in body signalType from layerChildren, hierStep, satisfies
   have boundary := satisfies.1
   let validInputs := (body signalType).wiring.childInputValues
     hierStep.inputs hierStep.childOutputs Instance.validStorage
@@ -269,8 +257,7 @@ private theorem same (signalType : SignalType) :
       ofNaming (OneEntryFifo.naming signalType) := by
   simp only [circuit_description, description, construction,
     EnabledResetRegister.placeNamed, EnabledRegister.placeNamed,
-    OneEntryFifo.Control.place,
-    EnabledResetRegister.design, EnabledRegister.design]
+    OneEntryFifo.Control.place]
   simp [circuit_description, enumeration]
   unfold moduleStructure naming
   simp only [id_eq]
@@ -288,8 +275,7 @@ private theorem unique (signalType : SignalType) :
     (description signalType).UniqueNames := by
   simp only [circuit_description, description, construction,
     EnabledResetRegister.placeNamed, EnabledRegister.placeNamed,
-    OneEntryFifo.Control.place,
-    EnabledResetRegister.design, EnabledRegister.design]
+    OneEntryFifo.Control.place]
   simp [circuit_description, enumeration]
   refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
   intro child member

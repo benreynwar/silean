@@ -129,6 +129,16 @@ def Allows (contract : ModuleCycleContract ports) (step : contract.Step) : Prop 
   contract.OutputRulesHold step.inputs step.currentState step.outputs ∧
     step.nextState = contract.stateRule.apply step.inputs step.currentState
 
+/-- One named output equation derived from a complete cycle contract. This is
+the reusable form consumed by parent-layer proofs: the equation's target is
+declared once, and `holds` connects it to every allowed contract step. -/
+structure OutputEquation (contract : ModuleCycleContract ports)
+    (output : ports.outputs.Label) where
+  target : ports.inputs.Values → contract.state.Values →
+    (ports.outputs.signalType output).Denote
+  holds : ∀ {step : contract.Step}, contract.Allows step →
+    step.outputs output = target step.inputs step.currentState
+
 def applyOutputRules (contract : ModuleCycleContract ports)
     (inputs : ports.inputs.Values) (currentState : contract.state.Values) :
     ports.outputs.Values :=

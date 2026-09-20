@@ -133,8 +133,8 @@ private theorem implements :
       controlInputs.resetn := by rw [inputsFieldsValue]; rfl
   have memDoneValue : hierStep.childOutputs .inputsFields .mem_done =
       controlInputs.mem_done := by rw [inputsFieldsValue]; rfl
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
 
   have baselineValue : hierStep.childOutputs .baseline .state =
       stateMap.pack baselineState' := by

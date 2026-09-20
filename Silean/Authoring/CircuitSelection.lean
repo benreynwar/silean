@@ -7,7 +7,7 @@ This sits above the mux modules because those modules themselves use the
 lower-level Boolean vocabulary in `CircuitLogic.lean`.
 -/
 
-namespace Silean.Authoring.CircuitLogic
+namespace Silean.Authoring
 
 open Silean
 open CircuitDescription
@@ -35,4 +35,4 @@ noncomputable def mux [operation : MuxPlacement signalType]
 
 attribute [circuit_description] mux MuxPlacement.place
 
-end Silean.Authoring.CircuitLogic
+end Silean.Authoring

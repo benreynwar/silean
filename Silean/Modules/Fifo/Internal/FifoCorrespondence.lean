@@ -15,7 +15,7 @@ private theorem same (element : SignalType) (addressWidth : Nat) :
       ofNaming (Fifo.naming element addressWidth) := by
   simp only [circuit_description, description, construction,
     EnabledResetCounter.placeNamed, PointerControl.place,
-    RegisterBank.place, EnabledResetCounter.design]
+    RegisterBank.place]
   simp only [show (inferInstance : Enumeration (RegisterBank.Input 1)).values =
     [.writeEnable, .writeAddress, .writeValue, .readAddress 0] by rfl]
   simp [circuit_description, enumeration]
@@ -25,7 +25,7 @@ private theorem unique (element : SignalType) (addressWidth : Nat) :
     (description element addressWidth).UniqueNames := by
   simp only [circuit_description, description, construction,
     EnabledResetCounter.placeNamed, PointerControl.place,
-    RegisterBank.place, EnabledResetCounter.design]
+    RegisterBank.place]
   simp only [show (inferInstance : Enumeration (RegisterBank.Input 1)).values =
     [.writeEnable, .writeAddress, .writeValue, .readAddress 0] by rfl]
   simp [circuit_description, enumeration]

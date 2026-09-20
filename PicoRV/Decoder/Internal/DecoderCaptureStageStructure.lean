@@ -2,8 +2,8 @@ import PicoRV.Decoder.DecoderTypes
 import Silean.Authoring.ModuleDesign
 import Silean.Authoring.SignalSchemaDeclaration
 import Silean.Modules.Constant.Constant
-import Silean.Modules.EnabledRegister.EnabledRegister
-import Silean.Modules.EnabledResetRegister.EnabledResetRegister
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
 import Silean.Modules.EqualsConstant.EqualsConstant
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
 import Silean.Modules.VectorLayout.VectorLayout

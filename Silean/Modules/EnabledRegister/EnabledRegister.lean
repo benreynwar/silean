@@ -1,91 +1,84 @@
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Authoring.CircuitSelection
 import Silean.Authoring.ModuleCycleContract
-import Silean.Modules.EnabledRegister.Internal.EnabledRegisterStructure
+import Silean.Authoring.ModulePorts
+import Silean.Modules.Register.RegisterDerived
 
 /-! # Enabled register
 
-An enabled register loads `data` on a clock edge when `enable` is high and
-otherwise feeds its stored value back to itself. The description below shows
-that feedback directly; the expanded typed hierarchy lives under `Internal/`.
+An enabled register loads `data` when `enable` is high and otherwise feeds its
+stored value back to itself. The construction shows that feedback directly;
+expanded structure and certification live under `Internal/`.
 -/
 
-namespace Silean.Modules.EnabledRegister.Description
-
-open Silean
-open Silean.Authoring.CircuitDescription
-open Silean.Authoring.CircuitLogic
-
-/-- A mux selects either the feedback value or new data, and a register stores
-the result. -/
-noncomputable def construction (signalType : SignalType) : Builder Unit := do
-  let data <- input "data" signalType
-  let enable <- input "enable" .bit
-  wire stored : signalType
-  let current <- Modules.Register.place (← mux enable stored data)
-  assign stored current
-  output "q" current
-
-noncomputable def description (signalType : SignalType) : Description :=
-  build (construction signalType)
-
-end Silean.Modules.EnabledRegister.Description
-
 namespace Silean.Modules.EnabledRegister
+
 open Silean
 open Silean.Authoring
-
 open Authoring.CircuitDescription
 
-/-! ## Placement -/
+module_ports ports (signalType : SignalType)
+    with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
+      .positional signalType) where
+  input data (schema := typeNaming) : signalType,
+  input enable : .bit,
+  output q (schema := typeNaming) : signalType
 
-/-- Place an enabled register with caller-supplied aggregate naming and a
-conventional indexed instance name. -/
-noncomputable def placeWith
-    (typeNaming : Silean.Naming.SignalTypeNaming signalType)
-    (data : Net signalType) (enable : Net .bit) : Builder (Net signalType) := do
-  let child <- placeIndexed "enabled_register" (designWith signalType typeNaming) fun
-    | .data => data
-    | .enable => enable
-  pure (child .q)
+open ports
 
-/-- Place an enabled register with caller-supplied aggregate naming under an
-explicit structural name. -/
-noncomputable def placeNamedWith (name : Silean.Naming.SourceName)
-    (typeNaming : Silean.Naming.SignalTypeNaming signalType)
-    (data : Net signalType) (enable : Net .bit) : Builder (Net signalType) := do
-  let child <- Authoring.CircuitDescription.placeNamed name
-    (designWith signalType typeNaming) fun
-      | .data => data
-      | .enable => enable
-  pure (child .q)
+noncomputable def construction (signalType : SignalType) :
+    ModuleBuilder (ports signalType) Unit := do
+  let data ← input signalType .data
+  let enable ← input signalType .enable
+  wire stored : signalType
+  let current ← Register.place (← mux enable stored data)
+  assign stored current
+  output signalType .q current
 
-/-- Place an enabled register under a caller-chosen instance name. -/
-noncomputable def placeNamed (name : Silean.Naming.SourceName)
-    (data : Net signalType) (enable : Net .bit) : Builder (Net signalType) := do
-  let child <- Authoring.CircuitDescription.placeNamed name (design signalType) fun
-    | .data => data
-    | .enable => enable
-  pure (child .q)
-
-/-- Place an enabled register using the next conventional indexed name. -/
-noncomputable def place (data : Net signalType)
-    (enable : Net .bit) : Builder (Net signalType) := do
-  let child <- placeIndexed "enabled_register" (design signalType) fun
-    | .data => data
-    | .enable => enable
-  pure (child .q)
-
-attribute [circuit_description] placeWith placeNamedWith placeNamed place
-
-/-! ## Exact cycle behavior -/
+noncomputable def description (signalType : SignalType) : Description :=
+  ModuleBuilder.build (Naming.ports signalType) (construction signalType)
 
 module_cycle_contract cycleContract (signalType : SignalType)
     for ports signalType where
-  state := Modules.Register.stateMap signalType
+  state := Register.stateMap signalType
   output_rule observe where
     reads := []
     writes := { q := state .stored }
   state_rule where
     reads := [enable, data]
     next := { stored := bif enable then data else state .stored }
+
+section AllowedStep
+
+variable {signalType : SignalType}
+  {step : (cycleContract signalType).Step}
+  (allowed : (cycleContract signalType).Allows step)
+
+include allowed
+
+/-- An allowed step exposes the value stored before the clock edge. -/
+theorem q_of_allowed : step.outputs .q = step.currentState .stored :=
+  (observeRule_holds_iff signalType
+    step.inputs step.currentState step.outputs).mp (allowed.1 .observe)
+
+/-- Enable chooses between loading new data and retaining the stored value. -/
+theorem next_stored_of_allowed :
+    step.nextState .stored =
+      bif step.inputs .enable then step.inputs .data
+      else step.currentState .stored := by
+  rw [allowed.2]
+  rfl
+
+theorem next_stored_of_enabled (enabled : step.inputs .enable = true) :
+    step.nextState .stored = step.inputs .data := by
+  rw [next_stored_of_allowed allowed, enabled]
+  rfl
+
+theorem next_stored_of_disabled (disabled : step.inputs .enable = false) :
+    step.nextState .stored = step.currentState .stored := by
+  rw [next_stored_of_allowed allowed, disabled]
+  rfl
+
+end AllowedStep
+
 end Silean.Modules.EnabledRegister

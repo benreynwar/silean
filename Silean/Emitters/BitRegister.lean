@@ -1,5 +1,5 @@
 import Silean.FIRRTL.Emit
-import Silean.Modules.Register.Register
+import Silean.Modules.Register.RegisterDerived
 
 def main (args : List String) : IO Unit :=
   Silean.FIRRTL.emitMain "emit-bit-register" args

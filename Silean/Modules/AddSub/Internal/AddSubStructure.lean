@@ -1,25 +1,7 @@
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Add.Add
+import Silean.Modules.AddSub.AddSub
 import Silean.Modules.BitwiseXor.BitwiseXor
 import Silean.Naming.SignalAdapterNaming
-
-namespace Silean.Modules.AddSub
-
-open Silean
-open Silean.Authoring
-
-module_ports ports (width : Nat) where
-  input left : .vector width .bit,
-  input right : .vector width .bit,
-  input subtract : .bit,
-  output result : .vector width .bit,
-  output carryOut : .bit
-
-/-- Broadcast shape used to present the subtraction bit to every operand bit. -/
-def subtractVector (width : Nat) : Composition.SignalCombiner :=
-  .vector width .bit
-
-end Silean.Modules.AddSub
 
 namespace Silean.Modules
 

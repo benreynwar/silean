@@ -9,7 +9,7 @@ namespace PicoRV.Memory
 open Silean
 open Silean.Authoring
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
+open PicoRV.Authoring
 
 /-! # Memory read formatting
 

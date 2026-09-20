@@ -1,7 +1,7 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Interfaces.FifoPorts
-import Silean.Modules.EnabledRegister.EnabledRegister
-import Silean.Modules.EnabledResetRegister.EnabledResetRegister
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
 import Silean.Modules.Mux.Mux
 import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControl
 import Silean.Naming.FifoPortsNaming

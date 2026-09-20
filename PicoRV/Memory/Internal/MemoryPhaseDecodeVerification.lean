@@ -67,21 +67,21 @@ private theorem implements :
     (childSolutionMatchesCoveredContract layerChildren hierStep
       satisfies child).choose_spec
 
-  have idleValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 2 .bit) (stateOfNat 0) _ _ _).mp
-    ((childMatch .idleMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have idleValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 2 .bit) (stateOfNat 0)
+    (childMatch .idleMatch).allowed
   normalize_child_hyp idleValue unfolding wiring, context
-  have readValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 2 .bit) (stateOfNat 1) _ _ _).mp
-    ((childMatch .readMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have readValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 2 .bit) (stateOfNat 1)
+    (childMatch .readMatch).allowed
   normalize_child_hyp readValue unfolding wiring, context
-  have writeValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 2 .bit) (stateOfNat 2) _ _ _).mp
-    ((childMatch .writeMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have writeValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 2 .bit) (stateOfNat 2)
+    (childMatch .writeMatch).allowed
   normalize_child_hyp writeValue unfolding wiring, context
-  have prefetchedValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 2 .bit) (stateOfNat 3) _ _ _).mp
-    ((childMatch .prefetchedMatch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have prefetchedValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 2 .bit) (stateOfNat 3)
+    (childMatch .prefetchedMatch).allowed
   normalize_child_hyp prefetchedValue unfolding wiring, context
 
   refine ⟨Silean.SignalMap.emptyValues, ?_, trivial⟩

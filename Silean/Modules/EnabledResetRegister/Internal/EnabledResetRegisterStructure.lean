@@ -1,23 +1,12 @@
 import Silean.Authoring.ModuleDesign
+import Silean.Modules.EnabledResetRegister.EnabledResetRegister
 import Silean.Modules.Mux.Mux
-import Silean.Modules.ResetRegister.ResetRegister
+import Silean.Modules.ResetRegister.ResetRegisterDerived
 
 namespace Silean.Modules
 
 open Silean
 open Silean.Authoring
-
-namespace EnabledResetRegister
-
-module_ports ports (signalType : SignalType)
-    with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
-      .positional signalType) where
-  input value (schema := typeNaming) : signalType,
-  input enable : .bit,
-  input reset : .bit,
-  output value (name := "value_out") (schema := typeNaming) : signalType
-
-end EnabledResetRegister
 
 module_design EnabledResetRegister (signalType : SignalType)
     (resetValue : signalType.Denote)

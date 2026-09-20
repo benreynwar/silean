@@ -21,8 +21,8 @@ behavior follow the selected source configuration. -/
 namespace Description
 
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open PicoRV.Authoring
+open scoped Silean.Authoring
 
 noncomputable def construction : Builder Unit := do
   let regOp1 ← input "reg_op1" wordType
@@ -71,7 +71,7 @@ noncomputable def construction : Builder Unit := do
         notSignedLess)
       notEqual)
     equal
-  let comparisonWord ← Silean.Authoring.CircuitLogic.combine wordCombiner
+  let comparisonWord ← Silean.Authoring.combine wordCombiner
     fun index => if (show Fin 32 from index) = 0 then comparison else zeroBit
   let xorSelected ← instrXori ||| instrXor
   let orSelected ← instrOri ||| instrOr

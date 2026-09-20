@@ -1,31 +1,16 @@
 import Silean.Composition.LeafwiseComposition
-import Silean.Naming.PrimitiveNaming
-import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.Register
-import Silean.Authoring.CircuitDescription
+
+/-! # Generic register
+
+`Register` stores any signal type. Its public contract exposes the value held
+before the clock edge and stores the input on the edge. The recursive
+componentwise implementation for aggregate values lives under `Internal/`.
+-/
 
 namespace Silean.Modules.Register
 
 open Silean
-
-/-! # Generic register
-
-A register for any signal type. Aggregate registers are recursively built from
-registers for their component signal types.
-
-`Register` is the generic recursive leaf mechanism used to construct all
-stateful aggregate storage: bits use the primitive register, while vectors and
-tuples are split, registered componentwise, and recombined. A separate builder
-description would merely duplicate this recursion and hide the important
-type-directed construction, so the recursive structure itself remains here as
-the human-facing hardware definition.
-
-The public behavioral and certification results are in
-`RegisterTheorems.lean`; their recursive proof machinery is under
-`Internal/`.
--/
-
-/-! ## Boundary and cycle contract -/
 
 @[reducible] def interface : Composition.LeafwiseInterface where
   Input := Primitives.UnaryInput
@@ -81,144 +66,42 @@ def stateRule (signalType : SignalType) :
   stateRule := stateRule signalType
   outputCoverage := by rfl
 
-/-! ## Hardware structure
+@[simp] theorem outputRule_holds_iff (signalType : SignalType)
+    (inputs : (ports signalType).inputs.Values)
+    (state : (stateMap signalType).Values)
+    (outputs : (ports signalType).outputs.Values) :
+    (outputRule signalType).Holds inputs state outputs ↔
+      outputs .output = state .stored := by
+  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
+    SignalGroup.all_matches]
+  constructor
+  · intro equal
+    exact congrFun equal .output
+  · intro equal
+    funext label
+    cases label
+    exact equal
 
-A bit is one register primitive. A vector or tuple is split into its immediate
-components, registered recursively, and recombined with the same shape. -/
+section AllowedStep
 
-def moduleStructure (signalType : SignalType) :
-    ModuleStructure (ports signalType) :=
-  interface.moduleStructure (.primitive Primitives.register) signalType
+variable {signalType : SignalType}
+  {step : (cycleContract signalType).Step}
+  (allowed : (cycleContract signalType).Allows step)
 
-end Silean.Modules.Register
+include allowed
 
-namespace Silean.Modules.Register.Naming
+/-- A register exposes the value stored before the clock edge. -/
+theorem output_of_allowed :
+    step.outputs .output = step.currentState .stored :=
+  (outputRule_holds_iff signalType
+    step.inputs step.currentState step.outputs).mp (allowed.1 .observe)
 
-open Silean Silean.Naming
+/-- On the clock edge, a register stores its input. -/
+theorem next_stored_of_allowed :
+    step.nextState .stored = step.inputs .input := by
+  rw [allowed.2]
+  rfl
 
-/-! ## Emission naming -/
-
-def portsWithNaming (signalType : SignalType)
-    (typeNaming : SignalTypeNaming signalType) :
-    ModulePortsNaming (Modules.Register.ports signalType) where
-  inputs := ⟨fun | .input => "in"⟩
-  outputs := ⟨fun | .output => "out"⟩
-  inputTypes := fun | .input => typeNaming
-  outputTypes := fun | .output => typeNaming
-
-def ports (signalType : SignalType) :
-    ModulePortsNaming (Modules.Register.ports signalType) :=
-  portsWithNaming signalType (.positional signalType)
-
-private def componentName (splitter : Composition.SignalSplitter)
-    (component : splitter.ports.outputs.Label) : SourceName :=
-  .scoped "register"
-    ((SignalMapNaming.indexed splitter.ports.outputs "component").name component)
-
-private def namingForType : (signalType : SignalType) → SignalTypeNaming signalType →
-      ModuleNaming (Modules.Register.moduleStructure signalType)
-  | .bit, _ => by
-      unfold Modules.Register.moduleStructure
-      rw [Composition.LeafwiseInterface.moduleStructure.eq_1]
-      exact Silean.Naming.Primitive.register
-  | .vector length elementType, typeNaming => by
-      unfold Modules.Register.moduleStructure
-      rw [Composition.LeafwiseInterface.moduleStructure.eq_2]
-      let splitter : Composition.SignalSplitter := .vector length elementType
-      exact .composite ⟨"register", "structural", [.signalType splitter.aggregateType]⟩
-        (portsWithNaming splitter.aggregateType typeNaming)
-        (fun
-          | .splitter .unit => "split"
-          | .component component => .scoped "register" (.indexed "component" component.val)
-          | .combiner .output => "combine")
-        (fun
-          | .splitter .unit => Silean.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
-          | .component component =>
-              namingForType elementType (typeNaming.component component)
-          | .combiner .output => Silean.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
-  | .tuple fields, typeNaming => by
-      unfold Modules.Register.moduleStructure
-      rw [Composition.LeafwiseInterface.moduleStructure.eq_3]
-      let splitter : Composition.SignalSplitter := .tuple fields
-      exact .composite ⟨"register", "structural", [.signalType splitter.aggregateType]⟩
-        (portsWithNaming splitter.aggregateType typeNaming)
-        (fun
-          | .splitter .unit => "split"
-          | .component component => componentName splitter component
-          | .combiner .output => "combine")
-        (fun
-          | .splitter .unit => Silean.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
-          | .component component => by
-              exact namingForType (fields.typeAt component)
-                (typeNaming.component component)
-          | .combiner .output => Silean.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
-termination_by signalType => signalType.complexity
-decreasing_by
-  · simp [SignalType.complexity]
-  · have smaller := SignalTypes.complexity_typeAt_lt
-      fields component
-    exact smaller
-
-def naming (signalType : SignalType) :
-    ModuleNaming (Modules.Register.moduleStructure signalType) :=
-  namingForType signalType (.positional signalType)
-
-/-- Apply authored names only to the emitted register boundary. Recursive
-splitters, combiners, and component registers retain canonical positional
-naming. -/
-def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalType) :
-    ModuleNaming (Modules.Register.moduleStructure signalType) :=
-  (naming signalType).withPorts (portsWithNaming signalType typeNaming)
-
-end Silean.Modules.Register.Naming
-
-namespace Silean.Modules.Register
-
-/-! ## Complete designs -/
-
-/-- The canonical register structure paired with caller-supplied emitted names. -/
-def designWith {signalType : SignalType}
-    (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
-    Silean.Naming.NamedModule where
-  ports := ports signalType
-  moduleStructure := moduleStructure signalType
-  naming := Naming.namingWith signalType typeNaming
-
-/-- The generic register structure paired with its default recursive naming. -/
-def design (signalType : SignalType) : Silean.Naming.NamedModule :=
-  designWith (Naming.SignalTypeNaming.positional signalType)
-
-/-! ## Placement -/
-
-open Silean.Authoring.CircuitDescription
-
-/-- Place a register under a caller-chosen instance name and aggregate naming. -/
-noncomputable def placeNamedWith (name : Silean.Naming.SourceName)
-    (typeNaming : Silean.Naming.SignalTypeNaming signalType)
-    (value : Net signalType) : Builder (Net signalType) := do
-  let child <- Authoring.CircuitDescription.placeNamed name
-    (designWith typeNaming) fun | .input => value
-  pure (child .output)
-
-/-- Place a register under a caller-chosen instance name. -/
-noncomputable def placeNamed (name : Silean.Naming.SourceName)
-    (value : Net signalType) : Builder (Net signalType) :=
-  placeNamedWith name (.positional signalType) value
-
-/-- Place a register with caller-supplied aggregate naming and a conventional
-indexed instance name. -/
-noncomputable def placeWith
-    (typeNaming : Silean.Naming.SignalTypeNaming signalType)
-    (value : Net signalType) : Builder (Net signalType) := do
-  let child <- placeIndexed "register" (designWith typeNaming) fun
-    | .input => value
-  pure (child .output)
-
-/-- Place a register using the next conventional indexed name. -/
-noncomputable def place (value : Net signalType) : Builder (Net signalType) := do
-  let child <- placeIndexed "register" (design signalType) fun | .input => value
-  pure (child .output)
-
-attribute [circuit_description] placeNamedWith placeNamed placeWith place
+end AllowedStep
 
 end Silean.Modules.Register

@@ -1,47 +1,25 @@
 import Silean.FIRRTL
-import Silean.Modules.FullAdder.FullAdderTheorems
+import Silean.Modules.FullAdder.FullAdderDerived
 
 namespace SileanTests.FullAdder
 
 open Silean Silean.FIRRTL
 
-example : Modules.FullAdder.Description.description.children.map (·.name) =
+example : Modules.FullAdder.description.inputs.map (·.name) =
+    [("left" : Naming.SourceName), "right", "carryIn"] := rfl
+
+example : Modules.FullAdder.description.children.map (·.name) =
     [.indexed "half_adder" 0, .indexed "half_adder" 1, .indexed "or" 0] := rfl
 
-example : Authoring.CircuitDescription.Corresponds
-    Modules.FullAdder.Description.description Modules.FullAdder.naming :=
-  Modules.FullAdder.Description.authored_definition_corresponds
+example : Authoring.CircuitDescription.Description.ImplementsCycleContract
+    Modules.FullAdder.description Modules.FullAdder.cycleContract
+      Modules.FullAdder.Naming.ports :=
+  Modules.FullAdder.construction_correct
 
 noncomputable example : Contracts.Cycle.ModuleCycleCertified Modules.FullAdder.ports :=
   Modules.FullAdder.certified
 
-/-- FullAdder likewise exports a proof valid for arbitrary child structures
-meeting its two HalfAdder and OR boundary contracts. -/
 noncomputable example := Modules.FullAdder.certifiedLayer.certify
-
-example : ModuleStructure.NoBlackboxesCertified Modules.FullAdder.moduleStructure :=
-  Modules.FullAdder.noBlackboxesCertified
-
-example {step : Modules.FullAdder.moduleStructure.Step}
-    (realizes : Modules.FullAdder.moduleStructure.Realizes step) :
-    Modules.FullAdder.Behavior step.inputs step.outputs :=
-  Modules.FullAdder.Description.behavior_of_realization realizes
-
-example : Contracts.Cycle.Implements
-    Modules.FullAdder.moduleStructure Modules.FullAdder.cycleContract
-    Modules.FullAdder.certification.stateCorresponds :=
-  Modules.FullAdder.implements_contract
-
-/-- Clients cannot discharge the private state relation by unfolding the
-FullAdder proof; they must use its public state-coverage guarantee. -/
-example (structuralState : Modules.FullAdder.moduleStructure.State) :
-    Modules.FullAdder.certified.certification.stateCorresponds
-      SignalMap.emptyValues structuralState := by
-  fail_if_success exact trivial
-  rcases Modules.FullAdder.certified.certification.hasCorrespondingState
-      structuralState with ⟨contractState, corresponds⟩
-  rw [Subsingleton.elim SignalMap.emptyValues contractState]
-  exact corresponds
 
 def inputs (left right carryIn : Bool) : Modules.FullAdder.ports.inputs.Values
   | .left => left
@@ -65,9 +43,9 @@ example (left right carryIn : Bool) :
     (result left right carryIn .sum).toNat +
         2 * (result left right carryIn .carryOut).toNat =
       left.toNat + right.toNat + carryIn.toNat := by
-  exact (Modules.FullAdder.Behavior.of_allowed
+  exact Modules.FullAdder.numeric_value_of_allowed
     (Modules.FullAdder.cycleContract.evaluateStep_allowed
-      (inputs left right carryIn) SignalMap.emptyValues)).numeric_value
+      (inputs left right carryIn) SignalMap.emptyValues)
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

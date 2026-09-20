@@ -18,7 +18,7 @@ namespace Silean.Modules.OneEntryFifo.Control.Description
 
 open Silean
 open Silean.Authoring.CircuitDescription
-open scoped Silean.Authoring.CircuitLogic
+open scoped Silean.Authoring
 
 noncomputable def construction : Builder Unit := do
   let storedValid ← input "storedValid" .bit

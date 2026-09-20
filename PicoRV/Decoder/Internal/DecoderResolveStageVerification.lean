@@ -7,10 +7,10 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Composition.SignalAdapterImplementation
-import Silean.Modules.EnabledRegister.EnabledRegisterTheorems
-import Silean.Modules.EnabledResetRegister.EnabledResetRegisterTheorems
-import Silean.Modules.Register.RegisterTheorems
-import Silean.Modules.ResetRegister.ResetRegisterTheorems
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
+import Silean.Modules.Register.RegisterDerived
+import Silean.Modules.ResetRegister.ResetRegisterDerived
 import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.Constant.Constant
 import Silean.Primitives.Not
@@ -440,26 +440,19 @@ private theorem implements :
   have summaryMatch := coveredMatch .instructionSummary
 
   have resetCurrent : hierStep.childOutputs .resetMatchStorage .value = resetMatches :=
-    (Silean.Modules.EnabledResetRegister.observeRule_holds_iff
-      resetMatchType falseResetMatches _ _ _).mp
-        (resetMatch.ruleHolds Silean.Modules.EnabledResetRegister.Rule.observe)
+    Silean.Modules.EnabledResetRegister.value_of_allowed resetMatch.allowed
   have retainedCurrent : hierStep.childOutputs .retainedMatchStorage .q = retainedMatches :=
-    (Silean.Modules.EnabledRegister.observeRule_holds_iff retainedMatchType _ _ _).mp
-      (retainedMatch.ruleHolds Silean.Modules.EnabledRegister.Rule.observe)
+    Silean.Modules.EnabledRegister.q_of_allowed retainedMatch.allowed
   have immediateCurrent : hierStep.childOutputs .immediateStorage .q = immediate :=
-    (Silean.Modules.EnabledRegister.observeRule_holds_iff immediateType _ _ _).mp
-      (immediateMatch.ruleHolds Silean.Modules.EnabledRegister.Rule.observe)
+    Silean.Modules.EnabledRegister.q_of_allowed immediateMatch.allowed
   have ordinaryCurrent : hierStep.childOutputs .ordinarySummaryStorage .output =
       ordinarySummaries :=
-    (Silean.Modules.Register.outputRule_holds_iff ordinarySummaryType _ _ _).mp
-      (ordinaryMatch.ruleHolds Silean.Primitives.RegisterRule.observe)
+    Silean.Modules.Register.output_of_allowed ordinaryMatch.allowed
   have addSubCurrent : hierStep.childOutputs .addSubSummaryStorage .output =
       addSubSummary :=
-    (Silean.Modules.Register.outputRule_holds_iff .bit _ _ _).mp
-      (addSubMatch.ruleHolds Silean.Primitives.RegisterRule.observe)
+    Silean.Modules.Register.output_of_allowed addSubMatch.allowed
   have compareCurrent : hierStep.childOutputs .compareStorage .value = compare :=
-    (Silean.Modules.ResetRegister.observeRule_holds_iff .bit false _ _ _).mp
-      (compareMatch.ruleHolds Silean.Modules.ResetRegister.Rule.observe)
+    Silean.Modules.ResetRegister.value_of_allowed compareMatch.allowed
 
   have resetOutputsEquation :=
     (Silean.Composition.SignalSplitter.outputRule_holds_iff resetMatchSplitter _ _ _).mp

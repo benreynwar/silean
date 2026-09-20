@@ -2,24 +2,18 @@ import Silean.Authoring.CircuitSelection
 import Silean.Authoring.CircuitArithmetic
 import Silean.Modules.Mux.Mux
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.Register.Register
+import Silean.Modules.Register.RegisterDerived
 import Silean.Naming.SignalAdapterNaming
 
-/-! Concise authoring vocabulary for the aggregate operations used throughout
-PicoRV. These are opt-in aliases; canonical placement APIs remain in their
-owning Silean module namespaces. -/
+/-! Concise authoring vocabulary for PicoRV-specific aggregate operations.
+General logic, constants, selection, and arithmetic come directly from
+`Silean.Authoring`. -/
 
-namespace PicoRV.Authoring.CircuitLogic
+namespace PicoRV.Authoring
 
 open Silean
 open Silean.Authoring
 open Silean.Authoring.CircuitDescription
-
-/-- Place a constant using the shared Silean authoring vocabulary. Re-exported
-here so PicoRV authoring files need open only one project vocabulary. -/
-noncomputable abbrev constant (signalType : SignalType)
-    (value : signalType.Denote) : Builder (Net signalType) :=
-  Silean.Authoring.CircuitLogic.constant signalType value
 
 /-- Split an authored named tuple into its typed fields, using a conventional
 indexed instance name. -/
@@ -95,14 +89,6 @@ noncomputable def updateNamed (name : Naming.SourceName) (signals : SignalMap)
   combineNamed name signals typeNaming fun label =>
     (overrides label).getD (original label)
 
-/-- Select between two values. The result type chooses the bit-specific or
-generic mux module automatically. -/
-noncomputable abbrev mux [operation :
-    Silean.Authoring.CircuitLogic.MuxPlacement signalType]
-    (select : Net .bit) (whenFalse whenTrue : Net signalType) :
-    Builder (Net signalType) :=
-  Silean.Authoring.CircuitLogic.mux select whenFalse whenTrue
-
 /-- Place an aggregate mux under an explicit instance name while retaining
 the aggregate's authored field names. -/
 noncomputable abbrev muxNamed (name : Naming.SourceName)
@@ -124,7 +110,7 @@ noncomputable abbrev registerNamed (name : Naming.SourceName)
   Modules.Register.placeNamedWith name typeNaming value
 
 attribute [circuit_description]
-  constant split splitNamed splitVector splitVectorNamed combine combineNamed
-  update updateNamed mux muxNamed register registerNamed
+  split splitNamed splitVector splitVectorNamed combine combineNamed
+  update updateNamed muxNamed register registerNamed
 
-end PicoRV.Authoring.CircuitLogic
+end PicoRV.Authoring

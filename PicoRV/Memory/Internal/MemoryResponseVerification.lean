@@ -96,9 +96,9 @@ private theorem implements :
     exact equation
   have idleValue : hierStep.childOutputs .idle .result =
       decide (stateNumber current = 0) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (stateOfNat 0) _ _ _).mp
-      ((childMatch .idle).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (stateOfNat 0)
+      (childMatch .idle).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [phaseValue, Memory.ProofSupport.equal_stateOfNat _ _ (by decide)]
       at equation
@@ -144,9 +144,9 @@ private theorem implements :
     exact equation
   have prefetchedValue : hierStep.childOutputs .prefetched .result =
       decide (stateNumber current = 3) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (stateOfNat 3) _ _ _).mp
-      ((childMatch .prefetched).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (stateOfNat 3)
+      (childMatch .prefetched).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [phaseValue, Memory.ProofSupport.equal_stateOfNat _ _ (by decide)]
       at equation

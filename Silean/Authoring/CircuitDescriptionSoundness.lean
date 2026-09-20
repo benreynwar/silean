@@ -387,6 +387,28 @@ theorem namedModule_hierStep_inputs_heq (left right : NamedModule)
   cases eq_of_heq sameStep
   rfl
 
+theorem namedModule_currentState_heq (left right : NamedModule)
+    (same : left = right)
+    (leftStep : HierStep left.moduleStructure)
+    (rightStep : HierStep right.moduleStructure)
+    (sameStep : HEq leftStep rightStep) :
+    HEq (HierStep.currentState left.moduleStructure leftStep)
+      (HierStep.currentState right.moduleStructure rightStep) := by
+  cases same
+  cases eq_of_heq sameStep
+  rfl
+
+theorem namedModule_nextState_heq (left right : NamedModule)
+    (same : left = right)
+    (leftStep : HierStep left.moduleStructure)
+    (rightStep : HierStep right.moduleStructure)
+    (sameStep : HEq leftStep rightStep) :
+    HEq (HierStep.nextState left.moduleStructure leftStep)
+      (HierStep.nextState right.moduleStructure rightStep) := by
+  cases same
+  cases eq_of_heq sameStep
+  rfl
+
 theorem namedModule_solution_iff (left right : NamedModule) (same : left = right)
     (leftStep : HierStep left.moduleStructure)
     (rightStep : HierStep right.moduleStructure)
@@ -522,6 +544,13 @@ noncomputable def Corresponds.transferInputs (inputs : leftBody.ports.inputs.Val
   (leftCertificate.inputBijection rightCertificate).transfer
     (fun entry => entry.signalType.Denote) inputs
 
+include leftCertificate in
+theorem Corresponds.boundaryOutputsUnique : leftPorts.outputs.names.Nodup := by
+  have unique := leftCertificate.unique.1
+  rw [Option.some.inj leftCertificate.same] at unique
+  simpa only [List.map_map, Function.comp_def, inputEntry,
+    SignalMapNaming.names] using (List.nodup_append.mp unique).2.1
+
 noncomputable def Corresponds.transferHierStep
     (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren)) :
     HierStep (ModuleStructure.composite rightBody rightChildren) :=
@@ -530,6 +559,56 @@ noncomputable def Corresponds.transferHierStep
       (fun entry => entry.port.signalType.Denote) hierStep.outputs
     children := (leftCertificate.childBijection rightCertificate).transfer
       (fun entry => HierStep entry.module.moduleStructure) hierStep.children }
+
+theorem Corresponds.transferCurrentState
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren)) :
+    (leftCertificate.childBijection rightCertificate).transfer
+        (fun entry => entry.module.moduleStructure.State) hierStep.currentState =
+      (leftCertificate.transferHierStep rightCertificate hierStep).currentState := by
+  funext rightChild
+  let bijection := leftCertificate.childBijection rightCertificate
+  let leftChild := bijection.backward rightChild
+  have modules := congrArg Child.module (bijection.backward_preserves rightChild)
+  have stepTransfer : HEq
+      ((leftCertificate.transferHierStep rightCertificate hierStep).children rightChild)
+      (hierStep.children leftChild) :=
+    cast_heq _ _
+  have stateTransfer : HEq
+      (bijection.transfer (fun entry => entry.module.moduleStructure.State)
+        hierStep.currentState rightChild)
+      (HierStep.currentState (leftChildren leftChild)
+        (hierStep.children leftChild)) :=
+    cast_heq _ _
+  exact eq_of_heq (stateTransfer.trans <|
+    namedModule_currentState_heq _ _ modules
+      (hierStep.children leftChild)
+      ((leftCertificate.transferHierStep rightCertificate hierStep).children rightChild)
+      stepTransfer.symm)
+
+theorem Corresponds.transferNextState
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren)) :
+    (leftCertificate.childBijection rightCertificate).transfer
+        (fun entry => entry.module.moduleStructure.State) hierStep.nextState =
+      (leftCertificate.transferHierStep rightCertificate hierStep).nextState := by
+  funext rightChild
+  let bijection := leftCertificate.childBijection rightCertificate
+  let leftChild := bijection.backward rightChild
+  have modules := congrArg Child.module (bijection.backward_preserves rightChild)
+  have stepTransfer : HEq
+      ((leftCertificate.transferHierStep rightCertificate hierStep).children rightChild)
+      (hierStep.children leftChild) :=
+    cast_heq _ _
+  have stateTransfer : HEq
+      (bijection.transfer (fun entry => entry.module.moduleStructure.State)
+        hierStep.nextState rightChild)
+      (HierStep.nextState (leftChildren leftChild)
+        (hierStep.children leftChild)) :=
+    cast_heq _ _
+  exact eq_of_heq (stateTransfer.trans <|
+    namedModule_nextState_heq _ _ modules
+      (hierStep.children leftChild)
+      ((leftCertificate.transferHierStep rightCertificate hierStep).children rightChild)
+      stepTransfer.symm)
 
 theorem Corresponds.transferInputs_agree (inputs : leftBody.ports.inputs.Values)
     (left : leftBody.ports.inputs.Label) (right : rightBody.ports.inputs.Label)
@@ -542,6 +621,21 @@ theorem Corresponds.transferInputs_agree (inputs : leftBody.ports.inputs.Values)
       rightCertificate.source_names_unique.1 (names.symm.trans sameName)
   subst right
   exact (bijection.transfer_forward (fun entry => entry.signalType.Denote) inputs left).symm
+
+theorem Corresponds.transferOutputs_agree
+    (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))
+    (left : leftBody.ports.outputs.Label) (right : rightBody.ports.outputs.Label)
+    (sameName : leftPorts.outputs.name left = rightPorts.outputs.name right) :
+    HEq (hierStep.outputs left)
+      ((leftCertificate.transferHierStep rightCertificate hierStep).outputs right) := by
+  let bijection := leftCertificate.outputBijection rightCertificate
+  have names := congrArg (fun entry => entry.port.name) (bijection.preserves left)
+  have equal : bijection.forward left = right :=
+    enumeration_name_injective rightBody.ports.outputs.labels rightPorts.outputs.name
+      rightCertificate.boundaryOutputsUnique (names.symm.trans sameName)
+  subst right
+  exact (bijection.transfer_forward
+    (fun entry => entry.port.signalType.Denote) hierStep.outputs left).symm
 
 theorem Corresponds.transferChildOutputs_agree
     (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))

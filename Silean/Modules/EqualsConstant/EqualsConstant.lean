@@ -16,8 +16,8 @@ namespace Silean.Modules.EqualsConstant
 open Silean
 open Silean.Authoring
 open Authoring.CircuitDescription
-open Authoring.CircuitLogic
-open scoped Authoring.CircuitLogic
+open Authoring
+open scoped Authoring
 
 namespace Description
 

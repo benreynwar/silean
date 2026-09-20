@@ -79,57 +79,41 @@ private theorem implements :
       (Silean.Contracts.Cycle.Certification.Layer.moduleStructure body layerChildren)
       cycleContract (stateCorresponds layerChildren) := by
   intro contractState hierStep corresponds satisfies
-  have statelessMatch (child : Instance)
-      [Subsingleton (childContracts child).state.Values]
-      (state : (childContracts child).state.Values) :=
-    Silean.Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      layerChildren hierStep satisfies child state
-  have zeroAddressMatch := statelessMatch .zeroAddress Silean.SignalMap.emptyValues
-  have zeroWordMatch := statelessMatch .zeroWord Silean.SignalMap.emptyValues
-  have rs1ZeroMatch := statelessMatch .rs1Zero Silean.SignalMap.emptyValues
-  have rs2ZeroMatch := statelessMatch .rs2Zero Silean.SignalMap.emptyValues
-  have rdZeroMatch := statelessMatch .rdZero Silean.SignalMap.emptyValues
-  have emptyStateSubsingleton : Subsingleton emptySignalMap.Values := inferInstance
-  have rdNonzeroMatch :=
-    letI : Subsingleton (childContracts .rdNonzero).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      exact emptyStateSubsingleton
-    statelessMatch .rdNonzero Silean.SignalMap.emptyValues
-  have requestedWriteMatch :=
-    letI : Subsingleton (childContracts .requestedWrite).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      exact emptyStateSubsingleton
-    statelessMatch .requestedWrite Silean.SignalMap.emptyValues
-  have enabledWriteMatch :=
-    letI : Subsingleton (childContracts .enabledWrite).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      exact emptyStateSubsingleton
-    statelessMatch .enabledWrite Silean.SignalMap.emptyValues
-  have rs1MuxMatch :=
-    letI : Subsingleton (childContracts .rs1Mux).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      exact emptyStateSubsingleton
-    statelessMatch .rs1Mux Silean.SignalMap.emptyValues
-  have rs2MuxMatch :=
-    letI : Subsingleton (childContracts .rs2Mux).state.Values := by
-      change Subsingleton emptySignalMap.Values
-      exact emptyStateSubsingleton
-    statelessMatch .rs2Mux Silean.SignalMap.emptyValues
+  derive_empty_state_child_match zeroAddressMatch for .zeroAddress
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match zeroWordMatch for .zeroWord
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match rs1ZeroMatch for .rs1Zero
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match rs2ZeroMatch for .rs2Zero
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match rdZeroMatch for .rdZero
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match rdNonzeroMatch for .rdNonzero
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match requestedWriteMatch for .requestedWrite
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match enabledWriteMatch for .enabledWrite
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match rs1MuxMatch for .rs1Mux
+    in body from layerChildren, hierStep, satisfies
+  derive_empty_state_child_match rs2MuxMatch for .rs2Mux
+    in body from layerChildren, hierStep, satisfies
   have bankMatches := Silean.Contracts.Cycle.Certification.Layer.childSolutionMatchesContract
     layerChildren hierStep satisfies .bank
     (fun | .entries => contractState .cpuregs) corresponds
 
   have zeroAddressValueEq : (hierStep.children .zeroAddress).outputs .output = zeroAddressValue :=
-    (Silean.Modules.Constant.outputRule_holds_iff addressType zeroAddressValue _ _ _).mp
-      (zeroAddressMatch.ruleHolds Silean.Primitives.ConstantRule.apply)
+    Silean.Modules.Constant.output_of_allowed addressType zeroAddressValue
+      zeroAddressMatch.allowed
   have zeroWordValueEq : (hierStep.children .zeroWord).outputs .output = zeroWordValue :=
-    (Silean.Modules.Constant.outputRule_holds_iff wordType zeroWordValue _ _ _).mp
-      (zeroWordMatch.ruleHolds Silean.Primitives.ConstantRule.apply)
+    Silean.Modules.Constant.output_of_allowed wordType zeroWordValue
+      zeroWordMatch.allowed
   have zeroWordsEqual : zeroWordValue = zeroWord := rfl
   have rs1ZeroValue : (hierStep.children .rs1Zero).outputs .result =
       addressType.equal (hierStep.inputs .decoded_rs1) zeroAddressValue := by
-    have held := (Silean.Modules.Equality.outputRule_holds_iff addressType _ _ _).mp
-      (rs1ZeroMatch.ruleHolds Silean.Modules.Equality.Rule.apply)
+    have held := Silean.Modules.Equality.result_of_allowed addressType
+      rs1ZeroMatch.allowed
     have wired : (hierStep.children .rs1Zero).outputs .result =
         addressType.equal (hierStep.inputs .decoded_rs1) ((hierStep.children .zeroAddress).outputs .output) := by
       simpa [Silean.HierStep.childOutputs, Silean.Wiring.childInputValues, body, wiring, context, instancePorts,
@@ -138,8 +122,8 @@ private theorem implements :
     exact wired
   have rs2ZeroValue : (hierStep.children .rs2Zero).outputs .result =
       addressType.equal (hierStep.inputs .decoded_rs2) zeroAddressValue := by
-    have held := (Silean.Modules.Equality.outputRule_holds_iff addressType _ _ _).mp
-      (rs2ZeroMatch.ruleHolds Silean.Modules.Equality.Rule.apply)
+    have held := Silean.Modules.Equality.result_of_allowed addressType
+      rs2ZeroMatch.allowed
     have wired : (hierStep.children .rs2Zero).outputs .result =
         addressType.equal (hierStep.inputs .decoded_rs2) ((hierStep.children .zeroAddress).outputs .output) := by
       simpa [Silean.HierStep.childOutputs, Silean.Wiring.childInputValues, body, wiring, context, instancePorts,
@@ -148,8 +132,8 @@ private theorem implements :
     exact wired
   have rdZeroValue : (hierStep.children .rdZero).outputs .result =
       addressType.equal (hierStep.inputs .latched_rd) zeroAddressValue := by
-    have held := (Silean.Modules.Equality.outputRule_holds_iff addressType _ _ _).mp
-      (rdZeroMatch.ruleHolds Silean.Modules.Equality.Rule.apply)
+    have held := Silean.Modules.Equality.result_of_allowed addressType
+      rdZeroMatch.allowed
     have wired : (hierStep.children .rdZero).outputs .result =
         addressType.equal (hierStep.inputs .latched_rd) ((hierStep.children .zeroAddress).outputs .output) := by
       simpa [Silean.HierStep.childOutputs, Silean.Wiring.childInputValues, body, wiring, context, instancePorts,
@@ -185,15 +169,15 @@ private theorem implements :
 
   have bankRead1Value : (hierStep.children .bank).outputs (.readValue 0) =
       contractState .cpuregs (registerIndex (hierStep.inputs .decoded_rs1)) := by
-    have held := (Silean.Modules.RegisterBank.readRule_holds_iff wordType 5 2 0 _ _ _).mp
-      (bankMatches.ruleHolds (.read 0))
+    have held := Silean.Modules.RegisterBank.readValue_of_allowed
+      bankMatches.allowed 0
     simpa [registerIndex, Silean.HierStep.childOutputs, Silean.Wiring.childInputValues,
       body, wiring, context, instancePorts,
       Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using held
   have bankRead2Value : (hierStep.children .bank).outputs (.readValue 1) =
       contractState .cpuregs (registerIndex (hierStep.inputs .decoded_rs2)) := by
-    have held := (Silean.Modules.RegisterBank.readRule_holds_iff wordType 5 2 1 _ _ _).mp
-      (bankMatches.ruleHolds (.read 1))
+    have held := Silean.Modules.RegisterBank.readValue_of_allowed
+      bankMatches.allowed 1
     simpa [registerIndex, Silean.HierStep.childOutputs, Silean.Wiring.childInputValues,
       body, wiring, context, instancePorts,
       Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using held
@@ -201,16 +185,14 @@ private theorem implements :
       bif (hierStep.children .rs1Zero).outputs .result then
         (hierStep.children .zeroWord).outputs .output else
         (hierStep.children .bank).outputs (.readValue 0) := by
-    have held := (Silean.Modules.Mux.selectRule_holds_iff wordType _ _ _).mp
-      (rs1MuxMatch.ruleHolds Silean.Modules.Mux.Rule.select)
+    have held := Silean.Modules.Mux.result_of_allowed wordType rs1MuxMatch.allowed
     simpa [Silean.HierStep.childOutputs, Silean.Wiring.childInputValues, body, wiring, context, instancePorts,
       Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using held
   have rs2MuxValue : (hierStep.children .rs2Mux).outputs .result =
       bif (hierStep.children .rs2Zero).outputs .result then
         (hierStep.children .zeroWord).outputs .output else
         (hierStep.children .bank).outputs (.readValue 1) := by
-    have held := (Silean.Modules.Mux.selectRule_holds_iff wordType _ _ _).mp
-      (rs2MuxMatch.ruleHolds Silean.Modules.Mux.Rule.select)
+    have held := Silean.Modules.Mux.result_of_allowed wordType rs2MuxMatch.allowed
     simpa [Silean.HierStep.childOutputs, Silean.Wiring.childInputValues, body, wiring, context, instancePorts,
       Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using held
 

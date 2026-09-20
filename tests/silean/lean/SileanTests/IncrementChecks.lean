@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Increment.IncrementTheorems
+import Silean.Modules.Increment.IncrementDerived
 
 namespace SileanTests.Increment
 

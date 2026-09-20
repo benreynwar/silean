@@ -186,22 +186,22 @@ private theorem implements :
       controlInputs.instr_sb := by
     simpa [Inputs.toValues] using inputField .instr_sb
 
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have trueValue := (Silean.Modules.Constant.outputRule_holds_iff .bit true _ _ _).mp
-    ((childMatch .trueBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have sizeWordValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 2 .bit) (twoBitsOfNat 0) _ _ _).mp
-    ((childMatch .sizeWord).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have sizeHalfValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 2 .bit) (twoBitsOfNat 1) _ _ _).mp
-    ((childMatch .sizeHalf).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have sizeByteValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 2 .bit) (twoBitsOfNat 2) _ _ _).mp
-    ((childMatch .sizeByte).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have fetchStateValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateFetch) _ _ _).mp
-    ((childMatch .fetchState).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
+  have trueValue := Silean.Modules.Constant.output_of_allowed .bit true
+    (childMatch .trueBit).allowed
+  have sizeWordValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 2 .bit) (twoBitsOfNat 0)
+    (childMatch .sizeWord).allowed
+  have sizeHalfValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 2 .bit) (twoBitsOfNat 1)
+    (childMatch .sizeHalf).allowed
+  have sizeByteValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 2 .bit) (twoBitsOfNat 2)
+    (childMatch .sizeByte).allowed
+  have fetchStateValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateFetch)
+    (childMatch .fetchState).allowed
 
   have notDoneValue : hierStep.childOutputs .notDone .output =
       !controlInputs.mem_done := by
@@ -276,16 +276,16 @@ private theorem implements :
   have finishedDecoderValue : hierStep.childOutputs .finishedDecoder .result =
       bif (!(current .mem_do_prefetch : Bool) && controlInputs.mem_done)
         then true else updated .decoder_trigger := by
-    have equation := (Silean.Modules.BitMux.selectRule_holds_iff _ _ _).mp
-      ((childMatch .finishedDecoder).ruleHolds Silean.Modules.BitMux.Rule.select)
+    have equation := Silean.Modules.BitMux.result_of_allowed
+      (childMatch .finishedDecoder).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr finishValue trueValue
       (congrFun updatedFieldsValue .decoder_trigger))
   have finishedPseudoValue : hierStep.childOutputs .finishedPseudo .result =
       bif (!(current .mem_do_prefetch : Bool) && controlInputs.mem_done)
         then true else updated .decoder_pseudo_trigger := by
-    have equation := (Silean.Modules.BitMux.selectRule_holds_iff _ _ _).mp
-      ((childMatch .finishedPseudo).ruleHolds Silean.Modules.BitMux.Rule.select)
+    have equation := Silean.Modules.BitMux.result_of_allowed
+      (childMatch .finishedPseudo).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr finishValue trueValue
       (congrFun updatedFieldsValue .decoder_pseudo_trigger))

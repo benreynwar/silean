@@ -4,7 +4,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.AddSub.AddSubTheorems
+import Silean.Modules.AddSub.AddSubDerived
 import Silean.Modules.EqualsConstant.EqualsConstantTheorems
 import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
@@ -265,9 +265,9 @@ private theorem implements :
     exact high_bits_mean_ge_four (current .reg_sh)
   have zeroValue : hierStep.childOutputs .amountZero .result =
       decide (shiftAmount current = 0) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 5 .bit) (fiveBitsOfNat 0) _ _ _).mp
-      ((childMatch .amountZero).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 5 .bit) (fiveBitsOfNat 0)
+      (childMatch .amountZero).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue] at equation
     rw [equation]
@@ -431,8 +431,8 @@ private theorem implements :
         (bif current .reg_sh 2 || current .reg_sh 3 || current .reg_sh 4 then
           fiveBitsOfNat 4 else fiveBitsOfNat 1) true).1 := by
     have equation :=
-      (Silean.Modules.AddSub.Behavior.of_allowed 5
-        (childMatch .subtractStep).allowed).result
+      Silean.Modules.AddSub.cycleContract.result 5
+        (childMatch .subtractStep).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, stepValue, trueValue] at equation
     have highMeaning := high_bits_mean_ge_four (current .reg_sh)

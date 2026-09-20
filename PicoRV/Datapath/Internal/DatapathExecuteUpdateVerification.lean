@@ -4,7 +4,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Add.AddTheorems
+import Silean.Modules.Add.AddDerived
 import Silean.Modules.Constant.Constant
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 
@@ -85,8 +85,8 @@ private theorem implements :
     ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
   have targetValue : hierStep.childOutputs .target .result =
       addWords (current .reg_pc) datapathInputs.decoded_imm := by
-    have equation :=
-      (Silean.Modules.Add.Behavior.of_allowed 32 (childMatch .target).allowed).result
+    have equation := Silean.Modules.Add.cycleContract.result 32
+      (childMatch .target).allowed
     change hierStep.childOutputs .target .result = (Silean.Modules.Add.addBits 32
       (hierStep.childOutputs .currentFields .reg_pc)
       (hierStep.childOutputs .inputsFields .decoded_imm)

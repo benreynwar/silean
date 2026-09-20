@@ -51,14 +51,8 @@ private theorem implements : Contracts.Cycle.ImplementsSolutions
     (stateCorresponds element leftWidth rightWidth layerChildren) := by
   intro contractState hierStep corresponds satisfies
   have boundary := satisfies.1
-  have childMatch (child : Instance) := by
-    letI : Subsingleton
-        ((childContracts element leftWidth rightWidth child).state.Values) := by
-      cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
-    exact childSolutionMatchesContract_of_subsingletonState
-      (body := body element leftWidth rightWidth) layerChildren hierStep
-      satisfies child
-      (by cases child <;> exact SignalMap.emptyValues)
+  derive_empty_state_child_matches childMatch
+    for body element leftWidth rightWidth from layerChildren, hierStep, satisfies
   have splitOutputs : (hierStep.children .split).outputs =
       (splitter element leftWidth rightWidth).outputValues
         (splitInputs element leftWidth rightWidth hierStep.inputs) := by

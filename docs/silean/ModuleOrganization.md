@@ -19,38 +19,181 @@ An ordinary composite module should normally have this shape:
 ```text
 Silean/Modules/Foo/
 |- Foo.lean
-|- FooTheorems.lean
+|- FooDerived.lean
 `- Internal/
    |- FooStructure.lean
    |- FooCorrespondence.lean  (when useful as a separate check)
    `- FooVerification.lean
 ```
 
-The intended reading order is `Foo.lean`, followed by `FooTheorems.lean`.
+The intended reading order is `Foo.lean`, followed by `FooDerived.lean`.
 Someone trying to understand the certified result should not need to read the
 files under `Internal/`. Those files remain available to someone maintaining
 or debugging the elaboration and proof.
 
+`Derived` means “public declarations whose definitions or proofs require the
+generated internals.” It does not mean that the file owns another hardware
+representation. Placement helpers, the concrete `design`, and short public
+theorems backed by internal proofs naturally live at this boundary.
+
+For an authored module, the public signatures in `FooDerived.lean` must use
+only declarations available from `Foo.lean` and the public authoring API. The
+implementation of `Foo.place` may consume the generated structure and naming,
+and a theorem proof may name an internal theorem. Neither dependency should
+appear in the placement type or theorem statement. The contract-first
+structural pattern below makes one explicit exception for its concrete
+structure-correctness statement.
+
+HalfAdder is the reference instance of this layout:
+
+```text
+HalfAdder.lean
+    ^
+    | imported by
+Internal/HalfAdderStructure.lean
+    ^
+    | imported by
+Internal/HalfAdderVerification.lean
+    ^
+    | imported by
+HalfAdderDerived.lean
+```
+
+`HalfAdder.lean` declares the ports once, then contains the readable XOR/AND
+construction, exact cycle contract, and its arithmetic meaning. The generated
+structure reuses that boundary rather than declaring it again. Internal
+verification proves concrete correspondence and certification, then proves the
+implementation-independent claim by transporting structural solutions through
+`Corresponds`. `HalfAdderDerived.lean` exposes `place` and a one-line
+`construction_correct` theorem whose proof simply names the internal result.
+
+HalfAdder also supplies two useful mechanical checks for this organization:
+
+- the import closure of `HalfAdder.lean` contains neither its own generated
+  structure nor verification module; and
+- if the proof of a public theorem in `HalfAdderDerived.lean` is replaced by
+  `by sorry`, its statement elaborates using `HalfAdder.lean` alone.
+
+The register family is the reference for the same organization with state:
+
+```text
+Register.lean / ResetRegister.lean / EnabledRegister.lean /
+EnabledResetRegister.lean / EnabledResetCounter.lean
+    boundary, readable construction when useful, state model, cycle contract,
+    and direct consequences of that contract
+
+Internal/*Structure.lean
+    expanded recursive or composite hierarchy and naming
+
+Internal/*Verification.lean
+    state correspondence, schedules, authored-description correspondence,
+    and certification
+
+*Derived.lean
+    placement and the public correctness proof backed by those internals
+```
+
+For a stateful authored module, the main file should make two times explicit:
+outputs describe the stored value before the edge, while the state rule
+describes the stored value after the edge. Short `*_of_allowed` theorems that
+spell out those two facts belong beside the contract in the main file. They
+depend only on `cycleContract.Allows`; they are not certification results and
+must not be hidden behind an internal import.
+
+Feedback wires belong in the readable construction when they explain the
+hardware. Their matching `named_wires` entries and the relation between the
+contract state and nested child state belong under `Internal/`. The public
+`construction_correct` theorem in the derived file connects any realization
+of the readable construction to the contract without exposing that state
+relation in its statement.
+
+## Contract-first structural modules
+
+Some hardware is most naturally implemented by recursive Lean definitions,
+indexed families, or another programmatic structural construction. If a
+`ModuleBuilder` description would obscure that implementation or duplicate it
+poorly, do not force one into the module. Equally, do not put the expanded
+structural construction in `Foo.lean` merely because no concise authored form
+exists.
+
+Use the same directory shape with a different correctness boundary:
+
+```text
+Foo.lean                         boundary, behavior, and cycle contract
+FooDerived.lean                  placement and public structural correctness
+Internal/FooStructure.lean       recursive or programmatic implementation
+Internal/FooVerification.lean    certification proof
+```
+
+`Foo.lean` should remain the file a human reads to understand what the module
+does. It declares the ports, mathematical behavior, exact cycle contract, and
+short contract-level consequences. It contains no `Description`, correspondence
+proof, child hierarchy, recursive wiring, structural naming, or placement
+implementation unless one of those is itself genuinely simple and explanatory.
+
+Because this pattern has no independent authored description, its derived
+correctness theorem names the generated structure directly:
+
+```lean
+theorem implements_contract (parameter : Parameter) :
+    Contracts.Cycle.Implements (moduleStructure parameter)
+      (cycleContract parameter)
+      (certification parameter).stateCorresponds :=
+  (certification parameter).implements
+```
+
+This theorem is intentionally different from an authored module's
+`description.ImplementsCycleContract`: the concrete `moduleStructure` and its
+state correspondence are part of the claim. They are generated under
+`Internal/` but exposed through `FooDerived.lean` as deliberate structural
+artifacts. Raw child labels, wiring tables, schedules, and proof helpers remain
+internal.
+
+Do not invent a builder description solely to obtain the authored-module
+theorem shape. The two supported patterns are “readable authored construction
+plus correspondence” and “small public contract plus directly certified
+internal structure.” In both patterns, `Foo.lean` stays simple.
+
+`Add` and `Increment` are reference examples of the contract-first structural
+pattern. `AddSub` is the corresponding arithmetic example with a concise
+authored construction and an implementation-independent correctness theorem.
+
 ## Authoring interface
 
-An ordinary fixed module should be written first with
-`Authoring.CircuitDescription.Builder`. This is the human-facing hardware
-definition: its `do` notation, named inputs and outputs, placed children,
-wires, and assignments should resemble the structure a Verilog author expects
-to see.
+An ordinary fixed module with a concise authored implementation should declare
+its boundary with `module_ports`, then write its construction with
+`Authoring.CircuitDescription.ModuleBuilder`. This is the human-facing hardware
+definition: its `do` notation, typed inputs and outputs, placed children, wires,
+and assignments should resemble the structure a Verilog author expects to see.
+The generated boundary operations live in the namespace named by the
+`module_ports` declaration; opening that namespace gives the construction the
+short `input` and `output` spellings.
 
 For example, the main definition should have the general shape:
 
 ```lean
-noncomputable def construction : Builder Unit := do
-  let left <- input "left" .bit
-  let right <- input "right" .bit
+module_ports ports where
+  input left : .bit,
+  input right : .bit,
+  output result : .bit
+
+open ports
+
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let left <- input .left
+  let right <- input .right
   let result <- SomeChild.place left right
-  output "result" result
+  output .result result
 
 noncomputable def description : Description :=
-  build construction
+  ModuleBuilder.build Naming.ports construction
 ```
+
+The boundary supplies each port's name and signal type, so the construction
+does not repeat either one. It also supplies the complete input list when the
+description is built: referring to an input reads that declared port rather
+than declaring it again. Ordinary `Builder` actions lift into `ModuleBuilder`,
+so placement, wires, registers, and logic operators keep their existing APIs.
 
 Authors should use a child's documented `place` helper rather than manually
 assembling its description. Placement helpers retain the child's production
@@ -59,14 +202,36 @@ compact hardware-oriented vocabulary. `placeNamed` is an explicit opt-in for
 the uncommon case where a caller-chosen instance name is useful; it is not the
 default spelling.
 
+`module_ports` generates `ports.OutputNets` together with boundary-specific
+`ports.placeNamed` and `ports.placeIndexed` adapters. A module's public
+placement wrapper should use those declarations instead of repeating the
+output ports in a handwritten `PlacedOutputs` structure, matching every input
+label by hand, and repackaging every output. For example:
+
+```lean
+noncomputable def place (left right : Net .bit) : Builder ports.OutputNets :=
+  ports.placeIndexed "half_adder" moduleStructure naming left right
+```
+
+Introduce a separate placement-result type only when it expresses a real
+abstraction not already present in the declared output boundary. Do not retain
+an abbreviation such as `PlacedOutputs := ports.OutputNets` merely to preserve
+an otherwise unused name.
+
 Every reusable module should keep `Foo.place` as its explicit, dependable
-placement API. A focused authoring-vocabulary module may additionally expose a
-short name for a commonly used, expression-like module. For example,
-`Authoring.CircuitLogic.constant` delegates to `Modules.Constant.place` and is
-available only to files that open that authoring vocabulary. Less common
-placements should continue to use `Foo.place`; project-specific code may
-provide its own similarly scoped vocabulary without adding project policy to
-Silean's global module namespaces.
+placement API. A common expression-like module may additionally expose a short
+name directly in `Silean.Authoring`, such as `halfAdder` or `constant`. For a
+single module, define that abbreviation physically in `FooDerived.lean`: this
+keeps its dependency on the concrete placement API local without adding a tiny
+coordination file. An operation that dispatches among several modules, such as
+`mux` or the arithmetic operators, belongs in a shared authoring file instead.
+The source-file boundary organizes dependencies; it need not introduce another
+public namespace.
+
+Ordinary vocabulary is enabled with `open Silean.Authoring`. Operators remain
+scoped so merely importing an authoring dependency does not silently change the
+parser; an authored module opts into them with `open scoped Silean.Authoring`.
+Less common placements should continue to use `Foo.place`.
 
 The authored definition should use the project’s hardware notation when it is
 available. In particular, prefer `!!`, `&&&`, `^^^`, `|||`, and `===` to
@@ -75,7 +240,7 @@ builder actions, so a result used only once should normally be embedded with a
 nested `←` instead of receiving a temporary name:
 
 ```lean
-output "result" (← (left &&& (← !! select)) ||| (right &&& select))
+output .result (← (left &&& (← !! select)) ||| (right &&& select))
 ```
 
 For a named aggregate declared with `signal_schema`, use its generated
@@ -151,37 +316,54 @@ fully typed `module_design` declaration in `Internal/FooStructure.lean`. It
 provides the total wiring, `ModuleStructure`, naming, and `NamedModule` values
 consumed by the rest of Silean.
 
-Every module using this two-representation pattern must expose an
-`authored_definition_corresponds` theorem in `FooTheorems.lean`. That theorem
-checks that finalizing the readable builder description produces exactly the
-named production structure, including its boundary, children, connections,
-and uniqueness of names. The detailed correspondence proof belongs in
-`Internal/FooVerification.lean`.
+Every module using this two-representation pattern should expose a public
+`construction_correct` theorem in `FooDerived.lean`. Its statement quantifies
+over every typed realization whose naming `Corresponds` to the authored
+description, so it mentions neither generated label constructors nor one
+chosen structure. The generated correspondence certificate and detailed proof
+belong in `Internal/FooVerification.lean`.
 
 The two declarations must not be allowed to drift:
 
 - the builder description is what a person reads to understand the hardware;
 - the typed structure is what verification and emission consume; and
-- `authored_definition_corresponds` is the checked connection between them.
+- the internal `Corresponds` certificate connects them, while public
+  `construction_correct` states that every such realization meets the contract.
 
-`module_design` may remain the primary authoring form when the builder would
-hide rather than clarify the construction. Typical exceptions are recursive
-module families, indexed or programmatically generated hierarchies, and
-generic composition mechanisms. A top-level integration shell may also keep
-an explicit `module_design` when its main explanatory content is the complete
-named port map between a small number of architectural children; translating
-that map into builder closures would be a second equally large representation,
-not a clearer circuit. The main file should briefly explain every exception.
-Avoid introducing a builder description merely to reproduce a generated
-structure or architectural connection table less clearly.
+When a builder would hide rather than clarify the construction, use the
+contract-first structural pattern above. Recursive module families, indexed or
+programmatically generated hierarchies, generic composition mechanisms, and
+large architectural connection tables all commonly fit this pattern. Keep the
+`module_design` or ordinary recursive structural definitions under
+`Internal/`; do not move their complexity into `Foo.lean`. Avoid introducing a
+builder description merely to reproduce that structure less clearly.
 
-## `Foo.lean`: definition and contract
+## Reader-facing style
+
+Keep the main and derived files visually small as well as logically simple.
+Open only namespaces that supply names actually used in the file. Prefer dot
+notation for an operation associated with a value, such as
+`description.ImplementsCycleContract`, instead of opening a deep namespace for
+one declaration. Namespace depth used to organize the library should not become
+vocabulary that every module author must understand.
+
+Comments should explain hardware intent, a non-obvious guarantee, or a genuine
+exception to the standard organization. Do not add a section heading around
+one or two self-explanatory declarations, narrate what the following line
+already says, or preserve historical commentary after the old approach has
+been removed. A short module-level sentence and concise API documentation are
+usually enough for `FooDerived.lean`.
+
+Prefer declarations generated from the boundary over handwritten aliases and
+adapters. Every repeated port name is an opportunity for the authored
+construction, placement API, and generated structure to drift apart.
+
+## `Foo.lean`: public definition and contract
 
 The main file explains what the hardware is. It should contain, as applicable:
 
 - a module-level description of the circuit and its purpose;
-- the concise, hardware-oriented authored definition;
-- small placement helpers intended for authors of parent circuits;
+- the concise, hardware-oriented authored definition, when one exists;
 - named functions or propositions that express the module's natural behavior;
 - the exact cycle contract; and
 - short, fundamental conversions that explain the meaning of that contract.
@@ -191,37 +373,75 @@ read and write. The contract should state the behavior independently of the
 implementation hierarchy. A reader should be able to see the ports, important
 children or operations, output behavior, and state transition from this file.
 
-This file may import `Internal/FooStructure.lean` to obtain the expanded typed
-structure generated from the authored form. It should not contain child
+For a contract-first structural module, omit the authored definition and the
+children or operations from this file. The reader should still see the complete
+boundary behavior and state transition; the implementation hierarchy belongs
+under `Internal/`.
+
+An ordinary main file must not directly import an `Internal/` path, and its own
+`Foo.Internal` structure or verification module must not occur in its import
+closure. The dependency direction is the reverse: generated structure imports
+the public boundary and contract, plus the authored construction when one
+exists. A parent construction may import a child's `BarDerived.lean` facade in
+order to place that child; the facade legitimately depends transitively on
+`Bar.Internal`. The parent must depend on that public facade rather than import
+the child's internal path itself. The main file should not contain child
 certification maps, schedules, structural-solution proofs, or long tactic
 proofs.
 
-Downstream circuit-authoring code normally imports this file and uses:
+Code that needs only the specification may import this file and use:
 
 - `Input`, `Output`, and `ports` for the boundary;
-- `place` or another documented placement helper when one exists;
-- `design` or `designWith` when declaring a child in `module_design`;
-- `moduleStructure` and `naming` for lower-level structural consumers; and
 - the behavior and cycle-contract declarations when stating specifications.
 
-## `FooTheorems.lean`: public guarantees
+## `FooDerived.lean`: public declarations backed by internals
 
-The theorem file states what downstream proofs may rely on. It should contain:
+The derived file imports `Internal/FooVerification.lean` and forms the complete
+public facade. It may contain:
 
+- placement helpers intended for authors of parent circuits;
+- short `Silean.Authoring` abbreviations for common expression-like
+  placements owned by this module;
+- wrappers that consume the concrete `design`, `moduleStructure`, and naming
+  declarations generated by the internal structure;
 - useful consequences of the contract, stated at the module's natural level;
-- the theorem connecting the authored definition to the production structure;
-- the main theorem that the structure implements its contract; and
+- either the authored module's implementation-independent
+  `construction_correct` theorem or the structural module's concrete
+  `implements_contract` theorem; and
 - additional semantic results that are useful to proofs using the module.
 
 These should be real reusable theorem interfaces, not duplicate propositions
 created only to make the file look explanatory. Comments should explain the
 roles of unfamiliar arguments and why a theorem is useful to a parent proof.
 
-Proofs in this file should normally be short. They may delegate to lemmas or a
+Proofs in this file should normally be a direct reference to a theorem under
+`Foo.Internal`, or otherwise remain short. They may delegate to a
 certification constructed in `Internal/FooVerification.lean`, but their
 statements must not expose schedules, intermediate child proposals, or other
 proof-specific choices unless those concepts are inherently part of the
 module's public semantics.
+
+For an authored module, use this concrete test for every public semantic
+theorem statement: copy the statement to a file that imports only `Foo.lean`,
+replace its proof with `by sorry`, and check that it elaborates. The real proof
+in `FooDerived.lean` may be only a reference to `Foo.Internal`; the statement
+must not require that import.
+
+A contract-first structural module has one deliberate exception:
+`implements_contract` names `moduleStructure` and the certification's state
+correspondence because there is no authored description to quantify over.
+Other semantic theorem statements should still depend only on the boundary and
+contract vocabulary from `Foo.lean`. Even this structural correctness
+statement must avoid raw wiring, generated child labels, schedules, and
+proof-local helpers.
+
+For example, the public correctness theorem should have this shape:
+
+```lean
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports :=
+  Internal.construction_correct
+```
 
 Public one-cycle theorems should use the shared boundary-step vocabulary:
 
@@ -234,17 +454,20 @@ This keeps `inputs`, `currentState`, `outputs`, and `nextState` together and
 prevents structural witnesses from leaking into the public interface.
 `IsSolution` and `HierStep` remain internal structural witnesses used to
 establish `Realizes`. The superseded four-argument `EvaluatesTo` relation and
-its compatibility layer have been removed; use `Allows`. A combinational
-module may still expose a smaller
-`Behavior step.inputs step.outputs` proposition; the theorem deriving that
-behavior should accept `Allows step` or `Realizes step`.
+its compatibility layer have been removed; use `Allows`. Inline
+`module_cycle_contract` rules generate one named projection for every written
+output, such as `cycleContract.sum allowed`; use those projections instead of
+restating the output equations in a separate `Behavior` proposition. Introduce
+a second behavioral abstraction only when it expresses a genuinely different
+guarantee, such as a transaction- or trace-level contract.
 
 When proving a parent module from its children, keep the returned
 `ChildContractMatch` intact. Use `childMatch.ruleHolds rule` for one declared
-output rule, `childMatch.boundaryFact theorem` for a public theorem that turns
-an allowed step into an input/output property, and
-`childMatch.nextCorresponds` for state threading. `childContractStep` is
-layer-certification machinery and should not appear in module proofs.
+output rule, `childMatch.boundaryOutput cycleContract.sumEquation` for a
+generated output equation, `childMatch.boundaryFact theorem` for a genuinely
+aggregate input/output property, and `childMatch.nextCorresponds` for state
+threading. `childContractStep` is layer-certification machinery and should not
+appear in module proofs.
 
 Downstream verification code normally imports this file. In addition to its
 named theorems, it may use:
@@ -254,7 +477,7 @@ named theorems, it may use:
 - `certifiedLayer`, when deliberately reusing the module body with a different
   family of children satisfying the same child contracts.
 
-Importing `FooTheorems.lean` also makes the definitions from `Foo.lean`
+Importing `FooDerived.lean` also makes the definitions from `Foo.lean`
 available, so downstream code should not separately import both.
 
 ## `Internal/FooStructure.lean`: expanded typed hardware
@@ -262,7 +485,7 @@ available, so downstream code should not separately import both.
 The structure file contains the mechanically explicit representation used by
 the framework. It normally contains:
 
-- `module_ports` when the boundary is generated there;
+- reuse of the boundary and boundary naming declared in `Foo.lean`;
 - the expanded `module_design` declaration;
 - child-instance types and boundaries;
 - total typed wiring;
@@ -274,10 +497,9 @@ emission, and verification but is usually noisier than the authored circuit.
 It contains no behavioral correctness proof.
 
 Some declarations generated in this file are deliberate public artifacts:
-`ports`, `moduleStructure`, `naming`, `namingWith`, `design`, and `designWith`,
-along with their boundary label types. Their physical location under
-`Internal/` keeps the normal reading path clean; it does not make those
-particular declarations unsupported.
+`moduleStructure`, `naming`, `namingWith`, `design`, and `designWith`. Their
+physical location under `Internal/` keeps the normal reading path clean; they
+are reached by ordinary users through `FooDerived.lean`.
 
 Other generated declarations, such as raw contexts, child maps, wiring, and
 module bodies, are structural implementation details. Downstream code should
@@ -323,6 +545,29 @@ facts explicit after normalization. For a sufficiently large module, put
 correspondence and behavioral certification in separate, descriptively named
 internal files so each independent check remains a small compilation unit.
 
+When turning that correspondence and a certification into the public authored
+correctness theorem, let the generated naming carry its own key, child names,
+child naming, and named-wire metadata. Unfold it in a local copy of the
+correspondence theorem, then provide only the structural body and children
+needed to resolve the dependent types:
+
+```lean
+have corresponds := description_corresponds parameter
+unfold Foo.naming at corresponds
+simp only [id_eq] at corresponds
+exact ImplementsCycleContract.of_certification
+  (referenceBody := {
+    instancePorts := instancePorts parameter
+    wiring := wiring parameter })
+  (children := structuralChildren parameter)
+  corresponds (certification parameter)
+```
+
+Do not restate the module key, instance-name function, child naming, or named
+wires in this proof. Those values already occur in `Foo.naming`; repeating them
+makes the correctness bridge longer and creates another place for naming to
+drift.
+
 ## The public boundary
 
 An `Internal/` directory is an organizational convention, not a Lean access
@@ -333,7 +578,7 @@ declarations cannot be referenced from a different source file.
 The project therefore uses three reinforcing boundaries:
 
 1. **Import boundary.** Code outside `Foo/` imports only `Foo.lean` or
-   `FooTheorems.lean`, never a path under `Foo/Internal/`.
+   `FooDerived.lean`, never a path under `Foo/Internal/`.
 2. **Namespace boundary.** Non-public declarations that must cross files use
    the `Foo.Internal` namespace.
 3. **Language boundary.** Declarations used within one file are marked
@@ -346,7 +591,7 @@ The supported downstream interface for an ordinary module is:
 - `moduleStructure` and naming values needed by structural tools;
 - its behavior and contract, including named rules required for composition;
 - its `Step`-based `Allows` and `Realizes` theorem interfaces;
-- the theorems in `FooTheorems.lean`; and
+- the declarations and theorems in `FooDerived.lean`; and
 - its `certification`, `certified`, and deliberately reusable
   `certifiedLayer` values.
 
@@ -368,20 +613,21 @@ Use the narrowest public import that provides the required layer:
 
 ```lean
 -- Defining or composing hardware:
-import Silean.Modules.Foo.Foo
+import Silean.Modules.Foo.FooDerived
 
--- Proving properties or certifying a parent:
-import Silean.Modules.Foo.FooTheorems
+-- Referring only to the public boundary, behavior, or contract:
+import Silean.Modules.Foo.Foo
 ```
 
-`Silean.Modules` should import the theorem file for an ordinary fully certified
+`Silean.Modules` should import the derived file for an ordinary fully certified
 module, making the complete supported interface available from the aggregate.
 Internal files must not be imported by unrelated modules as a shortcut around
 the public façade.
 
-The only ordinary main files that import a path under their own `Internal/`
-directory are the owners of an expanded structure generated there. Code
-outside that module imports the main file or theorem façade instead.
+An ordinary main file never imports a path under its own `Internal/` directory.
+`FooDerived.lean` is the single public exception: it is the facade specifically
+intended to turn internal generated artifacts into a supported API. Code
+outside the module imports the main or derived file.
 
 ## Variations
 
@@ -389,6 +635,9 @@ The four-file layout should be adapted when the module's semantics require it:
 
 - A primitive or simple leaf may keep its definition, contract, and short
   proof together when splitting them would make navigation worse.
+- Existing modules may retain a `FooTheorems.lean` facade until migrated. New
+  human-first modules should use `FooDerived.lean` when the same facade also
+  owns placement or other public declarations backed by generated internals.
 - A module refined through several abstraction levels may have a separate
   public file for each independently useful contract, such as exact-cycle and
   FIFO behavior.
@@ -396,31 +645,22 @@ The four-file layout should be adapted when the module's semantics require it:
   responsibilities rather than numbered as arbitrary chunks.
 - A private child meaningful only as part of its parent may live in a
   subdirectory of that parent instead of becoming a top-level reusable module.
-- Recursive or programmatically generated families may expose a different
-  construction surface, but should preserve the same distinction between
-  definition, public guarantees, and proof machinery.
 - A generic composition mechanism parameterized by arbitrary certified
   children may live under `Composition/` rather than imitate a concrete module
   directory. Its public certification constructor should be named for that
   role, while its schedules and proof-local helpers remain private.
 
-The register-to-FIFO stack supplies concrete examples of each variation:
+Several existing recursive modules predate the contract-first structural
+pattern. `Equality`, `BinaryToOneHot`, `CombMuxTree`, and `SerialDepthFifo`
+still mix substantial structural construction into their main files. They are
+migration candidates, not templates for new modules. Their eventual main files
+should retain their boundaries, mathematical behavior, and contracts while
+moving recursive structure and naming under `Internal/`. `Register`, `Add`,
+and `Increment` are completed examples of that migration.
 
-- `Register` keeps its type-directed recursive construction in
-  `Register.lean`, because that recursion is the clearest hardware definition.
-  `Internal/RegisterVerification.lean` contains the recursive certification,
-  while `RegisterTheorems.lean` is the public proof interface.
-- `Equality`, `BinaryToOneHot`, and `CombMuxTree` follow the same split for
-  recursive combinational hardware: the main file shows the recursive
-  structure, `Internal/*Verification.lean` contains schedules and inductive
-  certification, and `*Theorems.lean` states the supported structural result.
-- `Add` and `Increment` use that split for recursive ripple hardware;
-  `AddSub` uses it for an authored fixed composite. Their main files own the
-  natural arithmetic behavior, while theorem files are the downstream proof
-  boundary.
-- `SerialDepthFifo` keeps recursive composition as its hardware definition,
-  while recursive certification is under `Internal/` and public cycle/FIFO
-  results are separate theorem files.
+The register-to-FIFO stack also supplies legitimate examples of additional
+public contract files:
+
 - `OneEntryFifoCycleTheorems.lean` and
   `OneEntryFifoFifoTheorems.lean` distinguish exact clock behavior from the
   capacity-one abstract queue guarantee.
@@ -437,7 +677,7 @@ Compilation examples and regression checks belong under
 import the same public façade expected of downstream users. This checks both
 the declarations and the intended import boundary.
 
-The main and theorem files may still contain small checked `example`
+The main and derived files may still contain small checked `example`
 declarations when those examples materially teach a type or authoring form.
 Such examples should be unmistakably illustrative and must not be dependencies
 of production code.

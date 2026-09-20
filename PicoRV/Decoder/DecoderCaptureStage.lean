@@ -23,8 +23,8 @@ final reset block overrides only that assignment. -/
 namespace Description
 
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open PicoRV.Authoring
+open scoped Silean.Authoring
 
 noncomputable def construction : Builder Unit := do
   let resetn ← input "resetn" .bit

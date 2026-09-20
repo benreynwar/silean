@@ -1,6 +1,6 @@
 import Silean.Authoring.CircuitLogic
-import Silean.Modules.Add.Add
-import Silean.Modules.AddSub.AddSub
+import Silean.Modules.Add.AddDerived
+import Silean.Modules.AddSub.AddSubDerived
 import Silean.Modules.VectorLayout.VectorLayout
 
 /-! Fixed-width arithmetic for circuit descriptions.
@@ -13,7 +13,7 @@ width. Results remain plain bit-vector nets, so each later arithmetic operation
 chooses its operand interpretations afresh.
 -/
 
-namespace Silean.Authoring.CircuitLogic
+namespace Silean.Authoring
 
 open Silean
 open CircuitDescription
@@ -159,4 +159,4 @@ attribute [circuit_description]
   addUUT addUST addSUT addSST
   subtractUUT subtractUST subtractSUT subtractSST
 
-end Silean.Authoring.CircuitLogic
+end Silean.Authoring

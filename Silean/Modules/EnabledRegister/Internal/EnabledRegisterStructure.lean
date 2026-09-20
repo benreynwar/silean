@@ -1,6 +1,7 @@
 import Silean.Authoring.ModuleDesign
+import Silean.Modules.EnabledRegister.EnabledRegister
 import Silean.Modules.Mux.Mux
-import Silean.Modules.Register.Register
+import Silean.Modules.Register.RegisterDerived
 
 namespace Silean.Modules
 
@@ -10,10 +11,9 @@ open Silean.Authoring
 module_design EnabledRegister (signalType : SignalType)
     with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
       .positional signalType) where
-  ports {
-    input data (schema := typeNaming) : signalType,
-    input enable : .bit,
-    output q (schema := typeNaming) : signalType }
+  boundary (EnabledRegister.ports signalType)
+    (naming := EnabledRegister.Naming.ports signalType)
+    (namingWith := EnabledRegister.Naming.portsWithNaming signalType typeNaming)
   instances {
     selection (name := .indexed "mux" 0) := Modules.Mux.design signalType,
     storage (name := .indexed "register" 0) :=

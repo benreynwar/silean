@@ -4,8 +4,8 @@ namespace SileanTests.CircuitArithmetic
 
 open Silean
 open Silean.Authoring.CircuitDescription
-open Silean.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open Silean.Authoring
+open scoped Silean.Authoring
 
 private noncomputable def addDescription := build do
   let left ← input "left" (.vector 2 .bit)

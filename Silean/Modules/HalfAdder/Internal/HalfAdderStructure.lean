@@ -1,4 +1,5 @@
 import Silean.Authoring.ModuleDesign
+import Silean.Modules.HalfAdder.HalfAdder
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.AndPrimitive
 import Silean.Primitives.XorPrimitive
@@ -11,11 +12,7 @@ open Silean.Authoring
 /-! A one-bit half adder. `sum` is XOR and `carry` is AND. -/
 
 module_design HalfAdder where
-  ports {
-    input left : .bit,
-    input right : .bit,
-    output sum : .bit,
-    output carry : .bit }
+  boundary (HalfAdder.ports) (naming := HalfAdder.Naming.ports)
 
   instances {
     -- XOR produces the sum bit.

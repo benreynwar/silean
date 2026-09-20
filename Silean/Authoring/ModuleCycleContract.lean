@@ -44,8 +44,12 @@ complete next-state map. Input labels listed by `reads` are available under
 the same Lean names in the corresponding expressions; current contract state
 is available as `state`.
 
-The inline form generates private named input and output groups,
-rule definition, and a `...Rule_holds_iff` theorem. The form
+The inline form generates private named input and output groups, a rule
+definition, a `...Rule_holds_iff` theorem, and a named projection under the
+contract namespace for every written output. For example, writing `sum`
+generates `cycleContract.sum allowed` and `cycleContract.sumEquation`; the
+latter lets parent-layer proofs use the same equation directly at a child
+boundary. The form
 `output_rule name := existingRule` instead registers an ordinary Lean
 `CycleOutputRule`, allowing larger rules to reuse selections and targets
 defined outside the command. Likewise, `state_rule := existingRule` preserves
@@ -236,6 +240,15 @@ private def selectedEqualities (holds : TSyntax `ident)
   | some finalResult => pure finalResult
   | none => throwError "internal error: output rule has no writes"
 
+private partial def conjunctionProjection (value : TSyntax `term)
+    (index count : Nat) : CommandElabM (TSyntax `term) := do
+  if count == 1 then
+    pure value
+  else if index == 0 then
+    `(($value).1)
+  else
+    conjunctionProjection (← `(($value).2)) (index - 1) (count - 1)
+
 private def bindReadValues (inputs : TSyntax `ident)
     (reads : Array (TSyntax `ident)) (body : TSyntax `term) :
     CommandElabM (TSyntax `term) := do
@@ -243,6 +256,17 @@ private def bindReadValues (inputs : TSyntax `ident)
   for read in reads.reverse do
     result ← `(let $read := $inputs .$read; $result)
   pure result
+
+private def ruleValueFunction (origin state : TSyntax `ident)
+    (reads : Array (TSyntax `ident)) (body : TSyntax `term) :
+    CommandElabM (TSyntax `term) := do
+  let inputs := mkIdentFrom origin `inputs
+  let mut result := body
+  for read in reads.reverse do
+    result ← `(fun $read => $result)
+  for read in reads do
+    result ← `($result ($inputs .$read))
+  `(fun $inputs $state => $result)
 
 elab_rules : command
   | `(module_cycle_contract $contractName:ident
@@ -384,5 +408,41 @@ elab_rules : command
           · intro $holdsName:ident $labelName:ident
             cases $labelName:ident <;> simp_all
       )
+
+      let mut writeIndex := 0
+      for write in rule.writes do
+        let projectionName := mkIdentFrom contractName
+          (.str contractName.getId write.label.getId.toString)
+        let equationName := mkIdentFrom contractName
+          (.str contractName.getId s!"{write.label.getId}Equation")
+        let stepName := mkIdentFrom write.label `step
+        let allowedName := mkIdentFrom write.label `allowed
+        let target ← ruleValueFunction stepName theoremStateName
+          rule.reads write.value
+        let outputValue ← `($target ($stepName).inputs ($stepName).currentState)
+        let proposition ← `(
+          ($stepName).outputs .$(write.label):ident = $outputValue
+        )
+        let equations ← `(
+          ($theoremName $arguments:term* ($stepName).inputs
+            ($stepName).currentState ($stepName).outputs).mp
+            (($allowedName).1 .$(rule.ruleName):ident)
+        )
+        let selected ← conjunctionProjection equations writeIndex rule.writes.size
+        elabCommand <| ← `(
+          theorem $projectionName $binders:bracketedBinder*
+              {$stepName : ($contractName $arguments:term*).Step}
+              ($allowedName : ($contractName $arguments:term*).Allows $stepName) :
+              $proposition := by
+            exact $selected
+        )
+        elabCommand <| ← `(
+          @[reducible] def $equationName $binders:bracketedBinder* :
+              ($contractName $arguments:term*).OutputEquation
+                .$(write.label):ident where
+            target := $target
+            holds := $projectionName $arguments:term*
+        )
+        writeIndex := writeIndex + 1
 
 end Silean.Authoring

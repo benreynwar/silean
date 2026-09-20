@@ -1,6 +1,7 @@
 import Silean.Authoring.CircuitLogic
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Authoring.ModuleCycleContract
-import Silean.Modules.HalfAdder.Internal.HalfAdderStructure
+import Silean.Authoring.ModulePorts
 
 /-! # Half adder
 
@@ -8,8 +9,8 @@ The authored circuit makes the hardware definition explicit: XOR produces the
 sum bit and AND produces the carry bit. The exact cycle contract below gives
 the same behavior without referring to that implementation.
 
-The expanded typed structure and its verification are supporting machinery in
-`Internal/`; the main reader-facing results are in `HalfAdderTheorems.lean`.
+The generated typed structure and its proof are deliberately downstream of
+this file. Their public, derived interface is `HalfAdderDerived.lean`.
 -/
 
 namespace Silean.Modules.HalfAdder
@@ -17,44 +18,29 @@ namespace Silean.Modules.HalfAdder
 open Silean
 open Silean.Authoring
 open Authoring.CircuitDescription
-open scoped Authoring.CircuitLogic
+open scoped Authoring
 
-namespace Description
+module_ports ports where
+  input left : .bit,
+  input right : .bit,
+  output sum : .bit,
+  output carry : .bit
 
-noncomputable def construction : Builder Unit := do
-  let left ← input "left" .bit
-  let right ← input "right" .bit
-  output "sum" (← left ^^^ right)
-  output "carry" (← left &&& right)
+open ports
 
-noncomputable def description : Description := build construction
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let left ← input .left
+  let right ← input .right
+  output .sum (← left ^^^ right)
+  output .carry (← left &&& right)
 
-end Description
-
-/-- The two nets produced when a half adder is placed as a child. -/
-structure PlacedOutputs where
-  sum : Net .bit
-  carry : Net .bit
-
-/-- Place a half adder in a circuit description. -/
-noncomputable def place (left right : Net .bit) : Builder PlacedOutputs := do
-  let child ← placeIndexed "half_adder" design fun
-    | .left => left
-    | .right => right
-  pure { sum := child .sum, carry := child .carry }
-
-attribute [circuit_description] place
+noncomputable def description : Description :=
+  ModuleBuilder.build Naming.ports construction
 
 /-! ## Exact cycle behavior -/
 
 def sumValue (left right : Bool) : Bool := Primitives.xorValue left right
 def carryValue (left right : Bool) : Bool := left && right
-
-/-- The observable relationship between a half adder's inputs and outputs. -/
-structure Behavior (inputs : ports.inputs.Values)
-    (outputs : ports.outputs.Values) : Prop where
-  sum : outputs .sum = sumValue (inputs .left) (inputs .right)
-  carry : outputs .carry = carryValue (inputs .left) (inputs .right)
 
 module_cycle_contract cycleContract for ports where
   state := emptySignalMap
@@ -68,18 +54,12 @@ module_cycle_contract cycleContract for ports where
     reads := []
     next := {}
 
-namespace Behavior
-
-/-- Turn an allowed contract step into the half adder's simpler observable
-`Behavior`. -/
-theorem of_allowed {step : cycleContract.Step}
+/-- A half adder's two output bits encode the natural-number sum of its inputs. -/
+theorem numeric_value_of_allowed {step : cycleContract.Step}
     (allowed : cycleContract.Allows step) :
-    Behavior step.inputs step.outputs :=
-  ⟨(sumRule_holds_iff step.inputs step.currentState step.outputs).mp
-      (allowed.1 .sum),
-    (carryRule_holds_iff step.inputs step.currentState step.outputs).mp
-      (allowed.1 .carry)⟩
-
-end Behavior
+    (step.outputs .sum).toNat + 2 * (step.outputs .carry).toNat =
+      (step.inputs .left).toNat + (step.inputs .right).toNat := by
+  rw [cycleContract.sum allowed, cycleContract.carry allowed]
+  exact Primitives.xor_toNat_add_twice_and _ _
 
 end Silean.Modules.HalfAdder

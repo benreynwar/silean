@@ -67,18 +67,22 @@ module_cycle_contract cycleContract (addressWidth : Nat) for ports addressWidth 
     writes := { writeAddress := pointerAddress writePointer }
   output_rule inputReady where
     reads := [readPointer, writePointer]
-    writes := { inputReady := inputReady readPointer writePointer }
+    writes := {
+      inputReady := PointerControl.inputReady readPointer writePointer }
   output_rule outputValid where
     reads := [readPointer, writePointer]
-    writes := { outputValid := outputValid readPointer writePointer }
+    writes := {
+      outputValid := PointerControl.outputValid readPointer writePointer }
   output_rule readAdvance where
     reads := [readPointer, writePointer, outputReady]
     writes := {
-      readAdvance := readAdvance readPointer writePointer outputReady }
+      readAdvance :=
+        PointerControl.readAdvance readPointer writePointer outputReady }
   output_rule writeAdvance where
     reads := [readPointer, writePointer, inputValid]
     writes := {
-      writeAdvance := writeAdvance readPointer writePointer inputValid }
+      writeAdvance :=
+        PointerControl.writeAdvance readPointer writePointer inputValid }
   state_rule := Contracts.Cycle.CycleStateRule.empty _
 
 /-- The complete combinational behavior of the pointer controller. Keeping the
@@ -220,8 +224,8 @@ theorem writeAdvance_eq_true_iff (readPointer writePointer : Pointer addressWidt
 namespace Description
 
 open Authoring.CircuitDescription
-open Authoring.CircuitLogic
-open scoped Authoring.CircuitLogic
+open Authoring
+open scoped Authoring
 
 noncomputable def construction (addressWidth : Nat) : Builder Unit := do
   let readPointer ← input "readPointer" (pointerType addressWidth)

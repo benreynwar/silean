@@ -159,9 +159,9 @@ private theorem implements :
 
   have sizeIsWordValue : hierStep.childOutputs .sizeIsWord .result =
       decide (wordSize current = 0) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (twoBitsOfNat 0) _ _ _).mp
-      ((childMatch .sizeIsWord).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (twoBitsOfNat 0)
+      (childMatch .sizeIsWord).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans <| (congrArg
       (fun bits => (Silean.SignalType.vector 2 .bit).equal bits (twoBitsOfNat 0))
@@ -171,9 +171,9 @@ private theorem implements :
 
   have sizeIsHalfValue : hierStep.childOutputs .sizeIsHalf .result =
       decide (wordSize current = 1) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (twoBitsOfNat 1) _ _ _).mp
-      ((childMatch .sizeIsHalf).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (twoBitsOfNat 1)
+      (childMatch .sizeIsHalf).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans <| (congrArg
       (fun bits => (Silean.SignalType.vector 2 .bit).equal bits (twoBitsOfNat 1))

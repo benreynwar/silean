@@ -1,6 +1,7 @@
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.EnabledResetRegister.EnabledResetRegister
-import Silean.Modules.Increment.Increment
+import Silean.Modules.EnabledResetCounter.EnabledResetCounter
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
+import Silean.Modules.Increment.IncrementDerived
 
 /-! The expanded typed hierarchy for `EnabledResetCounter`.
 
@@ -8,25 +9,6 @@ The reader-facing feedback circuit and its contract live in
 `EnabledResetCounter.lean`; this file supplies the representation required by
 structural verification and emission.
 -/
-
-namespace Silean.Modules.EnabledResetCounter
-
-open Silean
-open Silean.Authoring
-
-abbrev Value (width : Nat) := Fin width → Bool
-
-@[reducible] def valueType (width : Nat) : SignalType :=
-  .vector width .bit
-
-module_ports ports (width : Nat)
-    with (typeNaming : Silean.Naming.SignalTypeNaming (valueType width) :=
-      .positional (valueType width)) where
-  input enable : .bit,
-  input reset : .bit,
-  output value (schema := typeNaming) : valueType width
-
-end Silean.Modules.EnabledResetCounter
 
 namespace Silean.Modules
 

@@ -5,8 +5,8 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
-import Silean.Modules.EnabledRegister.EnabledRegisterTheorems
-import Silean.Modules.EnabledResetRegister.EnabledResetRegisterTheorems
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
 import Silean.Modules.VectorLayout.VectorLayoutTheorems
 import Silean.Primitives.Not
@@ -236,8 +236,8 @@ private theorem implements :
       Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using equation
   have opcodeValue : hierStep.childOutputs .opcode .result =
       opcodeBits (hierStep.inputs .mem_rdata_latched) := by
-    have equation := (Silean.Modules.VectorSlice.outputRule_holds_iff .bit 0 7 25 _ _ _).mp
-      ((coveredMatch .opcode).ruleHolds Silean.Modules.VectorSlice.Rule.apply)
+    have equation := Silean.Modules.VectorSlice.result_of_allowed .bit 0 7 25
+      (coveredMatch .opcode).allowed
     change hierStep.childOutputs .opcode .result =
       Silean.Modules.VectorSlice.slice (prefixWidth := 0) (width := 7) (suffixWidth := 25)
         (hierStep.inputs .mem_rdata_latched)
@@ -245,8 +245,8 @@ private theorem implements :
       Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using equation
   have funct3Value : hierStep.childOutputs .funct3 .result =
       funct3Bits (hierStep.inputs .mem_rdata_latched) := by
-    have equation := (Silean.Modules.VectorSlice.outputRule_holds_iff .bit 12 3 17 _ _ _).mp
-      ((coveredMatch .funct3).ruleHolds Silean.Modules.VectorSlice.Rule.apply)
+    have equation := Silean.Modules.VectorSlice.result_of_allowed .bit 12 3 17
+      (coveredMatch .funct3).allowed
     change hierStep.childOutputs .funct3 .result =
       Silean.Modules.VectorSlice.slice (prefixWidth := 12) (width := 3) (suffixWidth := 17)
         (hierStep.inputs .mem_rdata_latched)
@@ -254,8 +254,8 @@ private theorem implements :
       Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using equation
   have decodedRdValue : hierStep.childOutputs .decodedRd .result =
       addressBits 7 20 (hierStep.inputs .mem_rdata_latched) := by
-    have equation := (Silean.Modules.VectorSlice.outputRule_holds_iff .bit 7 5 20 _ _ _).mp
-      ((coveredMatch .decodedRd).ruleHolds Silean.Modules.VectorSlice.Rule.apply)
+    have equation := Silean.Modules.VectorSlice.result_of_allowed .bit 7 5 20
+      (coveredMatch .decodedRd).allowed
     change hierStep.childOutputs .decodedRd .result =
       Silean.Modules.VectorSlice.slice (prefixWidth := 7) (width := 5) (suffixWidth := 20)
         (hierStep.inputs .mem_rdata_latched)
@@ -263,8 +263,8 @@ private theorem implements :
       Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using equation
   have decodedRs1Value : hierStep.childOutputs .decodedRs1 .result =
       addressBits 15 12 (hierStep.inputs .mem_rdata_latched) := by
-    have equation := (Silean.Modules.VectorSlice.outputRule_holds_iff .bit 15 5 12 _ _ _).mp
-      ((coveredMatch .decodedRs1).ruleHolds Silean.Modules.VectorSlice.Rule.apply)
+    have equation := Silean.Modules.VectorSlice.result_of_allowed .bit 15 5 12
+      (coveredMatch .decodedRs1).allowed
     change hierStep.childOutputs .decodedRs1 .result =
       Silean.Modules.VectorSlice.slice (prefixWidth := 15) (width := 5) (suffixWidth := 12)
         (hierStep.inputs .mem_rdata_latched)
@@ -272,8 +272,8 @@ private theorem implements :
       Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using equation
   have decodedRs2Value : hierStep.childOutputs .decodedRs2 .result =
       addressBits 20 7 (hierStep.inputs .mem_rdata_latched) := by
-    have equation := (Silean.Modules.VectorSlice.outputRule_holds_iff .bit 20 5 7 _ _ _).mp
-      ((coveredMatch .decodedRs2).ruleHolds Silean.Modules.VectorSlice.Rule.apply)
+    have equation := Silean.Modules.VectorSlice.result_of_allowed .bit 20 5 7
+      (coveredMatch .decodedRs2).allowed
     change hierStep.childOutputs .decodedRs2 .result =
       Silean.Modules.VectorSlice.slice (prefixWidth := 20) (width := 5) (suffixWidth := 7)
         (hierStep.inputs .mem_rdata_latched)
@@ -281,81 +281,81 @@ private theorem implements :
       Silean.EndpointContext.moduleInput, Silean.SignalSource.value] using equation
   have opcodeLuiValue : hierStep.childOutputs .opcodeLui .result =
       matchesBits 7 0x37 (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x37) _ _ _).mp
-        ((coveredMatch .opcodeLui).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x37)
+        (coveredMatch .opcodeLui).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x37)) opcodeValue)
   have opcodeAuipcValue : hierStep.childOutputs .opcodeAuipc .result =
       matchesBits 7 0x17 (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x17) _ _ _).mp
-        ((coveredMatch .opcodeAuipc).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x17)
+        (coveredMatch .opcodeAuipc).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x17)) opcodeValue)
   have opcodeJalValue : hierStep.childOutputs .opcodeJal .result =
       matchesBits 7 0x6f (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x6f) _ _ _).mp
-        ((coveredMatch .opcodeJal).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x6f)
+        (coveredMatch .opcodeJal).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x6f)) opcodeValue)
   have opcodeJalrValue : hierStep.childOutputs .opcodeJalr .result =
       matchesBits 7 0x67 (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x67) _ _ _).mp
-        ((coveredMatch .opcodeJalr).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x67)
+        (coveredMatch .opcodeJalr).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x67)) opcodeValue)
   have opcodeBranchValue : hierStep.childOutputs .opcodeBranch .result =
       matchesBits 7 0x63 (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x63) _ _ _).mp
-        ((coveredMatch .opcodeBranch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x63)
+        (coveredMatch .opcodeBranch).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x63)) opcodeValue)
   have opcodeLoadValue : hierStep.childOutputs .opcodeLoad .result =
       matchesBits 7 0x03 (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x03) _ _ _).mp
-        ((coveredMatch .opcodeLoad).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x03)
+        (coveredMatch .opcodeLoad).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x03)) opcodeValue)
   have opcodeStoreValue : hierStep.childOutputs .opcodeStore .result =
       matchesBits 7 0x23 (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x23) _ _ _).mp
-        ((coveredMatch .opcodeStore).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x23)
+        (coveredMatch .opcodeStore).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x23)) opcodeValue)
   have opcodeAluImmValue : hierStep.childOutputs .opcodeAluImm .result =
       matchesBits 7 0x13 (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x13) _ _ _).mp
-        ((coveredMatch .opcodeAluImm).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x13)
+        (coveredMatch .opcodeAluImm).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x13)) opcodeValue)
   have opcodeAluRegValue : hierStep.childOutputs .opcodeAluReg .result =
       matchesBits 7 0x33 (opcodeBits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 7 .bit) (bits 7 0x33) _ _ _).mp
-        ((coveredMatch .opcodeAluReg).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 7 .bit) (bits 7 0x33)
+        (coveredMatch .opcodeAluReg).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 7 .bit).equal value (bits 7 0x33)) opcodeValue)
   have funct3ZeroValue : hierStep.childOutputs .funct3Zero .result =
       matchesBits 3 0 (funct3Bits (hierStep.inputs .mem_rdata_latched)) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 3 .bit) (bits 3 0) _ _ _).mp
-        ((coveredMatch .funct3Zero).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 3 .bit) (bits 3 0)
+        (coveredMatch .funct3Zero).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg (fun value =>
       (Silean.SignalType.vector 3 .bit).equal value (bits 3 0)) funct3Value)
@@ -404,8 +404,7 @@ private theorem implements :
     | is_alu_reg_imm => exact opcodeAluImmValue
     | is_alu_reg_reg => exact opcodeAluRegValue
   have storedCurrent : hierStep.childOutputs .stored .q = storedValue contractState := by
-    exact (Silean.Modules.EnabledRegister.observeRule_holds_iff storedType _ _ _).mp
-      (storedMatch.ruleHolds Silean.Modules.EnabledRegister.Rule.observe)
+    exact Silean.Modules.EnabledRegister.q_of_allowed storedMatch.allowed
   have storedOutputsValue : hierStep.childOutputs .storedOutputs =
       Silean.Modules.NamedTupleSplitter.splitValue storedMap
         (storedValue contractState) := by

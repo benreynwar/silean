@@ -1,8 +1,8 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.Constant.Constant
-import Silean.Modules.HalfAdder.HalfAdderTheorems
-import Silean.Modules.Increment.Increment
+import Silean.Modules.HalfAdder.HalfAdderDerived
+import Silean.Modules.Increment.Internal.IncrementStructure
 import Silean.Modules.VectorConcat.VectorConcatTheorems
 
 /-! Internal schedules and inductive certification for `Increment`. -/
@@ -221,13 +221,18 @@ private theorem succImplements (width : Nat)
   have lowerEquation := (outputRule_holds_iff width _
     (childStates .lowerRipple) _).mp
       ((childMatches .lowerRipple).ruleHolds Rule.apply)
-  have highAdderBehavior :=
-    (childMatches .highAdder).boundaryFact HalfAdder.Behavior.of_allowed
-  have sumEquation := highAdderBehavior.sum
-  have carryEquation := highAdderBehavior.carry
-  have concatEquation := (VectorConcat.outputRule_holds_iff .bit width 1
-    _ (childStates .concat) _).mp
-      ((childMatches .concat).ruleHolds VectorConcat.Rule.apply)
+  have sumEquation :=
+    (childMatches .highAdder).boundaryOutput HalfAdder.cycleContract.sumEquation
+  have carryEquation :=
+    (childMatches .highAdder).boundaryOutput HalfAdder.cycleContract.carryEquation
+  have concatEquation := VectorConcat.result_of_allowed .bit width 1
+    (childMatches .concat).allowed
+  change (hierStep.children .concat).outputs .result =
+    VectorConcat.concat
+      ((succBody width).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs .concat .left)
+      ((succBody width).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs .concat .right) at concatEquation
   have lowerBitsInputsEquation : (succBody width).wiring.childInputValues
       hierStep.inputs hierStep.childOutputs .lowerBits =
         lowerBitsInputs width (hierStep.children .split).outputs := by
@@ -415,9 +420,8 @@ private theorem compositeImplements (width : Nat)
   let rippleResult : Fin width → Bool :=
     (hierStep.children .ripple).outputs .result
   let rippleCarry : Bool := (hierStep.children .ripple).outputs .carryOut
-  have oneEquation := (Modules.Constant.outputRule_holds_iff .bit true
-    _ (childStates .one) _).mp
-      ((childMatches .one).ruleHolds Primitives.ConstantRule.apply)
+  have oneEquation := Modules.Constant.output_of_allowed .bit true
+    (childMatches .one).allowed
   change oneValue = true at oneEquation
   have rippleEquation := (Ripple.outputRule_holds_iff width _
     (childStates .ripple) _).mp ((childMatches .ripple).ruleHolds Ripple.Rule.apply)
@@ -429,7 +433,7 @@ private theorem compositeImplements (width : Nat)
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     change hierStep.outputs .result = incrementValue width inputValue
     rw [show hierStep.outputs .result = rippleResult by exact boundary .result]
     change rippleResult = (addCarry width inputValue true).1

@@ -172,12 +172,13 @@ module_cycle_contract cycleContract (element : SignalType) (addressWidth : Nat)
   output_rule forward where
     reads := []
     writes := {
-      outputValid := outputValid (state .readPointer) (state .writePointer),
-      outputData := outputData addressWidth (state .readPointer) (state .entries) }
+      outputValid := Fifo.outputValid (state .readPointer) (state .writePointer),
+      outputData :=
+        Fifo.outputData addressWidth (state .readPointer) (state .entries) }
   output_rule ready where
     reads := []
     writes := {
-      inputReady := inputReady (state .readPointer) (state .writePointer) }
+      inputReady := Fifo.inputReady (state .readPointer) (state .writePointer) }
   state_rule := stateRule element addressWidth
 
 /-! ## Contract-facing laws -/
@@ -193,10 +194,10 @@ include allowed
 /-- The forward channel is determined entirely by the current FIFO state. -/
 theorem forward_of_allowed :
     step.outputs .outputValid =
-        outputValid (step.currentState .readPointer)
+        Fifo.outputValid (step.currentState .readPointer)
           (step.currentState .writePointer) ∧
       step.outputs .outputData =
-        outputData addressWidth (step.currentState .readPointer)
+        Fifo.outputData addressWidth (step.currentState .readPointer)
           (step.currentState .entries) :=
   (forwardRule_holds_iff element addressWidth
     step.inputs step.currentState step.outputs).mp (allowed.1 .forward)
@@ -204,7 +205,7 @@ theorem forward_of_allowed :
 /-- Input readiness is determined entirely by the current FIFO pointers. -/
 theorem input_ready_of_allowed :
     step.outputs .inputReady =
-      inputReady (step.currentState .readPointer)
+      Fifo.inputReady (step.currentState .readPointer)
         (step.currentState .writePointer) :=
   (readyRule_holds_iff element addressWidth
     step.inputs step.currentState step.outputs).mp (allowed.1 .ready)
@@ -277,9 +278,10 @@ theorem reset_writePointer (element : SignalType) (addressWidth : Nat)
   rfl
 
 theorem equalPointers_empty (pointer : Pointer addressWidth) :
-    outputValid pointer pointer = false ∧ inputReady pointer pointer = true := by
+    Fifo.outputValid pointer pointer = false ∧
+      Fifo.inputReady pointer pointer = true := by
   have empty := (Fifo.PointerControl.empty_eq_true_iff pointer pointer).mpr rfl
-  simp [outputValid, inputReady, Fifo.PointerControl.outputValid,
+  simp [Fifo.outputValid, Fifo.inputReady, Fifo.PointerControl.outputValid,
     Fifo.PointerControl.inputReady, empty,
     Fifo.PointerControl.empty_implies_not_full pointer pointer empty]
 
@@ -293,8 +295,8 @@ theorem empty_after_reset (element : SignalType) (addressWidth : Nat)
     (state : (stateMap element addressWidth).Values)
     (reset : inputs .reset = true) :
     let nextState := (stateRule element addressWidth).apply inputs state
-    outputValid (nextState .readPointer) (nextState .writePointer) = false ∧
-      inputReady (nextState .readPointer) (nextState .writePointer) = true := by
+    Fifo.outputValid (nextState .readPointer) (nextState .writePointer) = false ∧
+      Fifo.inputReady (nextState .readPointer) (nextState .writePointer) = true := by
   dsimp
   rw [reset_readPointer element addressWidth inputs state reset,
     reset_writePointer element addressWidth inputs state reset]

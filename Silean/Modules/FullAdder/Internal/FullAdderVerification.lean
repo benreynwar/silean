@@ -2,9 +2,9 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
-import Silean.Authoring.CircuitDescriptionSoundness
-import Silean.Modules.FullAdder.FullAdder
-import Silean.Modules.HalfAdder.HalfAdderTheorems
+import Silean.Authoring.CircuitDescriptionContracts
+import Silean.Modules.FullAdder.Internal.FullAdderStructure
+import Silean.Modules.HalfAdder.HalfAdderDerived
 import Silean.Primitives.Or
 
 namespace Silean.Modules.FullAdder
@@ -12,15 +12,6 @@ namespace Silean.Modules.FullAdder
 open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
-
-namespace Internal
-
-/-- Proof that the concrete full-adder hierarchy contains no opaque leaves. -/
-theorem noBlackboxesCertified :
-    ModuleStructure.NoBlackboxesCertified moduleStructure :=
-  ⟨rfl⟩
-
-end Internal
 
 /-! ## Cycle certification -/
 
@@ -57,14 +48,14 @@ private theorem implements :
   intro contractState hierStep corresponds satisfies
   derive_empty_state_child_matches childMatch for body from
     layerChildren, hierStep, satisfies
-  have operandBehavior :=
-    (childMatch .operands).boundaryFact HalfAdder.Behavior.of_allowed
-  have operandSumValue := operandBehavior.sum
-  have operandCarryValue := operandBehavior.carry
-  have carryBehavior :=
-    (childMatch .carry).boundaryFact HalfAdder.Behavior.of_allowed
-  have finalSumValue := carryBehavior.sum
-  have secondCarryValue := carryBehavior.carry
+  have operandSumValue :=
+    (childMatch .operands).boundaryOutput HalfAdder.cycleContract.sumEquation
+  have operandCarryValue :=
+    (childMatch .operands).boundaryOutput HalfAdder.cycleContract.carryEquation
+  have finalSumValue :=
+    (childMatch .carry).boundaryOutput HalfAdder.cycleContract.sumEquation
+  have secondCarryValue :=
+    (childMatch .carry).boundaryOutput HalfAdder.cycleContract.carryEquation
   have combinedCarryValue :=
     (Primitives.orOutputRule_holds_iff _ _ _).mp
       ((childMatch .combineCarry).ruleHolds Primitives.OrRule.apply)
@@ -130,25 +121,11 @@ module_cycle_certification certification for moduleStructure via body
   stateCoverage := fun _ _ => ⟨SignalMap.emptyValues, trivial⟩,
   implements := implements
 
-namespace Internal
-
-/-- Proof-level bridge used by the reader-facing structural behavior theorem. -/
-theorem behavior_of_realization {step : moduleStructure.Step}
-    (realizes : moduleStructure.Realizes step) :
-    Behavior step.inputs step.outputs := by
-  obtain ⟨contractState, stateCorresponds⟩ :=
-    certification.hasCorrespondingState step.currentState
-  obtain ⟨_, allowed, _⟩ := certification.allows_of_realizes
-    contractState step stateCorresponds realizes
-  exact Behavior.of_allowed allowed
-
-end Internal
-
 end Silean.Modules.FullAdder
 
 /-! ## Authored-description correspondence -/
 
-namespace Silean.Modules.FullAdder.Description.Internal
+namespace Silean.Modules.FullAdder.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
@@ -163,7 +140,21 @@ private theorem unique : description.UniqueNames := by
   rcases member with equal | equal | equal <;> subst child <;>
     constructor <;> exact of_decide_eq_true rfl
 
-theorem corresponds : Corresponds description FullAdder.naming :=
+theorem description_corresponds : Corresponds description FullAdder.naming :=
   ⟨same, unique⟩
 
-end Silean.Modules.FullAdder.Description.Internal
+open Authoring.CircuitDescription.Description
+
+/-- Generated proof of the implementation-independent claim exposed by the
+public FullAdder implementation facade. -/
+theorem construction_correct :
+    ImplementsCycleContract FullAdder.description cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold FullAdder.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := { instancePorts := instancePorts, wiring := wiring })
+    (children := structuralChildren)
+    corresponds certification
+
+end Silean.Modules.FullAdder.Internal

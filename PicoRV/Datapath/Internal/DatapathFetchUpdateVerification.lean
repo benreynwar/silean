@@ -4,7 +4,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Add.AddTheorems
+import Silean.Modules.Add.AddDerived
 import Silean.Modules.Constant.Constant
 import Silean.Modules.Mux.MuxTheorems
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
@@ -181,9 +181,8 @@ private theorem implements :
       simp [selectedCurrentPc, branch, store] at equation ⊢ <;> exact equation
   have sequentialValue : hierStep.childOutputs .sequentialPc .result =
       addWords (selectedCurrentPc datapathInputs current) (wordOfNat 4) := by
-    have equation :=
-      (Silean.Modules.Add.Behavior.of_allowed 32
-        (childMatch .sequentialPc).allowed).result
+    have equation := Silean.Modules.Add.cycleContract.result 32
+      (childMatch .sequentialPc).allowed
     change hierStep.childOutputs .sequentialPc .result =
       (Silean.Modules.Add.addBits 32 (hierStep.childOutputs .currentPc .result)
         (hierStep.childOutputs .four .output)
@@ -194,8 +193,8 @@ private theorem implements :
   have jalValue : hierStep.childOutputs .jalPc .result =
       addWords (selectedCurrentPc datapathInputs current)
         datapathInputs.decoded_imm_j := by
-    have equation :=
-      (Silean.Modules.Add.Behavior.of_allowed 32 (childMatch .jalPc).allowed).result
+    have equation := Silean.Modules.Add.cycleContract.result 32
+      (childMatch .jalPc).allowed
     change hierStep.childOutputs .jalPc .result =
       (Silean.Modules.Add.addBits 32 (hierStep.childOutputs .currentPc .result)
         (hierStep.childOutputs .inputsFields .decoded_imm_j)

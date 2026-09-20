@@ -81,15 +81,8 @@ private theorem implements :
     Contracts.Cycle.ImplementsSolutions (certificationStructure signalType layerChildren)
       (cycleContract signalType) (stateCorresponds signalType layerChildren) := by
   intro contractState hierStep corresponds satisfies
-  have childStateSubsingleton (child : Instance) :
-      Subsingleton
-        ((childContracts signalType child).state.Values) := by
-    cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
-  have childMatch (child : Instance) := by
-    letI := childStateSubsingleton child
-    exact Contracts.Cycle.Certification.Layer.childSolutionMatchesContract_of_subsingletonState
-      (body := body signalType) layerChildren hierStep satisfies child
-        (by cases child <;> exact SignalMap.emptyValues)
+  derive_empty_state_child_matches childMatch for body signalType from
+    layerChildren, hierStep, satisfies
   have boundary := satisfies.1
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
@@ -102,8 +95,8 @@ private theorem implements :
       ((childMatch .chooseFalse).ruleHolds Mask.Rule.apply)
     have trueOutput := (Mask.outputRule_holds_iff signalType _ _ _).mp
       ((childMatch .chooseTrue).ruleHolds Mask.Rule.apply)
-    have combineOutput := (BitwiseOr.outputRule_holds_iff signalType _ _ _).mp
-      ((childMatch .combine).ruleHolds BitwiseOr.Rule.apply)
+    have combineOutput := BitwiseOr.result_of_allowed signalType
+      (childMatch .combine).allowed
     have boundaryResult := boundary .result
     change hierStep.outputs .result =
       hierStep.childOutputs .combine .result at boundaryResult

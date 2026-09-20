@@ -27,6 +27,14 @@ example (inputs : ports.inputs.Values) (state : emptySignalMap.Values)
       outputs .result = (inputs .left && inputs .right) :=
   resultRule_holds_iff inputs state outputs
 
+example {step : cycleContract.Step} (allowed : cycleContract.Allows step) :
+    step.outputs .result = (step.inputs .left && step.inputs .right) :=
+  cycleContract.result allowed
+
+example (inputs : ports.inputs.Values) (state : emptySignalMap.Values) :
+    cycleContract.resultEquation.target inputs state =
+      (inputs .left && inputs .right) := rfl
+
 end Stateless
 
 namespace MultipleOutputs
@@ -53,6 +61,14 @@ example (inputs : ports.inputs.Values) (state : emptySignalMap.Values)
     bothRule.Holds inputs state outputs ↔
       outputs .first = inputs .left ∧ outputs .second = inputs .right :=
   bothRule_holds_iff inputs state outputs
+
+example {step : cycleContract.Step} (allowed : cycleContract.Allows step) :
+    step.outputs .first = step.inputs .left :=
+  cycleContract.first allowed
+
+example {step : cycleContract.Step} (allowed : cycleContract.Allows step) :
+    step.outputs .second = step.inputs .right :=
+  cycleContract.second allowed
 
 end MultipleOutputs
 
@@ -85,6 +101,11 @@ example (signalType : SignalType) (inputs : (ports signalType).inputs.Values)
     (observeRule signalType).Holds inputs state outputs ↔
       outputs .value = state .stored :=
   observeRule_holds_iff signalType inputs state outputs
+
+example (signalType : SignalType) {step : (cycleContract signalType).Step}
+    (allowed : (cycleContract signalType).Allows step) :
+    step.outputs .value = step.currentState .stored :=
+  cycleContract.value signalType allowed
 
 example (signalType : SignalType) (inputs : (ports signalType).inputs.Values)
     (state : (stateMap signalType).Values) :

@@ -160,16 +160,16 @@ private theorem implements :
     exact (congrFun inputsFieldsValue field).trans
       (congrFun (Inputs.toValues_unpack _).symm field)
 
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have trueValue := (Silean.Modules.Constant.outputRule_holds_iff .bit true _ _ _).mp
-    ((childMatch .trueBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have wordSizeValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 2 .bit) (twoBitsOfNat 0) _ _ _).mp
-    ((childMatch .wordSize).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have loadRs1Value := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateLdRs1) _ _ _).mp
-    ((childMatch .loadRs1State).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
+  have trueValue := Silean.Modules.Constant.output_of_allowed .bit true
+    (childMatch .trueBit).allowed
+  have wordSizeValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 2 .bit) (twoBitsOfNat 0)
+    (childMatch .wordSize).allowed
+  have loadRs1Value := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateLdRs1)
+    (childMatch .loadRs1State).allowed
   have notDecoderValue : hierStep.childOutputs .notDecoder .output =
       !(current .decoder_trigger : Bool) := by
     have equation := (Silean.Primitives.notOutputRule_holds_iff _ _ _).mp

@@ -201,17 +201,17 @@ private theorem implements :
     exact equation.trans (highBit_slice (inputs .reg_op1))
   have lowLaneValue : hierStep.childOutputs .lowLane .result =
       inputs .reg_op1 0 := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 1 .bit) (fun _ => true) _ _ _).mp
-      ((childMatch .lowLane).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 1 .bit) (fun _ => true)
+      (childMatch .lowLane).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [lowBitValue, equal_single_true] at equation
     exact equation
   have highLaneValue : hierStep.childOutputs .highLane .result =
       inputs .reg_op1 1 := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 1 .bit) (fun _ => true) _ _ _).mp
-      ((childMatch .highLane).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 1 .bit) (fun _ => true)
+      (childMatch .highLane).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [highBitValue, equal_single_true] at equation
     exact equation
@@ -288,17 +288,17 @@ private theorem implements :
 
   have halfWordsizeValue : hierStep.childOutputs .halfWordsize .result =
       decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 1) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (stateOfNat 1) _ _ _).mp
-      ((childMatch .halfWordsize).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (stateOfNat 1)
+      (childMatch .halfWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [Memory.ProofSupport.equal_stateOfNat _ _ (by decide)] at equation
     exact equation
   have byteWordsizeValue : hierStep.childOutputs .byteWordsize .result =
       decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 2) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 2 .bit) (stateOfNat 2) _ _ _).mp
-      ((childMatch .byteWordsize).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 2 .bit) (stateOfNat 2)
+      (childMatch .byteWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [Memory.ProofSupport.equal_stateOfNat _ _ (by decide)] at equation
     exact equation

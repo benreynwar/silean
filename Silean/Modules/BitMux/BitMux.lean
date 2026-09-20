@@ -15,7 +15,7 @@ namespace Silean.Modules.BitMux
 open Silean
 open Silean.Authoring
 open Authoring.CircuitDescription
-open scoped Authoring.CircuitLogic
+open scoped Authoring
 
 namespace Description
 

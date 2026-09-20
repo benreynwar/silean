@@ -136,14 +136,14 @@ private theorem implements :
       controlInputs.resetn := by
     rw [inputsFieldsValue]
     rfl
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have fetchValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateFetch) _ _ _).mp
-    ((childMatch .fetchState).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have trapValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateTrap) _ _ _).mp
-    ((childMatch .trapState).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
+  have fetchValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateFetch)
+    (childMatch .fetchState).allowed
+  have trapValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateTrap)
+    (childMatch .trapState).allowed
 
   have resetStateInputs : body.wiring.childInputValues hierStep.inputs
       hierStep.childOutputs .resetState = (resetTransition baseline).state := by

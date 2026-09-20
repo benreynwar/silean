@@ -146,19 +146,19 @@ private theorem implements :
     rw [inputsFieldsValue]
     rfl
 
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have trueValue := (Silean.Modules.Constant.outputRule_holds_iff .bit true _ _ _).mp
-    ((childMatch .trueBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have executeStateValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateExec) _ _ _).mp
-    ((childMatch .executeState).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have shiftStateValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateShift) _ _ _).mp
-    ((childMatch .shiftState).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have storeStateValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateStmem) _ _ _).mp
-    ((childMatch .storeState).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
+  have trueValue := Silean.Modules.Constant.output_of_allowed .bit true
+    (childMatch .trueBit).allowed
+  have executeStateValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateExec)
+    (childMatch .executeState).allowed
+  have shiftStateValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateShift)
+    (childMatch .shiftState).allowed
+  have storeStateValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateStmem)
+    (childMatch .storeState).allowed
 
   have shiftPhaseValue : hierStep.childOutputs .shiftPhase .result =
       bif controlInputs.is_sll_srl_sra then stateBits cpuStateShift
@@ -171,8 +171,8 @@ private theorem implements :
   have shiftRinstValue : hierStep.childOutputs .shiftRinst .result =
       bif controlInputs.is_sll_srl_sra then updated .mem_do_rinst
         else updated .mem_do_prefetch := by
-    have equation := (Silean.Modules.BitMux.selectRule_holds_iff _ _ _).mp
-      ((childMatch .shiftRinst).ruleHolds Silean.Modules.BitMux.Rule.select)
+    have equation := Silean.Modules.BitMux.result_of_allowed
+      (childMatch .shiftRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr shiftSelectorValue
       (congrFun updatedFieldsValue .mem_do_rinst)
@@ -188,8 +188,8 @@ private theorem implements :
   have storeRinstValue : hierStep.childOutputs .storeRinst .result =
       bif controlInputs.is_sb_sh_sw then true
         else hierStep.childOutputs .shiftRinst .result := by
-    have equation := (Silean.Modules.BitMux.selectRule_holds_iff _ _ _).mp
-      ((childMatch .storeRinst).ruleHolds Silean.Modules.BitMux.Rule.select)
+    have equation := Silean.Modules.BitMux.result_of_allowed
+      (childMatch .storeRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr storeSelectorValue trueValue (Eq.refl _))
 

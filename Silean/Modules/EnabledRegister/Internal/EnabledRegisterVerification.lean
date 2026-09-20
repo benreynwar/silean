@@ -2,10 +2,10 @@ import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
-import Silean.Authoring.CircuitDescriptionSoundness
-import Silean.Modules.EnabledRegister.EnabledRegister
+import Silean.Authoring.CircuitDescriptionContracts
+import Silean.Modules.EnabledRegister.Internal.EnabledRegisterStructure
 import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.Register.RegisterTheorems
+import Silean.Modules.Register.RegisterDerived
 
 /-! Certification machinery for the authored enabled register. -/
 
@@ -49,12 +49,8 @@ private theorem implements :
   have storageMatches :=
     childSolutionMatchesContract (body := body signalType) layerChildren hierStep
       satisfies .storage contractState corresponds
-  letI : Subsingleton (childContracts signalType .selection).state.Values := by
-    change Subsingleton emptySignalMap.Values
-    infer_instance
-  have selectionMatches :=
-    childSolutionMatchesContract_of_subsingletonState (body := body signalType)
-      layerChildren hierStep satisfies .selection SignalMap.emptyValues
+  derive_empty_state_child_match selectionMatches for .selection
+    in body signalType from layerChildren, hierStep, satisfies
   have boundary := satisfies.1
   have storageNextCorresponds := storageMatches.nextCorresponds
   let storageInputs := (body signalType).wiring.childInputValues
@@ -71,20 +67,18 @@ private theorem implements :
     have boundaryOutput := boundary .q
     change hierStep.outputs .q =
       (hierStep.children .storage).outputs .output at boundaryOutput
-    exact boundaryOutput.trans ((Register.outputRule_holds_iff signalType _ _ _).mp
-      (storageMatches.ruleHolds Primitives.RegisterRule.observe))
+    exact boundaryOutput.trans
+      (Register.output_of_allowed storageMatches.allowed)
   · change storageNextState =
       (cycleContract signalType).stateRule.apply hierStep.inputs contractState
-    have storageNextValue : storageNextState .stored =
-        storageInputs .input := by
-      rfl
-    have selected := (Mux.selectRule_holds_iff signalType _ _ _).mp
-      (selectionMatches.ruleHolds Mux.Rule.select)
+    have storageNextValue :=
+      Register.next_stored_of_allowed storageMatches.allowed
+    change storageNextState .stored = storageInputs .input at storageNextValue
+    have selected := Mux.result_of_allowed signalType selectionMatches.allowed
     change (hierStep.children .selection).outputs .result =
       bif hierStep.inputs .enable then hierStep.inputs .data
         else (hierStep.children .storage).outputs .output at selected
-    have storageCurrent := (Register.outputRule_holds_iff signalType _ _ _).mp
-      (storageMatches.ruleHolds Primitives.RegisterRule.observe)
+    have storageCurrent := Register.output_of_allowed storageMatches.allowed
     change (hierStep.children .storage).outputs .output =
       contractState .stored at storageCurrent
     funext statePort
@@ -113,7 +107,7 @@ module_cycle_certification certification (signalType : SignalType)
 
 end Silean.Modules.EnabledRegister
 
-namespace Silean.Modules.EnabledRegister.Description.Internal
+namespace Silean.Modules.EnabledRegister.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
@@ -157,8 +151,23 @@ private theorem unique (signalType : SignalType) :
       exact of_decide_eq_true rfl
     · exact of_decide_eq_true rfl
 
-theorem corresponds (signalType : SignalType) :
+theorem description_corresponds (signalType : SignalType) :
     Corresponds (description signalType) (EnabledRegister.naming signalType) :=
   ⟨same signalType, unique signalType⟩
 
-end Silean.Modules.EnabledRegister.Description.Internal
+open Authoring.CircuitDescription.Description
+
+theorem construction_correct (signalType : SignalType) :
+    (description signalType).ImplementsCycleContract
+      (cycleContract signalType) (Naming.ports signalType) := by
+  have corresponds := description_corresponds signalType
+  unfold EnabledRegister.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := instancePorts signalType
+      wiring := wiring signalType })
+    (children := structuralChildren signalType)
+    corresponds (certification signalType)
+
+end Silean.Modules.EnabledRegister.Internal

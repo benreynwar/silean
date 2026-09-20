@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.AddSub.AddSubTheorems
+import Silean.Modules.AddSub.AddSubDerived
 
 namespace SileanTests.AddSub
 
@@ -54,19 +54,26 @@ example (width : Nat) (left right : Fin width → Bool) (subtract : Bool) :
       else
         (BitVector.toNat width left + BitVector.toNat width right) %
           BitVector.cardinality width := by
-  have behavior := Modules.AddSub.Behavior.of_allowed width
-    ((Modules.AddSub.cycleContract width).evaluateStep_allowed
-      (inputs width left right subtract) SignalMap.emptyValues)
   simpa [outputs, inputs, Contracts.Cycle.ModuleCycleContract.evaluateStep] using
-    behavior.result_toNat
+    Modules.AddSub.result_toNat_of_allowed width
+      ((Modules.AddSub.cycleContract width).evaluateStep_allowed
+        (inputs width left right subtract) SignalMap.emptyValues)
 
 example (width : Nat) (left right : Fin width → Bool) :
     outputs width left right true .carryOut =
       decide (BitVector.toNat width right ≤ BitVector.toNat width left) := by
-  have behavior := Modules.AddSub.Behavior.of_allowed width
+  change @Eq Bool
+    (((Modules.AddSub.cycleContract width).evaluate
+      (inputs width left right true) SignalMap.emptyValues).1 .carryOut) _
+  have equation := Modules.AddSub.cycleContract.carryOut width
     ((Modules.AddSub.cycleContract width).evaluateStep_allowed
       (inputs width left right true) SignalMap.emptyValues)
-  exact behavior.carry_eq_noBorrow rfl
+  change @Eq Bool
+    (((Modules.AddSub.cycleContract width).evaluate
+      (inputs width left right true) SignalMap.emptyValues).1 .carryOut)
+    (Modules.AddSub.addSubBits width left right true).2 at equation
+  exact equation.trans
+    (Modules.AddSub.addSubBits_carry_subtract width left right)
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

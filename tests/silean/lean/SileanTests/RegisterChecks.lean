@@ -1,4 +1,4 @@
-import Silean.Modules.Register.RegisterTheorems
+import Silean.Modules.Register.RegisterDerived
 import Silean.Semantics.StructuralExecution
 
 namespace SileanTests.Register

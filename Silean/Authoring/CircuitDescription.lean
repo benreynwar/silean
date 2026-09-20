@@ -364,6 +364,79 @@ def output (name : SourceName) (net : Net signalType) : Builder Unit :=
   fun state => ((), { state with outputs := state.outputs ++
     [{ port := ⟨name, signalType⟩, driver := net }] })
 
+/-- A construction tied to one typed module boundary.  The boundary naming is
+supplied once when the construction is built.  Existing unbound `Builder`
+actions lift automatically, so placement, wires, registers, and logic retain
+their ordinary APIs. -/
+structure ModuleBuilder (ports : ModulePorts) (α : Type) : Type 1 where
+  run : ModulePortsNaming ports → Builder α
+
+namespace ModuleBuilder
+
+instance : Monad (ModuleBuilder ports) where
+  pure value := ⟨fun _ => pure value⟩
+  bind action next := ⟨fun naming => do
+    let value ← action.run naming
+    (next value).run naming⟩
+
+/-- Use an ordinary boundary-independent builder action inside a module
+construction. -/
+instance : Coe (Builder α) (ModuleBuilder ports α) where
+  coe action := ⟨fun _ => action⟩
+
+/-- Lift an ordinary boundary-independent builder action through `do`
+notation inside a typed module construction. -/
+instance : MonadLift Builder (ModuleBuilder ports) where
+  monadLift action := ⟨fun _ => action⟩
+
+@[circuit_description]
+theorem bind_run (action : ModuleBuilder ports α)
+    (next : α → ModuleBuilder ports β) (naming : ModulePortsNaming ports) :
+    ((action >>= next).run naming) =
+      (action.run naming >>= fun value => (next value).run naming) := rfl
+
+@[circuit_description]
+theorem pure_run (value : α)
+    (naming : ModulePortsNaming ports) :
+    ((pure value : ModuleBuilder ports α).run naming) =
+      (pure value : Builder α) := rfl
+
+@[circuit_description]
+theorem lift_run (action : Builder α)
+    (naming : ModulePortsNaming ports) :
+    ((liftM action : ModuleBuilder ports α).run naming) = action := rfl
+
+/-- Refer to one declared boundary input.  Merely referring to an input does
+not declare it: `buildResult` obtains the complete canonical input list from
+the module boundary. -/
+def input (port : ports.inputs.Label) :
+    ModuleBuilder ports (Net (ports.inputs.signalType port)) :=
+  ⟨fun naming => pure ⟨.source (.input (naming.inputs.name port))⟩⟩
+
+/-- Drive one declared boundary output with a net of its required type. -/
+def output (port : ports.outputs.Label)
+    (net : Net (ports.outputs.signalType port)) : ModuleBuilder ports Unit :=
+  ⟨fun naming =>
+    CircuitDescription.output (naming.outputs.name port) net⟩
+
+/-- Run and validate a typed module construction without discarding build
+diagnostics.  Every declared input is emitted once in canonical boundary
+order, independently of how often the construction refers to it. -/
+def buildResult (naming : ModulePortsNaming ports)
+    (action : ModuleBuilder ports Unit) : Except BuildError Description :=
+  Internal.finalizeDraft
+    ((action.run naming) { inputs := portList ports.inputs naming.inputs }).2
+
+/-- Finalize a typed module construction.  On failure, return the same invalid
+sentinel used by the low-level builder projection. -/
+def build (naming : ModulePortsNaming ports)
+    (action : ModuleBuilder ports Unit) : Description :=
+  match buildResult naming action with
+  | .ok description => description
+  | .error _ => Internal.invalidDescription
+
+end ModuleBuilder
+
 /-- Run an ordinary net-producing action and retain a name for its resolved
 structural source. The returned net is unchanged, so naming has no semantic
 effect and composes like a `let` binding. -/
@@ -516,6 +589,8 @@ def placeIndexed (stem : String) (module : NamedModule)
 
 attribute [circuit_description]
   bind_apply pure_apply build buildResult input output namedWire
+  ModuleBuilder.run ModuleBuilder.input ModuleBuilder.output
+  ModuleBuilder.build ModuleBuilder.buildResult
   Silean.Authoring.CircuitDescription.wire assign
   placeNamed placeIndexed
   Internal.findWire? Internal.replaceWire Internal.validateWireDrivers

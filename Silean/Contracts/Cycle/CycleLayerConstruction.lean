@@ -4,6 +4,14 @@ namespace Silean.Contracts.Cycle.Certification.Layer
 
 open Silean
 
+/-- The contract-state type of one certified child. Keeping `children` as an
+argument lets Lean recover the otherwise implicit child-contract family in
+small parent-proof helpers. -/
+@[reducible] def ChildStructures.ContractState
+    (_children : ChildStructures body childContracts)
+    (child : body.instancePorts.Name) : Type :=
+  (childContracts child).state.Values
+
 /-! Small congruence lemmas used when composing typed child-output equations.
 They avoid rewriting through the dependent child-output family itself. -/
 
@@ -98,11 +106,29 @@ theorem ChildContractMatch.ruleHolds
       (hierStep.childOutputs child) := by
   exact childMatch.allowed.1 rule
 
+/-- Apply one contract-derived output equation directly at a child's visible
+boundary. The equation may depend on the child's contract state, but does not
+expose the synthetic `childContractStep` used to instantiate it. -/
+theorem ChildContractMatch.boundaryOutput
+    {body : ModuleBody}
+    {childContracts : ChildCycleContracts body}
+    {children : ChildStructures body childContracts}
+    {hierStep : HierStep (moduleStructure body children)}
+    {child : body.instancePorts.Name}
+    {contractState : (childContracts child).state.Values}
+    (childMatch : ChildContractMatch children hierStep child contractState)
+    {output : (body.instancePorts.ports child).outputs.Label}
+    (equation : (childContracts child).OutputEquation output) :
+    (hierStep.childOutputs child) output =
+      equation.target
+        (body.wiring.childInputValues hierStep.inputs
+          hierStep.childOutputs child)
+        contractState := by
+  exact equation.holds childMatch.allowed
+
 /-- Apply a child's public boundary theorem without exposing the internal Step
 used to connect the child's contract to the parent's structural assignment.
-
-This is useful for child modules that package several output rules into a
-reader-facing `Behavior`: the package is returned over the child inputs and
+This presents contract-derived output facts directly over the child inputs and
 outputs visible in the parent proof. -/
 theorem ChildContractMatch.boundaryFact
     {body : ModuleBody}
@@ -275,6 +301,14 @@ syntax (name := deriveEmptyStateChildMatches)
   "derive_empty_state_child_matches " ident " for " term " from " term ", "
     term ", " term : tactic
 
+/-- Introduce the contract match for one child whose contract state is
+definitionally `emptySignalMap`. Supplying the canonical empty value both
+checks that condition and lets Lean infer the required `Subsingleton`
+instance. -/
+syntax (name := deriveEmptyStateChildMatch)
+  "derive_empty_state_child_match " ident " for " term " in " term " from "
+    term ", " term ", " term : tactic
+
 /-- Introduce a named fact by applying a public child-contract theorem to
 allowed-step evidence and normalizing the inputs induced by the parent wiring. -/
 syntax (name := childContractFact)
@@ -313,6 +347,17 @@ macro_rules
               cases child <;>
                 change Subsingleton emptySignalMap.Values <;>
                 infer_instance))
+  | `(tactic| derive_empty_state_child_match $name:ident for $child:term in
+        $body:term from $children:term, $hierStep:term, $satisfies:term) =>
+      `(tactic|
+        have $name := by
+          letI : Subsingleton
+              (ChildStructures.ContractState $children $child) := by
+            change Subsingleton emptySignalMap.Values
+            infer_instance
+          exact childSolutionMatchesContract_of_subsingletonState
+              (body := $body) $children $hierStep $satisfies $child
+              SignalMap.emptyValues)
   | `(tactic| child_contract_fact $name:ident : $type:term from
         $allowed:term using $contractTheorem:term) =>
       `(tactic|

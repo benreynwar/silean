@@ -265,10 +265,9 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
   let muxResult : element.Denote :=
     (hierStep.children .mux).outputs .result
 
-  have valuesEquation := (VectorSplit.outputRule_holds_iff element
+  have valuesEquation := VectorSplit.outputs_of_allowed element
     (BinaryToOneHot.size indexWidth) (BinaryToOneHot.size indexWidth)
-    _ SignalMap.emptyValues _).mp
-      ((childMatch .valuesSplit).ruleHolds VectorSplit.Rule.apply)
+    (childMatch .valuesSplit).allowed
   change leftValues = VectorSplit.leftPart rootValues ∧
     rightValues = VectorSplit.rightPart rootValues at valuesEquation
 
@@ -280,8 +279,7 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
     _ SignalMap.emptyValues _).mp ((childMatch .upper).ruleHolds Rule.apply)
   change upperResult = select indexWidth rightValues lowerIndexBits at upperEquation
 
-  have muxEquation := (Mux.selectRule_holds_iff element _ SignalMap.emptyValues _).mp
-    ((childMatch .mux).ruleHolds Mux.Rule.select)
+  have muxEquation := Mux.result_of_allowed element (childMatch .mux).allowed
   change muxResult = bif highBit then upperResult else lowerResult at muxEquation
 
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩

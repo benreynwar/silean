@@ -1,16 +1,20 @@
 import Silean.FIRRTL
-import Silean.Modules.HalfAdder.HalfAdderTheorems
+import Silean.Modules.HalfAdder.HalfAdderDerived
 
 namespace SileanTests.HalfAdder
 
 open Silean Silean.FIRRTL
 
-example : Modules.HalfAdder.Description.description.children.map (·.name) =
+example : Modules.HalfAdder.description.inputs.map (·.name) =
+    [("left" : Naming.SourceName), "right"] := rfl
+
+example : Modules.HalfAdder.description.children.map (·.name) =
     [.indexed "xor" 0, .indexed "and" 0] := rfl
 
-example : Authoring.CircuitDescription.Corresponds
-    Modules.HalfAdder.Description.description Modules.HalfAdder.naming :=
-  Modules.HalfAdder.Description.authored_definition_corresponds
+example : Authoring.CircuitDescription.Description.ImplementsCycleContract
+    Modules.HalfAdder.description Modules.HalfAdder.cycleContract
+      Modules.HalfAdder.Naming.ports :=
+  Modules.HalfAdder.construction_correct
 
 noncomputable example : Contracts.Cycle.ModuleCycleCertified Modules.HalfAdder.ports :=
   Modules.HalfAdder.certified
@@ -29,18 +33,10 @@ example : Modules.HalfAdder.carryRule.writesOutputs.labels = [.carry] := rfl
 the concrete XOR/AND hierarchy selected by `moduleStructure`. -/
 noncomputable example := Modules.HalfAdder.certifiedLayer.certify
 
-example : ModuleStructure.NoBlackboxesCertified Modules.HalfAdder.moduleStructure :=
-  Modules.HalfAdder.noBlackboxesCertified
-
-example {step : Modules.HalfAdder.moduleStructure.Step}
-    (realizes : Modules.HalfAdder.moduleStructure.Realizes step) :
-    Modules.HalfAdder.Behavior step.inputs step.outputs :=
-  Modules.HalfAdder.Description.behavior_of_realization realizes
-
 example : Contracts.Cycle.Implements
     Modules.HalfAdder.moduleStructure Modules.HalfAdder.cycleContract
     Modules.HalfAdder.certification.stateCorresponds :=
-  Modules.HalfAdder.implements_contract
+  Modules.HalfAdder.certification.implements
 
 /-- The exported proof is intentionally opaque: clients obtain state
 correspondence from its public coverage theorem, not by reducing the private
@@ -76,9 +72,9 @@ def carryResult (left right : Bool) : Bool := result left right .carry
 example (left right : Bool) :
     (result left right .sum).toNat + 2 * (result left right .carry).toNat =
       left.toNat + right.toNat := by
-  exact (Modules.HalfAdder.Behavior.of_allowed
+  exact Modules.HalfAdder.numeric_value_of_allowed
     (Modules.HalfAdder.cycleContract.evaluateStep_allowed
-      (inputs left right) SignalMap.emptyValues)).numeric_value
+      (inputs left right) SignalMap.emptyValues)
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

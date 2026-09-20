@@ -11,7 +11,7 @@ namespace PicoRV.Datapath
 open Silean
 open Silean.Authoring
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
+open PicoRV.Authoring
 
 /-! # Complete datapath-state update
 

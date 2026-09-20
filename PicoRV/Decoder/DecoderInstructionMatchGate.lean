@@ -17,7 +17,7 @@ behind a uniform boundary makes the instruction matcher hierarchy readable. -/
 namespace Description
 
 open Silean.Authoring.CircuitDescription
-open scoped Silean.Authoring.CircuitLogic
+open scoped Silean.Authoring
 
 noncomputable def construction : Builder Unit := do
   let broad ← input "broad" .bit

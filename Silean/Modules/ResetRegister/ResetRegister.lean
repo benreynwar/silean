@@ -1,39 +1,17 @@
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Authoring.CircuitLogic
 import Silean.Authoring.CircuitSelection
 import Silean.Authoring.ModuleCycleContract
-import Silean.Modules.ResetRegister.Internal.ResetRegisterStructure
+import Silean.Authoring.ModulePorts
+import Silean.Modules.Register.RegisterDerived
 
 /-! # Reset register
 
-A reset register exposes its stored value and, on each clock edge, stores the
-ordinary input unless synchronous reset is high. Reset selects the fixed
-`resetValue`.
-
-The short circuit description below is the reader-facing hardware definition.
-The expanded typed structure used by verification and emission lives under
-`Internal/`; `ResetRegisterTheorems.lean` connects the two and states the
-public correctness results.
+A reset register exposes its stored value and synchronously stores either its
+ordinary input or a fixed reset value. The short construction is the readable
+hardware definition; expanded structure and certification live under
+`Internal/`.
 -/
-
-namespace Silean.Modules.ResetRegister.Description
-
-open Silean
-open Silean.Authoring.CircuitDescription
-open Silean.Authoring.CircuitLogic
-
-/-- The reset value, mux, and register that make up a reset register. -/
-noncomputable def construction (signalType : SignalType)
-    (resetValue : signalType.Denote) : Builder Unit := do
-  let value <- input "value" signalType
-  let reset <- input "reset" .bit
-  output "value_out"
-    (← Modules.Register.place (← mux reset value (← constant signalType resetValue)))
-
-noncomputable def description (signalType : SignalType)
-    (resetValue : signalType.Denote) : Description :=
-  build (construction signalType resetValue)
-
-end Silean.Modules.ResetRegister.Description
 
 namespace Silean.Modules.ResetRegister
 
@@ -41,38 +19,70 @@ open Silean
 open Silean.Authoring
 open Authoring.CircuitDescription
 
-/-! ## Placement -/
+module_ports ports (signalType : SignalType)
+    with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
+      .positional signalType) where
+  input value (schema := typeNaming) : signalType,
+  input reset : .bit,
+  output value (name := "value_out") (schema := typeNaming) : signalType
 
-/-- Place a reset register under a caller-chosen instance name. -/
-noncomputable def placeNamed (name : Silean.Naming.SourceName)
-    (resetValue : signalType.Denote) (value : Net signalType)
-    (reset : Net .bit) : Builder (Net signalType) := do
-  let child ← Authoring.CircuitDescription.placeNamed name
-    (design signalType resetValue) fun
-      | .value => value
-      | .reset => reset
-  pure (child .value)
+open ports
 
-/-- Place a reset register using the next conventional indexed name. -/
-noncomputable def place (resetValue : signalType.Denote)
-    (value : Net signalType) (reset : Net .bit) : Builder (Net signalType) := do
-  let child ← placeIndexed "reset_register" (design signalType resetValue) fun
-    | .value => value
-    | .reset => reset
-  pure (child .value)
+noncomputable def construction (signalType : SignalType)
+    (resetValue : signalType.Denote) : ModuleBuilder (ports signalType) Unit := do
+  let value ← input signalType .value
+  let reset ← input signalType .reset
+  output signalType .value
+    (← Register.place (← mux reset value (← constant signalType resetValue)))
 
-attribute [circuit_description] placeNamed place
-
-/-! ## Exact cycle behavior -/
+noncomputable def description (signalType : SignalType)
+    (resetValue : signalType.Denote) : Description :=
+  ModuleBuilder.build (Naming.ports signalType)
+    (construction signalType resetValue)
 
 module_cycle_contract cycleContract (signalType : SignalType)
     (resetValue : signalType.Denote) for ports signalType where
-  state := Modules.Register.stateMap signalType
+  state := Register.stateMap signalType
   output_rule observe where
     reads := []
     writes := { value := state .stored }
   state_rule where
     reads := [reset, value]
     next := { stored := bif reset then resetValue else value }
+
+section AllowedStep
+
+variable {signalType : SignalType}
+  {resetValue : signalType.Denote}
+  {step : (cycleContract signalType resetValue).Step}
+  (allowed : (cycleContract signalType resetValue).Allows step)
+
+include allowed
+
+/-- An allowed step exposes the value stored before the clock edge. -/
+theorem value_of_allowed :
+    step.outputs .value = step.currentState .stored :=
+  (observeRule_holds_iff signalType resetValue
+    step.inputs step.currentState step.outputs).mp (allowed.1 .observe)
+
+/-- The next stored value is the reset value when reset is high and the input
+otherwise. -/
+theorem next_stored_of_allowed :
+    step.nextState .stored =
+      bif step.inputs .reset then resetValue else step.inputs .value := by
+  rw [allowed.2]
+  rfl
+
+theorem next_stored_of_reset (reset : step.inputs .reset = true) :
+    step.nextState .stored = resetValue := by
+  rw [next_stored_of_allowed allowed, reset]
+  rfl
+
+theorem next_stored_of_not_reset (notReset : step.inputs .reset = false) :
+    step.nextState .stored = step.inputs .value := by
+  rw [next_stored_of_allowed allowed, notReset]
+  rfl
+
+end AllowedStep
 
 end Silean.Modules.ResetRegister

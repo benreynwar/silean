@@ -3,7 +3,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.AddSub.AddSubTheorems
+import Silean.Modules.AddSub.AddSubDerived
 import Silean.Modules.BitMux.BitMuxTheorems
 import Silean.Modules.Equality.EqualityTheorems
 import Silean.Modules.Mux.MuxTheorems
@@ -186,7 +186,8 @@ private theorem implements :
       (Silean.Modules.AddSub.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2)
         (hierStep.inputs .instr_sub || hierStep.inputs .is_compare)).1 := by
     have equation :=
-      (Silean.Modules.AddSub.Behavior.of_allowed 32 (childMatch .addSub).allowed).result
+      Silean.Modules.AddSub.cycleContract.result 32
+        (childMatch .addSub).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg
       (fun subtract => (Silean.Modules.AddSub.addSubBits 32
@@ -196,7 +197,8 @@ private theorem implements :
       (Silean.Modules.AddSub.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2)
         (hierStep.inputs .instr_sub || hierStep.inputs .is_compare)).2 := by
     have equation :=
-      (Silean.Modules.AddSub.Behavior.of_allowed 32 (childMatch .addSub).allowed).carryOut
+      Silean.Modules.AddSub.cycleContract.carryOut 32
+        (childMatch .addSub).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg
       (fun subtract => (Silean.Modules.AddSub.addSubBits 32

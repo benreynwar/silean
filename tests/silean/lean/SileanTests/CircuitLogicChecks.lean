@@ -5,7 +5,7 @@ namespace SileanTests.CircuitLogic
 
 open Silean
 open Silean.Authoring.CircuitDescription
-open scoped Silean.Authoring.CircuitLogic
+open scoped Silean.Authoring
 
 private noncomputable def bitAndDescription := build do
   let left ← input "left" .bit
@@ -194,7 +194,7 @@ namespace SileanTests.CircuitLogic.ImmediateWires
 
 open Silean
 open Silean.Authoring.CircuitDescription
-open scoped Silean.Authoring.CircuitLogic
+open scoped Silean.Authoring
 
 private noncomputable def immediateWire := buildResult do
   let source ← input "source" .bit

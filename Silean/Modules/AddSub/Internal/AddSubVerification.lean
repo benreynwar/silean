@@ -1,9 +1,10 @@
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
-import Silean.Authoring.CircuitDescriptionSoundness
-import Silean.Modules.AddSub.AddSub
-import Silean.Modules.Add.AddTheorems
+import Silean.Authoring.CircuitDescriptionContracts
+import Silean.Modules.AddSub.Internal.AddSubArithmetic
+import Silean.Modules.AddSub.Internal.AddSubStructure
+import Silean.Modules.Add.AddDerived
 
 /-! Internal schedules and structural certification for `AddSub`. -/
 
@@ -55,27 +56,25 @@ private theorem implements :
   intro contractState hierStep corresponds satisfies
   have boundary := satisfies.1
 
-  have childStateSubsingleton (child : Instance) :
-      Subsingleton (childContracts width child).state.Values := by
-    cases child <;> change Subsingleton emptySignalMap.Values <;> infer_instance
-  have childMatch (child : Instance) := by
-    letI := childStateSubsingleton child
-    exact childSolutionMatchesContract_of_subsingletonState
-      (body := body width) layerChildren hierStep satisfies child
-      (by cases child <;> exact SignalMap.emptyValues)
+  derive_empty_state_child_matches childMatch for body width from
+    layerChildren, hierStep, satisfies
   have broadcastEquation := (Composition.SignalCombiner.outputRule_holds_iff
     (subtractVector width) _ SignalMap.emptyValues _).mp
       ((childMatch .broadcastSubtract).ruleHolds Composition.SignalComponentRule.apply)
 
-  have xorEquation := (BitwiseXor.outputRule_holds_iff (.vector width .bit)
-    _ SignalMap.emptyValues _).mp
-      ((childMatch .bitwiseXor).ruleHolds Composition.BinaryLeafwise.Rule.apply)
+  have xorEquation := BitwiseXor.result_of_allowed (.vector width .bit)
+    (childMatch .bitwiseXor).allowed
+  change hierStep.childOutputs .bitwiseXor .result =
+    (SignalType.vector width .bit).bitwiseXor
+      ((body width).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs .bitwiseXor .left)
+      ((body width).wiring.childInputValues
+        hierStep.inputs hierStep.childOutputs .bitwiseXor .right) at xorEquation
 
-  have addEquations := (Add.outputRule_holds_iff width
-    _ SignalMap.emptyValues _).mp
-      ((childMatch .add).ruleHolds Add.Rule.apply)
-  have addResult := addEquations.1
-  have addCarry := addEquations.2
+  have addResult := (childMatch .add).boundaryOutput
+    (Add.cycleContract.resultEquation width)
+  have addCarry := (childMatch .add).boundaryOutput
+    (Add.cycleContract.carryOutEquation width)
 
   have broadcastInputsEquation : (body width).wiring.childInputValues
       hierStep.inputs hierStep.childOutputs .broadcastSubtract =
@@ -116,13 +115,13 @@ private theorem implements :
       (hierStep.childOutputs .bitwiseXor .result)
       (hierStep.inputs .subtract)).2 at addCarry
   rw [transformedRight] at addResult addCarry
-  rw [addBits_xorRight_eq_addSubBits] at addResult addCarry
+  rw [Internal.addBits_xorRight_eq_addSubBits] at addResult addCarry
 
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     dsimp only
     constructor
     · rw [show hierStep.outputs .result =
@@ -153,15 +152,14 @@ end Silean.Modules.AddSub
 
 /-! ## Authored-description correspondence -/
 
-namespace Silean.Modules.AddSub.Description.Internal
+namespace Silean.Modules.AddSub.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
 private theorem same (width : Nat) :
     some (description width) = ofNaming (AddSub.naming width) := by
-  simp only [circuit_description, description, construction, Add.place,
-    AddSub.subtractVector]
-  simp [circuit_description, enumeration]
+  simp [circuit_description, description, construction, Add.place,
+    AddSub.subtractVector, enumeration]
   rfl
 
 private theorem unique (width : Nat) : (description width).UniqueNames := by
@@ -194,8 +192,24 @@ private theorem unique (width : Nat) : (description width).UniqueNames := by
     · rw [Add.Naming.naming_ports]
       exact of_decide_eq_true rfl
 
-theorem corresponds (width : Nat) :
+theorem description_corresponds (width : Nat) :
     Corresponds (description width) (AddSub.naming width) :=
   ⟨same width, unique width⟩
 
-end Silean.Modules.AddSub.Description.Internal
+open Authoring.CircuitDescription.Description
+
+/-- The authored add/subtract construction implements its cycle contract. -/
+theorem construction_correct (width : Nat) :
+    ImplementsCycleContract (description width) (cycleContract width)
+      (Naming.ports width) := by
+  have corresponds := description_corresponds width
+  unfold AddSub.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := instancePorts width,
+      wiring := wiring width })
+    (children := structuralChildren width)
+    corresponds (certification width)
+
+end Silean.Modules.AddSub.Internal

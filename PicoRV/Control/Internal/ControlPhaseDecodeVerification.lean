@@ -70,37 +70,37 @@ private theorem implements :
   derive_empty_state_child_matches childMatch for body from
     layerChildren, hierStep, satisfies
 
-  have trapValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateTrap) _ _ _).mp
-    ((childMatch .trap).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have trapValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateTrap)
+    (childMatch .trap).allowed
   normalize_child_hyp trapValue unfolding wiring, context
-  have fetchValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateFetch) _ _ _).mp
-    ((childMatch .fetch).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have fetchValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateFetch)
+    (childMatch .fetch).allowed
   normalize_child_hyp fetchValue unfolding wiring, context
-  have loadRs1Value := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateLdRs1) _ _ _).mp
-    ((childMatch .loadRs1).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have loadRs1Value := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateLdRs1)
+    (childMatch .loadRs1).allowed
   normalize_child_hyp loadRs1Value unfolding wiring, context
-  have loadRs2Value := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateLdRs2) _ _ _).mp
-    ((childMatch .loadRs2).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have loadRs2Value := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateLdRs2)
+    (childMatch .loadRs2).allowed
   normalize_child_hyp loadRs2Value unfolding wiring, context
-  have executeValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateExec) _ _ _).mp
-    ((childMatch .execute).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have executeValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateExec)
+    (childMatch .execute).allowed
   normalize_child_hyp executeValue unfolding wiring, context
-  have shiftValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateShift) _ _ _).mp
-    ((childMatch .shift).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have shiftValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateShift)
+    (childMatch .shift).allowed
   normalize_child_hyp shiftValue unfolding wiring, context
-  have storeValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateStmem) _ _ _).mp
-    ((childMatch .store).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have storeValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateStmem)
+    (childMatch .store).allowed
   normalize_child_hyp storeValue unfolding wiring, context
-  have loadValue := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateLdmem) _ _ _).mp
-    ((childMatch .load).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+  have loadValue := Silean.Modules.EqualsConstant.result_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateLdmem)
+    (childMatch .load).allowed
   normalize_child_hyp loadValue unfolding wiring, context
 
   refine ⟨Silean.SignalMap.emptyValues, ?_, trivial⟩

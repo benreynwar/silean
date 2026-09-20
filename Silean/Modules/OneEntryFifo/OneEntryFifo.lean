@@ -21,8 +21,8 @@ namespace Silean.Modules.OneEntryFifo.Description
 
 open Silean
 open Silean.Authoring.CircuitDescription
-open Silean.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open Silean.Authoring
+open scoped Silean.Authoring
 
 noncomputable def construction (signalType : SignalType) : Builder Unit := do
   let inputValid ← input "input_valid" .bit

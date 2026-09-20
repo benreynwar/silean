@@ -3,10 +3,10 @@ import PicoRV.Decoder.Internal.DecoderInstructionMatchStructure
 import PicoRV.Decoder.DecoderImmediate
 import PicoRV.Decoder.Internal.DecoderInstructionSummaryStructure
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.EnabledRegister.EnabledRegister
-import Silean.Modules.EnabledResetRegister.EnabledResetRegister
-import Silean.Modules.Register.Register
-import Silean.Modules.ResetRegister.ResetRegister
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
+import Silean.Modules.Register.RegisterDerived
+import Silean.Modules.ResetRegister.ResetRegisterDerived
 import Silean.Modules.Mux.Mux
 import Silean.Modules.Constant.Constant
 import Silean.Primitives.Not

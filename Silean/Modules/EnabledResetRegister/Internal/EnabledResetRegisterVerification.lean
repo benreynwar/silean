@@ -1,11 +1,11 @@
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
-import Silean.Authoring.CircuitDescriptionSoundness
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EnabledResetRegister.EnabledResetRegister
+import Silean.Modules.EnabledResetRegister.Internal.EnabledResetRegisterStructure
 import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.ResetRegister.ResetRegisterTheorems
+import Silean.Modules.ResetRegister.ResetRegisterDerived
 
 /-! Certification machinery for the authored enabled reset register. -/
 
@@ -51,13 +51,8 @@ private theorem implements :
   have storageMatches :=
     childSolutionMatchesContract (body := body signalType resetValue)
       layerChildren hierStep satisfies .storage contractState corresponds
-  letI : Subsingleton (childContracts signalType resetValue .selection).state.Values := by
-    change Subsingleton emptySignalMap.Values
-    infer_instance
-  have selectionMatches :=
-    childSolutionMatchesContract_of_subsingletonState
-      (body := body signalType resetValue) layerChildren hierStep satisfies
-      .selection SignalMap.emptyValues
+  derive_empty_state_child_match selectionMatches for .selection
+    in body signalType resetValue from layerChildren, hierStep, satisfies
   have boundary := satisfies.1
   have storageNextCorresponds := storageMatches.nextCorresponds
   let storageInputs := (body signalType resetValue).wiring.childInputValues
@@ -76,8 +71,7 @@ private theorem implements :
     change hierStep.outputs .value =
       (hierStep.children .storage).outputs .value at boundaryOutput
     exact boundaryOutput.trans
-      ((ResetRegister.observeRule_holds_iff signalType resetValue _ _ _).mp
-        (storageMatches.ruleHolds ResetRegister.Rule.observe))
+      (ResetRegister.value_of_allowed storageMatches.allowed)
   · change storageNextState =
       (cycleContract signalType resetValue).stateRule.apply
         hierStep.inputs contractState
@@ -85,14 +79,12 @@ private theorem implements :
         bif hierStep.inputs .reset then resetValue
         else (hierStep.children .selection).outputs .result := by
       exact ResetRegister.next_stored_of_allowed storageMatches.allowed
-    have selected := (Mux.selectRule_holds_iff signalType _ _ _).mp
-      (selectionMatches.ruleHolds Mux.Rule.select)
+    have selected := Mux.result_of_allowed signalType selectionMatches.allowed
     change (hierStep.children .selection).outputs .result =
       bif hierStep.inputs .enable then hierStep.inputs .value
         else (hierStep.children .storage).outputs .value at selected
     have storageCurrent :=
-      (ResetRegister.observeRule_holds_iff signalType resetValue _ _ _).mp
-        (storageMatches.ruleHolds ResetRegister.Rule.observe)
+      ResetRegister.value_of_allowed storageMatches.allowed
     change (hierStep.children .storage).outputs .value =
       contractState .stored at storageCurrent
     funext statePort
@@ -128,7 +120,7 @@ end Silean.Modules.EnabledResetRegister
 
 /-! ## Authored-description correspondence -/
 
-namespace Silean.Modules.EnabledResetRegister.Description.Internal
+namespace Silean.Modules.EnabledResetRegister.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
@@ -154,10 +146,26 @@ private theorem unique (signalType : SignalType)
   rcases member with equal | equal <;> subst child <;>
     constructor <;> exact of_decide_eq_true rfl
 
-theorem corresponds (signalType : SignalType)
+theorem description_corresponds (signalType : SignalType)
     (resetValue : signalType.Denote) :
     Corresponds (description signalType resetValue)
       (EnabledResetRegister.naming signalType resetValue) :=
   ⟨same signalType resetValue, unique signalType resetValue⟩
 
-end Silean.Modules.EnabledResetRegister.Description.Internal
+open Authoring.CircuitDescription.Description
+
+theorem construction_correct (signalType : SignalType)
+    (resetValue : signalType.Denote) :
+    (description signalType resetValue).ImplementsCycleContract
+      (cycleContract signalType resetValue) (Naming.ports signalType) := by
+  have corresponds := description_corresponds signalType resetValue
+  unfold EnabledResetRegister.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := instancePorts signalType resetValue,
+      wiring := wiring signalType resetValue })
+    (children := structuralChildren signalType resetValue)
+    corresponds (certification signalType resetValue)
+
+end Silean.Modules.EnabledResetRegister.Internal

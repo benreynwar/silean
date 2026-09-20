@@ -2,7 +2,7 @@ import Silean.Authoring.ModuleDesign
 import Silean.Authoring.CircuitDescription
 import Silean.Modules.BinaryToOneHot.BinaryToOneHot
 import Silean.Modules.CombMuxTree.CombMuxTree
-import Silean.Modules.EnabledRegister.EnabledRegister
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 

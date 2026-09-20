@@ -8,7 +8,7 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.Register.RegisterTheorems
+import Silean.Modules.Register.RegisterDerived
 
 namespace PicoRV.Memory
 
@@ -117,8 +117,7 @@ private theorem implements :
     rfl
   have storageOutputValue : hierStep.childOutputs .storage .output =
       stateMap.pack contractState := by
-    exact (Silean.Modules.Register.outputRule_holds_iff stateType _ _ _).mp
-      (storageMatch.ruleHolds Silean.Primitives.RegisterRule.observe)
+    exact Silean.Modules.Register.output_of_allowed storageMatch.allowed
   have stateFieldsValue : hierStep.childOutputs .stateFields = contractState := by
     have equation := (Silean.Modules.NamedTupleSplitter.outputRule_holds_iff
       stateMap _ _ _).mp

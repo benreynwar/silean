@@ -1,6 +1,6 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Foundation.BitVector
-import Silean.Modules.AddSub.AddSub
+import Silean.Modules.AddSub.AddSubDerived
 import Silean.Modules.BitMux.BitMux
 import Silean.Modules.BitwiseAnd.BitwiseAnd
 import Silean.Modules.BitwiseOr.BitwiseOr

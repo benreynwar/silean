@@ -1,6 +1,6 @@
 import PicoRV.Authoring.CircuitLogic
 import PicoRV.Datapath.Internal.DatapathFetchUpdateStructure
-import Silean.Modules.Add.Add
+import Silean.Modules.Add.AddDerived
 import Silean.Modules.VectorLayout.VectorLayout
 
 namespace PicoRV.Datapath
@@ -8,8 +8,8 @@ namespace PicoRV.Datapath
 open Silean
 open Silean.Authoring
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open PicoRV.Authoring
+open scoped Silean.Authoring
 
 /-! # Fetch datapath update
 

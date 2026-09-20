@@ -8,8 +8,8 @@ namespace PicoRV.Control
 open Silean
 open Silean.Authoring
 open Silean.Authoring.CircuitDescription
-open PicoRV.Authoring.CircuitLogic
-open scoped Silean.Authoring.CircuitLogic
+open PicoRV.Authoring
+open scoped Silean.Authoring
 
 /-! The baseline layer represents the unconditional assignments at the start
 of the source control block. Every state field passes through except `trap`

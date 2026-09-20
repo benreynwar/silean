@@ -9,6 +9,7 @@ import Silean.Authoring.ModuleRuleSchedules
 import Silean.Authoring.SignalSchema
 import Silean.Authoring.SignalSchemaDeclaration
 import Silean.Authoring.CircuitArithmetic
+import Silean.Authoring.CircuitDescriptionContracts
 
 /-! # Hardware authoring commands
 

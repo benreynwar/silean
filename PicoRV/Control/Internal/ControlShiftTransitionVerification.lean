@@ -135,18 +135,18 @@ private theorem implements :
     rw [inputsFieldsValue]
     rfl
 
-  have falseValue := (Silean.Modules.Constant.outputRule_holds_iff .bit false _ _ _).mp
-    ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have trueValue := (Silean.Modules.Constant.outputRule_holds_iff .bit true _ _ _).mp
-    ((childMatch .trueBit).ruleHolds Silean.Primitives.ConstantRule.apply)
-  have fetchValue := (Silean.Modules.Constant.outputRule_holds_iff
-    (.vector 8 .bit) (stateBits cpuStateFetch) _ _ _).mp
-    ((childMatch .fetchState).ruleHolds Silean.Primitives.ConstantRule.apply)
+  have falseValue := Silean.Modules.Constant.output_of_allowed .bit false
+    (childMatch .falseBit).allowed
+  have trueValue := Silean.Modules.Constant.output_of_allowed .bit true
+    (childMatch .trueBit).allowed
+  have fetchValue := Silean.Modules.Constant.output_of_allowed
+    (.vector 8 .bit) (stateBits cpuStateFetch)
+    (childMatch .fetchState).allowed
   have shiftZeroValue : hierStep.childOutputs .shiftIsZero .result =
       decide (shiftAmount controlInputs = 0) := by
-    have equation := (Silean.Modules.EqualsConstant.outputRule_holds_iff
-      (.vector 5 .bit) (fiveBitsOfNat 0) _ _ _).mp
-      ((childMatch .shiftIsZero).ruleHolds Silean.Modules.EqualsConstant.Rule.apply)
+    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+      (.vector 5 .bit) (fiveBitsOfNat 0)
+      (childMatch .shiftIsZero).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans <| (congrArg
       (fun bits => (Silean.SignalType.vector 5 .bit).equal bits (fiveBitsOfNat 0))
@@ -162,8 +162,8 @@ private theorem implements :
       simp [selectedPhaseValue, zero] at result ⊢ <;> exact result
   have rinstValue : hierStep.childOutputs .selectedRinst .result =
       selectedRinstValue controlInputs updated := by
-    have equation := (Silean.Modules.BitMux.selectRule_holds_iff _ _ _).mp
-      ((childMatch .selectedRinst).ruleHolds Silean.Modules.BitMux.Rule.select)
+    have equation := Silean.Modules.BitMux.result_of_allowed
+      (childMatch .selectedRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     have result := equation.trans (bif_congr shiftZeroValue
       (congrFun updatedFieldsValue .mem_do_prefetch)
