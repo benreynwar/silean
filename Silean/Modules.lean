@@ -5,6 +5,10 @@ import Silean.Modules.Any.Any
 import Silean.Modules.HalfAdder.HalfAdderDerived
 import Silean.Modules.FullAdder.FullAdderDerived
 import Silean.Modules.Add.AddDerived
+import Silean.Modules.CarrySaveAdder.CarrySaveAdderDerived
+import Silean.Modules.CarrySaveLayer.CarrySaveLayerDerived
+import Silean.Modules.CarrySaveTree.CarrySaveTreeDerived
+import Silean.Modules.UnsignedMultiply.UnsignedMultiplyDerived
 import Silean.Modules.BitwiseXor.BitwiseXor
 import Silean.Modules.BitwiseAnd.BitwiseAnd
 import Silean.Modules.AddSub.AddSubDerived
@@ -28,6 +32,8 @@ import Silean.Modules.VectorConcat.VectorConcatDerived
 import Silean.Modules.VectorSplit.VectorSplitDerived
 import Silean.Modules.VectorSlice.VectorSliceDerived
 import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.VectorReindex.VectorReindexDerived
+import Silean.Modules.PartialProductRow.PartialProductRowDerived
 import Silean.Modules.EqualsConstant.EqualsConstantDerived
 import Silean.Modules.OneEntryFifo.OneEntryFifoDerived
 import Silean.Modules.SerialDepthFifo.SerialDepthFifoDerived

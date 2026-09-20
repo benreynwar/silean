@@ -21,6 +21,15 @@ import SileanTests.StructuralExecutionChecks
 import SileanTests.VectorConcatChecks
 import SileanTests.VectorSliceChecks
 import SileanTests.VectorLayoutChecks
+import SileanTests.VectorReindexChecks
+import SileanTests.PartialProductRowChecks
+import SileanTests.CarrySaveAdderChecks
+import SileanTests.CarrySaveLayerContractChecks
+import SileanTests.CarrySaveLayerChecks
+import SileanTests.CarrySaveTreeContractChecks
+import SileanTests.CarrySaveTreeChecks
+import SileanTests.UnsignedMultiplyContractChecks
+import SileanTests.UnsignedMultiplyChecks
 import SileanTests.EqualsConstantChecks
 import SileanTests.BinaryToOneHotChecks
 import SileanTests.CombMuxTreeChecks
