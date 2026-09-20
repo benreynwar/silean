@@ -1,6 +1,7 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.BitwiseOr.BitwiseOr
 import Silean.Modules.Mask.Mask
+import Silean.Modules.Mux.Mux
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.NotPrimitive
 
@@ -14,11 +15,9 @@ open Silean.Authoring
 module_design Mux (signalType : SignalType)
     with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
       .positional signalType) where
-  ports {
-    input select : .bit,
-    input whenFalse (schema := typeNaming) : signalType,
-    input whenTrue (schema := typeNaming) : signalType,
-    output result (schema := typeNaming) : signalType }
+  boundary (Mux.ports signalType)
+    (naming := Mux.Naming.ports signalType)
+    (namingWith := Mux.Naming.portsWithNaming signalType typeNaming)
   instances {
     -- Produces the complement of the select bit.
     invertSelect (name := .indexed "not" 0) := Primitives.notDesign,
@@ -45,15 +44,3 @@ module_design Mux (signalType : SignalType)
   }
 
 end Silean.Modules
-
-namespace Silean.Modules.Mux.Naming
-
-open Silean Silean.Naming
-
-/-- The emitted boundary names of a mux are collision-free. -/
-theorem portNames_nodup (signalType : SignalType) :
-    (Mux.naming signalType).ports.names.Nodup := by
-  change (ports signalType).names.Nodup
-  exact of_decide_eq_true rfl
-
-end Silean.Modules.Mux.Naming

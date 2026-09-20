@@ -1,4 +1,5 @@
 import Silean.Modules.Add.Internal.AddVerification
+import Silean.Authoring.ModuleCycleCertification
 
 /-! Public adder declarations backed by the recursive implementation. -/
 
@@ -15,19 +16,14 @@ noncomputable def place (left right : Net (.vector width .bit))
 
 attribute [circuit_description] place
 
-/-- The result and carry bit encode the complete natural-number sum. -/
-theorem addBits_numeric (width : Nat) (left right : Fin width → Bool)
-    (carry : Bool) :
-    BitVector.toNat width (addBits width left right carry).1 +
-        BitVector.cardinality width * (addBits width left right carry).2.toNat =
-      BitVector.toNat width left + BitVector.toNat width right + carry.toNat :=
-  Internal.addBits_numeric width left right carry
+module_cycle_realization_bridge allowed_of_realization (width : Nat)
+  for moduleStructure width implementing cycleContract width using certification
 
 /-- Numerically, an allowed adder step produces the full sum across its result
 vector and carry-out bit. -/
 theorem numeric_value_of_allowed (width : Nat)
     {step : (cycleContract width).Step}
-    (allowed : (cycleContract width).Allows step) :
+  (allowed : (cycleContract width).Allows step) :
     BitVector.toNat width (step.outputs .result) +
         2 ^ width * (step.outputs .carryOut).toNat =
       BitVector.toNat width (step.inputs .left) +
@@ -35,8 +31,21 @@ theorem numeric_value_of_allowed (width : Nat)
           (step.inputs .carryIn).toNat := by
   rw [cycleContract.result width allowed, cycleContract.carryOut width allowed,
     ← BitVector.cardinality_eq_pow]
-  exact addBits_numeric width (step.inputs .left) (step.inputs .right)
-    (step.inputs .carryIn)
+  simpa [totalValue] using Internal.naturalValues_numeric width
+    (step.inputs .left) (step.inputs .right) (step.inputs .carryIn)
+
+/-- The result vector is the low `width` bits of the ordinary input sum. -/
+theorem result_toNat_of_allowed (width : Nat)
+    {step : (cycleContract width).Step}
+    (allowed : (cycleContract width).Allows step) :
+    BitVector.toNat width (step.outputs .result) =
+      totalValue width (step.inputs .left) (step.inputs .right)
+        (step.inputs .carryIn) % BitVector.cardinality width := by
+  rw [cycleContract.result width allowed]
+  change BitVector.toNat width
+      (resultValue width (step.inputs .left) (step.inputs .right)
+        (step.inputs .carryIn)) = _
+  rw [resultValue, BitVector.toNat_ofNat]
 
 /-- The recursive ripple implementation satisfies the exact cycle contract. -/
 theorem implements_contract (width : Nat) :

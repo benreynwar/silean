@@ -1,6 +1,7 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Equality.Equality
+import Silean.Modules.Equality.EqualityDerived
+import Silean.Modules.EqualsConstant.EqualsConstant
 
 namespace Silean.Modules
 
@@ -8,16 +9,6 @@ open Silean
 open Silean.Authoring
 
 /-! Expanded typed structure for comparison against a fixed value. -/
-
-namespace EqualsConstant
-
-module_ports ports (signalType : SignalType)
-    with (typeNaming : Silean.Naming.SignalTypeNaming signalType :=
-      .positional signalType) where
-  input value (schema := typeNaming) : signalType,
-  output result : .bit
-
-end EqualsConstant
 
 module_design EqualsConstant (signalType : SignalType)
     (constant : signalType.Denote)

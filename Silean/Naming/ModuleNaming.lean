@@ -186,17 +186,6 @@ def ports {modulePorts : ModulePorts}
   | .combiner _ _ ports => ports
   | .composite _ ports _ _ _ => ports
 
-/-- Transporting naming across equal structures at the same interface does
-not change the boundary-port naming. This keeps equality-proof details out of
-the naming implementations built on recursive structures. -/
-theorem ports_mpr_of_eq {ports : ModulePorts}
-    {left right : ModuleStructure ports} (equal : left = right)
-    (typeEqual : ModuleNaming left = ModuleNaming right)
-    (naming : ModuleNaming right) :
-    (typeEqual.mpr naming).ports = naming.ports := by
-  cases equal
-  rfl
-
 def withKey (newKey : ModuleKey) :
     (naming : ModuleNaming moduleStructure) → ModuleNaming moduleStructure
   | .primitive _ ports state operation => .primitive newKey ports state operation
@@ -216,13 +205,6 @@ def withPorts {modulePorts : ModulePorts}
   | _, .combiner adapter key _ => .combiner adapter key newPorts
   | _, .composite key _ instanceName childNaming namedWires =>
       .composite key newPorts instanceName childNaming namedWires
-
-@[simp] theorem ports_withPorts {modulePorts : ModulePorts}
-    (newPorts : ModulePortsNaming modulePorts)
-    {moduleStructure : ModuleStructure modulePorts}
-    (naming : ModuleNaming moduleStructure) :
-    (naming.withPorts newPorts).ports = newPorts := by
-  cases naming <;> rfl
 
 end ModuleNaming
 

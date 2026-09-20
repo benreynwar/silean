@@ -1,12 +1,12 @@
 import Silean.Contracts.Fifo.FifoCycleRefinement
 import Silean.Contracts.Fifo.FifoPortContract
-import Silean.Modules.OneEntryFifo.OneEntryFifoCycleTheorems
+import Silean.Modules.OneEntryFifo.Internal.OneEntryFifoVerification
 
 /-! # One-entry FIFO refinement verification
 
 This internal proof relates the exact cycle behavior of the one-entry FIFO to
 the latency-independent FIFO contract. Downstream code should use the
-certification exported by `OneEntryFifoFifoTheorems` rather than this witness.
+certification exported by `OneEntryFifoDerived` rather than this witness.
 -/
 
 namespace Silean.Modules.OneEntryFifo.Internal

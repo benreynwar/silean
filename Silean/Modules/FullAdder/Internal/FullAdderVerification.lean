@@ -132,16 +132,8 @@ open Silean Naming Authoring.CircuitDescription
 private theorem same : some description = ofNaming FullAdder.naming := by
   rfl
 
-private theorem unique : description.UniqueNames := by
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal <;> subst child <;>
-    constructor <;> exact of_decide_eq_true rfl
-
 theorem description_corresponds : Corresponds description FullAdder.naming :=
-  ⟨same, unique⟩
+  ⟨same⟩
 
 open Authoring.CircuitDescription.Description
 

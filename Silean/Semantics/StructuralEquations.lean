@@ -68,6 +68,41 @@ def SignalSource.value (source : SignalSource ports instancePorts signalType)
   | .moduleInput port => inputs port
   | .instanceOutput name port => childOutputs name port
 
+@[simp] theorem SignalSource.value_moduleInput
+    {ports : ModulePorts} {instancePorts : InstancePorts}
+    (port : ports.inputs.Label)
+    (inputs : ports.inputs.Values)
+    (childOutputs : (name : instancePorts.Name) →
+      (instancePorts.ports name).outputs.Values) :
+    (SignalSource.moduleInput (instancePorts := instancePorts) port).value
+      inputs childOutputs = inputs port := rfl
+
+@[simp] theorem SignalSource.value_instanceOutput
+    {ports : ModulePorts} {instancePorts : InstancePorts}
+    (name : instancePorts.Name)
+    (port : (instancePorts.ports name).outputs.Label)
+    (inputs : ports.inputs.Values)
+    (childOutputs : (child : instancePorts.Name) →
+      (instancePorts.ports child).outputs.Values) :
+    (SignalSource.instanceOutput (ports := ports) name port).value
+      inputs childOutputs = childOutputs name port := rfl
+
+@[simp] theorem EndpointContext.moduleInput_value (context : EndpointContext)
+    (port : context.ports.inputs.Label)
+    (inputs : context.ports.inputs.Values)
+    (childOutputs : (name : context.instancePorts.Name) →
+      (context.instancePorts.ports name).outputs.Values) :
+    (context.moduleInput port).value inputs childOutputs = inputs port := rfl
+
+@[simp] theorem EndpointContext.instanceOutput_value (context : EndpointContext)
+    (name : context.instancePorts.Name)
+    (port : (context.instancePorts.ports name).outputs.Label)
+    (inputs : context.ports.inputs.Values)
+    (childOutputs : (child : context.instancePorts.Name) →
+      (context.instancePorts.ports child).outputs.Values) :
+    (context.instanceOutput name port).value inputs childOutputs =
+      childOutputs name port := rfl
+
 @[simp] theorem SignalSource.value_castType
     {sourceType targetType : SignalType} (equal : sourceType = targetType)
     (source : SignalSource ports instancePorts sourceType)
@@ -165,6 +200,20 @@ def step {ports : ModulePorts} {module : ModuleStructure ports}
   outputs := hierStep.outputs
   nextState := nextState module hierStep
 
+@[simp] theorem step_inputs {module : ModuleStructure ports}
+    (hierStep : HierStep module) : hierStep.step.inputs = hierStep.inputs := rfl
+
+@[simp] theorem step_outputs {module : ModuleStructure ports}
+    (hierStep : HierStep module) : hierStep.step.outputs = hierStep.outputs := rfl
+
+@[simp] theorem step_currentState {module : ModuleStructure ports}
+    (hierStep : HierStep module) :
+    hierStep.step.currentState = currentState module hierStep := rfl
+
+@[simp] theorem step_nextState {module : ModuleStructure ports}
+    (hierStep : HierStep module) :
+    hierStep.step.nextState = nextState module hierStep := rfl
+
 def children {body : ModuleBody}
     {childStructure : (name : body.instancePorts.Name) →
       ModuleStructure (body.instancePorts.ports name)}
@@ -257,6 +306,49 @@ def ModuleStructure.Realizes {ports : ModulePorts}
 
 namespace ModuleStructure
 
+/-- Extract the defining output equation from a splitter solution. -/
+theorem splitter_outputs_of_solution
+    {splitter : Composition.SignalSplitter}
+    {hierStep : HierStep (.splitter splitter)}
+    (solution : (ModuleStructure.splitter splitter).IsSolution hierStep) :
+    hierStep.outputs = splitter.outputValues hierStep.inputs :=
+  solution
+
+/-- Extract the defining output equation from a combiner solution. -/
+theorem combiner_outputs_of_solution
+    {combiner : Composition.SignalCombiner}
+    {hierStep : HierStep (.combiner combiner)}
+    (solution : (ModuleStructure.combiner combiner).IsSolution hierStep) :
+    hierStep.outputs = combiner.outputValues hierStep.inputs :=
+  solution
+
+/-- Read a parent-output wiring equation pointwise, using the same concrete
+child-output projection that appears in a child's boundary step. -/
+theorem parent_output {body : ModuleBody}
+    {childStructure : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    {hierStep : HierStep (.composite body childStructure)}
+    (solution : (ModuleStructure.composite body childStructure).IsSolution hierStep)
+    (port : body.ports.outputs.Label) :
+    hierStep.outputs port =
+      (body.wiring.moduleOutput port).value hierStep.inputs
+        (fun child => (hierStep.children child).outputs) :=
+  solution.1 port
+
+/-- Read a child-input wiring equation pointwise, in the boundary vocabulary
+used by child contracts and realization theorems. -/
+theorem child_input {body : ModuleBody}
+    {childStructure : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    {hierStep : HierStep (.composite body childStructure)}
+    (solution : (ModuleStructure.composite body childStructure).IsSolution hierStep)
+    (name : body.instancePorts.Name)
+    (port : (body.instancePorts.ports name).inputs.Label) :
+    (hierStep.children name).inputs port =
+      (body.wiring.instanceInput name port).value hierStep.inputs
+        (fun child => (hierStep.children child).outputs) :=
+  congrFun (solution.2.1 name) port
+
 theorem realizes_iff_exists_solution {module : ModuleStructure ports}
     {boundary : module.Step} :
     module.Realizes boundary ↔
@@ -268,6 +360,21 @@ theorem realizes_of_solution {module : ModuleStructure ports}
     {hierStep : HierStep module} (solution : module.IsSolution hierStep) :
     module.Realizes hierStep.step :=
   ⟨hierStep, solution, rfl⟩
+
+/-- Transfer a contract-independent boundary property across an equality of
+module structures. This keeps the dependent cast of `Step` internal when a
+recursive structure unfolds by a propositional equation rather than by
+definitional reduction. -/
+theorem boundary_property_of_structure_eq
+    {source target : ModuleStructure ports}
+    (structureEq : source = target)
+    {property : ports.inputs.Values → ports.outputs.Values → Prop}
+    (targetCorrect : ∀ {step : target.Step}, target.Realizes step →
+      property step.inputs step.outputs)
+    {step : source.Step} (realizes : source.Realizes step) :
+    property step.inputs step.outputs := by
+  subst target
+  exact targetCorrect realizes
 
 /-- The selected child of a composite solution is itself a solution. -/
 theorem child_isSolution {body : ModuleBody}

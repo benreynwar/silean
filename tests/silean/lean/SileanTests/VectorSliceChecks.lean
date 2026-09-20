@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.VectorSlice.VectorSliceTheorems
+import Silean.Modules.VectorSlice.VectorSliceDerived
 
 namespace SileanTests.VectorSlice
 
@@ -12,7 +12,7 @@ noncomputable example : Contracts.Cycle.ModuleCycleCertified
   Modules.VectorSlice.certified .bit 2 3 1
 
 example : (Modules.VectorSlice.moduleStructure .bit 2 3 1).HasNoBlackboxes := by
-  simp only [Modules.VectorSlice.moduleStructure, ModuleStructure.HasNoBlackboxes]
+  simp only [ModuleStructure.HasNoBlackboxes]
   intro child
   cases child <;>
     simp [ModuleStructure.HasNoBlackboxes]
@@ -32,14 +32,16 @@ noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.VectorSlice.ports pairBits 0 0 2) :=
   Modules.VectorSlice.certified pairBits 0 0 2
 
-example (inputs : (Modules.VectorSlice.ports element prefixWidth width suffixWidth).inputs.Values)
-    (outputs : (Modules.VectorSlice.ports element prefixWidth width suffixWidth).outputs.Values)
-    (holds : (Modules.VectorSlice.outputRule element prefixWidth width suffixWidth).Holds
-      inputs SignalMap.emptyValues outputs) (index : Fin width) :
-    outputs .result index =
-      inputs .value (Fin.castAdd suffixWidth (Fin.natAdd prefixWidth index)) :=
-  Modules.VectorSlice.result_at_of_holds element prefixWidth width suffixWidth inputs
-    SignalMap.emptyValues outputs holds index
+example {step : (Modules.VectorSlice.cycleContract
+      element prefixWidth width suffixWidth).Step}
+    (allowed : (Modules.VectorSlice.cycleContract
+      element prefixWidth width suffixWidth).Allows step)
+    (index : Fin width) :
+    step.outputs .result index =
+      step.inputs .value
+        (Fin.castAdd suffixWidth (Fin.natAdd prefixWidth index)) :=
+  Modules.VectorSlice.result_at_of_allowed
+    element prefixWidth width suffixWidth allowed index
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

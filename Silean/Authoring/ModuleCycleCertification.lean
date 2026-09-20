@@ -29,6 +29,13 @@ syntax "(" ident " : " term ")" : moduleCycleCertificationParam
 declare_syntax_cat moduleCycleCertificationItem
 syntax ident " := " term : moduleCycleCertificationItem
 
+/-- Generate the standard public bridge from structural realizability to the
+module's cycle contract. This is also useful for certifications assembled
+without `module_cycle_certification`. -/
+syntax (name := moduleCycleRealizationBridge)
+    "module_cycle_realization_bridge " ident moduleCycleCertificationParam*
+    " for " term " implementing " term " using " term : command
+
 /-- Assemble a validated rule schedule and a module-specific implementation
 proof into the standard certified layer, concrete certification, and public
 certified bundle. The state relation and behavioral proof remain explicit. -/
@@ -95,6 +102,39 @@ private def collectItems (syntaxItems : Array (TSyntax `moduleCycleCertification
     implements := ← get `implements
   }
 
+private def emitRealizationBridge (theoremName : TSyntax `ident)
+    (parameters : Array (TSyntax `moduleCycleCertificationParam))
+    (moduleStructure contract certification : TSyntax `term) : CommandElabM Unit := do
+  let params ← parameters.mapM parseParam
+  let binders := params.map (·.binder)
+  let arguments := params.map (·.argument)
+  elabCommand <| ← `(
+    /-- Every realizable structural boundary step is accepted by the public
+    cycle contract for some corresponding behavioral states. -/
+    theorem $theoremName $binders:bracketedBinder*
+        {structuralStep : ($moduleStructure).Step}
+        (realizes : ($moduleStructure).Realizes structuralStep) :
+        ∃ currentState nextState,
+          ($contract).Allows {
+            inputs := structuralStep.inputs
+            currentState := currentState
+            outputs := structuralStep.outputs
+            nextState := nextState } := by
+      obtain ⟨currentState, corresponds⟩ :=
+        ($certification $arguments:term*).hasCorrespondingState
+          structuralStep.currentState
+      obtain ⟨nextState, allowed, _⟩ :=
+        ($certification $arguments:term*).allows_of_realizes
+          currentState structuralStep corresponds realizes
+      exact ⟨currentState, nextState, allowed⟩
+  )
+
+elab_rules : command
+  | `(module_cycle_realization_bridge $theoremName:ident
+      $parameters:moduleCycleCertificationParam* for $moduleStructure:term
+      implementing $contract:term using $certification:term) =>
+    emitRealizationBridge theoremName parameters moduleStructure contract certification
+
 elab_rules : command
   | `(module_cycle_certification $certificationName:ident
       $parameters:moduleCycleCertificationParam* for $moduleStructure:term via
@@ -109,6 +149,8 @@ elab_rules : command
     let moduleStructureTheorem :=
       mkIdentFrom certificationName `certified_moduleStructure
     let contractTheorem := mkIdentFrom certificationName `certified_cycleContract
+    let allowedOfRealization :=
+      mkIdentFrom certificationName `allowed_of_realization
     elabCommand <| ← `(
       noncomputable opaque $layerName $binders:bracketedBinder* :
           Silean.Contracts.Cycle.ModuleCycleCertifiedLayer
@@ -136,6 +178,11 @@ elab_rules : command
     elabCommand <| ← `(
       @[simp] theorem $contractTheorem $binders:bracketedBinder* :
           ($bundleName $arguments:term*).cycleContract = $contract := rfl
+    )
+    elabCommand <| ← `(
+      module_cycle_realization_bridge $allowedOfRealization
+        $parameters:moduleCycleCertificationParam* for $moduleStructure
+        implementing $contract using $certificationName
     )
 
 end Silean.Authoring

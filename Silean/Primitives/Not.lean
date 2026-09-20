@@ -61,10 +61,9 @@ def notCertified : Contracts.Cycle.ModuleCycleCertified not.ports where
   moduleStructure := .primitive not
   cycleContract := notCycleContract
   certification := {
+    structural := not.structuralCertification
     stateCorresponds := notStateCorresponds
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-    hasStructuralResult := Primitive.hasSolution not
-    structuralResultUnique := Primitive.hasAtMostOneSolution not
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp notImplements }
 
 end Silean.Primitives

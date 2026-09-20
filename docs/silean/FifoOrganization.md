@@ -50,37 +50,36 @@ that result.
 | Source | Responsibility |
 | --- | --- |
 | `Modules/OneEntryFifo/OneEntryFifo.lean` | Readable one-entry feedback circuit and natural exact-cycle contract |
+| `Modules/OneEntryFifo/OneEntryFifoDerived.lean` | Placement, authored correctness, exact-cycle certification, and capacity-one FIFO certification |
 | `Modules/OneEntryFifo/Internal/OneEntryFifoStructure.lean` | Expanded typed hierarchy used by verification and emission |
 | `Modules/OneEntryFifo/Internal/OneEntryFifoVerification.lean` | Child selection, schedules, structural certification, and authored-description correspondence |
 | `Modules/OneEntryFifo/Control/OneEntryFifoControl.lean` | Readable gate-level definition and exact contract of the private combinational control child |
-| `Modules/OneEntryFifo/Control/OneEntryFifoControlTheorems.lean` | Public-to-the-parent control equations and implementation theorem |
+| `Modules/OneEntryFifo/Control/OneEntryFifoControlDerived.lean` | Control placement and authored correctness |
 | `Modules/OneEntryFifo/Control/Internal/` | Expanded control structure and gate-level certification details |
-| `Modules/OneEntryFifo/OneEntryFifoCycleTheorems.lean` | Step-based exact-cycle laws, authored correspondence, and structural implementation theorem |
-| `Modules/OneEntryFifo/OneEntryFifoCycleBehavior.lean` | Small adapter exposing the certified exact behavior to serial FIFO composition |
 | `Modules/OneEntryFifo/Internal/OneEntryFifoFifoVerification.lean` | Capacity-one logical-queue refinement proof |
-| `Modules/OneEntryFifo/OneEntryFifoFifoTheorems.lean` | Public capacity-one FIFO certification |
 | `Composition/FifoSerialComposition.lean` | Generic two-child serial structural layer |
 | `Composition/FifoSerialCertification.lean` | Exact-cycle certification using only the two public child contracts |
 | `Composition/FifoSerialRefinement.lean` | Generic composition of two child FIFO refinements; downstream contents precede upstream contents and the internal transfer cancels |
 | `Naming/FifoSerialNaming.lean` | Presentation names for the generic serial hierarchy |
-| `Modules/SerialDepthFifo/SerialDepthFifo.lean` | Recursive positive-depth structure, natural exact-cycle behavior, naming, and complete design bundles; documents why builder duplication would obscure this generated family |
+| `Modules/SerialDepthFifo/SerialDepthFifo.lean` | Natural recursive exact-cycle behavior, contract, and contract laws |
+| `Modules/SerialDepthFifo/SerialDepthFifoDerived.lean` | Naming, design, placement, exact certification, and FIFO certification |
+| `Modules/SerialDepthFifo/Internal/SerialDepthFifoStructure.lean` | Recursive positive-depth structural hierarchy |
 | `Modules/SerialDepthFifo/Internal/SerialDepthFifoVerification.lean` | Recursive structural certification for every positive depth |
-| `Modules/SerialDepthFifo/SerialDepthFifoCycleTheorems.lean` | Step-based exact-cycle interface and implementation theorem |
 | `Modules/SerialDepthFifo/Internal/SerialDepthFifoFifoVerification.lean` | Recursive abstract FIFO refinement proof |
-| `Modules/SerialDepthFifo/SerialDepthFifoFifoTheorems.lean` | Public FIFO certification with capacity equal to depth |
-| `Modules/Fifo/Fifo.lean` | Pointer/register-bank structure and exact cycle contract |
-| `Modules/Fifo/FifoPointerControl.lean` | Private pointer interpretation and transfer-control child used by the FIFO built from a register bank and pointers |
-| `Modules/Fifo/FifoPointerControlTheorems.lean` | Public pointer-control behavior and implementation theorem |
+| `Modules/Fifo/Fifo.lean` | Readable pointer/register-bank construction, exact contract, laws, and logical queue definitions |
+| `Modules/Fifo/FifoDerived.lean` | Placement, authored correctness, exact certification, and bounded FIFO certification |
+| `Modules/Fifo/FifoPointerControl.lean` | Readable pointer-control construction, exact equations, and mathematical laws |
+| `Modules/Fifo/FifoPointerControlDerived.lean` | Pointer-control placement and authored correctness |
 | `Modules/Fifo/Internal/FifoPointerControlVerification.lean` | Pointer-control schedules and structural certification |
-| `Modules/Fifo/FifoCycleTheorems.lean` | Public exact-cycle laws and implementation theorem for the pointer FIFO |
 | `Modules/Fifo/Internal/FifoCycleVerification.lean` | Pointer-FIFO structural certification |
-| `Modules/Fifo/FifoProperties.lean` | Circular-buffer occupancy, logical contents, invariant, and one-cycle queue lemmas |
+| `Modules/Fifo/FifoProperties.lean` | Compact public queue-property theorem interface |
+| `Modules/Fifo/Internal/FifoPropertiesVerification.lean` | Circular-buffer arithmetic and queue-property proof implementation |
 | `Modules/Fifo/Internal/FifoFifoVerification.lean` | Pointer-FIFO logical-queue refinement proof |
-| `Modules/Fifo/FifoFifoTheorems.lean` | Public capacity-`2^addressWidth` FIFO certification |
 
-The former FIFO `*Certified.lean` import shims have been removed. New proof
-code imports the theorem files above; structural details and refinement
-witnesses are not a supported downstream interface.
+Downstream construction and certification code imports the corresponding
+`*Derived.lean` facade. Code that needs only a FIFO's behavior or exact
+contract imports its main file. Structural details and refinement witnesses
+are not a supported downstream interface.
 
 The three `Composition/FifoSerial*` files are a generic composition mechanism,
 not one concrete reusable module. `FifoSerialCertification.lean` therefore

@@ -1,6 +1,6 @@
 import Silean.FIRRTL.Emit
 import Silean.Emitters.StructuredPayload
-import Silean.Modules.OneEntryFifo.OneEntryFifo
+import Silean.Modules.OneEntryFifo.OneEntryFifoDerived
 
 namespace Silean.Emitters.StructuredFifo
 

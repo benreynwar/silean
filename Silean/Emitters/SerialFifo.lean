@@ -1,5 +1,5 @@
 import Silean.FIRRTL.Emit
-import Silean.Modules.SerialDepthFifo.SerialDepthFifo
+import Silean.Modules.SerialDepthFifo.SerialDepthFifoDerived
 
 namespace Silean.Emitters.SerialFifo
 

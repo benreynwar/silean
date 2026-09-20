@@ -350,7 +350,7 @@ functions. The source order is preserved exactly. -/
     rw [← rightInverse value]
     exact (source.locate (backward value)).map forward
 
-def ordinal (enumeration : Enumeration α) (value : α) :
+@[reducible] def ordinal (enumeration : Enumeration α) (value : α) :
     Fin enumeration.values.length := (enumeration.locate value).toFin
 
 @[reducible] def empty (eliminate : α → False) : Enumeration α where

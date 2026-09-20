@@ -30,7 +30,7 @@ namespace Body
 end Body
 
 /-- Any ordinary typed composite that has the requested boundary naming and is
-proven to be the same named circuit as `description`. -/
+proven to extract the same structurally identified circuit description. -/
 structure Realization (description : Description) (ports : ModulePorts)
     (boundaryNaming : ModulePortsNaming ports) where
   body : Body ports

@@ -1,4 +1,4 @@
-import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
 import Silean.Modules.All.All
 import Silean.Modules.Any.Any
@@ -13,26 +13,24 @@ import Silean.Modules.Register.RegisterDerived
 import Silean.Modules.ResetRegister.ResetRegisterDerived
 import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
 import Silean.Modules.EnabledResetCounter.EnabledResetCounterDerived
-import Silean.Modules.Fifo.FifoFifoTheorems
+import Silean.Modules.Fifo.FifoDerived
 import Silean.Modules.Mask.Mask
 import Silean.Modules.BitwiseOr.BitwiseOr
-import Silean.Modules.BinaryToOneHot.BinaryToOneHotTheorems
-import Silean.Modules.CombMuxTree.CombMuxTreeTheorems
-import Silean.Modules.RegisterBank.RegisterBankTheorems
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.BinaryToOneHot.BinaryToOneHotDerived
+import Silean.Modules.CombMuxTree.CombMuxTreeDerived
+import Silean.Modules.RegisterBank.RegisterBankDerived
+import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.EnabledRegister.EnabledRegisterDerived
-import Silean.Modules.TupleField.TupleFieldTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.Equality.EqualityTheorems
-import Silean.Modules.VectorConcat.VectorConcatTheorems
-import Silean.Modules.VectorSplit.VectorSplitTheorems
-import Silean.Modules.VectorSlice.VectorSliceTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.OneEntryFifo.OneEntryFifoCycleTheorems
-import Silean.Modules.OneEntryFifo.OneEntryFifoFifoTheorems
-import Silean.Modules.SerialDepthFifo.SerialDepthFifoCycleTheorems
-import Silean.Modules.SerialDepthFifo.SerialDepthFifoFifoTheorems
+import Silean.Modules.TupleField.TupleFieldDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.Equality.EqualityDerived
+import Silean.Modules.VectorConcat.VectorConcatDerived
+import Silean.Modules.VectorSplit.VectorSplitDerived
+import Silean.Modules.VectorSlice.VectorSliceDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.OneEntryFifo.OneEntryFifoDerived
+import Silean.Modules.SerialDepthFifo.SerialDepthFifoDerived
 
 /-! # Reusable hardware modules
 

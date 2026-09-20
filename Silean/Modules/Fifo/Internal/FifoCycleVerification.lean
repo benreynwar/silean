@@ -1,7 +1,8 @@
 import Silean.Modules.Fifo.Fifo
-import Silean.Modules.Fifo.FifoPointerControlTheorems
+import Silean.Modules.Fifo.FifoPointerControlDerived
+import Silean.Modules.Fifo.Internal.FifoStructure
 import Silean.Modules.EnabledResetCounter.EnabledResetCounterDerived
-import Silean.Modules.RegisterBank.RegisterBankTheorems
+import Silean.Modules.RegisterBank.RegisterBankDerived
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
@@ -132,58 +133,67 @@ private theorem implements :
   have writeCurrent : (hierStep.children .writeCounter).outputs .value =
       writePointer :=
     EnabledResetCounter.value_of_allowed writeMatches.allowed
-  have controlInputRead : (body element addressWidth).wiring.childInputValues
-      hierStep.inputs hierStep.childOutputs .control .readPointer =
+  let controlInputs := (body element addressWidth).wiring.childInputValues
+    hierStep.inputs hierStep.childOutputs .control
+  have controlInputRead : controlInputs .readPointer =
       (hierStep.children .readCounter).outputs .value := rfl
-  have controlInputWrite : (body element addressWidth).wiring.childInputValues
-      hierStep.inputs hierStep.childOutputs .control .writePointer =
+  have controlInputWrite : controlInputs .writePointer =
       (hierStep.children .writeCounter).outputs .value := rfl
-  have controlInputValid : (body element addressWidth).wiring.childInputValues
-      hierStep.inputs hierStep.childOutputs .control .inputValid =
+  have controlInputValid : controlInputs .inputValid =
       inputValid := rfl
-  have controlOutputReady : (body element addressWidth).wiring.childInputValues
-      hierStep.inputs hierStep.childOutputs .control .outputReady =
+  have controlOutputReady : controlInputs .outputReady =
       outputReady := rfl
-  have controlBehavior :=
-    Fifo.PointerControl.Behavior.of_allowed addressWidth controlMatches.allowed
-  normalize_child_hyp controlBehavior
   have controlReadAddress : controlReadAddressOutput =
       Fifo.PointerControl.pointerAddress readPointer := by
-    have equation := controlBehavior.readAddress
-    change controlReadAddressOutput = _ at equation
+    have equation := Fifo.PointerControl.cycleContract.readAddress
+      addressWidth controlMatches.allowed
+    change controlReadAddressOutput =
+      Fifo.PointerControl.pointerAddress (controlInputs .readPointer) at equation
     rw [controlInputRead, readCurrent] at equation
     exact equation
   have controlWriteAddress : controlWriteAddressOutput =
       Fifo.PointerControl.pointerAddress writePointer := by
-    have equation := controlBehavior.writeAddress
-    change controlWriteAddressOutput = _ at equation
+    have equation := Fifo.PointerControl.cycleContract.writeAddress
+      addressWidth controlMatches.allowed
+    change controlWriteAddressOutput =
+      Fifo.PointerControl.pointerAddress (controlInputs .writePointer) at equation
     rw [controlInputWrite, writeCurrent] at equation
     exact equation
   have controlReady : controlReadyOutput =
       inputReady readPointer writePointer := by
-    have equation := controlBehavior.inputReady
-    change controlReadyOutput = _ at equation
+    have equation := Fifo.PointerControl.cycleContract.inputReady
+      addressWidth controlMatches.allowed
+    change controlReadyOutput = Fifo.PointerControl.inputReady
+      (controlInputs .readPointer) (controlInputs .writePointer) at equation
     rw [controlInputRead, controlInputWrite, readCurrent, writeCurrent] at equation
     exact equation
   have controlValid : controlValidOutput =
       outputValid readPointer writePointer := by
-    have equation := controlBehavior.outputValid
-    change controlValidOutput = _ at equation
+    have equation := Fifo.PointerControl.cycleContract.outputValid
+      addressWidth controlMatches.allowed
+    change controlValidOutput = Fifo.PointerControl.outputValid
+      (controlInputs .readPointer) (controlInputs .writePointer) at equation
     rw [controlInputRead, controlInputWrite, readCurrent, writeCurrent] at equation
     exact equation
   have controlReadAdvance : controlReadAdvanceOutput =
       readAdvance readPointer writePointer
         outputReady := by
-    have equation := controlBehavior.readAdvance
-    change controlReadAdvanceOutput = _ at equation
+    have equation := Fifo.PointerControl.cycleContract.readAdvance
+      addressWidth controlMatches.allowed
+    change controlReadAdvanceOutput = Fifo.PointerControl.readAdvance
+      (controlInputs .readPointer) (controlInputs .writePointer)
+      (controlInputs .outputReady) at equation
     rw [controlInputRead, controlInputWrite, controlOutputReady,
       readCurrent, writeCurrent] at equation
     exact equation
   have controlWriteAdvance : controlWriteAdvanceOutput =
       writeAdvance readPointer writePointer
         inputValid := by
-    have equation := controlBehavior.writeAdvance
-    change controlWriteAdvanceOutput = _ at equation
+    have equation := Fifo.PointerControl.cycleContract.writeAdvance
+      addressWidth controlMatches.allowed
+    change controlWriteAdvanceOutput = Fifo.PointerControl.writeAdvance
+      (controlInputs .readPointer) (controlInputs .writePointer)
+      (controlInputs .inputValid) at equation
     rw [controlInputRead, controlInputWrite, controlInputValid,
       readCurrent, writeCurrent] at equation
     exact equation

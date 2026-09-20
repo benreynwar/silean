@@ -74,13 +74,13 @@ assignment used to justify each transition remains behind `Transition`. -/
 example : ∃ outputs nextState,
     tupleSplitter.certified.moduleStructure.Transition
       (fun | .value => tupleValue) tupleSplitterState outputs nextState :=
-  tupleSplitter.certified.hasStructuralResult.transition_exists _ _
+  tupleSplitter.certified.structuralCertification.hasSolution.transition_exists _ _
 
 example : ∃ outputs nextState,
     tupleCombiner.certified.moduleStructure.Transition
       (tupleSplitter.outputValues (fun | .value => tupleValue))
       tupleCombinerState outputs nextState :=
-  tupleCombiner.certified.hasStructuralResult.transition_exists _ _
+  tupleCombiner.certified.structuralCertification.hasSolution.transition_exists _ _
 
 example {outputs nextState otherOutputs otherNext}
     (left : tupleSplitter.certified.moduleStructure.Transition
@@ -88,6 +88,6 @@ example {outputs nextState otherOutputs otherNext}
     (right : tupleSplitter.certified.moduleStructure.Transition
       (fun | .value => tupleValue) tupleSplitterState otherOutputs otherNext) :
     outputs = otherOutputs ∧ nextState = otherNext :=
-  left.unique tupleSplitter.certified.structuralResultUnique right
+  left.unique tupleSplitter.certified.structuralCertification.hasAtMostOneSolution right
 
 end SileanTests.SignalAdapter

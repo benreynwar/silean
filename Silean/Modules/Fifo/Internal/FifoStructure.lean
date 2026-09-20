@@ -1,23 +1,12 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Interfaces.FifoPorts
 import Silean.Modules.EnabledResetCounter.EnabledResetCounterDerived
-import Silean.Modules.Fifo.FifoPointerControl
-import Silean.Modules.RegisterBank.RegisterBank
+import Silean.Modules.Fifo.Internal.FifoPointerControlStructure
+import Silean.Modules.Fifo.Fifo
+import Silean.Modules.RegisterBank.RegisterBankDerived
 import Silean.Naming.FifoPortsNaming
 
 /-! Expanded typed structure for the reader-facing register-bank FIFO. -/
-
-namespace Silean.Modules.Fifo
-
-open Silean Silean.Interfaces.Fifo
-
-abbrev Pointer (addressWidth : Nat) :=
-  EnabledResetCounter.Value (addressWidth + 1)
-
-/-- Both counters start at the first entry, making the FIFO empty. -/
-def zeroPointer (addressWidth : Nat) : Pointer addressWidth := fun _ => false
-
-end Silean.Modules.Fifo
 
 namespace Silean.Modules
 
@@ -69,12 +58,10 @@ module_design Fifo (element : SignalType) (addressWidth : Nat) where
       .readAddress 0 := control.readAddress }
   }
 
-namespace Fifo.Naming
+namespace Fifo.Internal
 
 open Silean.Naming
 
-/-- Attach authored payload names to the FIFO boundary and recursively to its
-storage hierarchy without changing the canonical FIFO structure. -/
 def namingWith (element : SignalType) (addressWidth : Nat)
     (elementNaming : SignalTypeNaming element) :
     ModuleNaming (Fifo.moduleStructure element addressWidth) := by
@@ -82,7 +69,7 @@ def namingWith (element : SignalType) (addressWidth : Nat)
   exact .composite
     ⟨"Fifo", "", [.signalType element, .natural addressWidth]⟩
     (Silean.Naming.FifoPorts.portsWithNaming element elementNaming)
-    (instanceNames element addressWidth)
+    (Fifo.Naming.instanceNames element addressWidth)
     (fun
       | .readCounter => EnabledResetCounter.naming (addressWidth + 1)
           (Fifo.zeroPointer addressWidth)
@@ -92,6 +79,6 @@ def namingWith (element : SignalType) (addressWidth : Nat)
       | .storage => RegisterBank.Naming.namingWith element addressWidth 1
           elementNaming)
 
-end Fifo.Naming
+end Fifo.Internal
 
 end Silean.Modules

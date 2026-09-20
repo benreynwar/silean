@@ -27,12 +27,6 @@ theorem incrementValue_toNat (width : Nat) (bits : Fin width → Bool) :
       (BitVector.toNat width bits + 1) % BitVector.cardinality width :=
   Internal.incrementValue_toNat width bits
 
-/-- An allowed incrementer step returns the mathematical incremented value. -/
-theorem result_of_allowed (width : Nat) {step : (cycleContract width).Step}
-    (allowed : (cycleContract width).Allows step) :
-    step.outputs .result = incrementValue width (step.inputs .value) := by
-  simpa using cycleContract.result width allowed
-
 /-- Numerically, an allowed step adds one modulo the vector width. -/
 theorem result_toNat_of_allowed (width : Nat)
     {step : (cycleContract width).Step}
@@ -40,7 +34,7 @@ theorem result_toNat_of_allowed (width : Nat)
     BitVector.toNat width (step.outputs .result) =
       (BitVector.toNat width (step.inputs .value) + 1) %
         BitVector.cardinality width := by
-  rw [result_of_allowed width allowed]
+  rw [cycleContract.result width allowed]
   exact incrementValue_toNat width (step.inputs .value)
 
 /-- Every realizable incrementer step returns the mathematical increment. -/
@@ -52,7 +46,7 @@ theorem result_of_realization (width : Nat)
     (certification width).hasCorrespondingState step.currentState
   obtain ⟨_, allowed, _⟩ := (certification width).allows_of_realizes
     contractState step corresponds realizes
-  exact result_of_allowed width allowed
+  exact cycleContract.result width allowed
 
 /-- The recursive incrementer implements its exact cycle contract. -/
 theorem implements_contract (width : Nat) :

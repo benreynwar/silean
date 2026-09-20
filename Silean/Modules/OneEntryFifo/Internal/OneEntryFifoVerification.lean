@@ -1,13 +1,15 @@
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Authoring.CircuitDescriptionSoundness
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.EnabledRegister.EnabledRegisterDerived
 import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
-import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControlTheorems
+import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControlDerived
 import Silean.Modules.OneEntryFifo.OneEntryFifo
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.OneEntryFifo.Internal.OneEntryFifoStructure
+import Silean.Modules.Mux.MuxDerived
 import Silean.Primitives.Or
 
 namespace Silean.Modules.OneEntryFifo
@@ -112,9 +114,10 @@ private theorem implements :
       cases name
       · change (forwardRule signalType).Holds hierStep.inputs contractState _
         rw [forwardRule_holds_iff signalType]
-        have validEquation := EnabledResetRegister.value_of_allowed validAllowed
-        have dataEquation := EnabledRegister.q_of_allowed dataAllowed
-        have muxRule := Mux.result_of_allowed signalType muxAllowed
+        have validEquation := EnabledResetRegister.cycleContract.value
+          .bit false validAllowed
+        have dataEquation := EnabledRegister.cycleContract.q signalType dataAllowed
+        have muxRule := Mux.cycleContract.result signalType muxAllowed
         normalize_child_hyp validEquation
         normalize_child_hyp dataEquation
         normalize_child_hyp muxRule unfolding wiring, context
@@ -144,9 +147,10 @@ private theorem implements :
               else hierStep.inputs .inputData) pairEqual))
       · change (readyRule signalType).Holds hierStep.inputs contractState _
         rw [readyRule_holds_iff signalType]
-        have controlReady := OneEntryFifo.Control.upstreamReady_of_allowed
+        have controlReady := OneEntryFifo.Control.cycleContract.upstreamReady
           controlAllowed
-        have validEquation := EnabledResetRegister.value_of_allowed validAllowed
+        have validEquation := EnabledResetRegister.cycleContract.value
+          .bit false validAllowed
         normalize_child_hyp controlReady unfolding wiring, context
         normalize_child_hyp validEquation
         change (hierStep.children .validStorage).outputs .value =
@@ -157,9 +161,10 @@ private theorem implements :
         exact readyBoundary.trans (controlReady.trans (congrArg
           (fun value => hierStep.inputs .outputReady || !value) validEquation))
     · rfl
-  · have controlUpdate := OneEntryFifo.Control.storageUpdate_of_allowed
+  · have controlUpdate := OneEntryFifo.Control.cycleContract.storageUpdate
       controlAllowed
-    have validOutputRule := EnabledResetRegister.value_of_allowed validAllowed
+    have validOutputRule := EnabledResetRegister.cycleContract.value
+      .bit false validAllowed
     normalize_child_hyp controlUpdate unfolding wiring, context
     normalize_child_hyp validOutputRule
     change (hierStep.children .validStorage).outputs .value =
@@ -248,12 +253,12 @@ end Silean.Modules.OneEntryFifo
 
 /-! ## Authored-description correspondence -/
 
-namespace Silean.Modules.OneEntryFifo.Description.Internal
+namespace Silean.Modules.OneEntryFifo.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
 private theorem same (signalType : SignalType) :
-    some (description signalType) =
+    some (OneEntryFifo.description signalType) =
       ofNaming (OneEntryFifo.naming signalType) := by
   simp only [circuit_description, description, construction,
     EnabledResetRegister.placeNamed, EnabledRegister.placeNamed,
@@ -271,21 +276,24 @@ private theorem same (signalType : SignalType) :
     Interfaces.Fifo.inputMap, Interfaces.Fifo.outputMap]
   rfl
 
-private theorem unique (signalType : SignalType) :
-    (description signalType).UniqueNames := by
-  simp only [circuit_description, description, construction,
-    EnabledResetRegister.placeNamed, EnabledRegister.placeNamed,
-    OneEntryFifo.Control.place]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal | equal | equal <;>
-    subst child <;> constructor <;> exact of_decide_eq_true rfl
+theorem description_corresponds (signalType : SignalType) :
+    Corresponds (OneEntryFifo.description signalType)
+      (OneEntryFifo.naming signalType) :=
+  ⟨same signalType⟩
 
-theorem corresponds (signalType : SignalType) :
-    Corresponds (description signalType) (OneEntryFifo.naming signalType) :=
-  ⟨same signalType, unique signalType⟩
+open Authoring.CircuitDescription.Description
 
-end Silean.Modules.OneEntryFifo.Description.Internal
+theorem construction_correct (signalType : SignalType) :
+    ImplementsCycleContract (OneEntryFifo.description signalType)
+      (cycleContract signalType) (Naming.FifoPorts.ports signalType) := by
+  have corresponds := description_corresponds signalType
+  unfold OneEntryFifo.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := instancePorts signalType,
+      wiring := wiring signalType })
+    (children := structuralChildren signalType)
+    corresponds (certification signalType)
+
+end Silean.Modules.OneEntryFifo.Internal

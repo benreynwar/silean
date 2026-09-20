@@ -72,7 +72,7 @@ private theorem implements :
     change hierStep.outputs .value =
       (hierStep.children .storage).outputs .value at boundaryOutput
     exact boundaryOutput.trans
-      (EnabledResetRegister.value_of_allowed storageAllowed)
+      (EnabledResetRegister.cycleContract.value (valueType width) resetValue storageAllowed)
   · change storageNextState =
       (cycleContract width resetValue).stateRule.apply
         hierStep.inputs contractState
@@ -83,14 +83,15 @@ private theorem implements :
           else contractState .stored := by
       exact EnabledResetRegister.next_stored_of_allowed storageAllowed
     have incremented :=
-      Increment.result_of_allowed width incrementMatches.allowed
+      Increment.cycleContract.result width incrementMatches.allowed
     change (hierStep.children .increment).outputs .result =
       Increment.incrementValue width
         ((hierStep.children .storage).outputs .value)
       at incremented
     have storageCurrent :
         (hierStep.children .storage).outputs .value = contractState .stored := by
-      exact EnabledResetRegister.value_of_allowed storageAllowed
+      exact EnabledResetRegister.cycleContract.value
+        (valueType width) resetValue storageAllowed
     funext statePort
     cases statePort
     rw [storageNextValue]
@@ -144,29 +145,10 @@ private theorem same (width : Nat) (resetValue : Value width) :
   simp [inputMap, outputMap, ports]
   rfl
 
-private theorem unique (width : Nat) (resetValue : Value width) :
-    (description width resetValue).UniqueNames := by
-  simp only [circuit_description, description, construction,
-    Increment.place, EnabledResetRegister.place]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal
-  · subst child
-    exact ⟨of_decide_eq_true rfl, of_decide_eq_true rfl⟩
-  · subst child
-    constructor
-    · change (EnabledResetRegister.Naming.portsWithNaming
-          (valueType width) (.positional (valueType width))).names.Nodup
-      exact of_decide_eq_true rfl
-    · exact of_decide_eq_true rfl
-
 theorem description_corresponds (width : Nat) (resetValue : Value width) :
     Corresponds (description width resetValue)
       (EnabledResetCounter.naming width resetValue) :=
-  ⟨same width resetValue, unique width resetValue⟩
+  ⟨same width resetValue⟩
 
 open Authoring.CircuitDescription.Description
 

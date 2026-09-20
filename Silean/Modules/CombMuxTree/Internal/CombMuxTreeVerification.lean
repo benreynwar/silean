@@ -1,13 +1,12 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
-import Silean.Modules.CombMuxTree.CombMuxTree
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.VectorSplit.VectorSplitTheorems
+import Silean.Modules.CombMuxTree.Internal.CombMuxTreeStructure
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.VectorSplit.VectorSplitDerived
 
 /-! # Combinational mux-tree verification
 
-Schedules and recursive certification for the mux tree in `CombMuxTree.lean`.
-Import `CombMuxTreeTheorems.lean` for the public proof interface. -/
+Schedules and recursive certification for the mux-tree hierarchy. -/
 
 namespace Silean.Modules.CombMuxTree
 
@@ -84,7 +83,7 @@ private theorem baseImplements (element : SignalType)
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     change hierStep.outputs .result = _
     rw [show hierStep.outputs .result =
         (hierStep.children .split).outputs ⟨0, by omega⟩ by
@@ -271,22 +270,22 @@ private theorem succImplements (element : SignalType) (indexWidth : Nat)
   change leftValues = VectorSplit.leftPart rootValues ∧
     rightValues = VectorSplit.rightPart rootValues at valuesEquation
 
-  have lowerEquation := (outputRule_holds_iff element indexWidth
+  have lowerEquation := (applyRule_holds_iff element indexWidth
     _ SignalMap.emptyValues _).mp ((childMatch .lower).ruleHolds Rule.apply)
   change lowerResult = select indexWidth leftValues lowerIndexBits at lowerEquation
 
-  have upperEquation := (outputRule_holds_iff element indexWidth
+  have upperEquation := (applyRule_holds_iff element indexWidth
     _ SignalMap.emptyValues _).mp ((childMatch .upper).ruleHolds Rule.apply)
   change upperResult = select indexWidth rightValues lowerIndexBits at upperEquation
 
-  have muxEquation := Mux.result_of_allowed element (childMatch .mux).allowed
+  have muxEquation := Mux.cycleContract.result element (childMatch .mux).allowed
   change muxResult = bif highBit then upperResult else lowerResult at muxEquation
 
   refine ⟨SignalMap.emptyValues, ?_, trivial⟩
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     change hierStep.outputs .result =
       select (indexWidth + 1) rootValues rootIndex
     rw [show hierStep.outputs .result =

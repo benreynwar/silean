@@ -16,14 +16,6 @@ noncomputable def place (left right : Net (.vector width .bit))
 
 attribute [circuit_description] place
 
-/-- The adder formulation and the independent add/subtract recursion agree. -/
-theorem addBits_xorRight_eq_addSubBits (width : Nat)
-    (left right : Fin width → Bool) (subtract : Bool) :
-    Add.addBits width left
-        (fun index => Primitives.xorValue (right index) subtract) subtract =
-      addSubBits width left right subtract :=
-  Internal.addBits_xorRight_eq_addSubBits width left right subtract
-
 /-- The result is addition or modular subtraction according to `subtract`. -/
 theorem addSubBits_result_toNat (width : Nat)
     (left right : Fin width → Bool) (subtract : Bool) :

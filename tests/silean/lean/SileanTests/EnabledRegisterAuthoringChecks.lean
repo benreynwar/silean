@@ -7,7 +7,7 @@ namespace SileanTests.EnabledRegisterAuthoring
 
 open Silean
 
-#check Modules.EnabledRegister.q_of_allowed
+#check Modules.EnabledRegister.cycleContract.q
 #check Modules.EnabledRegister.next_stored_of_allowed
 #check Modules.EnabledRegister.next_stored_of_enabled
 #check Modules.EnabledRegister.next_stored_of_disabled

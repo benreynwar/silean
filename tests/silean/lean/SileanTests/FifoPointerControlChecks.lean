@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Fifo.FifoPointerControlTheorems
+import Silean.Modules.Fifo.FifoPointerControlDerived
 
 namespace SileanTests.FifoPointerControl
 
@@ -83,8 +83,10 @@ example : (inputReadyRule 2).Holds inputs SignalMap.emptyValues outputs := by
   exact ((cycleContract 2).evaluateStep_allowed inputs SignalMap.emptyValues).1
     .inputReady
 
-example : Behavior 2 inputs outputs :=
-  Behavior.of_allowed 2
+example : outputs .writeAdvance =
+    writeAdvance (inputs .readPointer) (inputs .writePointer)
+      (inputs .inputValid) :=
+  cycleContract.writeAdvance 2
     ((cycleContract 2).evaluateStep_allowed inputs SignalMap.emptyValues)
 
 -- At address width zero, the sole pointer bit is the wrap bit and the address
@@ -126,9 +128,9 @@ example : Contracts.Cycle.Implements (moduleStructure 2) (cycleContract 2)
     (certification 2).stateCorresponds :=
   implements_contract 2
 
-example : Authoring.CircuitDescription.Corresponds
-    (Description.description 2) (naming 2) :=
-  Description.authored_definition_corresponds 2
+example : Authoring.CircuitDescription.Description.ImplementsCycleContract
+    (description 2) (cycleContract 2) (Naming.ports 2) :=
+  construction_correct 2
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

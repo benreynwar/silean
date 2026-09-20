@@ -1,5 +1,5 @@
 import Silean.Authoring.CircuitLogic
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.Mux.MuxDerived
 
 namespace SileanTests.CircuitLogic
 
@@ -66,7 +66,7 @@ example : notOrDescription.children.map (fun child => child.name) =
 
 end SileanTests.CircuitLogic
 
-namespace SileanTests.CircuitLogic.MuxCorrespondence
+namespace SileanTests.CircuitLogic.Mux
 
 open Silean Naming Authoring.CircuitDescription
 
@@ -75,14 +75,14 @@ example (signalType : SignalType)
     (allowed : (Modules.Mux.cycleContract signalType).Allows step) :
     step.outputs .result =
       bif step.inputs .select then step.inputs .whenTrue else step.inputs .whenFalse :=
-  Modules.Mux.result_of_allowed signalType allowed
+  Modules.Mux.cycleContract.result signalType allowed
 
 example (signalType : SignalType)
     {step : (Modules.Mux.moduleStructure signalType).Step}
     (realizes : (Modules.Mux.moduleStructure signalType).Realizes step) :
     step.outputs .result =
       bif step.inputs .select then step.inputs .whenTrue else step.inputs .whenFalse :=
-  Modules.Mux.Description.result_of_realization signalType realizes
+  Modules.Mux.result_of_realization signalType realizes
 
 example (signalType : SignalType) :
     Contracts.Cycle.Implements
@@ -91,30 +91,29 @@ example (signalType : SignalType) :
       (Modules.Mux.certification signalType).stateCorresponds :=
   Modules.Mux.implements_contract signalType
 
--- Correspondence checks actual wiring, not merely matching interfaces.
 example (signalType : SignalType) :
-    some { Modules.Mux.Description.description signalType with outputs :=
-      [⟨⟨"result", signalType⟩, .input "whenTrue"⟩] } ≠
-        ofNaming (Modules.Mux.naming signalType) := by
-  intro assumed
-  have equal := assumed.trans
-    (Modules.Mux.Description.authored_definition_corresponds signalType).same.symm
-  have sources := congrArg (fun value : Option Description =>
-    value.map fun circuit => circuit.outputs.map (·.source)) equal
-  change some [Source.input "whenTrue"] =
-    some [Source.child (.indexed "bitwise_or" 0) _] at sources
-  cases sources
+    (Modules.Mux.description signalType).ImplementsCycleContract
+      (Modules.Mux.cycleContract signalType)
+      (Modules.Mux.Naming.ports signalType) :=
+  Modules.Mux.construction_correct signalType
 
--- Name uniqueness is a checked obligation, not an assumption of the builder.
-example (signalType : SignalType) :
-    ¬ ({ Modules.Mux.Description.description signalType with inputs :=
-      [⟨"select", .bit⟩, ⟨"select", .bit⟩] } : Description).UniqueNames := by
-  intro names
-  have distinct := names.1
-  change ([SourceName.plain "select", SourceName.plain "select"] ++ _).Nodup at distinct
-  simp at distinct
+private def duplicateNames := buildResult do
+  let first ← input "same" .bit
+  let second ← input "same" .bit
+  output "same" first
+  output "same" second
 
-end SileanTests.CircuitLogic.MuxCorrespondence
+-- Names are metadata: duplicate spellings do not merge structural endpoints.
+example : duplicateNames = .ok
+    { inputs := [
+        { id := ⟨0⟩, name := "same", signalType := .bit },
+        { id := ⟨1⟩, name := "same", signalType := .bit }]
+      outputs := [
+        ⟨{ id := ⟨0⟩, name := "same", signalType := .bit }, .input ⟨0⟩⟩,
+        ⟨{ id := ⟨1⟩, name := "same", signalType := .bit }, .input ⟨1⟩⟩] } := by
+  rfl
+
+end SileanTests.CircuitLogic.Mux
 
 namespace SileanTests.CircuitLogic.Wires
 
@@ -133,9 +132,9 @@ private def directWire := buildResult do
 
 -- A forward-declared wire resolves to its unique source and retains its name.
 example : directWire = .ok
-    { inputs := [{ name := "source", signalType := .bit }]
-      outputs := [⟨⟨"result", .bit⟩, .input "source"⟩]
-      namedWires := [⟨"result", .bit, .input "source"⟩] } := by
+    { inputs := [{ id := ⟨0⟩, name := "source", signalType := .bit }]
+      outputs := [⟨⟨⟨0⟩, "result", .bit⟩, .input ⟨0⟩⟩]
+      namedWires := [⟨"result", .bit, .input ⟨0⟩⟩] } := by
   rfl
 
 private def wireChain := buildResult do
@@ -148,10 +147,10 @@ private def wireChain := buildResult do
 
 -- Wire chains resolve transitively while retaining each declared name.
 example : wireChain = .ok
-    { inputs := [{ name := "source", signalType := .bit }]
-      outputs := [⟨⟨"result", .bit⟩, .input "source"⟩]
-      namedWires := [⟨"first", .bit, .input "source"⟩,
-        ⟨"second", .bit, .input "source"⟩] } := by
+    { inputs := [{ id := ⟨0⟩, name := "source", signalType := .bit }]
+      outputs := [⟨⟨⟨0⟩, "result", .bit⟩, .input ⟨0⟩⟩]
+      namedWires := [⟨"first", .bit, .input ⟨0⟩⟩,
+        ⟨"second", .bit, .input ⟨0⟩⟩] } := by
   rfl
 
 -- Every declared wire must have exactly one driver, even if it is unused.
@@ -204,13 +203,14 @@ private noncomputable def immediateWire := buildResult do
 -- The inferred form binds the net and records the binder spelling against its
 -- resolved source without inserting another child or structural endpoint.
 example : immediateWire = .ok
-    { inputs := [{ name := "source", signalType := .bit }]
-      outputs := [⟨⟨"result", .bit⟩, .child (.indexed "not" 0) "out"⟩]
+    { inputs := [{ id := ⟨0⟩, name := "source", signalType := .bit }]
+      outputs := [⟨⟨⟨0⟩, "result", .bit⟩, .child ⟨0⟩ ⟨0⟩⟩]
       children := [{
+        id := ⟨0⟩
         name := .indexed "not" 0
         module := Silean.Primitives.notDesign
-        inputs := [⟨⟨"in", .bit⟩, .input "source"⟩] }]
-      namedWires := [⟨"inverted", .bit, .child (.indexed "not" 0) "out"⟩] } := by
+        inputs := [⟨⟨⟨0⟩, "in", .bit⟩, .input ⟨0⟩⟩] }]
+      namedWires := [⟨"inverted", .bit, .child ⟨0⟩ ⟨0⟩⟩] } := by
   rfl
 
 -- The annotated immediate form checks the declared signal type.
@@ -218,9 +218,9 @@ example : (buildResult do
     let source ← input "source" .bit
     wire observed : .bit ← pure source
     output "result" observed) = .ok
-      { inputs := [⟨"source", .bit⟩]
-        outputs := [⟨⟨"result", .bit⟩, .input "source"⟩]
-        namedWires := [⟨"observed", .bit, .input "source"⟩] } := by
+      { inputs := [⟨⟨0⟩, "source", .bit⟩]
+        outputs := [⟨⟨⟨0⟩, "result", .bit⟩, .input ⟨0⟩⟩]
+        namedWires := [⟨"observed", .bit, .input ⟨0⟩⟩] } := by
   rfl
 
 -- Duplicate wire names are rejected across immediate declarations.

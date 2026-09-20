@@ -1,6 +1,6 @@
-import Silean.Modules.Fifo.FifoFifoTheorems
-import Silean.Modules.OneEntryFifo.OneEntryFifoFifoTheorems
-import Silean.Modules.SerialDepthFifo.SerialDepthFifoFifoTheorems
+import Silean.Modules.Fifo.FifoDerived
+import Silean.Modules.OneEntryFifo.OneEntryFifoDerived
+import Silean.Modules.SerialDepthFifo.SerialDepthFifoDerived
 
 namespace SileanTests.FifoContract
 

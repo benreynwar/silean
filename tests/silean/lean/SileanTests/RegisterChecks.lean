@@ -38,7 +38,7 @@ noncomputable def vectorStructuralState :
 example : ∃ outputs nextState,
     (Modules.Register.certified vectorType).moduleStructure.Transition
       vectorInputs vectorStructuralState outputs nextState :=
-  (Modules.Register.certified vectorType).hasStructuralResult.transition_exists
+  (Modules.Register.certified vectorType).structuralCertification.hasSolution.transition_exists
     vectorInputs vectorStructuralState
 
 example {outputs nextState otherOutputs otherNext}
@@ -47,7 +47,8 @@ example {outputs nextState otherOutputs otherNext}
     (right : (Modules.Register.certified vectorType).moduleStructure.Transition
       vectorInputs vectorStructuralState otherOutputs otherNext) :
     outputs = otherOutputs ∧ nextState = otherNext :=
-  left.unique (Modules.Register.certified vectorType).structuralResultUnique right
+  left.unique
+    (Modules.Register.certified vectorType).structuralCertification.hasAtMostOneSolution right
 
 abbrev tupleFields : SignalTypes :=
   .ofList [.bit, .vector 2 (.tuple (.ofList [.bit, .bit]))]
@@ -68,7 +69,7 @@ noncomputable def tupleStructuralState :
 example : ∃ outputs nextState,
     (Modules.Register.certified tupleType).moduleStructure.Transition
       tupleInputs tupleStructuralState outputs nextState :=
-  (Modules.Register.certified tupleType).hasStructuralResult.transition_exists
+  (Modules.Register.certified tupleType).structuralCertification.hasSolution.transition_exists
     tupleInputs tupleStructuralState
 
 end SileanTests.Register

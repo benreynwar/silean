@@ -1,11 +1,11 @@
 import Silean.Composition.FifoSerialRefinement
-import Silean.Modules.OneEntryFifo.OneEntryFifoFifoTheorems
-import Silean.Modules.SerialDepthFifo.SerialDepthFifoCycleTheorems
+import Silean.Modules.OneEntryFifo.OneEntryFifoDerived
+import Silean.Modules.SerialDepthFifo.Internal.SerialDepthFifoVerification
 
 /-! # Serial-depth FIFO refinement verification
 
 This internal proof recursively lifts the one-entry FIFO refinement through
-generic serial composition. The public theorem facade exports only the
+generic serial composition. The public derived facade exports only the
 resulting certified FIFO and its stable identities.
 -/
 

@@ -1,0 +1,14 @@
+import Silean.Modules.SerialDepthFifo.SerialDepthFifo
+
+assert_not_imported Silean.Modules.SerialDepthFifo.Internal.SerialDepthFifoStructure
+assert_not_imported Silean.Modules.SerialDepthFifo.Internal.SerialDepthFifoVerification
+assert_not_imported Silean.Modules.SerialDepthFifo.Internal.SerialDepthFifoFifoVerification
+
+namespace SileanTests.SerialDepthFifoAuthoring
+
+open Silean
+
+#check Modules.SerialDepthFifo.cycleContract .bit 3 (by omega)
+#check Modules.SerialDepthFifo.forward_of_allowed
+
+end SileanTests.SerialDepthFifoAuthoring

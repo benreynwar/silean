@@ -1,4 +1,6 @@
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
 import Silean.Authoring.CircuitLogic
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
@@ -6,17 +8,81 @@ import Silean.Modules.Equality.Equality
 import Silean.Primitives
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Composition.SignalLogic
-import Silean.Modules.Fifo.Internal.FifoPointerControlStructure
 
 namespace Silean.Modules.Fifo.PointerControl
 
 open Silean
 open Silean.Authoring
-open Contracts.Cycle.Certification.Layer
+open Authoring.CircuitDescription
+open scoped Authoring
 
 /-! Combinational control for a FIFO built from a power-of-two register bank.
 It derives storage addresses, empty/full status, valid/ready signals, and
 pointer advances from extended read and write pointers. -/
+
+abbrev Pointer (addressWidth : Nat) := Fin (addressWidth + 1) → Bool
+abbrev Address (addressWidth : Nat) := Fin addressWidth → Bool
+
+@[reducible] def pointerType (addressWidth : Nat) : SignalType :=
+  .vector (addressWidth + 1) .bit
+
+@[reducible] def addressType (addressWidth : Nat) : SignalType :=
+  .vector addressWidth .bit
+
+module_ports ports (addressWidth : Nat) where
+  input readPointer : pointerType addressWidth,
+  input writePointer : pointerType addressWidth,
+  input inputValid : .bit,
+  input outputReady : .bit,
+  output readAddress : addressType addressWidth,
+  output writeAddress : addressType addressWidth,
+  output inputReady : .bit,
+  output outputValid : .bit,
+  output readAdvance : .bit,
+  output writeAdvance : .bit
+
+open ports
+
+def pointerSplitter (addressWidth : Nat) : Composition.SignalSplitter :=
+  .vector (addressWidth + 1) .bit
+
+def addressCombiner (addressWidth : Nat) : Composition.SignalCombiner :=
+  .vector addressWidth .bit
+
+/-! ## Authored hardware -/
+
+noncomputable def construction (addressWidth : Nat) :
+    ModuleBuilder (ports addressWidth) Unit := do
+  let readPointer ← input addressWidth .readPointer
+  let writePointer ← input addressWidth .writePointer
+  let inputValid ← input addressWidth .inputValid
+  let outputReady ← input addressWidth .outputReady
+
+  let readSplit ← split (pointerSplitter addressWidth) readPointer
+  let writeSplit ← split (pointerSplitter addressWidth) writePointer
+  let readAddress ← combine (addressCombiner addressWidth)
+    (fun index => readSplit index.castSucc)
+  let writeAddress ← combine (addressCombiner addressWidth)
+    (fun index => writeSplit index.castSucc)
+  let readWrap : Net .bit := readSplit (Fin.last addressWidth)
+  let writeWrap : Net .bit := writeSplit (Fin.last addressWidth)
+
+  wire addressesEqual ← readAddress === writeAddress
+  wire wrapsEqual ← readWrap === writeWrap
+  let inputReady ← !! (← addressesEqual &&& (← !! wrapsEqual))
+  let outputValid ← !! (← addressesEqual &&& wrapsEqual)
+
+  output addressWidth .readAddress readAddress
+  output addressWidth .writeAddress writeAddress
+  output addressWidth .inputReady inputReady
+  output addressWidth .outputValid outputValid
+  output addressWidth .readAdvance (← outputValid &&& outputReady)
+  output addressWidth .writeAdvance (← inputValid &&& inputReady)
+
+noncomputable def description (addressWidth : Nat) : Description :=
+  ModuleBuilder.build (Naming.ports addressWidth) (construction addressWidth)
+
+/-! ## Exact combinational behavior -/
 
 def pointerAddress (pointer : Pointer addressWidth) : Address addressWidth :=
   fun index => pointer index.castSucc
@@ -84,46 +150,6 @@ module_cycle_contract cycleContract (addressWidth : Nat) for ports addressWidth 
       writeAdvance :=
         PointerControl.writeAdvance readPointer writePointer inputValid }
   state_rule := Contracts.Cycle.CycleStateRule.empty _
-
-/-- The complete combinational behavior of the pointer controller. Keeping the
-six equations together gives readers and parent proofs one semantic view,
-while the contract retains separate rules for dependency scheduling. -/
-structure Behavior (addressWidth : Nat)
-    (inputs : (ports addressWidth).inputs.Values)
-    (outputs : (ports addressWidth).outputs.Values) : Prop where
-  readAddress : outputs .readAddress = pointerAddress (inputs .readPointer)
-  writeAddress : outputs .writeAddress = pointerAddress (inputs .writePointer)
-  inputReady : outputs .inputReady =
-    inputReady (inputs .readPointer) (inputs .writePointer)
-  outputValid : outputs .outputValid =
-    outputValid (inputs .readPointer) (inputs .writePointer)
-  readAdvance : outputs .readAdvance =
-    readAdvance (inputs .readPointer) (inputs .writePointer)
-      (inputs .outputReady)
-  writeAdvance : outputs .writeAdvance =
-    writeAdvance (inputs .readPointer) (inputs .writePointer)
-      (inputs .inputValid)
-
-namespace Behavior
-
-/-- An allowed contract step satisfies every pointer-control equation. -/
-theorem of_allowed (addressWidth : Nat) {step : (cycleContract addressWidth).Step}
-    (allowed : (cycleContract addressWidth).Allows step) :
-    Behavior addressWidth step.inputs step.outputs :=
-  ⟨(readAddressRule_holds_iff addressWidth _ _ _).mp
-      (allowed.1 .readAddress),
-    (writeAddressRule_holds_iff addressWidth _ _ _).mp
-      (allowed.1 .writeAddress),
-    (inputReadyRule_holds_iff addressWidth _ _ _).mp
-      (allowed.1 .inputReady),
-    (outputValidRule_holds_iff addressWidth _ _ _).mp
-      (allowed.1 .outputValid),
-    (readAdvanceRule_holds_iff addressWidth _ _ _).mp
-      (allowed.1 .readAdvance),
-    (writeAdvanceRule_holds_iff addressWidth _ _ _).mp
-      (allowed.1 .writeAdvance)⟩
-
-end Behavior
 
 theorem addressesEqual_eq_true_iff (readPointer writePointer : Pointer addressWidth) :
     addressesEqual readPointer writePointer = true ↔
@@ -218,95 +244,5 @@ theorem writeAdvance_eq_true_iff (readPointer writePointer : Pointer addressWidt
     writeAdvance readPointer writePointer upstreamValid = true ↔
       upstreamValid = true ∧ inputReady readPointer writePointer = true := by
   simp [writeAdvance]
-
-/-! ## Authored hardware -/
-
-namespace Description
-
-open Authoring.CircuitDescription
-open Authoring
-open scoped Authoring
-
-noncomputable def construction (addressWidth : Nat) : Builder Unit := do
-  let readPointer ← input "readPointer" (pointerType addressWidth)
-  let writePointer ← input "writePointer" (pointerType addressWidth)
-  let inputValid ← input "inputValid" .bit
-  let outputReady ← input "outputReady" .bit
-
-  let readSplit ← split (pointerSplitter addressWidth) readPointer
-  let writeSplit ← split (pointerSplitter addressWidth) writePointer
-  let readAddress ← combine (addressCombiner addressWidth)
-    (fun index => readSplit index.castSucc)
-  let writeAddress ← combine (addressCombiner addressWidth)
-    (fun index => writeSplit index.castSucc)
-  let readWrap : Net .bit := readSplit (Fin.last addressWidth)
-  let writeWrap : Net .bit := writeSplit (Fin.last addressWidth)
-
-  wire addressesEqual ← readAddress === writeAddress
-  wire wrapsEqual ← readWrap === writeWrap
-  let inputReady ← !! (← addressesEqual &&& (← !! wrapsEqual))
-  let outputValid ← !! (← addressesEqual &&& wrapsEqual)
-
-  output "readAddress" readAddress
-  output "writeAddress" writeAddress
-  output "inputReady" inputReady
-  output "outputValid" outputValid
-  output "readAdvance" (← outputValid &&& outputReady)
-  output "writeAdvance" (← inputValid &&& inputReady)
-
-noncomputable def description (addressWidth : Nat) : Description :=
-  build (construction addressWidth)
-
-end Description
-
-/-! ## Placement -/
-
-open Authoring.CircuitDescription
-
-/-- Outputs produced by a placed pointer controller. -/
-structure PlacedOutputs (addressWidth : Nat) where
-  readAddress : Net (addressType addressWidth)
-  writeAddress : Net (addressType addressWidth)
-  inputReady : Net .bit
-  outputValid : Net .bit
-  readAdvance : Net .bit
-  writeAdvance : Net .bit
-
-/-- Place a pointer controller under a caller-chosen instance name. -/
-noncomputable def placeNamed (name : Naming.SourceName)
-    (readPointer writePointer : Net (pointerType addressWidth))
-    (inputValid outputReady : Net .bit) : Builder (PlacedOutputs addressWidth) := do
-  let child ← Authoring.CircuitDescription.placeNamed name
-    (design addressWidth) fun
-      | .readPointer => readPointer
-      | .writePointer => writePointer
-      | .inputValid => inputValid
-      | .outputReady => outputReady
-  pure {
-    readAddress := child .readAddress
-    writeAddress := child .writeAddress
-    inputReady := child .inputReady
-    outputValid := child .outputValid
-    readAdvance := child .readAdvance
-    writeAdvance := child .writeAdvance }
-
-/-- Place a pointer controller using the next conventional indexed name. -/
-noncomputable def place
-    (readPointer writePointer : Net (pointerType addressWidth))
-    (inputValid outputReady : Net .bit) : Builder (PlacedOutputs addressWidth) := do
-  let child ← placeIndexed "fifo_pointer_control" (design addressWidth) fun
-    | .readPointer => readPointer
-    | .writePointer => writePointer
-    | .inputValid => inputValid
-    | .outputReady => outputReady
-  pure {
-    readAddress := child .readAddress
-    writeAddress := child .writeAddress
-    inputReady := child .inputReady
-    outputValid := child .outputValid
-    readAdvance := child .readAdvance
-    writeAdvance := child .writeAdvance }
-
-attribute [circuit_description] placeNamed place
 
 end Silean.Modules.Fifo.PointerControl

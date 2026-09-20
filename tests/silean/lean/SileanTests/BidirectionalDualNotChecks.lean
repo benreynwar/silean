@@ -91,10 +91,12 @@ abbrev ruleSchedules := derivedRuleSchedules.schedules
 theorem coversChildren : ruleSchedules.CoversChildren :=
   derivedRuleSchedules.coversChildren
 
-
+theorem structuralCertification :
+    ModuleStructuralCertification moduleStructure :=
+  ruleSchedules.structuralCertification coversChildren layerChildren
 
 theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution :=
-  ruleSchedules.hasAtMostOneSolution coversChildren layerChildren
+  structuralCertification.hasAtMostOneSolution
 
 def stateCorresponds (_ : cycleContract.state.Values)
     (_ : moduleStructure.State) : Prop := True
@@ -164,15 +166,13 @@ def certified : Contracts.Cycle.ModuleCycleCertified ports where
   moduleStructure := moduleStructure
   cycleContract := cycleContract
   certification := {
+    structural := structuralCertification
     stateCorresponds := stateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := ruleSchedules.hasSolution coversChildren layerChildren,
-    structuralResultUnique := hasAtMostOneSolution,
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp implements }
 
 theorem hasExactlyOneSolution : moduleStructure.HasExactlyOneSolution :=
-  ⟨ruleSchedules.hasSolution coversChildren layerChildren,
-    hasAtMostOneSolution⟩
+  structuralCertification.hasExactlyOneSolution
 
 /-! Collapsing either child to one rule that reads both inputs would report a
 cycle: initially `a` lacks its backward input and `b` lacks its forward input.

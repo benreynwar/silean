@@ -92,40 +92,4 @@ def naming (moduleName componentScope : String)
     ModuleNaming (BinaryLeafwise.moduleStructure signalType) :=
   namingWith moduleName componentScope bitNaming signalType (.positional signalType)
 
-/-- Recursive binary-leafwise naming preserves the boundary naming supplied
-for the aggregate type. Clients should use this theorem instead of unfolding
-the recursive structure and its equality transports. -/
-theorem namingWith_ports (moduleName componentScope : String)
-    (bitNaming : ModuleNaming gate.certified.moduleStructure)
-    (signalType : SignalType) (typeNaming : SignalTypeNaming signalType) :
-    (namingWith moduleName componentScope bitNaming signalType typeNaming).ports =
-      portsWithNaming signalType typeNaming := by
-  cases signalType with
-  | bit =>
-      rw [namingWith.eq_1]
-      erw [ModuleNaming.ports_mpr_of_eq
-        (BinaryLeafwise.moduleStructure.eq_1 .bit)]
-      erw [ModuleNaming.ports_mpr_of_eq
-        (LeafwiseInterface.moduleStructure.eq_1
-          BinaryLeafwise.interface BinaryLeafwise.bitModuleStructure)]
-      cases typeNaming
-      rfl
-  | vector length elementType =>
-      rw [namingWith.eq_2]
-      erw [ModuleNaming.ports_mpr_of_eq
-        (BinaryLeafwise.moduleStructure.eq_1 (.vector length elementType))]
-      erw [ModuleNaming.ports_mpr_of_eq
-        (LeafwiseInterface.moduleStructure.eq_2
-          BinaryLeafwise.interface BinaryLeafwise.bitModuleStructure
-          length elementType)]
-      rfl
-  | tuple fields =>
-      rw [namingWith.eq_3]
-      erw [ModuleNaming.ports_mpr_of_eq
-        (BinaryLeafwise.moduleStructure.eq_1 (.tuple fields))]
-      erw [ModuleNaming.ports_mpr_of_eq
-        (LeafwiseInterface.moduleStructure.eq_3
-          BinaryLeafwise.interface BinaryLeafwise.bitModuleStructure fields)]
-      rfl
-
 end Silean.Naming.BinaryLeafwise

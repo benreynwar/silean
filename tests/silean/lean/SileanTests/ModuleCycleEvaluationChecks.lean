@@ -1,5 +1,5 @@
 import Silean.Contracts.Cycle.CycleEvaluation
-import Silean.Modules.BitMux.BitMux
+import Silean.Modules.BitMux.BitMuxDerived
 import SileanTests.Fixtures.DualNot
 import Silean.Modules.EnabledRegister.EnabledRegister
 

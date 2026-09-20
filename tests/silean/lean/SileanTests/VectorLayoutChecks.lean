@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 namespace SileanTests.VectorLayout
 
@@ -68,9 +68,6 @@ def immediateJ : Fin 32 → BitSource 32 := fun index =>
 
 #guard apply immediateJ (fun index => index.val == 31) 0 == false
 #guard apply immediateJ (fun index => index.val == 31) 31 == true
-
-#guard variant reverse !=
-  variant (fun _ : Fin 4 => (BitSource.constant false : BitSource 4))
 
 #guard match Silean.FIRRTL.renderCircuit (design 2 4 insertConstants).naming with
   | .ok _ => true

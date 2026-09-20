@@ -3,7 +3,7 @@ import Silean.Authoring.ModulePorts
 import Silean.Modules.Constant.Constant
 import Silean.Modules.HalfAdder.HalfAdderDerived
 import Silean.Modules.Increment.Increment
-import Silean.Modules.VectorConcat.VectorConcat
+import Silean.Modules.VectorConcat.VectorConcatDerived
 import Silean.Naming.SignalAdapterNaming
 
 namespace Silean.Modules.Increment

@@ -1,4 +1,5 @@
 import Silean.Authoring.ModuleDesign
+import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControl
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.EqPrimitive
 import Silean.Primitives.NotPrimitive
@@ -12,11 +13,8 @@ open Silean
 open Silean.Authoring
 
 module_design Control where
-  ports {
-    input storedValid : .bit,
-    input downstreamReady : .bit,
-    output upstreamReady : .bit,
-    output storageUpdate : .bit }
+  boundary (Control.ports) (naming := Control.Naming.ports)
+
   instances {
     invertValid (name := .indexed "not" 0) := Primitives.notDesign,
     readyOr (name := .indexed "or" 0) := Primitives.orDesign,

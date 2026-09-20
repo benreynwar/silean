@@ -1,7 +1,7 @@
 import Silean.Authoring.CircuitLogic
 import Silean.Modules.Add.AddDerived
 import Silean.Modules.AddSub.AddSubDerived
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 /-! Fixed-width arithmetic for circuit descriptions.
 

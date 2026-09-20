@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.RegisterBank.RegisterBankTheorems
+import Silean.Modules.RegisterBank.RegisterBankDerived
 
 namespace SileanTests.RegisterBank
 

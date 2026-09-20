@@ -1,42 +1,9 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
-import Silean.Modules.Equality.Equality
+import Silean.Modules.Equality.EqualityDerived
+import Silean.Modules.Fifo.FifoPointerControl
 import Silean.Primitives
-
-namespace Silean.Modules.Fifo.PointerControl
-
-open Silean
-open Silean.Authoring
-
-abbrev Pointer (addressWidth : Nat) := Fin (addressWidth + 1) → Bool
-abbrev Address (addressWidth : Nat) := Fin addressWidth → Bool
-
-@[reducible] def pointerType (addressWidth : Nat) : SignalType :=
-  .vector (addressWidth + 1) .bit
-
-@[reducible] def addressType (addressWidth : Nat) : SignalType :=
-  .vector addressWidth .bit
-
-module_ports ports (addressWidth : Nat) where
-  input readPointer : pointerType addressWidth,
-  input writePointer : pointerType addressWidth,
-  input inputValid : .bit,
-  input outputReady : .bit,
-  output readAddress : addressType addressWidth,
-  output writeAddress : addressType addressWidth,
-  output inputReady : .bit,
-  output outputValid : .bit,
-  output readAdvance : .bit,
-  output writeAdvance : .bit
-
-def pointerSplitter (addressWidth : Nat) : Composition.SignalSplitter :=
-  .vector (addressWidth + 1) .bit
-
-def addressCombiner (addressWidth : Nat) : Composition.SignalCombiner :=
-  .vector addressWidth .bit
-
-end Silean.Modules.Fifo.PointerControl
 
 namespace Silean.Modules.Fifo
 

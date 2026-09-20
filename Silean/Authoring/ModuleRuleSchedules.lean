@@ -131,14 +131,14 @@ elab_rules : command
 elab_rules : command
   | `(module_complete_schedule $derivedName:ident
       $parameters:moduleRuleScheduleParam* for $body:term with
-      $childContracts:term := $order:moduleRuleOrder) => do
+      $childRules:term := $order:moduleRuleOrder) => do
     let params ← parameters.mapM parseParam
     let binders := params.map (·.binder)
     let orderValue ← orderTerm order
     elabCommand <| ← `(
       private noncomputable def $derivedName $binders:bracketedBinder* :
-          Silean.Contracts.Cycle.Certification.Layer.ScheduleDerivation.DerivedCompleteSchedule
-            ($body) ($childContracts) := by
+          Silean.ModuleStructuralCertification.Layer.ScheduleDerivation.DerivedCompleteSchedule
+            ($body) ($childRules) := by
         derive_complete_schedule $orderValue
     )
 

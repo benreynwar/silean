@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.VectorConcat.VectorConcatTheorems
+import Silean.Modules.VectorConcat.VectorConcatDerived
 import Silean.Composition.SignalLogic
 
 namespace SileanTests.VectorConcat
@@ -70,21 +70,25 @@ def aggregateResult := ((Modules.VectorConcat.cycleContract pairBits 1 2).evalua
 #guard pairBits.equal (aggregateResult 1) (false, (true, ()))
 #guard pairBits.equal (aggregateResult 2) (true, (true, ()))
 
-example (inputs : (Modules.VectorConcat.ports element leftWidth rightWidth).inputs.Values)
-    (outputs : (Modules.VectorConcat.ports element leftWidth rightWidth).outputs.Values)
-    (holds : (Modules.VectorConcat.outputRule element leftWidth rightWidth).Holds
-      inputs SignalMap.emptyValues outputs) (index : Fin leftWidth) :
-    outputs .result (Fin.castAdd rightWidth index) = inputs .left index :=
-  Modules.VectorConcat.result_left_of_holds element leftWidth rightWidth inputs
-    SignalMap.emptyValues outputs holds index
+example {step : (Modules.VectorConcat.cycleContract
+      element leftWidth rightWidth).Step}
+    (allowed : (Modules.VectorConcat.cycleContract
+      element leftWidth rightWidth).Allows step)
+    (index : Fin leftWidth) :
+    step.outputs .result (Fin.castAdd rightWidth index) =
+      step.inputs .left index :=
+  Modules.VectorConcat.result_left_of_allowed
+    element leftWidth rightWidth allowed index
 
-example (inputs : (Modules.VectorConcat.ports element leftWidth rightWidth).inputs.Values)
-    (outputs : (Modules.VectorConcat.ports element leftWidth rightWidth).outputs.Values)
-    (holds : (Modules.VectorConcat.outputRule element leftWidth rightWidth).Holds
-      inputs SignalMap.emptyValues outputs) (index : Fin rightWidth) :
-    outputs .result (Fin.natAdd leftWidth index) = inputs .right index :=
-  Modules.VectorConcat.result_right_of_holds element leftWidth rightWidth inputs
-    SignalMap.emptyValues outputs holds index
+example {step : (Modules.VectorConcat.cycleContract
+      element leftWidth rightWidth).Step}
+    (allowed : (Modules.VectorConcat.cycleContract
+      element leftWidth rightWidth).Allows step)
+    (index : Fin rightWidth) :
+    step.outputs .result (Fin.natAdd leftWidth index) =
+      step.inputs .right index :=
+  Modules.VectorConcat.result_right_of_allowed
+    element leftWidth rightWidth allowed index
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

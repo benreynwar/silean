@@ -82,15 +82,13 @@ without evaluating this (generally noncomputable) proof object. -/
 structure ModuleCycleCertification {ports : ModulePorts}
     (moduleStructure : ModuleStructure ports)
     (cycleContract : ModuleCycleContract ports) where
+  /-- Contract-independent existence and uniqueness of structural solutions. -/
+  structural : ModuleStructuralCertification moduleStructure
   /-- Relation between behavioral state and the hierarchy's physical state. -/
   stateCorresponds : cycleContract.state.Values → moduleStructure.State → Prop
   /-- Every physical state has at least one behavioral description. -/
   hasCorrespondingState : ∀ structuralState,
     ∃ contractState, stateCorresponds contractState structuralState
-  /-- The structural equations have a solution for every input and state. -/
-  hasStructuralResult : moduleStructure.HasSolution
-  /-- The structural equations cannot have two different solutions. -/
-  structuralResultUnique : moduleStructure.HasAtMostOneSolution
   /-- Every structural solution follows the contract and preserves correspondence. -/
   implements : Implements moduleStructure cycleContract stateCorresponds
 
@@ -262,6 +260,17 @@ def ModuleCycleCertification.transportContract {ports : ModulePorts}
   cases equal
   exact certification
 
+/-- Forget behavioral targets and contract state, retaining only the boundary
+dependency declarations needed by structural composition. -/
+@[reducible] def ModuleCycleContract.structuralRules
+    (contract : ModuleCycleContract ports) : ModuleStructuralRules ports where
+  RuleName := contract.RuleName
+  ruleNames := contract.ruleNames
+  rule := fun name => {
+    reads := (contract.outputRule name).readsInputs.labels
+    writes := (contract.outputRule name).writesOutputs.labels }
+  outputCoverage := contract.outputCoverage
+
 namespace ModuleCycleCertified
 
 /-! Forwarding projections retain the convenient public interface while the
@@ -273,11 +282,10 @@ abbrev stateCorresponds (certified : ModuleCycleCertified ports) :=
 abbrev hasCorrespondingState (certified : ModuleCycleCertified ports) :=
   certified.certification.hasCorrespondingState
 
-abbrev hasStructuralResult (certified : ModuleCycleCertified ports) :=
-  certified.certification.hasStructuralResult
-
-abbrev structuralResultUnique (certified : ModuleCycleCertified ports) :=
-  certified.certification.structuralResultUnique
+/-- Contract-independent structural evidence carried by a cycle-certified
+module. -/
+abbrev structuralCertification (certified : ModuleCycleCertified ports) :=
+  certified.certification.structural
 
 abbrev implements (certified : ModuleCycleCertified ports) :=
   certified.certification.implements
@@ -300,11 +308,11 @@ theorem hasExactlyOneStructuralResult
         HierStep.currentState certified.moduleStructure other =
           structuralState →
         other = hierStep := by
-  rcases certified.hasStructuralResult inputs structuralState with
+  rcases certified.certification.structural.hasSolution inputs structuralState with
     ⟨hierStep, satisfies, inputsEqual, stateEqual⟩
   refine ⟨hierStep, satisfies, inputsEqual, stateEqual, ?_⟩
   intro other otherSatisfies otherInputsEqual otherStateEqual
-  exact certified.structuralResultUnique other hierStep
+  exact certified.certification.structural.hasAtMostOneSolution other hierStep
     otherSatisfies satisfies
     (otherInputsEqual.trans inputsEqual.symm)
     (otherStateEqual.trans stateEqual.symm)
@@ -398,6 +406,33 @@ def structuralRule (certified : ModuleCycleCertified ports)
   exact SignalGroup.Matches.eq_of_mem rule.writesOutputs
     leftHolds rightHolds output outputMem
 
+/-- A cycle certification automatically certifies the dependency-only rule
+interface obtained by forgetting the cycle rules' behavioral targets. -/
+theorem structuralRuleCertification (certified : ModuleCycleCertified ports) :
+    ModuleStructuralRuleCertification certified.moduleStructure
+      certified.cycleContract.structuralRules where
+  structural := certified.certification.structural
+  determines := fun name => (certified.structuralRule name).determines
+
+/-- View a cycle-certified module as a contract-independent structurally
+certified child while retaining its fine-grained output dependencies. -/
+def structuralCertifiedStructure (certified : ModuleCycleCertified ports) :
+    ModuleStructuralCertifiedStructure certified.cycleContract.structuralRules where
+  moduleStructure := certified.moduleStructure
+  certification := certified.structuralRuleCertification
+
 end ModuleCycleCertified
+
+namespace ModuleCycleCertifiedStructure
+
+/-- Contract-independent structural view of a structure certified against a
+fixed cycle contract. -/
+def structuralCertifiedStructure
+    {cycleContract : ModuleCycleContract ports}
+    (certified : ModuleCycleCertifiedStructure cycleContract) :
+    ModuleStructuralCertifiedStructure cycleContract.structuralRules :=
+  certified.bundle.structuralCertifiedStructure
+
+end ModuleCycleCertifiedStructure
 
 end Silean.Contracts.Cycle

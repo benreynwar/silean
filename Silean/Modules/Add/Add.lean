@@ -22,35 +22,28 @@ module_ports ports (width : Nat) where
   output result : .vector width .bit,
   output carryOut (name := "carry_out") : .bit
 
-/-- Low bit of the natural sum of three Boolean digits. -/
-def sumBit (left right carry : Bool) : Bool :=
-  Primitives.xorValue (Primitives.xorValue left right) carry
+/-- The ordinary natural-number sum represented by the inputs. -/
+def totalValue (width : Nat) (left right : Fin width → Bool)
+    (carryIn : Bool) : Nat :=
+  BitVector.toNat width left + BitVector.toNat width right + carryIn.toNat
 
-/-- High bit of the natural sum of three Boolean digits. -/
-def carryBit (left right carry : Bool) : Bool :=
-  (left && right) || (left && carry) || (right && carry)
+/-- The low `width` bits of the natural-number sum. -/
+def resultValue (width : Nat) (left right : Fin width → Bool)
+    (carryIn : Bool) : Fin width → Bool :=
+  BitVector.ofNat width (totalValue width left right carryIn)
 
-/-- Mathematical fixed-width binary addition on LSB-first vectors. -/
-def addBits : (width : Nat) → (Fin width → Bool) →
-    (Fin width → Bool) → Bool → (Fin width → Bool) × Bool
-  | 0, _, _, carry => (fun index => Fin.elim0 index, carry)
-  | width + 1, left, right, carry =>
-      let lower := addBits width
-        (fun index => left index.castSucc)
-        (fun index => right index.castSucc) carry
-      let high := sumBit
-        (left (Fin.last width)) (right (Fin.last width)) lower.2
-      let carryOut := carryBit
-        (left (Fin.last width)) (right (Fin.last width)) lower.2
-      (Fin.lastCases high lower.1, carryOut)
+/-- The bit immediately above the fixed-width result. -/
+def carryValue (width : Nat) (left right : Fin width → Bool)
+    (carryIn : Bool) : Bool :=
+  (totalValue width left right carryIn).testBit width
 
 module_cycle_contract cycleContract (width : Nat) for ports width where
   state := emptySignalMap
   output_rule apply where
     reads := [left, right, carryIn]
     writes := {
-      result := (addBits width left right carryIn).1,
-      carryOut := (addBits width left right carryIn).2 }
+      result := resultValue width left right carryIn,
+      carryOut := carryValue width left right carryIn }
   state_rule where
     reads := []
     next := {}

@@ -3,12 +3,15 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Modules.VectorSlice.VectorSlice
+import Silean.Modules.VectorSlice.Internal.VectorSliceStructure
 
 namespace Silean.Modules.VectorSlice
 
 open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
+
+open Internal
 
 module_child_certifications childContracts (element : SignalType)
     (prefixWidth : Nat) (width : Nat) (suffixWidth : Nat)
@@ -75,7 +78,7 @@ private theorem implements : Contracts.Cycle.ImplementsSolutions
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     change hierStep.outputs .result = slice (hierStep.inputs .value)
     rw [show hierStep.outputs .result =
         (hierStep.children .combine).outputs .value by

@@ -1,14 +1,14 @@
 import Silean.FIRRTL
 import Silean.Naming.PrimitiveNaming
-import Silean.Modules.BitMux.BitMux
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.FullAdder.FullAdderDerived
 import Silean.Modules.Register.RegisterDerived
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.EnabledRegister.EnabledRegisterDerived
-import Silean.Modules.RegisterBank.RegisterBank
-import Silean.Modules.TupleField.TupleField
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.OneEntryFifo.OneEntryFifo
+import Silean.Modules.RegisterBank.RegisterBankDerived
+import Silean.Modules.TupleField.TupleFieldDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.OneEntryFifo.OneEntryFifoDerived
 import Silean.Authoring.ModuleDesign
 import Silean.Authoring.SignalSchemaDeclaration
 import Silean.Emitters.StructuredPayload
@@ -274,6 +274,41 @@ module_design DuplicateNamedWires where
 
 #guard match renderRootModule DuplicateNamedWires.naming with
   | .error message => contains message "duplicate FIRRTL component name 'observed'"
+  | .ok _ => false
+
+module_design DuplicateBoundaryNames where
+  ports {
+    input left (name := "duplicate") : .bit,
+    input right (name := "duplicate") : .bit,
+    output result : .bit }
+  instances {
+    combine := Primitives.andDesign }
+  wiring {
+    outputs { .result := combine.output }
+    instance (.combine) {
+      .left := input.left,
+      .right := input.right }
+  }
+
+private noncomputable def duplicateBoundaryNamesDescription :=
+    Authoring.CircuitDescription.build do
+  let left ← Authoring.CircuitDescription.input "duplicate" .bit
+  let right ← Authoring.CircuitDescription.input "duplicate" .bit
+  let combine ← Authoring.CircuitDescription.placeNamed "combine"
+    Primitives.andDesign fun
+      | .left => left
+      | .right => right
+  Authoring.CircuitDescription.output "result" (combine .output)
+
+-- The dynamic builder and typed extractor assign the same canonical IDs even
+-- though two distinct boundary inputs have identical emission metadata.
+example : Authoring.CircuitDescription.Corresponds
+    duplicateBoundaryNamesDescription DuplicateBoundaryNames.naming :=
+  ⟨rfl⟩
+
+-- The FIRRTL boundary still rejects those names before serialization.
+#guard match renderRootModule DuplicateBoundaryNames.naming with
+  | .error message => contains message "duplicate FIRRTL component name 'duplicate'"
   | .ok _ => false
 
 end SileanTests.FIRRTL

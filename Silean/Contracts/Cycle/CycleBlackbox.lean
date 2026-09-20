@@ -44,20 +44,21 @@ metadata; the contract boundary keeps the supplied port naming. -/
 def ModuleCycleContract.blackboxCertification
     (contract : ModuleCycleContract ports) :
     ModuleCycleCertification contract.blackboxStructure contract where
+  structural := {
+    hasSolution := by
+      intro inputs structuralState
+      let hierStep : HierStep contract.blackboxStructure :=
+        { inputs := inputs
+          currentState := structuralState
+          outputs := (contract.evaluate inputs structuralState).1
+          nextState := (contract.evaluate inputs structuralState).2 }
+      refine ⟨hierStep, ?_, rfl, rfl⟩
+      exact ⟨rfl, rfl⟩
+    hasAtMostOneSolution :=
+      Primitive.blackbox_hasAtMostOneSolution contract.blackboxBehavior }
   stateCorresponds := fun contractState structuralState =>
     contractState = structuralState
   hasCorrespondingState := fun structuralState => ⟨structuralState, rfl⟩
-  hasStructuralResult := by
-    intro inputs structuralState
-    let hierStep : HierStep contract.blackboxStructure :=
-      { inputs := inputs
-        currentState := structuralState
-        outputs := (contract.evaluate inputs structuralState).1
-        nextState := (contract.evaluate inputs structuralState).2 }
-    refine ⟨hierStep, ?_, rfl, rfl⟩
-    exact ⟨rfl, rfl⟩
-  structuralResultUnique :=
-    Primitive.blackbox_hasAtMostOneSolution contract.blackboxBehavior
   implements := implementsSolutions_iff_implements.mp (by
     intro contractState hierStep corresponds satisfies
     cases hierStep with

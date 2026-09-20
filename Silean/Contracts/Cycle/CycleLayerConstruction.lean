@@ -272,10 +272,9 @@ noncomputable def RuleSchedules.certifiedLayer
           (stateCorresponds children)) :
     ModuleCycleCertifiedLayer body childContracts cycleContract where
   certify children := {
+    structural := schedules.structuralCertification covers children
     stateCorresponds := stateCorresponds children
     hasCorrespondingState := hasCorrespondingState children
-    hasStructuralResult := schedules.hasSolution covers children
-    structuralResultUnique := schedules.hasAtMostOneSolution covers children
     implements := implementsSolutions_iff_implements.mp (implements children)
   }
 

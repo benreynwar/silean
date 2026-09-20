@@ -5,6 +5,7 @@ import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.Constant
 import Silean.Authoring.CircuitDescription
+import Silean.Authoring.ModuleCycleCertification
 
 namespace Silean.Modules.Constant
 
@@ -490,6 +491,11 @@ noncomputable def certified (signalType : SignalType) (value : signalType.Denote
     (value : signalType.Denote) :
     (certified signalType value).cycleContract = cycleContract signalType value :=
   rfl
+
+module_cycle_realization_bridge allowed_of_realization
+  (signalType : SignalType) (value : signalType.Denote)
+  for moduleStructure signalType value
+  implementing cycleContract signalType value using certification
 
 /-- Contract-facing constant result law. -/
 theorem output_of_allowed (signalType : SignalType) (value : signalType.Denote)

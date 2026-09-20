@@ -1,4 +1,5 @@
 import Silean.Modules.AddSub.AddSub
+import Silean.Modules.Add.Internal.AddArithmetic
 
 namespace Silean.Modules.AddSub.Internal
 
@@ -6,16 +7,16 @@ open Silean
 
 private theorem addBits_transformed : ∀ (width : Nat)
     (left right : Fin width → Bool) (subtract chain : Bool),
-    Add.addBits width left
+    Add.Internal.addBits width left
         (fun index => Primitives.xorValue (right index) subtract)
         (if subtract then !chain else chain) =
       operate width left right subtract chain
-  | 0, _, _, subtract, chain => by simp [Add.addBits, operate]
+  | 0, _, _, subtract, chain => by simp [Add.Internal.addBits, operate]
   | width + 1, left, right, subtract, chain => by
       have lower := addBits_transformed width
         (fun index => left index.castSucc)
         (fun index => right index.castSucc) subtract chain
-      simp only [Add.addBits, operate]
+      simp only [Add.Internal.addBits, operate]
       rw [lower]
       cases lowerOp : operate width (fun index => left index.castSucc)
           (fun index => right index.castSucc) subtract chain with
@@ -23,12 +24,13 @@ private theorem addBits_transformed : ∀ (width : Nat)
           cases subtract <;> cases lowerFlag <;>
             cases leftHigh : left (Fin.last width) <;>
             cases rightHigh : right (Fin.last width) <;>
-            simp [Add.sumBit, Add.carryBit, sumBit, carryBit, borrowBit,
+            simp [Add.Internal.sumBit, Add.Internal.carryBit,
+              sumBit, carryBit, borrowBit,
               Primitives.xorValue]
 
 theorem addBits_xorRight_eq_addSubBits (width : Nat)
     (left right : Fin width → Bool) (subtract : Bool) :
-    Add.addBits width left
+    Add.Internal.addBits width left
         (fun index => Primitives.xorValue (right index) subtract) subtract =
       addSubBits width left right subtract := by
   simpa [addSubBits] using addBits_transformed width left right subtract false
@@ -53,7 +55,7 @@ theorem addSubBits_result_toNat (width : Nat) (left right : Fin width → Bool)
       else
         (BitVector.toNat width left + BitVector.toNat width right) %
           BitVector.cardinality width := by
-  have equation := Add.addBits_numeric width left
+  have equation := Add.Internal.addBits_numeric width left
     (fun index => Primitives.xorValue (right index) subtract) subtract
   rw [addBits_xorRight_eq_addSubBits] at equation
   have resultBound := BitVector.toNat_lt_cardinality width
@@ -85,7 +87,7 @@ theorem addSubBits_carry_subtract (width : Nat)
     (left right : Fin width → Bool) :
     (addSubBits width left right true).2 =
       decide (BitVector.toNat width right ≤ BitVector.toNat width left) := by
-  have equation := Add.addBits_numeric width left
+  have equation := Add.Internal.addBits_numeric width left
     (fun index => Primitives.xorValue (right index) true) true
   rw [addBits_xorRight_eq_addSubBits] at equation
   have complement := complemented_toNat width right

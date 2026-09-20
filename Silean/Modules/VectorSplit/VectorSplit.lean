@@ -1,15 +1,24 @@
 import Silean.Authoring.ModuleCycleContract
-import Silean.Authoring.ModuleDesign
-import Silean.Naming.SignalAdapterNaming
+import Silean.Authoring.ModulePorts
+
+/-! # Vector split
+
+`VectorSplit` divides a vector into its low-index left portion and its
+remaining right portion.
+-/
 
 namespace Silean.Modules.VectorSplit
 
 open Silean
+open Silean.Authoring
 
-/-! Split a vector into its low-index left portion and remaining right portion.
-The circuit is a pair of dependent index mappings between generic adapters;
-the typed `module_design` is therefore clearer than a second fixed builder
-description. -/
+module_ports ports (element : SignalType) (leftWidth : Nat) (rightWidth : Nat)
+    with (elementNaming : Naming.SignalTypeNaming element :=
+      .positional element) where
+  input value (schema := .vector elementNaming) :
+    .vector (leftWidth + rightWidth) element,
+  output left (schema := .vector elementNaming) : .vector leftWidth element,
+  output right (schema := .vector elementNaming) : .vector rightWidth element
 
 def leftPart (value : Fin (leftWidth + rightWidth) → α) : Fin leftWidth → α :=
   fun index => value (Fin.castAdd rightWidth index)
@@ -17,122 +26,26 @@ def leftPart (value : Fin (leftWidth + rightWidth) → α) : Fin leftWidth → �
 def rightPart (value : Fin (leftWidth + rightWidth) → α) : Fin rightWidth → α :=
   fun index => value (Fin.natAdd leftWidth index)
 
-def splitter (element : SignalType) (leftWidth rightWidth : Nat) :
-    Composition.SignalSplitter := .vector (leftWidth + rightWidth) element
-
-def leftCombiner (element : SignalType) (leftWidth : Nat) :
-    Composition.SignalCombiner := .vector leftWidth element
-
-def rightCombiner (element : SignalType) (rightWidth : Nat) :
-    Composition.SignalCombiner := .vector rightWidth element
-
-end Silean.Modules.VectorSplit
-
-namespace Silean.Modules
-
-open Silean
-open Silean.Authoring
-
-module_design VectorSplit (element : SignalType) (leftWidth : Nat) (rightWidth : Nat)
-    with (elementNaming : Silean.Naming.SignalTypeNaming element :=
-      .positional element) where
-  ports {
-    input value (schema := .vector elementNaming) : .vector (leftWidth + rightWidth) element,
-    output left (schema := .vector elementNaming) : .vector leftWidth element,
-    output right (schema := .vector elementNaming) : .vector rightWidth element }
-  instances {
-    -- Expose every input element.
-    split
-      (naming := Silean.Naming.SignalAdapter.splitterWithNaming
-        (.vector (leftWidth + rightWidth) element) (.vector elementNaming)) :=
-      Silean.Naming.SignalAdapter.splitterDesign
-        (VectorSplit.splitter element leftWidth rightWidth),
-    -- Reassemble the two index ranges. Their emitted names avoid collisions
-    -- with the boundary outputs of the same names.
-    left (name := "combineLeft")
-      (naming := Silean.Naming.SignalAdapter.combinerWithNaming
-        (.vector leftWidth element) (.vector elementNaming)) :=
-      Silean.Naming.SignalAdapter.combinerDesign
-        (VectorSplit.leftCombiner element leftWidth),
-    right (name := "combineRight")
-      (naming := Silean.Naming.SignalAdapter.combinerWithNaming
-        (.vector rightWidth element) (.vector elementNaming)) :=
-      Silean.Naming.SignalAdapter.combinerDesign
-        (VectorSplit.rightCombiner element rightWidth) }
-  wiring {
-    outputs {
-      .left := left.value,
-      .right := right.value }
-    instance (.split) {
-      .value := input.value }
-    instance (.left) {
-      index := from ((VectorSplit.context element leftWidth rightWidth).instanceOutput
-        .split (Fin.castAdd rightWidth index)) }
-    instance (.right) {
-      index := from ((VectorSplit.context element leftWidth rightWidth).instanceOutput
-        .split (Fin.natAdd leftWidth index)) }
-  }
-
-end Silean.Modules
-
-namespace Silean.Modules.VectorSplit
-
-open Silean
-open Silean.Authoring
-
-def outputRule (element : SignalType) (leftWidth rightWidth : Nat) :
-    Contracts.Cycle.CycleOutputRule (ports element leftWidth rightWidth)
-      emptySignalMap where
-  readsInputs := .all (inputMap element leftWidth rightWidth)
-  writesOutputs := .all (outputMap element leftWidth rightWidth)
-  target inputs _ := fun
-    | .left => leftPart (inputs .value)
-    | .right => rightPart (inputs .value)
-
 module_cycle_contract cycleContract (element : SignalType)
-    (leftWidth : Nat) (rightWidth : Nat) for ports element leftWidth rightWidth where
+    (leftWidth : Nat) (rightWidth : Nat)
+    for ports element leftWidth rightWidth where
   state := emptySignalMap
-  output_rule apply := outputRule element leftWidth rightWidth
-  state_rule := Contracts.Cycle.CycleStateRule.empty _
+  output_rule apply where
+    reads := [value]
+    writes := {
+      left := leftPart value,
+      right := rightPart value }
+  state_rule where
+    reads := []
+    next := {}
 
-@[simp] theorem outputRule_holds_iff (element : SignalType)
-    (leftWidth rightWidth : Nat)
-    (inputs : (ports element leftWidth rightWidth).inputs.Values)
-    (state : emptySignalMap.Values)
-    (outputs : (ports element leftWidth rightWidth).outputs.Values) :
-    (outputRule element leftWidth rightWidth).Holds inputs state outputs ↔
-      outputs .left = leftPart (inputs .value) ∧
-      outputs .right = rightPart (inputs .value) := by
-  simp only [outputRule, Contracts.Cycle.CycleOutputRule.Holds,
-    SignalGroup.all_matches]
-  constructor
-  · intro equal; exact ⟨congrFun equal .left, congrFun equal .right⟩
-  · rintro ⟨left, right⟩; funext output; cases output <;> assumption
-
-theorem left_of_holds (element : SignalType) (leftWidth rightWidth : Nat)
-    (inputs : (ports element leftWidth rightWidth).inputs.Values)
-    (state : emptySignalMap.Values)
-    (outputs : (ports element leftWidth rightWidth).outputs.Values)
-    (holds : (outputRule element leftWidth rightWidth).Holds inputs state outputs) :
-    outputs .left = leftPart (inputs .value) :=
-  (outputRule_holds_iff element leftWidth rightWidth inputs state outputs).mp holds |>.1
-
-theorem right_of_holds (element : SignalType) (leftWidth rightWidth : Nat)
-    (inputs : (ports element leftWidth rightWidth).inputs.Values)
-    (state : emptySignalMap.Values)
-    (outputs : (ports element leftWidth rightWidth).outputs.Values)
-    (holds : (outputRule element leftWidth rightWidth).Holds inputs state outputs) :
-    outputs .right = rightPart (inputs .value) :=
-  (outputRule_holds_iff element leftWidth rightWidth inputs state outputs).mp holds |>.2
-
-/-- Every contract-allowed split step returns the two corresponding portions
-of the input vector. -/
+/-- Every allowed step returns the two portions of its input. -/
 theorem outputs_of_allowed (element : SignalType) (leftWidth rightWidth : Nat)
     {step : (cycleContract element leftWidth rightWidth).Step}
     (allowed : (cycleContract element leftWidth rightWidth).Allows step) :
     step.outputs .left = leftPart (step.inputs .value) ∧
       step.outputs .right = rightPart (step.inputs .value) :=
-  (outputRule_holds_iff element leftWidth rightWidth
-    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
+  ⟨cycleContract.left element leftWidth rightWidth allowed,
+    cycleContract.right element leftWidth rightWidth allowed⟩
 
 end Silean.Modules.VectorSplit

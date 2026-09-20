@@ -2,10 +2,10 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Composition.SignalAdapterImplementation
-import Silean.Modules.BinaryToOneHot.BinaryToOneHotTheorems
-import Silean.Modules.CombMuxTree.CombMuxTreeTheorems
+import Silean.Modules.BinaryToOneHot.BinaryToOneHotDerived
+import Silean.Modules.CombMuxTree.CombMuxTreeDerived
 import Silean.Modules.EnabledRegister.EnabledRegisterDerived
-import Silean.Modules.RegisterBank.RegisterBank
+import Silean.Modules.RegisterBank.Internal.RegisterBankStructure
 import Silean.Primitives.And
 
 /-! Certification machinery for the authored register bank. -/
@@ -157,7 +157,7 @@ private theorem implements :
       (hierStep.children (storage index)).outputs .q =
         contractState .entries index := by
     intro index
-    exact EnabledRegister.q_of_allowed (storageMatches index).allowed
+    exact EnabledRegister.cycleContract.q element (storageMatches index).allowed
 
   derive_empty_state_child_match decoderMatches for decoder
     in body element addressWidth readCount from layerChildren, hierStep, satisfies
@@ -165,12 +165,12 @@ private theorem implements :
       (hierStep.children decoder).outputs .result index =
         BinaryToOneHot.oneHot addressWidth
           (hierStep.inputs .writeAddress) index := by
-    have held := decoderMatches.ruleHolds BinaryToOneHot.Rule.apply
-    have result := BinaryToOneHot.result_of_holds addressWidth _ _ _ held index
-    rw [show (body element addressWidth readCount).wiring.childInputValues
-        hierStep.inputs hierStep.childOutputs decoder .value =
-        hierStep.inputs .writeAddress by rfl] at result
-    exact result
+    have result := BinaryToOneHot.cycleContract.result addressWidth
+      decoderMatches.allowed
+    change (hierStep.children decoder).outputs .result =
+      BinaryToOneHot.oneHot addressWidth
+        (hierStep.inputs .writeAddress) at result
+    exact congrFun result index
 
   derive_empty_state_child_match splitMatches for decodeSplit
     in body element addressWidth readCount from layerChildren, hierStep, satisfies
@@ -217,18 +217,12 @@ private theorem implements :
           (hierStep.inputs (.readAddress port))) := by
     derive_empty_state_child_match muxMatches for (readMux port)
       in body element addressWidth readCount from layerChildren, hierStep, satisfies
-    have held := muxMatches.ruleHolds CombMuxTree.Rule.apply
-    change (CombMuxTree.outputRule element addressWidth).Holds
-      ((body element addressWidth readCount).wiring.childInputValues
-        hierStep.inputs hierStep.childOutputs (readMux port))
-      SignalMap.emptyValues (hierStep.children (readMux port)).outputs at held
-    rw [CombMuxTree.outputRule_holds_iff] at held
-    rw [show (body element addressWidth readCount).wiring.childInputValues
-          hierStep.inputs hierStep.childOutputs (readMux port) .values =
-          (hierStep.children combine).outputs .value by rfl,
-      show (body element addressWidth readCount).wiring.childInputValues
-          hierStep.inputs hierStep.childOutputs (readMux port) .index =
-          hierStep.inputs (.readAddress port) by rfl] at held
+    have held := CombMuxTree.cycleContract.result element addressWidth
+      muxMatches.allowed
+    change (hierStep.children (readMux port)).outputs .result =
+      CombMuxTree.select addressWidth
+        ((hierStep.children combine).outputs .value)
+        (hierStep.inputs (.readAddress port)) at held
     rw [held]
     unfold CombMuxTree.select
     change (hierStep.children combine).outputs .value

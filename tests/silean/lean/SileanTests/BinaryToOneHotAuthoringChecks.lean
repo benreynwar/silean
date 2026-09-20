@@ -1,0 +1,13 @@
+import Silean.Modules.BinaryToOneHot.BinaryToOneHot
+
+assert_not_imported Silean.Modules.BinaryToOneHot.Internal.BinaryToOneHotStructure
+assert_not_imported Silean.Modules.BinaryToOneHot.Internal.BinaryToOneHotVerification
+
+namespace SileanTests.BinaryToOneHotAuthoring
+
+open Silean
+
+#check Modules.BinaryToOneHot.cycleContract
+#check Modules.BinaryToOneHot.cycleContract.result
+
+end SileanTests.BinaryToOneHotAuthoring

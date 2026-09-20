@@ -1,9 +1,12 @@
 import Silean.Authoring.CircuitLogic
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Authoring.CircuitSelection
-import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.FifoPorts
 import Silean.Contracts.Fifo.FifoCycleBehavior
 import Silean.Interfaces.FifoPorts
-import Silean.Modules.OneEntryFifo.Internal.OneEntryFifoStructure
+import Silean.Modules.EnabledRegister.EnabledRegisterDerived
+import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
+import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControlDerived
 import Silean.Naming.FifoPortsNaming
 
 /-! # One-entry fall-through FIFO
@@ -13,22 +16,30 @@ entry is empty. If the consumer stalls, the entry captures that payload; while
 occupied, it presents the stored payload until the consumer accepts it.
 
 The authored circuit below shows the control and feedback paths. Its exact
-clock-cycle behavior is stated later in this file. The separate higher-level
-FIFO refinement is intentionally kept in `OneEntryFifoFifoTheorems.lean`.
+clock-cycle behavior and the laws needed to use that contract are stated in
+the same file. Generated structure and certification remain downstream in
+`OneEntryFifoDerived.lean`.
 -/
 
-namespace Silean.Modules.OneEntryFifo.Description
+namespace Silean.Modules.OneEntryFifo
 
 open Silean
-open Silean.Authoring.CircuitDescription
 open Silean.Authoring
-open scoped Silean.Authoring
+open Authoring.CircuitDescription
+open Contracts.Fifo.Cycle
+open Silean.Interfaces.Fifo.ports
+open scoped Authoring
 
-noncomputable def construction (signalType : SignalType) : Builder Unit := do
-  let inputValid ← input "input_valid" .bit
-  let inputData ← input "input_data" signalType
-  let outputReady ← input "output_ready" .bit
-  let reset ← input "reset" .bit
+abbrev ports := Silean.Interfaces.Fifo.ports
+abbrev inputMap := Silean.Interfaces.Fifo.inputMap
+abbrev outputMap := Silean.Interfaces.Fifo.outputMap
+
+noncomputable def construction (signalType : SignalType) :
+    ModuleBuilder (ports signalType) Unit := do
+  let inputValid ← input signalType .inputValid
+  let inputData ← input signalType .inputData
+  let outputReady ← input signalType .outputReady
+  let reset ← input signalType .reset
   wire storedValid : .bit
   wire storedData : signalType
   wire storageUpdate : .bit
@@ -36,76 +47,16 @@ noncomputable def construction (signalType : SignalType) : Builder Unit := do
     "validStorage" false inputValid storageUpdate reset)
   assign storedData (← Modules.EnabledRegister.placeNamed "dataStorage"
     inputData storageUpdate)
-  let (inputReady, update) ← Modules.OneEntryFifo.Control.place
+  let control ← Modules.OneEntryFifo.Control.place
     storedValid outputReady
-  assign storageUpdate update
-  output "output_valid" (← storedValid ||| inputValid)
-  output "output_data" (← mux storedValid inputData storedData)
-  output "input_ready" inputReady
+  assign storageUpdate control.storageUpdate
+  output signalType .outputValid (← storedValid ||| inputValid)
+  output signalType .outputData (← mux storedValid inputData storedData)
+  output signalType .inputReady control.upstreamReady
 
 noncomputable def description (signalType : SignalType) : Description :=
-  build (construction signalType)
-
-end Silean.Modules.OneEntryFifo.Description
-
-namespace Silean.Modules.OneEntryFifo
-
-open Silean
-open Contracts.Fifo.Cycle
-open Silean.Authoring
-
-abbrev ports := Silean.Interfaces.Fifo.ports
-abbrev inputMap := Silean.Interfaces.Fifo.inputMap
-abbrev outputMap := Silean.Interfaces.Fifo.outputMap
-
-def namingWith (signalType : SignalType)
-    (typeNaming : Silean.Naming.SignalTypeNaming signalType) :
-    Silean.Naming.ModuleNaming (moduleStructure signalType) :=
-  (naming signalType).withPorts
-    (Silean.Naming.FifoPorts.portsWithNaming signalType typeNaming)
-
-/-! ## Placement -/
-
-/-- Boundary nets returned when a one-entry FIFO is placed as a child. -/
-structure PlacedOutputs (signalType : SignalType) where
-  outputValid : Authoring.CircuitDescription.Net .bit
-  outputData : Authoring.CircuitDescription.Net signalType
-  inputReady : Authoring.CircuitDescription.Net .bit
-
-/-- Place a one-entry FIFO under a caller-chosen instance name. -/
-noncomputable def placeNamed (name : Silean.Naming.SourceName)
-    (inputValid : Authoring.CircuitDescription.Net .bit)
-    (inputData : Authoring.CircuitDescription.Net signalType)
-    (outputReady reset : Authoring.CircuitDescription.Net .bit) :
-    Authoring.CircuitDescription.Builder (PlacedOutputs signalType) := do
-  let child ← Authoring.CircuitDescription.placeNamed name (design signalType) fun
-    | .inputValid => inputValid
-    | .inputData => inputData
-    | .outputReady => outputReady
-    | .reset => reset
-  pure {
-    outputValid := child .outputValid
-    outputData := child .outputData
-    inputReady := child .inputReady }
-
-/-- Place a one-entry FIFO using the next conventional indexed name. -/
-noncomputable def place
-    (inputValid : Authoring.CircuitDescription.Net .bit)
-    (inputData : Authoring.CircuitDescription.Net signalType)
-    (outputReady reset : Authoring.CircuitDescription.Net .bit) :
-    Authoring.CircuitDescription.Builder (PlacedOutputs signalType) := do
-  let child ← Authoring.CircuitDescription.placeIndexed "one_entry_fifo"
-    (design signalType) fun
-      | .inputValid => inputValid
-      | .inputData => inputData
-      | .outputReady => outputReady
-      | .reset => reset
-  pure {
-    outputValid := child .outputValid
-    outputData := child .outputData
-    inputReady := child .inputReady }
-
-attribute [circuit_description] placeNamed place
+  ModuleBuilder.build (Naming.FifoPorts.ports signalType)
+    (construction signalType)
 
 /-! ## Exact cycle behavior -/
 
@@ -121,32 +72,6 @@ def stateMap (signalType : SignalType) : SignalMap :=
     | .storedValid => .bit
     | .storedData => signalType
 
-def forwardRule (signalType : SignalType) :
-    Contracts.Cycle.CycleOutputRule (ports signalType) (stateMap signalType) where
-  readsInputs := Contracts.Fifo.Cycle.CycleBehavior.forwardInputGroup signalType
-  writesOutputs := Contracts.Fifo.Cycle.CycleBehavior.forwardOutputGroup signalType
-  target inputs state := fun
-    | .outputValid => state .storedValid || inputs .inputValid
-    | .outputData => bif state .storedValid then state .storedData else inputs .inputData
-
-def readyRule (signalType : SignalType) :
-    Contracts.Cycle.CycleOutputRule (ports signalType) (stateMap signalType) where
-  readsInputs := Contracts.Fifo.Cycle.CycleBehavior.readyInputGroup signalType
-  writesOutputs := Contracts.Fifo.Cycle.CycleBehavior.readyOutputGroup signalType
-  target inputs state := fun
-    | .inputReady => inputs .outputReady || !state .storedValid
-
-def stateRule (signalType : SignalType) :
-    Contracts.Cycle.CycleStateRule (ports signalType) (stateMap signalType) where
-  readsInputs := .all (inputMap signalType)
-  target inputs state :=
-    let update := (inputs .outputReady && state .storedValid) ||
-      (!inputs .outputReady && !state .storedValid)
-    fun
-      | .storedValid => bif inputs .reset then false
-          else bif update then inputs .inputValid else state .storedValid
-      | .storedData => bif update then inputs .inputData else state .storedData
-
 def cycleBehavior (signalType : SignalType) :
     Contracts.Fifo.Cycle.CycleBehavior signalType where
   state := stateMap signalType
@@ -154,7 +79,22 @@ def cycleBehavior (signalType : SignalType) :
     (state .storedValid || inputValid,
       bif state .storedValid then state .storedData else inputData)
   ready := fun outputReady state => outputReady || !state .storedValid
-  nextState := (stateRule signalType).apply
+  nextState := fun inputs state =>
+    let update := (inputs .outputReady && state .storedValid) ||
+      (!inputs .outputReady && !state .storedValid)
+    fun
+      | .storedValid => bif inputs .reset then false
+          else bif update then inputs .inputValid else state .storedValid
+      | .storedData => bif update then inputs .inputData else state .storedData
+
+abbrev forwardRule (signalType : SignalType) :=
+  (cycleBehavior signalType).forwardRule
+
+abbrev readyRule (signalType : SignalType) :=
+  (cycleBehavior signalType).readyRule
+
+abbrev stateRule (signalType : SignalType) :=
+  (cycleBehavior signalType).stateRule
 
 def cycleContract (signalType : SignalType) :
     Contracts.Cycle.ModuleCycleContract (ports signalType) :=
@@ -184,28 +124,81 @@ theorem forwardRule_holds_iff (signalType : SignalType)
     (forwardRule signalType).Holds inputs state outputs ↔
       outputs .outputValid = (state .storedValid || inputs .inputValid) ∧
       outputs .outputData =
-        (bif state .storedValid then state .storedData else inputs .inputData) := by
-  unfold forwardRule Contracts.Cycle.CycleOutputRule.Holds SignalGroup.Matches
-  constructor
-  · intro equal
-    exact ⟨congrFun equal .outputValid, congrFun equal .outputData⟩
-  · rintro ⟨valid, data⟩
-    funext output
-    cases output <;> assumption
+        (bif state .storedValid then state .storedData else inputs .inputData) :=
+  (cycleBehavior signalType).forwardRule_holds_iff inputs state outputs
 
 theorem readyRule_holds_iff (signalType : SignalType)
     (inputs : (ports signalType).inputs.Values)
     (state : (cycleContract signalType).state.Values)
     (outputs : (ports signalType).outputs.Values) :
     (readyRule signalType).Holds inputs state outputs ↔
-      outputs .inputReady = (inputs .outputReady || !state .storedValid) := by
-  unfold readyRule Contracts.Cycle.CycleOutputRule.Holds SignalGroup.Matches
-  constructor
-  · intro equal
-    exact congrFun equal .inputReady
-  · intro equal
-    funext output
-    cases output
-    exact equal
+      outputs .inputReady = (inputs .outputReady || !state .storedValid) :=
+  (cycleBehavior signalType).readyRule_holds_iff inputs state outputs
+
+section AllowedStep
+
+variable {signalType : SignalType}
+  {step : (cycleContract signalType).Step}
+  (allowed : (cycleContract signalType).Allows step)
+
+include allowed
+
+/-- Output valid is asserted for either a buffered or incoming payload. -/
+theorem outputValid_of_allowed :
+    step.outputs .outputValid =
+      (step.currentState .storedValid || step.inputs .inputValid) :=
+  (forwardRule_holds_iff signalType
+    step.inputs step.currentState step.outputs).mp (allowed.1 .forward) |>.1
+
+/-- A buffered payload has priority; otherwise the input falls through. -/
+theorem outputData_of_allowed :
+    step.outputs .outputData =
+      bif step.currentState .storedValid then step.currentState .storedData
+      else step.inputs .inputData :=
+  (forwardRule_holds_iff signalType
+    step.inputs step.currentState step.outputs).mp (allowed.1 .forward) |>.2
+
+/-- The producer may send when the entry is empty or the consumer is ready. -/
+theorem inputReady_of_allowed :
+    step.outputs .inputReady =
+      (step.inputs .outputReady || !step.currentState .storedValid) :=
+  (readyRule_holds_iff signalType
+    step.inputs step.currentState step.outputs).mp (allowed.1 .ready)
+
+/-- The complete next occupancy equation, including synchronous reset. -/
+theorem next_storedValid_of_allowed :
+    step.nextState .storedValid =
+      bif step.inputs .reset then false else
+        bif ((step.inputs .outputReady && step.currentState .storedValid) ||
+          (!step.inputs .outputReady && !step.currentState .storedValid))
+          then step.inputs .inputValid else step.currentState .storedValid := by
+  rw [allowed.2]
+  rfl
+
+/-- Payload storage follows the ordinary update condition. Reset clears valid
+but does not require choosing or writing a reset payload. -/
+theorem next_storedData_of_allowed :
+    step.nextState .storedData =
+      bif ((step.inputs .outputReady && step.currentState .storedValid) ||
+        (!step.inputs .outputReady && !step.currentState .storedValid))
+        then step.inputs .inputData else step.currentState .storedData := by
+  rw [allowed.2]
+  rfl
+
+/-- Reset empties the FIFO regardless of the handshake inputs. -/
+theorem next_storedValid_of_reset (reset : step.inputs .reset = true) :
+    step.nextState .storedValid = false := by
+  rw [next_storedValid_of_allowed allowed, reset]
+  rfl
+
+/-- Without an update, the buffered payload is retained. -/
+theorem next_storedData_of_no_update
+    (noUpdate : ((step.inputs .outputReady && step.currentState .storedValid) ||
+      (!step.inputs .outputReady && !step.currentState .storedValid)) = false) :
+    step.nextState .storedData = step.currentState .storedData := by
+  rw [next_storedData_of_allowed allowed, noUpdate]
+  rfl
+
+end AllowedStep
 
 end Silean.Modules.OneEntryFifo

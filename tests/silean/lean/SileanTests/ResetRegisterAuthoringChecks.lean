@@ -7,7 +7,7 @@ namespace SileanTests.ResetRegisterAuthoring
 
 open Silean
 
-#check Modules.ResetRegister.value_of_allowed
+#check Modules.ResetRegister.cycleContract.value
 #check Modules.ResetRegister.next_stored_of_allowed
 #check ∀ (signalType : SignalType) (resetValue : signalType.Denote),
   (Modules.ResetRegister.description signalType resetValue).ImplementsCycleContract

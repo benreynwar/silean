@@ -12,6 +12,26 @@ The organization is a default, not a reason to create empty files. A primitive
 or very small leaf may need only its main file. A module with several genuinely
 different contracts may need additional files named after those contracts.
 
+## Development order
+
+Develop a module in this order:
+
+1. define its boundary, natural Lean semantics, and cycle contract;
+2. build the hardware structure that is intended to realize that contract; and
+3. prove correspondence, certification, and any derived mathematical results.
+
+The contract is the specification, so it should be readable and settled before
+the implementation and proof machinery begin to shape the module. In
+particular, write the contract in the most natural Lean terms for users of the
+module, rather than describing the implementation's wires, child instances, or
+intermediate signals. The hardware may introduce those details afterward, and
+the proof is the bridge between the two.
+
+This order is also the intended reading order within a main module file: put the
+semantics and contract before an authored construction when both live in that
+file. Internal structure and verification files follow the same conceptual
+order even when Lean import dependencies require them to be separate files.
+
 ## Standard directory
 
 An ordinary composite module should normally have this shape:
@@ -95,10 +115,11 @@ Internal/*Verification.lean
 
 For a stateful authored module, the main file should make two times explicit:
 outputs describe the stored value before the edge, while the state rule
-describes the stored value after the edge. Short `*_of_allowed` theorems that
-spell out those two facts belong beside the contract in the main file. They
-depend only on `cycleContract.Allows`; they are not certification results and
-must not be hidden behind an internal import.
+describes the stored value after the edge. Use the output projections generated
+by `module_cycle_contract` for the first fact. Short `*_of_allowed` theorems may
+spell out state transitions or genuinely derived consequences beside the
+contract in the main file. They depend only on `cycleContract.Allows`; they are
+not certification results and must not be hidden behind an internal import.
 
 Feedback wires belong in the readable construction when they explain the
 hardware. Their matching `named_wires` entries and the relation between the
@@ -155,8 +176,11 @@ plus correspondence” and “small public contract plus directly certified
 internal structure.” In both patterns, `Foo.lean` stays simple.
 
 `Add` and `Increment` are reference examples of the contract-first structural
-pattern. `AddSub` is the corresponding arithmetic example with a concise
-authored construction and an implementation-independent correctness theorem.
+pattern. `CarrySaveAdder` is the reference for an indexed family of children:
+its `module_design` is the sole hardware representation rather than being
+duplicated as a recursive builder description. `AddSub` is the corresponding
+arithmetic example with a concise authored construction and an
+implementation-independent correctness theorem.
 
 ## Authoring interface
 
@@ -194,6 +218,15 @@ does not repeat either one. It also supplies the complete input list when the
 description is built: referring to an input reads that declared port rather
 than declaring it again. Ordinary `Builder` actions lift into `ModuleBuilder`,
 so placement, wires, registers, and logic operators keep their existing APIs.
+
+When a canonical boundary is already owned by an interface module, reuse it
+instead of declaring the same ports again. Put reusable typed authoring
+adapters beside the authoring layer, following the generated `ports.input`,
+`ports.output`, `ports.OutputNets`, and placement shape. The FIFO family uses
+`Authoring/FifoPorts.lean` this way. A one-off construction can use
+`ModuleBuilder.input (ports := ...)` and `ModuleBuilder.output` directly, but
+should never duplicate an established interface merely to obtain shorter
+operations.
 
 Authors should use a child's documented `place` helper rather than manually
 assembling its description. Placement helpers retain the child's production
@@ -330,6 +363,47 @@ The two declarations must not be allowed to drift:
 - the internal `Corresponds` certificate connects them, while public
   `construction_correct` states that every such realization meets the contract.
 
+### Boundary naming convention
+
+The `module_ports` declaration owns a module's authoritative boundary naming.
+An ordinary `module_design` must reuse that naming in its `boundary` clause;
+the generated hierarchical naming should therefore project back to exactly the
+declared boundary naming.
+
+Handwritten recursive structures need a little more care. When a recursive
+naming definition does not directly expose the caller-supplied
+`SignalTypeNaming` at its boundary, keep recursive hierarchy construction in a
+private core and normalize the public boundary with `ModuleNaming.withPorts`:
+
+```lean
+private def namingCore ...
+    (typeNaming : SignalTypeNaming signalType) :
+    ModuleNaming (moduleStructure ...) :=
+  -- Name recursive children and internal adapters, propagating typeNaming
+  -- wherever their emitted aggregate names should remain meaningful.
+  ...
+
+def namingWith ... (typeNaming : SignalTypeNaming signalType) :=
+  (namingCore ... typeNaming).withPorts
+    (Naming.portsWithNaming ... typeNaming)
+
+def naming ... :=
+  namingWith ... (.positional signalType)
+```
+
+`withPorts` changes only external naming metadata. It preserves the module
+key, structure, child-instance names, recursive child naming, and named wires.
+It does not replace propagation of `typeNaming` through the recursive core:
+without that propagation, only the outer boundary receives meaningful names.
+
+Do not add per-module projection equations such as `naming_ports` or
+`namingWith_ports` speculatively. The naming definition itself is sufficient
+for ordinary construction and emission; add a theorem only when a concrete
+consumer needs that public guarantee. Likewise, emitted-name uniqueness is an
+emission concern, not a structural correspondence obligation. Emitters should
+diagnose collisions rather than requiring every module to carry an unused
+`portNames_nodup` proof.
+
 When a builder would hide rather than clarify the construction, use the
 contract-first structural pattern above. Recursive module families, indexed or
 programmatically generated hierarchies, generic composition mechanisms, and
@@ -372,6 +446,46 @@ The authored definition should be the form a hardware author is expected to
 read and write. The contract should state the behavior independently of the
 implementation hierarchy. A reader should be able to see the ports, important
 children or operations, output behavior, and state transition from this file.
+
+### Natural contract vocabulary
+
+A contract should express the module's intended behavior as natural Lean:
+ordinary pure functions, arithmetic, finite collections, records, protocol
+states, and explicit encodings at the port boundary. It should describe what
+the module computes, not replay the sequence of children used to compute it.
+The structure and its certification proof are responsible for connecting that
+natural specification to gates, adapters, layouts, registers, and wiring.
+
+For example, an unsigned partial-product row should first state its numerical
+meaning and then encode that value at the output width:
+
+```lean
+def resultNat (width : Nat) (row : Nat)
+    (multiplicand : Fin width → Bool) (selected : Bool) : Nat :=
+  if selected then BitVector.toNat width multiplicand * 2 ^ row else 0
+
+def resultValue ... :=
+  BitVector.ofNat resultWidth (resultNat width row multiplicand selected)
+```
+
+Its contract should use `resultValue`; it should not define the result as a
+`Mask` operation followed by a `VectorLayout` merely because that is the chosen
+implementation. The certification proof establishes that those children
+implement the numerical function.
+
+“Natural” does not mean imprecise or detached from hardware. Wrapping,
+truncation, saturation, bit ordering, latency, reset behavior, and protocol
+assumptions must remain explicit whenever they are observable. Prefer a pure
+Lean definition of those effects over a restatement of the structural
+decomposition. A structural operation may appear directly in a contract when
+that operation is itself the module's advertised behavior—for example, a
+generic layout module whose purpose is exactly to apply a supplied layout.
+
+Use this test when reviewing a contract: if the implementation changed to a
+different hierarchy that computes the same result, the contract should usually
+remain unchanged. If changing a child module, instance order, or wiring pattern
+forces an otherwise behavior-preserving contract rewrite, the contract is
+probably too implementation-shaped.
 
 For a contract-first structural module, omit the authored definition and the
 children or operations from this file. The reader should still see the complete
@@ -457,9 +571,12 @@ establish `Realizes`. The superseded four-argument `EvaluatesTo` relation and
 its compatibility layer have been removed; use `Allows`. Inline
 `module_cycle_contract` rules generate one named projection for every written
 output, such as `cycleContract.sum allowed`; use those projections instead of
-restating the output equations in a separate `Behavior` proposition. Introduce
-a second behavioral abstraction only when it expresses a genuinely different
-guarantee, such as a transaction- or trace-level contract.
+adding handwritten aliases such as `sum_of_allowed`, or restating the output
+equations in a separate `Behavior` proposition. A theorem that combines several
+projections or states a result in more natural mathematical vocabulary is not
+an alias and may still be useful. Introduce a second behavioral abstraction only
+when it expresses a genuinely different guarantee, such as a transaction- or
+trace-level contract.
 
 When proving a parent module from its children, keep the returned
 `ChildContractMatch` intact. Use `childMatch.ruleHolds rule` for one declared
@@ -506,10 +623,41 @@ module bodies, are structural implementation details. Downstream code should
 not use them merely because Lean makes them visible through a transitive
 import.
 
+### Structural rules and contract-independent certification
+
+Structural solvability is independent of behavioral specification.
+`ModuleStructuralRules` describes only which boundary inputs a child rule reads
+and which boundary outputs it makes available. A
+`ModuleStructuralCertification` proves that the simultaneous equations have
+exactly one solution for every boundary input and physical state; it does not
+state what that solution means.
+
+Cycle contracts automatically supply fine-grained structural rules by erasing
+their behavioral targets, and cycle certifications automatically certify those
+rules. A structurally certified module without a cycle contract can instead use
+the conservative whole-module rule, which reads every input and writes every
+output. Do not invent a deterministic cycle contract merely to make a custom
+relational contract compositional.
+
+Use the two canonical schedule commands according to the proof being built:
+
+- `module_rule_schedules` supplies the output and state schedules needed by a
+  cycle-contract certification; and
+- `module_complete_schedule` supplies one contract-independent order covering
+  every structural rule of every child.
+
+A complete derived schedule can be instantiated with structurally certified
+children and transported to a separately declared composite using
+`DerivedCompleteSchedule.certifyComposite`. Keep the schedule private. Expose
+only the resulting `structuralCertification` when downstream structural
+composition needs it. `CarrySaveLayer` demonstrates fine-grained rules derived
+from cycle-certified children; `CarrySaveTree` demonstrates automatic whole
+rules for a recursive module with a custom relational contract.
+
 ## `Internal/FooVerification.lean`: proof construction
 
 The verification file contains the details needed to build the public
-certificate. It normally contains:
+certificate. For a cycle-contract module it normally contains:
 
 - certified-child selection;
 - output and state proof schedules;
@@ -518,6 +666,10 @@ certificate. It normally contains:
 - detailed authored-description correspondence proofs, unless kept in a
   separate `Internal/FooCorrespondence.lean` compilation unit; and
 - construction of `certification` and `certified`.
+
+For a custom relational contract, replace the cycle-only items with a complete
+structural schedule, a public `ModuleStructuralCertification`, and a direct
+theorem connecting every realization to the relational contract.
 
 Proof-local declarations should be `private` whenever they are used only in
 this file. A supporting declaration that must cross a Lean file boundary but
@@ -592,6 +744,8 @@ The supported downstream interface for an ordinary module is:
 - its behavior and contract, including named rules required for composition;
 - its `Step`-based `Allows` and `Realizes` theorem interfaces;
 - the declarations and theorems in `FooDerived.lean`; and
+- its documented `structuralCertification` when it has no ordinary cycle
+  certification but is intended for structural composition; and
 - its `certification`, `certified`, and deliberately reusable
   `certifiedLayer` values.
 
@@ -650,22 +804,21 @@ The four-file layout should be adapted when the module's semantics require it:
   directory. Its public certification constructor should be named for that
   role, while its schedules and proof-local helpers remain private.
 
-Several existing recursive modules predate the contract-first structural
-pattern. `Equality`, `BinaryToOneHot`, `CombMuxTree`, and `SerialDepthFifo`
-still mix substantial structural construction into their main files. They are
-migration candidates, not templates for new modules. Their eventual main files
-should retain their boundaries, mathematical behavior, and contracts while
-moving recursive structure and naming under `Internal/`. `Register`, `Add`,
-and `Increment` are completed examples of that migration.
+`Equality`, `BinaryToOneHot`, `CombMuxTree`, and `RegisterBank` are completed
+examples of the contract-first structural pattern. `EqualsConstant` is the
+authored comparison counterpart. Their direct PicoRV clients—`Alu`, `Regs`,
+and `MemoryLookahead`—show the authored pattern at larger scale: their main
+files own typed constructions and contracts, while placement and generated
+correctness live in `Derived` facades. `Register`, `Add`, `Increment`, and
+`SerialDepthFifo` provide further completed examples.
 
-The register-to-FIFO stack also supplies legitimate examples of additional
-public contract files:
-
-- `OneEntryFifoCycleTheorems.lean` and
-  `OneEntryFifoFifoTheorems.lean` distinguish exact clock behavior from the
-  capacity-one abstract queue guarantee.
-- `OneEntryFifo/Control/` is organized as a private child beneath the only
-  parent for which its handshake decisions are meaningful.
+The register-to-FIFO stack shows that distinct contracts do not require one
+public file per proof layer. `OneEntryFifo.lean` owns the exact-cycle behavior;
+`OneEntryFifoDerived.lean` exposes both exact structural certification and the
+separate capacity-one abstract queue guarantee. Their statements remain
+distinct even though the internal-backed public results share one facade.
+`OneEntryFifo/Control/` remains a private child beneath the only parent for
+which its handshake decisions are meaningful.
 
 Additional files should correspond to concepts a reader or maintainer can
 name. They should not split a linear proof merely to reduce file length.

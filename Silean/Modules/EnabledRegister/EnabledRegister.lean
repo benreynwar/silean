@@ -56,11 +56,6 @@ variable {signalType : SignalType}
 
 include allowed
 
-/-- An allowed step exposes the value stored before the clock edge. -/
-theorem q_of_allowed : step.outputs .q = step.currentState .stored :=
-  (observeRule_holds_iff signalType
-    step.inputs step.currentState step.outputs).mp (allowed.1 .observe)
-
 /-- Enable chooses between loading new data and retaining the stored value. -/
 theorem next_stored_of_allowed :
     step.nextState .stored =

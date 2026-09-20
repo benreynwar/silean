@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Fifo.FifoCycleTheorems
+import Silean.Modules.Fifo.FifoDerived
 import Silean.Emitters.StructuredPayload
 
 namespace SileanTests.Fifo
@@ -131,7 +131,7 @@ def middleStep := (cycleContract .bit 1).evaluateStep
 example : middleStep.outputs .inputReady =
     inputReady (middleStep.currentState .readPointer)
       (middleStep.currentState .writePointer) :=
-  input_ready_of_allowed
+  cycleContract.inputReady .bit 1
     ((cycleContract .bit 1).evaluateStep_allowed _ _)
 
 example : middleStep.nextState .entries =

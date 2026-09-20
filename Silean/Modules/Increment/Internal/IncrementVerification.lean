@@ -3,7 +3,7 @@ import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.Constant.Constant
 import Silean.Modules.HalfAdder.HalfAdderDerived
 import Silean.Modules.Increment.Internal.IncrementStructure
-import Silean.Modules.VectorConcat.VectorConcatTheorems
+import Silean.Modules.VectorConcat.VectorConcatDerived
 
 /-! Internal schedules and inductive certification for `Increment`. -/
 
@@ -225,7 +225,7 @@ private theorem succImplements (width : Nat)
     (childMatches .highAdder).boundaryOutput HalfAdder.cycleContract.sumEquation
   have carryEquation :=
     (childMatches .highAdder).boundaryOutput HalfAdder.cycleContract.carryEquation
-  have concatEquation := VectorConcat.result_of_allowed .bit width 1
+  have concatEquation := VectorConcat.cycleContract.result .bit width 1
     (childMatches .concat).allowed
   change (hierStep.children .concat).outputs .result =
     VectorConcat.concat

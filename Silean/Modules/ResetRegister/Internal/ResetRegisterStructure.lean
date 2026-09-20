@@ -1,6 +1,6 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.Register.RegisterDerived
 import Silean.Modules.ResetRegister.ResetRegister
 

@@ -591,14 +591,15 @@ private theorem leafImplements :
     rfl
 
 private def leafImplementation : Implementation binary identityModule .leaf where
+  structural := {
+    hasSolution := fun inputs state =>
+      ⟨leafHierStep (binary := binary) (identityModule := identityModule) inputs,
+        leafHierStep_satisfies inputs, rfl, (by
+          funext impossible
+          exact nomatch impossible)⟩
+    hasAtMostOneSolution := leafUnique }
   stateCorresponds := fun _ _ => True
   hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-  hasStructuralResult := fun inputs state =>
-    ⟨leafHierStep (binary := binary) (identityModule := identityModule) inputs,
-      leafHierStep_satisfies inputs, rfl, (by
-        funext impossible
-        exact nomatch impossible)⟩
-  structuralResultUnique := leafUnique
   implements := Contracts.Cycle.implementsSolutions_iff_implements.mp leafImplements
 
 private def nodeChildContracts

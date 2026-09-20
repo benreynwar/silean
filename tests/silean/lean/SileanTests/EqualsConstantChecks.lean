@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
 
 namespace SileanTests.EqualsConstant
 
@@ -27,13 +27,11 @@ def differentInputs : (Modules.EqualsConstant.ports threeBits).inputs.Values
 #guard !((Modules.EqualsConstant.cycleContract threeBits five).evaluate
   differentInputs SignalMap.emptyValues).1 .result
 
-example (inputs : (Modules.EqualsConstant.ports signalType).inputs.Values)
-    (outputs : (Modules.EqualsConstant.ports signalType).outputs.Values)
-    (holds : (Modules.EqualsConstant.outputRule signalType constant).Holds
-      inputs SignalMap.emptyValues outputs) :
-    outputs .result = true ↔ inputs .value = constant :=
-  Modules.EqualsConstant.output_eq_true_iff_of_holds signalType constant inputs
-    SignalMap.emptyValues outputs holds
+example {step : (Modules.EqualsConstant.cycleContract signalType constant).Step}
+    (allowed : (Modules.EqualsConstant.cycleContract signalType constant).Allows step) :
+    step.outputs .result = true ↔ step.inputs .value = constant :=
+  Modules.EqualsConstant.result_eq_true_iff_of_allowed
+    signalType constant allowed
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

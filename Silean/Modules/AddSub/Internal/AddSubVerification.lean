@@ -107,13 +107,19 @@ private theorem implements :
     rw [broadcastValue] at xorEquation
     exact xorEquation
   change hierStep.childOutputs .add .result =
-    (Add.addBits width (hierStep.inputs .left)
+    Add.resultValue width (hierStep.inputs .left)
       (hierStep.childOutputs .bitwiseXor .result)
-      (hierStep.inputs .subtract)).1 at addResult
+      (hierStep.inputs .subtract) at addResult
+  rw [← Add.Internal.addBits_result width (hierStep.inputs .left)
+    (hierStep.childOutputs .bitwiseXor .result)
+    (hierStep.inputs .subtract)] at addResult
   change hierStep.childOutputs .add .carryOut =
-    (Add.addBits width (hierStep.inputs .left)
+    Add.carryValue width (hierStep.inputs .left)
       (hierStep.childOutputs .bitwiseXor .result)
-      (hierStep.inputs .subtract)).2 at addCarry
+      (hierStep.inputs .subtract) at addCarry
+  rw [← Add.Internal.addBits_carry width (hierStep.inputs .left)
+    (hierStep.childOutputs .bitwiseXor .result)
+    (hierStep.inputs .subtract)] at addCarry
   rw [transformedRight] at addResult addCarry
   rw [Internal.addBits_xorRight_eq_addSubBits] at addResult addCarry
 
@@ -162,39 +168,9 @@ private theorem same (width : Nat) :
     AddSub.subtractVector, enumeration]
   rfl
 
-private theorem unique (width : Nat) : (description width).UniqueNames := by
-  simp only [circuit_description, description, construction, Add.place,
-    AddSub.subtractVector]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal
-  · subst child
-    constructor
-    · exact Naming.SignalAdapter.vectorCombiner_portNames_nodup width .bit
-    · rw [List.map_map]
-      change (Naming.SignalAdapter.combiner
-          (.vector width .bit)).ports.inputs.names.Nodup
-      exact (List.nodup_append.mp
-        (Naming.SignalAdapter.vectorCombiner_portNames_nodup width .bit)).1
-  · subst child
-    constructor
-    · exact BitwiseXor.Naming.portNames_nodup (.vector width .bit)
-    · rw [show (BitwiseXor.Naming.namingWith (.vector width .bit)
-          (.positional _)).ports = BitwiseXor.Naming.ports (.vector width .bit) by
-        exact BitwiseXor.Naming.naming_ports (.vector width .bit)]
-      exact of_decide_eq_true rfl
-  · subst child
-    constructor
-    · exact Add.Naming.portNames_nodup width
-    · rw [Add.Naming.naming_ports]
-      exact of_decide_eq_true rfl
-
 theorem description_corresponds (width : Nat) :
     Corresponds (description width) (AddSub.naming width) :=
-  ⟨same width, unique width⟩
+  ⟨same width⟩
 
 open Authoring.CircuitDescription.Description
 

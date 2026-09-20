@@ -1,0 +1,14 @@
+import Silean.Modules.RegisterBank.RegisterBank
+
+assert_not_imported Silean.Modules.RegisterBank.Internal.RegisterBankStructure
+assert_not_imported Silean.Modules.RegisterBank.Internal.RegisterBankVerification
+
+namespace SileanTests.RegisterBankAuthoring
+
+open Silean
+
+#check Modules.RegisterBank.cycleContract
+#check Modules.RegisterBank.readValue_of_allowed
+#check Modules.RegisterBank.next_entries_of_allowed
+
+end SileanTests.RegisterBankAuthoring

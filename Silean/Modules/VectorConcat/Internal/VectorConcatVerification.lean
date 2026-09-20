@@ -3,12 +3,15 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Modules.VectorConcat.VectorConcat
+import Silean.Modules.VectorConcat.Internal.VectorConcatStructure
 
 namespace Silean.Modules.VectorConcat
 
 open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
+
+open Internal
 
 module_child_certifications childContracts (element : SignalType)
     (leftWidth : Nat) (rightWidth : Nat) for body element leftWidth rightWidth where
@@ -105,7 +108,7 @@ private theorem implements :
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     change hierStep.outputs .result =
       concat (hierStep.inputs .left) (hierStep.inputs .right)
     rw [show hierStep.outputs .result =
@@ -134,11 +137,13 @@ private theorem implements :
     funext index
     refine Fin.addCases ?_ ?_ index
     · intro leftIndex
-      simp [combiner, Composition.SignalCombiner.outputValues, combineInputs, concat]
+      simp [combiner,
+        Composition.SignalCombiner.outputValues, combineInputs, concat]
       rw [leftOutputs]
       rfl
     · intro rightIndex
-      simp [combiner, Composition.SignalCombiner.outputValues, combineInputs, concat]
+      simp [combiner,
+        Composition.SignalCombiner.outputValues, combineInputs, concat]
       rw [rightOutputs]
       rfl
   · rfl

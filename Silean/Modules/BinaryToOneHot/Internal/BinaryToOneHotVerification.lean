@@ -1,13 +1,11 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
-import Silean.Modules.BinaryToOneHot.BinaryToOneHot
-import Silean.Modules.VectorConcat.VectorConcatTheorems
+import Silean.Modules.BinaryToOneHot.Internal.BinaryToOneHotStructure
+import Silean.Modules.VectorConcat.VectorConcatDerived
 
 /-! # Binary-to-one-hot verification
 
-Schedules and recursive certification for the hardware family in
-`BinaryToOneHot.lean`. Import `BinaryToOneHotTheorems.lean` for the public
-proof interface. -/
+Schedules and recursive certification for the binary-to-one-hot hierarchy. -/
 
 namespace Silean.Modules.BinaryToOneHot
 
@@ -56,7 +54,7 @@ private theorem baseImplements
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     funext index
     change hierStep.outputs .result index = _
     have boundaryResult := boundary .result
@@ -214,7 +212,7 @@ private theorem succImplements (width : Nat)
       (lowerCombiner width) _ _ _).mp
       ((childMatch .lowerBits).ruleHolds Composition.SignalComponentRule.apply)
 
-  have decodedEquation := (outputRule_holds_iff width _ SignalMap.emptyValues _).mp
+  have decodedEquation := (applyRule_holds_iff width _ SignalMap.emptyValues _).mp
     ((childMatch .decode).ruleHolds Rule.apply)
 
   have invertEquation := (Primitives.notOutputRule_holds_iff
@@ -229,7 +227,7 @@ private theorem succImplements (width : Nat)
     (.vector (size width) .bit) _ SignalMap.emptyValues _).mp
       ((childMatch .upperMask).ruleHolds Modules.Mask.Rule.apply)
 
-  have concatEquation := Modules.VectorConcat.result_of_allowed
+  have concatEquation := Modules.VectorConcat.cycleContract.result
     .bit (size width) (size width) (childMatch .concat).allowed
   change hierStep.childOutputs .concat .result =
     Modules.VectorConcat.concat
@@ -242,7 +240,9 @@ private theorem succImplements (width : Nat)
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
+    change hierStep.outputs .result =
+      oneHot (width + 1) (hierStep.inputs .value)
     rw [oneHot_eq_decode]
     change hierStep.outputs .result = decode (width + 1) (hierStep.inputs .value)
     rw [show hierStep.outputs .result =
@@ -278,6 +278,9 @@ private theorem succImplements (width : Nat)
     rw [lowerInputsEquation] at lowerEquation
     rw [upperInputsEquation] at upperEquation
     rw [decodeInputsEquation] at decodedEquation
+    change (hierStep.children .decode).outputs .result =
+      oneHot width ((hierStep.children .lowerBits).outputs .value)
+        at decodedEquation
     rw [oneHot_eq_decode] at decodedEquation
     rw [invertInputsEquation] at invertEquation
     rw [lowerBitsInputsEquation] at lowerOutputs

@@ -63,10 +63,9 @@ def eqCertified : Contracts.Cycle.ModuleCycleCertified eq.ports where
   moduleStructure := .primitive eq
   cycleContract := eqCycleContract
   certification := {
+    structural := eq.structuralCertification,
     stateCorresponds := eqStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := Primitive.hasSolution eq,
-    structuralResultUnique := Primitive.hasAtMostOneSolution eq,
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp eqImplements }
 end Silean.Primitives
 

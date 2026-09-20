@@ -65,10 +65,9 @@ def constantCertified (value : Bool) :
   moduleStructure := .primitive (constant value)
   cycleContract := constantCycleContract value
   certification := {
+    structural := (constant value).structuralCertification
     stateCorresponds := stateCorresponds value
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-    hasStructuralResult := Primitive.hasSolution (constant value)
-    structuralResultUnique := Primitive.hasAtMostOneSolution (constant value)
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp
       (implements value) }
 

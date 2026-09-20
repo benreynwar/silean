@@ -36,6 +36,8 @@ import SileanTests.ModuleDesignAuthoringChecks
 import SileanTests.ModuleCycleContractAuthoringChecks
 import SileanTests.HierarchicalDualNotCertificationChecks
 import SileanTests.OneEntryFifoChecks
+import SileanTests.OneEntryFifoControlAuthoringChecks
+import SileanTests.OneEntryFifoAuthoringChecks
 import SileanTests.BidirectionalDualNotChecks
 import SileanTests.FIRRTLChecks
 import SileanTests.ConstantChecks
@@ -60,6 +62,15 @@ import SileanTests.BitwiseOrChecks
 import SileanTests.AddSubChecks
 import SileanTests.IncrementChecks
 import SileanTests.FifoPointerControlChecks
+import SileanTests.FifoPointerControlAuthoringChecks
+import SileanTests.FifoAuthoringChecks
 import SileanTests.EqualityChecks
+import SileanTests.EqualityAuthoringChecks
+import SileanTests.EqualsConstantAuthoringChecks
+import SileanTests.BinaryToOneHotAuthoringChecks
+import SileanTests.CombMuxTreeAuthoringChecks
+import SileanTests.RegisterBankAuthoringChecks
 import SileanTests.FifoContractChecks
 import SileanTests.SerialDepthFifoChecks
+import SileanTests.SerialDepthFifoAuthoringChecks
+import SileanTests.SelectionAuthoringChecks

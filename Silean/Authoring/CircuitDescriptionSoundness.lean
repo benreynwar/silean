@@ -2,9 +2,10 @@ import Silean.Authoring.CircuitDescription
 import Silean.Semantics.StructuralEquations
 import Silean.Contracts.Cycle.CycleImplementation
 
-/-! Soundness of the named translation boundary. This file reasons about
-production endpoints and structural equations; it does not define another
-hardware interpreter.
+/-! Soundness of the circuit-description translation boundary. This file
+reasons about production endpoints and structural equations; it does not define
+another hardware interpreter. Endpoint matching uses canonical structural IDs;
+emission names remain checked metadata but are not identity witnesses.
 
 `Corresponds.transferSolution_iff` is the main theorem: any two production
 realizations certified against the same description have corresponding
@@ -55,63 +56,37 @@ theorem Internal.finalizeConnections_map_of_sources {Index : Type}
       rw [driver]
       simp only [Internal.resolveNet, ih]
 
-/-- Duplicate-free keys make a named list lossless on its entries. -/
-theorem namedEntry_unique {α : Type u} {β : Type v} (key : α → β)
-    {entries : List α} (unique : (entries.map key).Nodup)
-    {left right : α} (leftMem : left ∈ entries) (rightMem : right ∈ entries)
-    (same : key left = key right) : left = right := by
-  induction entries with
-  | nil => cases leftMem
-  | cons head tail induction =>
-    have distinct := List.nodup_cons.mp unique
-    rcases List.mem_cons.mp leftMem with leftEqual | leftTail
-    · subst left
-      rcases List.mem_cons.mp rightMem with rightEqual | rightTail
-      · exact rightEqual.symm
-      · exact False.elim (distinct.1 (List.mem_map.mpr ⟨right, rightTail, same.symm⟩))
-    · rcases List.mem_cons.mp rightMem with rightEqual | rightTail
-      · subst right
-        exact False.elim (distinct.1 (List.mem_map.mpr ⟨left, leftTail, same⟩))
-      · exact induction distinct.2 leftTail rightTail
-
-theorem enumeration_name_injective (enumeration : Enumeration α) (name : α → β)
-    (unique : (enumeration.values.map name).Nodup) :
-    ∀ {left right}, name left = name right → left = right := by
+/-- Canonical description-local IDs retain the identity of typed labels
+without consulting emission names. -/
+theorem portId_injective (signals : SignalMap) : Function.Injective (portId signals) := by
   intro left right same
-  exact namedEntry_unique name unique (enumeration.locate left).mem
-    (enumeration.locate right).mem same
+  apply signals.labels.ordinal_injective
+  apply Fin.ext
+  exact congrArg PortId.index same
 
-/-- Include the signal type when comparing endpoints: name equality must not
-silently identify endpoints of different types. -/
+theorem childId_injective (instances : InstancePorts) : Function.Injective (childId instances) := by
+  intro left right same
+  apply instances.names.ordinal_injective
+  apply Fin.ext
+  exact congrArg ChildId.index same
+
+/-- Include the signal type when comparing endpoints so equality also
+transports the dependent source type. -/
 def packedSourceDescription {body : ModuleBody}
-    (ports : ModulePortsNaming body.ports)
-    (instanceName : body.instancePorts.Name → SourceName)
-    (childPorts : (child : body.instancePorts.Name) →
-      ModulePortsNaming (body.instancePorts.ports child))
     (source : (signalType : SignalType) × SignalSource body.ports body.instancePorts signalType) :
-    Source := sourceDescription ports instanceName childPorts source.2
+    Source := sourceDescription source.2
 
 theorem packedSourceDescription_injective {body : ModuleBody}
-    (ports : ModulePortsNaming body.ports)
-    (instanceName : body.instancePorts.Name → SourceName)
-    (childPorts : (child : body.instancePorts.Name) →
-      ModulePortsNaming (body.instancePorts.ports child))
-    (inputsUnique : ports.inputs.names.Nodup)
-    (instancesUnique : (body.instancePorts.names.values.map instanceName).Nodup)
-    (outputsUnique : ∀ child, (childPorts child).outputs.names.Nodup)
     {left right : (signalType : SignalType) ×
       SignalSource body.ports body.instancePorts signalType}
-    (same : packedSourceDescription ports instanceName childPorts left =
-      packedSourceDescription ports instanceName childPorts right) : left = right := by
+    (same : packedSourceDescription left = packedSourceDescription right) : left = right := by
   rcases left with ⟨_, left⟩
   rcases right with ⟨_, right⟩
   cases left with
   | moduleInput left =>
     cases right with
     | moduleInput right =>
-      have names := Source.input.inj same
-      have equal := enumeration_name_injective body.ports.inputs.labels
-        ports.inputs.name inputsUnique names
+      have equal := portId_injective body.ports.inputs (Source.input.inj same)
       cases equal
       rfl
     | instanceOutput child port => cases same
@@ -119,88 +94,32 @@ theorem packedSourceDescription_injective {body : ModuleBody}
     cases right with
     | moduleInput right => cases same
     | instanceOutput rightChild rightPort =>
-      have names := Source.child.inj same
-      have equal := enumeration_name_injective body.instancePorts.names
-        instanceName instancesUnique names.1
+      have ids := Source.child.inj same
+      have equal := childId_injective body.instancePorts ids.1
       cases equal
-      have portEqual := enumeration_name_injective
-        (body.instancePorts.ports leftChild).outputs.labels
-        (childPorts leftChild).outputs.name (outputsUnique leftChild) names.2
+      have portEqual := portId_injective
+        (body.instancePorts.ports leftChild).outputs ids.2
       cases portEqual
       rfl
 
-/-- In particular, equal named drivers of a fixed type are equal production
-drivers, not merely drivers that happen to produce the same Boolean value. -/
+/-- Equal structural driver IDs of a fixed type are equal production drivers. -/
 theorem sourceDescription_injective {body : ModuleBody}
-    (ports : ModulePortsNaming body.ports)
-    (instanceName : body.instancePorts.Name → SourceName)
-    (childPorts : (child : body.instancePorts.Name) →
-      ModulePortsNaming (body.instancePorts.ports child))
-    (inputsUnique : ports.inputs.names.Nodup)
-    (instancesUnique : (body.instancePorts.names.values.map instanceName).Nodup)
-    (outputsUnique : ∀ child, (childPorts child).outputs.names.Nodup)
     {left right : SignalSource body.ports body.instancePorts signalType}
-    (same : sourceDescription ports instanceName childPorts left =
-      sourceDescription ports instanceName childPorts right) : left = right := by
-  have packed := packedSourceDescription_injective ports instanceName childPorts
-    inputsUnique instancesUnique outputsUnique
+    (same : sourceDescription left = sourceDescription right) : left = right := by
+  have packed := packedSourceDescription_injective
     (left := ⟨signalType, left⟩) (right := ⟨signalType, right⟩) same
   exact eq_of_heq (Sigma.mk.inj packed).2
 
-/-- This uses the existing production source evaluator. No alternate
-interpretation of the named description is introduced. -/
+/-- This uses the production source evaluator; structural IDs introduce no
+alternate hardware interpretation. -/
 theorem sourceDescription_value_eq {body : ModuleBody}
-    (ports : ModulePortsNaming body.ports)
-    (instanceName : body.instancePorts.Name → SourceName)
-    (childPorts : (child : body.instancePorts.Name) →
-      ModulePortsNaming (body.instancePorts.ports child))
-    (inputsUnique : ports.inputs.names.Nodup)
-    (instancesUnique : (body.instancePorts.names.values.map instanceName).Nodup)
-    (outputsUnique : ∀ child, (childPorts child).outputs.names.Nodup)
     {left right : SignalSource body.ports body.instancePorts signalType}
-    (same : sourceDescription ports instanceName childPorts left =
-      sourceDescription ports instanceName childPorts right)
+    (same : sourceDescription left = sourceDescription right)
     (inputs : body.ports.inputs.Values)
     (childOutputs : (child : body.instancePorts.Name) →
       (body.instancePorts.ports child).outputs.Values) :
     left.value inputs childOutputs = right.value inputs childOutputs := by
-  rw [sourceDescription_injective ports instanceName childPorts
-    inputsUnique instancesUnique outputsUnique same]
-
-
-/-- The existing certificate supplies all the source-uniqueness hypotheses;
-no additional naming invariant is assumed by the endpoint soundness proof. -/
-theorem Corresponds.source_names_unique {description : Description} {body : ModuleBody}
-    {children : (child : body.instancePorts.Name) →
-      ModuleStructure (body.instancePorts.ports child)}
-    {key : ModuleKey} {ports : ModulePortsNaming body.ports}
-    {instanceName : body.instancePorts.Name → SourceName}
-    {childNaming : (child : body.instancePorts.Name) → ModuleNaming (children child)}
-    {namedWires : List (Naming.NamedWire body)}
-    (certificate : Corresponds description
-      (ModuleNaming.composite key ports instanceName childNaming namedWires)) :
-    ports.inputs.names.Nodup ∧
-      (body.instancePorts.names.values.map instanceName).Nodup ∧
-      ∀ child, (childNaming child).ports.outputs.names.Nodup := by
-  have equal := Option.some.inj certificate.same
-  have unique := certificate.unique
-  rw [equal] at unique
-  refine ⟨?_, ?_, ?_⟩
-  · have boundary := (List.nodup_append.mp unique.1).1
-    simpa only [portList, List.map_map, Function.comp_def, SignalMapNaming.names] using boundary
-  · simpa only [List.map_map, Function.comp_def] using unique.2.1
-  · intro child
-    have member := List.mem_map_of_mem (f := fun child =>
-      ({ name := instanceName child
-         module := ⟨body.instancePorts.ports child, children child, childNaming child⟩
-         inputs := (body.instancePorts.ports child).inputs.labels.values.map fun port =>
-           ⟨⟨(childNaming child).ports.inputs.name port,
-             (body.instancePorts.ports child).inputs.signalType port⟩,
-             sourceDescription ports instanceName (fun child => (childNaming child).ports)
-               (body.wiring.instanceInput child port)⟩ } : Child))
-      (body.instancePorts.names.locate child).mem
-    have childUnique := (unique.2.2 _ member).1
-    exact (List.nodup_append.mp childUnique).2.1
+  rw [sourceDescription_injective same]
 
 
 /-- A proof-level correspondence, constructed from the compared descriptions.
@@ -254,27 +173,17 @@ theorem EntryBijection.transfer_surjective {α : Type u} {β : Type v} {γ : Typ
   funext label
   exact eq_of_heq ((cast_heq _ _).trans (bijection.symm.transfer_forward Value target label))
 
-/-- Equal named lists give a bijection even when their label types differ.
-Uniqueness of names, not an assumed relationship between label constructors,
-provides the inverse laws. -/
+/-- Equal ordered entry lists give a bijection even when their label types
+differ. Canonical structural IDs make the entry functions injective without
+any assumption about emitted names. -/
 noncomputable def matchingEntries {α : Type u} {β : Type v} {γ : Type w}
     (leftLabels : Enumeration α) (rightLabels : Enumeration β)
-    (left : α → γ) (right : β → γ) (name : γ → SourceName)
+    (left : α → γ) (right : β → γ)
     (same : leftLabels.values.map left = rightLabels.values.map right)
-    (unique : ((leftLabels.values.map left).map name).Nodup) :
+    (leftInjective : Function.Injective left)
+    (rightInjective : Function.Injective right) :
     EntryBijection left right := by
   classical
-  have rightUnique : ((rightLabels.values.map right).map name).Nodup := same ▸ unique
-  have leftInjective : ∀ {a b}, left a = left b → a = b := by
-    intro a b equal
-    apply enumeration_name_injective leftLabels (name ∘ left)
-      (by simpa only [List.map_map] using unique)
-    exact congrArg name equal
-  have rightInjective : ∀ {a b}, right a = right b → a = b := by
-    intro a b equal
-    apply enumeration_name_injective rightLabels (name ∘ right)
-      (by simpa only [List.map_map] using rightUnique)
-    exact congrArg name equal
   have rightExists (label : α) : ∃ other, right other = left label := by
     have member := List.mem_map_of_mem (f := left) (leftLabels.locate label).mem
     rw [same] at member
@@ -303,30 +212,27 @@ noncomputable def matchingEntries {α : Type u} {β : Type v} {γ : Type w}
 /-- The concrete entries already stored by `ofNaming`. These abbreviations
 only expose its fields to the proof; they do not introduce another encoding. -/
 abbrev inputEntry (signals : SignalMap) (names : SignalMapNaming signals)
-    (label : signals.Label) : Port := ⟨names.name label, signals.signalType label⟩
+    (label : signals.Label) : Port :=
+  ⟨portId signals label, names.name label, signals.signalType label⟩
 
 abbrev outputEntry {body : ModuleBody}
     (ports : ModulePortsNaming body.ports)
-    (instanceName : body.instancePorts.Name → SourceName)
-    (childPorts : (child : body.instancePorts.Name) →
-      ModulePortsNaming (body.instancePorts.ports child))
     (label : body.ports.outputs.Label) : Connection :=
   ⟨inputEntry body.ports.outputs ports.outputs label,
-    sourceDescription ports instanceName childPorts (body.wiring.moduleOutput label)⟩
+    sourceDescription (body.wiring.moduleOutput label)⟩
 
 abbrev childEntry {body : ModuleBody}
     {children : (child : body.instancePorts.Name) →
       ModuleStructure (body.instancePorts.ports child)}
-    (ports : ModulePortsNaming body.ports)
     (instanceName : body.instancePorts.Name → SourceName)
     (childNaming : (child : body.instancePorts.Name) → ModuleNaming (children child))
     (child : body.instancePorts.Name) : Child :=
-  { name := instanceName child
+  { id := childId body.instancePorts child
+    name := instanceName child
     module := ⟨body.instancePorts.ports child, children child, childNaming child⟩
     inputs := (body.instancePorts.ports child).inputs.labels.values.map fun port =>
       ⟨inputEntry (body.instancePorts.ports child).inputs (childNaming child).ports.inputs port,
-        sourceDescription ports instanceName (fun child => (childNaming child).ports)
-          (body.wiring.instanceInput child port)⟩ }
+        sourceDescription (body.wiring.instanceInput child port)⟩ }
 
 /-- Equal actual children and corresponding hierarchy assignments have corresponding
 output values. This inspects neither the child implementation nor its proof. -/
@@ -334,16 +240,14 @@ theorem namedModule_output_heq (left right : NamedModule) (same : left = right)
     (leftStep : HierStep left.moduleStructure)
     (rightStep : HierStep right.moduleStructure)
     (stepsEqual : HEq leftStep rightStep)
-    (unique : left.naming.ports.outputs.names.Nodup)
     (leftPort : left.ports.outputs.Label) (rightPort : right.ports.outputs.Label)
-    (namesEqual : left.naming.ports.outputs.name leftPort =
-      right.naming.ports.outputs.name rightPort) :
+    (idsEqual : portId left.ports.outputs leftPort =
+      portId right.ports.outputs rightPort) :
     HEq (leftStep.outputs leftPort) (rightStep.outputs rightPort) := by
   cases same
   have equal := eq_of_heq stepsEqual
   cases equal
-  have portEqual := enumeration_name_injective left.ports.outputs.labels
-    left.naming.ports.outputs.name unique namesEqual
+  have portEqual := portId_injective left.ports.outputs idsEqual
   cases portEqual
   rfl
 
@@ -356,13 +260,11 @@ theorem namedModule_input_source_eq (left right : NamedModule) (same : left = ri
         (⟨inputEntry left.ports.inputs left.naming.ports.inputs port, leftSource port⟩ : Connection)) =
       (right.ports.inputs.labels.values.map fun port =>
         (⟨inputEntry right.ports.inputs right.naming.ports.inputs port, rightSource port⟩ : Connection)))
-    (unique : left.naming.ports.inputs.names.Nodup)
     (leftPort : left.ports.inputs.Label) (rightPort : right.ports.inputs.Label)
-    (sameName : left.naming.ports.inputs.name leftPort = right.naming.ports.inputs.name rightPort) :
+    (sameId : portId left.ports.inputs leftPort = portId right.ports.inputs rightPort) :
     leftSource leftPort = rightSource rightPort := by
   cases same
-  have equal := enumeration_name_injective left.ports.inputs.labels
-    left.naming.ports.inputs.name unique sameName
+  have equal := portId_injective left.ports.inputs sameId
   cases equal
   exact congrArg Connection.source ((List.map_inj_left.mp sameInputs)
     leftPort (left.ports.inputs.labels.locate leftPort).mem)
@@ -370,7 +272,7 @@ theorem namedModule_input_source_eq (left right : NamedModule) (same : left = ri
 theorem namedModule_inputs_heq (left right : NamedModule) (same : left = right)
     (leftInputs : left.ports.inputs.Values) (rightInputs : right.ports.inputs.Values)
     (agree : ∀ leftPort rightPort,
-      left.naming.ports.inputs.name leftPort = right.naming.ports.inputs.name rightPort →
+      portId left.ports.inputs leftPort = portId right.ports.inputs rightPort →
       HEq (leftInputs leftPort) (rightInputs rightPort)) : HEq leftInputs rightInputs := by
   cases same
   apply heq_of_eq
@@ -419,38 +321,30 @@ theorem namedModule_solution_iff (left right : NamedModule) (same : left = right
   cases eq_of_heq stepEqual
   rfl
 
-/-- Name-aligned production valuations give the same value to corresponding
-sources, even across different boundary and instance-label types. The
+/-- Structurally aligned production valuations give the same value to
+corresponding sources, even across different boundary and instance-label types. The
 bijections above are what will supply the alignment, rather than an author
 assumption or a second interpreter. -/
 theorem sourceDescription_value_heq
     {leftBody rightBody : ModuleBody}
-    (leftPorts : ModulePortsNaming leftBody.ports)
-    (rightPorts : ModulePortsNaming rightBody.ports)
-    (leftName : leftBody.instancePorts.Name → SourceName)
-    (rightName : rightBody.instancePorts.Name → SourceName)
-    (leftChildPorts : (child : leftBody.instancePorts.Name) →
-      ModulePortsNaming (leftBody.instancePorts.ports child))
-    (rightChildPorts : (child : rightBody.instancePorts.Name) →
-      ModulePortsNaming (rightBody.instancePorts.ports child))
     (leftInputs : leftBody.ports.inputs.Values)
     (rightInputs : rightBody.ports.inputs.Values)
     (leftOutputs : (child : leftBody.instancePorts.Name) →
       (leftBody.instancePorts.ports child).outputs.Values)
     (rightOutputs : (child : rightBody.instancePorts.Name) →
       (rightBody.instancePorts.ports child).outputs.Values)
-    (inputsAgree : ∀ left right, leftPorts.inputs.name left = rightPorts.inputs.name right →
+    (inputsAgree : ∀ left right,
+      portId leftBody.ports.inputs left = portId rightBody.ports.inputs right →
       HEq (leftInputs left) (rightInputs right))
     (outputsAgree : ∀ leftChild rightChild leftPort rightPort,
-      leftName leftChild = rightName rightChild →
-      (leftChildPorts leftChild).outputs.name leftPort =
-        (rightChildPorts rightChild).outputs.name rightPort →
+      childId leftBody.instancePorts leftChild = childId rightBody.instancePorts rightChild →
+      portId (leftBody.instancePorts.ports leftChild).outputs leftPort =
+        portId (rightBody.instancePorts.ports rightChild).outputs rightPort →
       HEq (leftOutputs leftChild leftPort) (rightOutputs rightChild rightPort))
     {leftType rightType : SignalType}
     (left : SignalSource leftBody.ports leftBody.instancePorts leftType)
     (right : SignalSource rightBody.ports rightBody.instancePorts rightType)
-    (same : sourceDescription leftPorts leftName leftChildPorts left =
-      sourceDescription rightPorts rightName rightChildPorts right) :
+    (same : sourceDescription left = sourceDescription right) :
     HEq (left.value leftInputs leftOutputs) (right.value rightInputs rightOutputs) := by
   cases left with
   | moduleInput left =>
@@ -504,52 +398,48 @@ variable {description : Description} {leftBody rightBody : ModuleBody}
   (rightCertificate : Corresponds description
     (ModuleNaming.composite rightKey rightPorts rightName rightNaming rightNamedWires))
 
-/-- Complete parent-input correspondence: names and signal types are preserved
-even though the two structural boundaries may use different label types. -/
+/-- Complete parent-input correspondence preserves structural IDs, metadata,
+and signal types even when label types differ. -/
 noncomputable def Corresponds.inputBijection :
     EntryBijection (inputEntry leftBody.ports.inputs leftPorts.inputs)
       (inputEntry rightBody.ports.inputs rightPorts.inputs) := by
   have descriptions := Option.some.inj (leftCertificate.same.symm.trans rightCertificate.same)
   apply matchingEntries leftBody.ports.inputs.labels rightBody.ports.inputs.labels
-    _ _ Port.name (congrArg Description.inputs descriptions)
-  simpa only [List.map_map, Function.comp_def, inputEntry, SignalMapNaming.names]
-    using leftCertificate.source_names_unique.1
+    _ _ (congrArg Description.inputs descriptions)
+  · intro left right same
+    exact portId_injective leftBody.ports.inputs (congrArg Port.id same)
+  · intro left right same
+    exact portId_injective rightBody.ports.inputs (congrArg Port.id same)
 
-/-- Parent-output correspondence preserves the driven source as well as the
-port name and type. -/
+/-- Parent-output correspondence preserves the complete sink entry, including
+its structural ID, driven source, emission name, and signal type. -/
 noncomputable def Corresponds.outputBijection :
-    EntryBijection (outputEntry leftPorts leftName (fun child => (leftNaming child).ports))
-      (outputEntry rightPorts rightName (fun child => (rightNaming child).ports)) := by
+    EntryBijection (outputEntry leftPorts) (outputEntry rightPorts) := by
   have descriptions := Option.some.inj (leftCertificate.same.symm.trans rightCertificate.same)
   apply matchingEntries leftBody.ports.outputs.labels rightBody.ports.outputs.labels
-    _ _ (fun entry => entry.port.name) (congrArg Description.outputs descriptions)
-  have unique := leftCertificate.unique.1
-  rw [Option.some.inj leftCertificate.same] at unique
-  exact (List.nodup_append.mp unique).2.1
+    _ _ (congrArg Description.outputs descriptions)
+  · intro left right same
+    exact portId_injective leftBody.ports.outputs (congrArg (fun entry => entry.port.id) same)
+  · intro left right same
+    exact portId_injective rightBody.ports.outputs (congrArg (fun entry => entry.port.id) same)
 
-/-- Child correspondence preserves the full NamedModule and every input
-connection, not just the child's name or interface. -/
+/-- Child correspondence preserves the structural child ID, full `NamedModule`,
+emission name, and every input connection. -/
 noncomputable def Corresponds.childBijection :
-    EntryBijection (childEntry leftPorts leftName leftNaming)
-      (childEntry rightPorts rightName rightNaming) := by
+    EntryBijection (childEntry leftName leftNaming)
+      (childEntry rightName rightNaming) := by
   have descriptions := Option.some.inj (leftCertificate.same.symm.trans rightCertificate.same)
   apply matchingEntries leftBody.instancePorts.names rightBody.instancePorts.names
-    _ _ Child.name (congrArg Description.children descriptions)
-  have unique := leftCertificate.unique.2.1
-  rw [Option.some.inj leftCertificate.same] at unique
-  exact unique
+    _ _ (congrArg Description.children descriptions)
+  · intro left right same
+    exact childId_injective leftBody.instancePorts (congrArg Child.id same)
+  · intro left right same
+    exact childId_injective rightBody.instancePorts (congrArg Child.id same)
 
 noncomputable def Corresponds.transferInputs (inputs : leftBody.ports.inputs.Values) :
     rightBody.ports.inputs.Values :=
   (leftCertificate.inputBijection rightCertificate).transfer
     (fun entry => entry.signalType.Denote) inputs
-
-include leftCertificate in
-theorem Corresponds.boundaryOutputsUnique : leftPorts.outputs.names.Nodup := by
-  have unique := leftCertificate.unique.1
-  rw [Option.some.inj leftCertificate.same] at unique
-  simpa only [List.map_map, Function.comp_def, inputEntry,
-    SignalMapNaming.names] using (List.nodup_append.mp unique).2.1
 
 noncomputable def Corresponds.transferHierStep
     (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren)) :
@@ -612,27 +502,25 @@ theorem Corresponds.transferNextState
 
 theorem Corresponds.transferInputs_agree (inputs : leftBody.ports.inputs.Values)
     (left : leftBody.ports.inputs.Label) (right : rightBody.ports.inputs.Label)
-    (sameName : leftPorts.inputs.name left = rightPorts.inputs.name right) :
+    (sameId : portId leftBody.ports.inputs left = portId rightBody.ports.inputs right) :
     HEq (inputs left) (leftCertificate.transferInputs rightCertificate inputs right) := by
   let bijection := leftCertificate.inputBijection rightCertificate
-  have names := congrArg Port.name (bijection.preserves left)
+  have ids := congrArg Port.id (bijection.preserves left)
   have equal : bijection.forward left = right :=
-    enumeration_name_injective rightBody.ports.inputs.labels rightPorts.inputs.name
-      rightCertificate.source_names_unique.1 (names.symm.trans sameName)
+    portId_injective rightBody.ports.inputs (ids.symm.trans sameId)
   subst right
   exact (bijection.transfer_forward (fun entry => entry.signalType.Denote) inputs left).symm
 
 theorem Corresponds.transferOutputs_agree
     (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))
     (left : leftBody.ports.outputs.Label) (right : rightBody.ports.outputs.Label)
-    (sameName : leftPorts.outputs.name left = rightPorts.outputs.name right) :
+    (sameId : portId leftBody.ports.outputs left = portId rightBody.ports.outputs right) :
     HEq (hierStep.outputs left)
       ((leftCertificate.transferHierStep rightCertificate hierStep).outputs right) := by
   let bijection := leftCertificate.outputBijection rightCertificate
-  have names := congrArg (fun entry => entry.port.name) (bijection.preserves left)
+  have ids := congrArg (fun entry => entry.port.id) (bijection.preserves left)
   have equal : bijection.forward left = right :=
-    enumeration_name_injective rightBody.ports.outputs.labels rightPorts.outputs.name
-      rightCertificate.boundaryOutputsUnique (names.symm.trans sameName)
+    portId_injective rightBody.ports.outputs (ids.symm.trans sameId)
   subst right
   exact (bijection.transfer_forward
     (fun entry => entry.port.signalType.Denote) hierStep.outputs left).symm
@@ -642,45 +530,33 @@ theorem Corresponds.transferChildOutputs_agree
     (leftChild : leftBody.instancePorts.Name) (rightChild : rightBody.instancePorts.Name)
     (leftPort : (leftBody.instancePorts.ports leftChild).outputs.Label)
     (rightPort : (rightBody.instancePorts.ports rightChild).outputs.Label)
-    (sameChild : leftName leftChild = rightName rightChild)
-    (samePort : (leftNaming leftChild).ports.outputs.name leftPort =
-      (rightNaming rightChild).ports.outputs.name rightPort) :
+    (sameChild : childId leftBody.instancePorts leftChild =
+      childId rightBody.instancePorts rightChild)
+    (samePort : portId (leftBody.instancePorts.ports leftChild).outputs leftPort =
+      portId (rightBody.instancePorts.ports rightChild).outputs rightPort) :
     HEq ((hierStep.children leftChild).outputs leftPort)
       (((leftCertificate.transferHierStep rightCertificate hierStep).children
         rightChild).outputs rightPort) := by
   let bijection := leftCertificate.childBijection rightCertificate
-  have names := congrArg Child.name (bijection.preserves leftChild)
+  have ids := congrArg Child.id (bijection.preserves leftChild)
   have equal : bijection.forward leftChild = rightChild :=
-    enumeration_name_injective rightBody.instancePorts.names rightName
-      rightCertificate.source_names_unique.2.1 (names.symm.trans sameChild)
+    childId_injective rightBody.instancePorts (ids.symm.trans sameChild)
   subst rightChild
   exact namedModule_output_heq _ _ (congrArg Child.module (bijection.preserves leftChild))
     _ _ (bijection.transfer_forward
       (fun entry => HierStep entry.module.moduleStructure) hierStep.children leftChild).symm
-    (leftCertificate.source_names_unique.2.2 leftChild) leftPort rightPort samePort
-
-include leftCertificate in
-theorem Corresponds.childInputsUnique (child : leftBody.instancePorts.Name) :
-    (leftNaming child).ports.inputs.names.Nodup := by
-  have unique := leftCertificate.unique
-  rw [Option.some.inj leftCertificate.same] at unique
-  have member := List.mem_map_of_mem (f := childEntry leftPorts leftName leftNaming)
-    (leftBody.instancePorts.names.locate child).mem
-  exact (List.nodup_append.mp (unique.2.2 _ member).1).1
+    leftPort rightPort samePort
 
 theorem Corresponds.transferSourceValue (inputs : leftBody.ports.inputs.Values)
     (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))
     {leftType rightType : SignalType}
     (left : SignalSource leftBody.ports leftBody.instancePorts leftType)
     (right : SignalSource rightBody.ports rightBody.instancePorts rightType)
-    (same : sourceDescription leftPorts leftName (fun child => (leftNaming child).ports) left =
-      sourceDescription rightPorts rightName (fun child => (rightNaming child).ports) right) :
+    (same : sourceDescription left = sourceDescription right) :
     HEq (left.value inputs hierStep.childOutputs)
       (right.value (leftCertificate.transferInputs rightCertificate inputs)
         (leftCertificate.transferHierStep rightCertificate hierStep).childOutputs) :=
-  sourceDescription_value_heq leftPorts rightPorts leftName rightName
-    (fun child => (leftNaming child).ports) (fun child => (rightNaming child).ports)
-    inputs _ hierStep.childOutputs _
+  sourceDescription_value_heq inputs _ hierStep.childOutputs _
     (leftCertificate.transferInputs_agree rightCertificate inputs)
     (leftCertificate.transferChildOutputs_agree rightCertificate hierStep) left right same
 
@@ -696,12 +572,12 @@ theorem Corresponds.transferChildInputs (inputs : leftBody.ports.inputs.Values)
   have childEqual := bijection.preserves child
   have moduleEqual := congrArg Child.module childEqual
   apply namedModule_inputs_heq _ _ moduleEqual
-  intro leftPort rightPort sameName
+  intro leftPort rightPort sameId
   exact leftCertificate.transferSourceValue rightCertificate inputs hierStep
     (leftBody.wiring.instanceInput child leftPort)
     (rightBody.wiring.instanceInput (bijection.forward child) rightPort)
     (namedModule_input_source_eq _ _ moduleEqual _ _ (congrArg Child.inputs childEqual)
-      (leftCertificate.childInputsUnique child) leftPort rightPort sameName)
+      leftPort rightPort sameId)
 
 theorem Corresponds.transferStoredChildInputs
     (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren))
@@ -716,10 +592,10 @@ theorem Corresponds.transferStoredChildInputs
       (fun entry => HierStep entry.module.moduleStructure)
       hierStep.children child).symm
 
-/-- Generic structural soundness. Equal uniquely named descriptions preserve
-the production solution relation under automatically derived boundary and
-child correspondences. This includes every complete hierarchy assignment,
-not just evaluation of a chosen example. -/
+/-- Generic structural soundness. Equal descriptions preserve the production
+solution relation under automatically derived structural-ID correspondences;
+no emitted-name uniqueness assumption is required. This includes every
+complete hierarchy assignment, not just evaluation of a chosen example. -/
 theorem Corresponds.transferSolution_iff
     (hierStep : HierStep (ModuleStructure.composite leftBody leftChildren)) :
     (ModuleStructure.composite leftBody leftChildren).IsSolution hierStep ↔

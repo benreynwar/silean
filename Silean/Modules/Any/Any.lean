@@ -174,10 +174,9 @@ private def orImplementation :
     Composition.Reduction.BinaryImplementation .bit orOperation where
   moduleStructure := .primitive Primitives.or
   certification := {
+    structural := Primitives.orCertified.certification.structural
     stateCorresponds := orStateCorresponds
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-    hasStructuralResult := Primitives.orCertified.hasStructuralResult
-    structuralResultUnique := Primitives.orCertified.structuralResultUnique
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp orImplements }
 
 private def falseStateCorresponds (_ : emptySignalMap.Values)
@@ -201,11 +200,9 @@ private theorem falseImplements :
 private def falseImplementation : Composition.Reduction.IdentityImplementation .bit falseValue where
   moduleStructure := .primitive (Primitives.constant false)
   certification := {
+    structural := (Primitives.constantCertified false).certification.structural
     stateCorresponds := falseStateCorresponds
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩
-    hasStructuralResult := (Primitives.constantCertified false).hasStructuralResult
-    structuralResultUnique :=
-      (Primitives.constantCertified false).structuralResultUnique
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp falseImplements }
 
 private abbrev tree (width : Nat) : Composition.Reduction.Tree :=

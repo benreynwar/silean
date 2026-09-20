@@ -53,10 +53,9 @@ def registerCertified : Contracts.Cycle.ModuleCycleCertified register.ports wher
   moduleStructure := .primitive register
   cycleContract := registerCycleContract
   certification := {
+    structural := register.structuralCertification
     stateCorresponds := registerStateCorresponds
     hasCorrespondingState := fun state => ⟨state, rfl⟩
-    hasStructuralResult := Primitive.hasSolution register
-    structuralResultUnique := Primitive.hasAtMostOneSolution register
     implements :=
       Contracts.Cycle.implementsSolutions_iff_implements.mp registerImplements }
 

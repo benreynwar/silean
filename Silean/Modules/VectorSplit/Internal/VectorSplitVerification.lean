@@ -3,12 +3,15 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Composition.SignalAdapterImplementation
 import Silean.Modules.VectorSplit.VectorSplit
+import Silean.Modules.VectorSplit.Internal.VectorSplitStructure
 
 namespace Silean.Modules.VectorSplit
 
 open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
+
+open Internal
 
 module_child_certifications childContracts (element : SignalType)
     (leftWidth : Nat) (rightWidth : Nat) for body element leftWidth rightWidth where
@@ -85,7 +88,7 @@ private theorem implements : Contracts.Cycle.ImplementsSolutions
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     constructor
     · change hierStep.outputs .left = leftPart (hierStep.inputs .value)
       rw [show hierStep.outputs .left =

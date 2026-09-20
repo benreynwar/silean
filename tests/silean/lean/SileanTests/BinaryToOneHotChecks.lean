@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.BinaryToOneHot.BinaryToOneHotTheorems
+import Silean.Modules.BinaryToOneHot.BinaryToOneHotDerived
 
 namespace SileanTests.BinaryToOneHot
 
@@ -44,14 +44,12 @@ def result (width : Nat) (inputs : (Modules.BinaryToOneHot.ports width).inputs.V
 #guard BitVector.toNat 2 (inputs2 .value) == 1
 #guard BitVector.toNat 3 (inputs3 .value) == 3
 
-example (inputs : (Modules.BinaryToOneHot.ports width).inputs.Values)
-    (outputs : (Modules.BinaryToOneHot.ports width).outputs.Values)
-    (holds : (Modules.BinaryToOneHot.outputRule width).Holds
-      inputs SignalMap.emptyValues outputs) (index : Fin (Modules.BinaryToOneHot.size width)) :
-    outputs .result index = true ↔
-      index.val = BitVector.toNat width (inputs .value) :=
-  Modules.BinaryToOneHot.result_eq_true_iff_of_holds width inputs
-    SignalMap.emptyValues outputs holds index
+example {step : (Modules.BinaryToOneHot.cycleContract width).Step}
+    (allowed : (Modules.BinaryToOneHot.cycleContract width).Allows step)
+    (index : Fin (Modules.BinaryToOneHot.size width)) :
+    step.outputs .result index = true ↔
+      index.val = BitVector.toNat width (step.inputs .value) :=
+  Modules.BinaryToOneHot.result_eq_true_iff_of_allowed width allowed index
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

@@ -2,14 +2,13 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Authoring.CircuitDescriptionSoundness
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Equality.EqualityTheorems
+import Silean.Modules.EqualsConstant.Internal.EqualsConstantStructure
+import Silean.Modules.Equality.EqualityDerived
 
 /-! # EqualsConstant verification
 
-Child certifications, schedules, and the structural proof for the circuit in
-\`EqualsConstant.lean\`. Import \`EqualsConstantTheorems.lean\` for the public
-proof interface. -/
+Child certifications, schedules, correspondence, and structural correctness
+for constant comparison. -/
 
 namespace Silean.Modules.EqualsConstant
 
@@ -59,7 +58,7 @@ private theorem implements : Contracts.Cycle.ImplementsSolutions
   have equalityOutput : (hierStep.children .equality).outputs .result =
       signalType.equal (hierStep.inputs .value)
         ((hierStep.children .constantValue).outputs .output) := by
-    have held := Equality.result_of_allowed signalType
+    have held := Equality.cycleContract.result signalType
       (childMatch .equality).allowed
     have inputsEqual : (body signalType constant).wiring.childInputValues
         hierStep.inputs hierStep.childOutputs .equality =
@@ -78,7 +77,7 @@ private theorem implements : Contracts.Cycle.ImplementsSolutions
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     change hierStep.outputs .result =
       signalType.equal (hierStep.inputs .value) constant
     rw [show hierStep.outputs .result =
@@ -105,7 +104,7 @@ end Silean.Modules.EqualsConstant
 
 /-! ## Authored-description correspondence -/
 
-namespace Silean.Modules.EqualsConstant.Description.Internal
+namespace Silean.Modules.EqualsConstant.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
@@ -115,21 +114,28 @@ private theorem same (signalType : SignalType)
       ofNaming (EqualsConstant.naming signalType constant) := by
   rfl
 
-private theorem unique (signalType : SignalType)
-    (constant : signalType.Denote) :
-    (description signalType constant).UniqueNames := by
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal <;> subst child <;>
-    constructor <;> simp only [Equality.Naming.naming_ports] <;>
-    exact of_decide_eq_true rfl
-
-theorem corresponds (signalType : SignalType)
+theorem description_corresponds (signalType : SignalType)
     (constant : signalType.Denote) :
     Corresponds (description signalType constant)
       (EqualsConstant.naming signalType constant) :=
-  ⟨same signalType constant, unique signalType constant⟩
+  ⟨same signalType constant⟩
 
-end Silean.Modules.EqualsConstant.Description.Internal
+open Authoring.CircuitDescription.Description
+
+/-- Generated proof behind the public implementation-independent correctness
+claim. -/
+theorem construction_correct (signalType : SignalType)
+    (constant : signalType.Denote) :
+    (description signalType constant).ImplementsCycleContract
+      (cycleContract signalType constant) (Naming.ports signalType) := by
+  have corresponds := description_corresponds signalType constant
+  unfold EqualsConstant.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := instancePorts signalType constant
+      wiring := wiring signalType constant })
+    (children := structuralChildren signalType constant)
+    corresponds (certification signalType constant)
+
+end Silean.Modules.EqualsConstant.Internal

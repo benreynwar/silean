@@ -2,6 +2,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.VectorLayout.Internal.VectorLayoutStructure
 import Silean.Primitives.Constant
 
 namespace Silean.Modules.VectorLayout
@@ -9,6 +10,8 @@ namespace Silean.Modules.VectorLayout
 open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
+
+open Internal
 
 module_child_certifications childContracts (inputWidth : Nat) (outputWidth : Nat)
     (layout : Fin outputWidth → BitSource inputWidth)

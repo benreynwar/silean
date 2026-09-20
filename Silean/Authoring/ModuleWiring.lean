@@ -156,7 +156,7 @@ elab_rules : command
         ⟨$context, $wiringName $arguments:term*⟩
     )
     elabCommand <| ← `(
-      def $moduleStructureName $binders:bracketedBinder* :
+      @[reducible] def $moduleStructureName $binders:bracketedBinder* :
           Silean.ModuleStructure ($context).ports :=
         .composite ($bodyName $arguments:term*)
           ($structuralChildrenName $arguments:term*)

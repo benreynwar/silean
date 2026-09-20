@@ -30,13 +30,13 @@ def bitUpdateInputs : (Modules.EnabledRegister.ports .bit).inputs.Values
 example : ∃ outputs nextState,
     (Modules.EnabledRegister.moduleStructure .bit).Transition bitHoldInputs
       (structuralState .bit) outputs nextState :=
-  (Modules.EnabledRegister.certified .bit).hasStructuralResult.transition_exists
+  (Modules.EnabledRegister.certified .bit).structuralCertification.hasSolution.transition_exists
     bitHoldInputs (structuralState .bit)
 
 example : ∃ outputs nextState,
     (Modules.EnabledRegister.moduleStructure .bit).Transition bitUpdateInputs
       (structuralState .bit) outputs nextState :=
-  (Modules.EnabledRegister.certified .bit).hasStructuralResult.transition_exists
+  (Modules.EnabledRegister.certified .bit).structuralCertification.hasSolution.transition_exists
     bitUpdateInputs (structuralState .bit)
 
 abbrev vectorType : SignalType := .vector 3 .bit
@@ -53,7 +53,7 @@ def vectorInputs : (Modules.EnabledRegister.ports vectorType).inputs.Values
 example : ∃ outputs nextState,
     (Modules.EnabledRegister.moduleStructure vectorType).Transition vectorInputs
       (structuralState vectorType) outputs nextState :=
-  (Modules.EnabledRegister.certified vectorType).hasStructuralResult.transition_exists
+  (Modules.EnabledRegister.certified vectorType).structuralCertification.hasSolution.transition_exists
     vectorInputs (structuralState vectorType)
 
 abbrev nestedFields : SignalTypes :=
@@ -72,7 +72,7 @@ def nestedInputs : (Modules.EnabledRegister.ports nestedType).inputs.Values
 example : ∃ outputs nextState,
     (Modules.EnabledRegister.moduleStructure nestedType).Transition nestedInputs
       (structuralState nestedType) outputs nextState :=
-  (Modules.EnabledRegister.certified nestedType).hasStructuralResult.transition_exists
+  (Modules.EnabledRegister.certified nestedType).structuralCertification.hasSolution.transition_exists
     nestedInputs (structuralState nestedType)
 
 example : ∃ contractState,

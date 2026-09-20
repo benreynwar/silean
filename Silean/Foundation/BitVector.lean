@@ -23,6 +23,21 @@ def toNat : (width : Nat) → (Fin width → Bool) → Nat
       (if bits (Fin.last width) then cardinality width else 0) +
         toNat width (fun index => bits index.castSucc)
 
+/-- Decode from the least-significant end: bit zero contributes one and the
+remaining vector contributes twice its recursively decoded value. -/
+theorem toNat_succ_low : ∀ (width : Nat) (bits : Fin (width + 1) → Bool),
+    toNat (width + 1) bits =
+      (bits 0).toNat + 2 * toNat width (fun index => bits index.succ)
+  | 0, bits => by
+      cases value : bits 0 <;> simp [toNat, cardinality, value]
+  | width + 1, bits => by
+      have lower := toNat_succ_low width
+        (fun index : Fin (width + 1) => bits index.castSucc)
+      cases high : bits (Fin.last (width + 1)) <;>
+        cases low : bits 0 <;>
+        simp [toNat, cardinality, high, low] at lower ⊢ <;>
+        omega
+
 def toIndex : (width : Nat) → (Fin width → Bool) → Fin (cardinality width)
   | 0, _ => ⟨0, by simp [cardinality]⟩
   | width + 1, bits =>
@@ -107,5 +122,15 @@ theorem testBit_toNat (width : Nat) (bits : Fin width → Bool)
     apply toNat_injective width
     rw [toNat_ofNat, cardinality_eq_pow, Nat.mod_eq_of_lt bound]
   exact congrFun recovered index
+
+/-- Bits at and above the encoded width are zero. -/
+@[simp] theorem testBit_toNat_of_width_le (width : Nat)
+    (bits : Fin width → Bool) (index : Nat) (outside : width ≤ index) :
+    (toNat width bits).testBit index = false := by
+  apply Nat.testBit_lt_two_pow
+  calc
+    toNat width bits < cardinality width := toNat_lt_cardinality width bits
+    _ = 2 ^ width := cardinality_eq_pow width
+    _ ≤ 2 ^ index := Nat.pow_le_pow_right (by omega) outside
 
 end Silean.BitVector

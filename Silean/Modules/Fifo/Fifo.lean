@@ -1,6 +1,13 @@
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.CircuitDescription
-import Silean.Modules.Fifo.Internal.FifoStructure
+import Silean.Authoring.FifoPorts
+import Silean.Interfaces.FifoPorts
+import Silean.Modules.EnabledResetCounter.EnabledResetCounterDerived
+import Silean.Modules.Fifo.CircularBuffer
+import Silean.Modules.Fifo.FifoPointerControlDerived
+import Silean.Modules.RegisterBank.RegisterBankDerived
+import Silean.Naming.FifoPortsNaming
 
 namespace Silean.Modules.Fifo
 
@@ -14,17 +21,22 @@ one when their address bits are equal. Reset is synchronous; invalid storage
 contents do not need to be cleared. -/
 
 open Authoring.CircuitDescription
+open Silean.Interfaces.Fifo.ports
+
+abbrev Pointer (addressWidth : Nat) :=
+  EnabledResetCounter.Value (addressWidth + 1)
+
+/-- Both counters start at the first entry, making the FIFO empty. -/
+def zeroPointer (addressWidth : Nat) : Pointer addressWidth := fun _ => false
 
 /-! ## Authored hardware -/
 
-namespace Description
-
 noncomputable def construction (element : SignalType) (addressWidth : Nat) :
-    Builder Unit := do
-  let inputValid ← input "input_valid" .bit
-  let inputData ← input "input_data" element
-  let outputReady ← input "output_ready" .bit
-  let reset ← input "reset" .bit
+    ModuleBuilder (ports element) Unit := do
+  let inputValid ← input element .inputValid
+  let inputData ← input element .inputData
+  let outputReady ← input element .outputReady
+  let reset ← input element .reset
 
   wire readAdvance : .bit
   wire writeAdvance : .bit
@@ -41,56 +53,14 @@ noncomputable def construction (element : SignalType) (addressWidth : Nat) :
     control.writeAdvance control.writeAddress inputData
     (fun _ => control.readAddress)
 
-  output "output_valid" control.outputValid
-  output "output_data" (storage.readValue 0)
-  output "input_ready" control.inputReady
+  output element .outputValid control.outputValid
+  output element .outputData (storage.readValue 0)
+  output element .inputReady control.inputReady
 
 noncomputable def description (element : SignalType) (addressWidth : Nat) :
     Description :=
-  build (construction element addressWidth)
-
-end Description
-
-/-! ## Placement -/
-
-/-- Boundary outputs produced by a placed register-bank FIFO. -/
-structure PlacedOutputs (element : SignalType) where
-  outputValid : Net .bit
-  outputData : Net element
-  inputReady : Net .bit
-
-/-- Place a FIFO under a caller-chosen instance name. -/
-noncomputable def placeNamed (name : Naming.SourceName)
-    (addressWidth : Nat) (inputValid : Net .bit) (inputData : Net element)
-    (outputReady reset : Net .bit) : Builder (PlacedOutputs element) := do
-  let child ← Authoring.CircuitDescription.placeNamed name
-    (design element addressWidth) fun
-      | .inputValid => inputValid
-      | .inputData => inputData
-      | .outputReady => outputReady
-      | .reset => reset
-  pure {
-    outputValid := child .outputValid
-    outputData := child .outputData
-    inputReady := child .inputReady }
-
-/-- Place a FIFO using the next conventional indexed name. -/
-noncomputable def place (addressWidth : Nat)
-    (inputValid : Net .bit) (inputData : Net element)
-    (outputReady reset : Net .bit) : Builder (PlacedOutputs element) := do
-  let child ← placeIndexed "fifo" (design element addressWidth) fun
-    | .inputValid => inputValid
-    | .inputData => inputData
-    | .outputReady => outputReady
-    | .reset => reset
-  pure {
-    outputValid := child .outputValid
-    outputData := child .outputData
-    inputReady := child .inputReady }
-
-attribute [circuit_description] placeNamed place
-
-open Contracts.Cycle.Certification.Layer
+  ModuleBuilder.build (Naming.FifoPorts.ports element)
+    (construction element addressWidth)
 
 /-! ## Exact cycle behavior -/
 
@@ -201,14 +171,6 @@ theorem forward_of_allowed :
           (step.currentState .entries) :=
   (forwardRule_holds_iff element addressWidth
     step.inputs step.currentState step.outputs).mp (allowed.1 .forward)
-
-/-- Input readiness is determined entirely by the current FIFO pointers. -/
-theorem input_ready_of_allowed :
-    step.outputs .inputReady =
-      Fifo.inputReady (step.currentState .readPointer)
-        (step.currentState .writePointer) :=
-  (readyRule_holds_iff element addressWidth
-    step.inputs step.currentState step.outputs).mp (allowed.1 .ready)
 
 theorem next_readPointer_of_allowed :
     step.nextState .readPointer =
@@ -323,5 +285,57 @@ theorem written_entry_of_accepted_input (addressWidth : Nat)
   unfold nextEntries
   rw [accepted]
   exact RegisterBank.nextEntries_selected _ _ _ _
+
+/-! ## Logical queue view -/
+
+namespace Properties
+
+abbrev Word (element : SignalType) := element.Denote
+
+abbrev ContractState (element : SignalType) (addressWidth : Nat) :=
+  (cycleContract element addressWidth).state.Values
+
+def capacity (addressWidth : Nat) : Nat := BitVector.cardinality addressWidth
+
+def pointerModulus (addressWidth : Nat) : Nat :=
+  BitVector.cardinality (addressWidth + 1)
+
+theorem capacity_positive (addressWidth : Nat) : 0 < capacity addressWidth := by
+  rw [capacity, BitVector.cardinality_eq_pow]
+  exact Nat.two_pow_pos addressWidth
+
+instance capacityNeZero (addressWidth : Nat) : NeZero (capacity addressWidth) :=
+  ⟨Nat.ne_of_gt (capacity_positive addressWidth)⟩
+
+def pointerValue (addressWidth : Nat) (pointer : Pointer addressWidth) : Nat :=
+  BitVector.toNat (addressWidth + 1) pointer
+
+def occupancy (addressWidth : Nat)
+    (readPointer writePointer : Pointer addressWidth) : Nat :=
+  CircularBuffer.distance (pointerModulus addressWidth)
+    (pointerValue addressWidth readPointer)
+    (pointerValue addressWidth writePointer)
+
+def Invariant (addressWidth : Nat)
+    (state : ContractState element addressWidth) : Prop :=
+  occupancy addressWidth (state .readPointer) (state .writePointer) ≤
+    capacity addressWidth
+
+def entryIndex (addressWidth : Nat) (pointer : Pointer addressWidth) :
+    Fin (capacity addressWidth) :=
+  Fin.ofNat (capacity addressWidth) (pointerValue addressWidth pointer)
+
+def contentsOf (addressWidth : Nat) (entries : Entries element addressWidth)
+    (readPointer writePointer : Pointer addressWidth) : List (Word element) :=
+  CircularBuffer.values (capacity addressWidth) entries
+    (entryIndex addressWidth readPointer)
+    (occupancy addressWidth readPointer writePointer)
+
+def contents (addressWidth : Nat) (state : ContractState element addressWidth) :
+    List (Word element) :=
+  contentsOf addressWidth (state .entries) (state .readPointer)
+    (state .writePointer)
+
+end Properties
 
 end Silean.Modules.Fifo

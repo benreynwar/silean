@@ -1,5 +1,5 @@
 import Silean.FIRRTL.Render
-import Silean.Modules.SerialDepthFifo.SerialDepthFifoFifoTheorems
+import Silean.Modules.SerialDepthFifo.SerialDepthFifoDerived
 
 namespace SileanTests.SerialDepthFifo
 

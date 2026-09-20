@@ -4,6 +4,7 @@ import Silean.Authoring.ModuleRuleSchedules
 import Silean.Authoring.CircuitDescriptionSoundness
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.BitMux.BitMux
+import Silean.Modules.BitMux.Internal.BitMuxStructure
 import Silean.Primitives.And
 import Silean.Primitives.Not
 import Silean.Primitives.Or
@@ -100,22 +101,28 @@ end Silean.Modules.BitMux
 
 /-! ## Authored-description correspondence -/
 
-namespace Silean.Modules.BitMux.Description.Internal
+namespace Silean.Modules.BitMux.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
 private theorem same : some description = ofNaming BitMux.naming := by
   rfl
 
-private theorem unique : description.UniqueNames := by
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal | equal <;> subst child <;>
-    constructor <;> exact of_decide_eq_true rfl
+theorem description_corresponds : Corresponds description BitMux.naming :=
+  ⟨same⟩
 
-theorem corresponds : Corresponds description BitMux.naming :=
-  ⟨same, unique⟩
+open Authoring.CircuitDescription.Description
 
-end Silean.Modules.BitMux.Description.Internal
+/-- Generated proof of the implementation-independent claim exposed by the
+public bit-mux facade. -/
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold BitMux.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := { instancePorts := instancePorts, wiring := wiring })
+    (children := structuralChildren)
+    corresponds certification
+
+end Silean.Modules.BitMux.Internal

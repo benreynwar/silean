@@ -5,7 +5,7 @@ import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.ResetRegister.Internal.ResetRegisterStructure
 import Silean.Modules.Register.RegisterDerived
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.Mux.MuxDerived
 
 /-! Certification machinery for the authored reset register. -/
 
@@ -78,7 +78,7 @@ private theorem implements :
       (Register.output_of_allowed storageMatches.allowed)
   · change nextState = (cycleContract signalType resetValue).stateRule.apply
       hierStep.inputs contractState
-    have selected := Mux.result_of_allowed signalType selectionMatches.allowed
+    have selected := Mux.cycleContract.result signalType selectionMatches.allowed
     have constantValue :=
       Constant.output_of_allowed signalType resetValue constantMatches.allowed
     change (hierStep.children .resetValue).outputs .output =
@@ -126,8 +126,7 @@ private theorem same (signalType : SignalType)
       ofNaming (ResetRegister.naming signalType resetValue) := by
   simp only [circuit_description, description, construction,
     Constant.design, Constant.designWith,
-    Register.place, Register.design, Register.designWith,
-    Naming.ModuleNaming.ports_withPorts]
+    Register.place, Register.design, Register.designWith]
   simp [circuit_description, enumeration]
   unfold moduleStructure
   unfold naming
@@ -142,46 +141,14 @@ private theorem same (signalType : SignalType)
     sourceDescription, Constant.design, Constant.designWith,
     Register.design, Register.designWith, EndpointContext.moduleInput,
     EndpointContext.instanceOutput]
-  simp [enumeration, inputMap, outputMap, ports]
-
-private theorem unique (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    (description signalType resetValue).UniqueNames := by
-  simp only [circuit_description, description, construction,
-    Constant.design, Constant.designWith,
-    Register.place, Register.design, Register.designWith,
-    Naming.ModuleNaming.ports_withPorts]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal
-  · subst child
-    constructor
-    · rw [Naming.ModuleNaming.ports_withPorts]
-      change (Constant.Naming.portsWithNaming signalType
-          (.positional signalType)).names.Nodup
-      exact of_decide_eq_true rfl
-    · exact of_decide_eq_true rfl
-  · subst child
-    constructor
-    · exact Mux.Naming.portNames_nodup signalType
-    · exact of_decide_eq_true rfl
-  · subst child
-    constructor
-    · rw [show (Register.Naming.namingWith signalType
-          (.positional signalType)).ports =
-          Register.Naming.portsWithNaming signalType (.positional signalType) by
-          simp [Register.Naming.namingWith]]
-      exact of_decide_eq_true rfl
-    · exact of_decide_eq_true rfl
+  simp [enumeration, inputMap, outputMap, ports, childId, Enumeration.ordinal]
+  exact of_decide_eq_true rfl
 
 theorem description_corresponds (signalType : SignalType)
     (resetValue : signalType.Denote) :
     Corresponds (description signalType resetValue)
       (ResetRegister.naming signalType resetValue) :=
-  ⟨same signalType resetValue, unique signalType resetValue⟩
+  ⟨same signalType resetValue⟩
 
 open Authoring.CircuitDescription.Description
 

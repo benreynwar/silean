@@ -1,102 +1,92 @@
 import Silean.Contracts.Cycle.CycleImplementation
+import Silean.Semantics.StructuralRuleSchedule
 
 namespace Silean.Contracts.Cycle.Certification.Layer
 
 open Silean
 
-/-! # Schedules for an uninstantiated structural layer
+/-! # Cycle-layer views of contract-independent structural schedules
 
-These are the primary schedule types. They mention only a `ModuleBody` and the
-contracts required at its child boundaries; they neither select child
-structures nor contain child certifications. Semantic theorems accept matching
-certified children separately. -/
+The canonical schedule machinery lives under
+`ModuleStructuralCertification.Layer`. A cycle contract contributes only its
+boundary structural-rule specifications; the cycle-specific types below add
+parent output/state scheduling obligations used by behavioral certification.
+Existing cycle authoring syntax is intentionally preserved. -/
 
-structure RuleOccurrence (body : ModuleBody)
-    (childContracts : ChildCycleContracts body) where
-  child : body.instancePorts.Name
-  rule : (childContracts child).RuleName
+/-- Dependency-only child interfaces obtained from the declared cycle
+contracts. -/
+@[reducible] def childStructuralRules (body : ModuleBody)
+    (childContracts : ChildCycleContracts body) :
+    ModuleStructuralCertification.Layer.ChildRules body :=
+  fun child => (childContracts child).structuralRules
+
+abbrev RuleOccurrence (body : ModuleBody)
+    (childContracts : ChildCycleContracts body) :=
+  ModuleStructuralCertification.Layer.RuleOccurrence body
+    (childStructuralRules body childContracts)
 
 namespace RuleOccurrence
 
-@[reducible] instance : DecidableEq (RuleOccurrence body childContracts) := by
-  intro left right
-  rcases left with ⟨leftChild, leftRule⟩
-  rcases right with ⟨rightChild, rightRule⟩
-  letI : DecidableEq body.instancePorts.Name :=
-    body.instancePorts.names.decidableEq
-  if childEqual : leftChild = rightChild then
-    subst rightChild
-    letI : DecidableEq (childContracts leftChild).RuleName :=
-      (childContracts leftChild).ruleNames.decidableEq
-    if ruleEqual : leftRule = rightRule then
-      subst rightRule
-      exact isTrue rfl
-    else
-      exact isFalse fun equal => ruleEqual (by injection equal)
-  else
-    exact isFalse fun equal => childEqual (by injection equal)
+@[match_pattern] abbrev mk
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    (child : body.instancePorts.Name)
+    (rule : (childContracts child).RuleName) :
+    RuleOccurrence body childContracts :=
+  ModuleStructuralCertification.Layer.RuleOccurrence.mk child rule
 
-def writes (occurrence : RuleOccurrence body childContracts) :
-    List (body.instancePorts.ports occurrence.child).outputs.Label :=
-  ((childContracts occurrence.child).outputRule occurrence.rule).writesOutputs.labels
+abbrev child {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    (occurrence : RuleOccurrence body childContracts) :
+    body.instancePorts.Name :=
+  ModuleStructuralCertification.Layer.RuleOccurrence.child occurrence
 
-def reads (occurrence : RuleOccurrence body childContracts) :
-    List (body.instancePorts.ports occurrence.child).inputs.Label :=
-  ((childContracts occurrence.child).outputRule occurrence.rule).readsInputs.labels
+abbrev rule {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    (occurrence : RuleOccurrence body childContracts) :
+    (childContracts
+      (ModuleStructuralCertification.Layer.RuleOccurrence.child occurrence)).RuleName :=
+  ModuleStructuralCertification.Layer.RuleOccurrence.rule occurrence
+
+abbrev writes (occurrence : RuleOccurrence body childContracts) :=
+  ModuleStructuralCertification.Layer.RuleOccurrence.writes occurrence
+
+abbrev reads (occurrence : RuleOccurrence body childContracts) :=
+  ModuleStructuralCertification.Layer.RuleOccurrence.reads occurrence
 
 end RuleOccurrence
 
-abbrev Availability (body : ModuleBody) (childContracts : ChildCycleContracts body) :=
-  List (RuleOccurrence body childContracts)
+abbrev Availability (body : ModuleBody)
+    (childContracts : ChildCycleContracts body) :=
+  ModuleStructuralCertification.Layer.Availability body
+    (childStructuralRules body childContracts)
 
-/-- Every public output rule of every child has been called. -/
-def CoversAllRules (body : ModuleBody) (childContracts : ChildCycleContracts body)
-    (available : Availability body childContracts) : Prop :=
-  ∀ child rule, RuleOccurrence.mk child rule ∈ available
+abbrev CoversAllRules (body : ModuleBody)
+    (childContracts : ChildCycleContracts body)
+    (available : Availability body childContracts) :=
+  ModuleStructuralCertification.Layer.CoversAllRules body
+    (childStructuralRules body childContracts) available
 
-def outputAvailable
+abbrev outputAvailable
     (available : Availability body childContracts)
     (child : body.instancePorts.Name)
-    (output : (body.instancePorts.ports child).outputs.Label) : Prop :=
-  ∃ rule, RuleOccurrence.mk child rule ∈ available ∧
-    output ∈ (RuleOccurrence.mk child rule : RuleOccurrence body childContracts).writes
+    (output : (body.instancePorts.ports child).outputs.Label) :=
+  ModuleStructuralCertification.Layer.outputAvailable available child output
 
-def sourceAvailable
+abbrev sourceAvailable
     (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts)
-    (source : SignalSource body.ports body.instancePorts signalType) : Prop :=
-  match source with
-  | .moduleInput input => inputAvailable input
-  | .instanceOutput child output => outputAvailable available child output
+    (source : SignalSource body.ports body.instancePorts signalType) :=
+  ModuleStructuralCertification.Layer.sourceAvailable inputAvailable available source
 
-@[simp] theorem sourceAvailable_castType
+theorem sourceAvailable_castType
     (inputAvailable : body.ports.inputs.Label → Prop)
     (available : Availability body childContracts)
     (equal : sourceType = targetType)
     (source : SignalSource body.ports body.instancePorts sourceType) :
     sourceAvailable inputAvailable available
         (SignalSource.castType equal source) ↔
-      sourceAvailable inputAvailable available source := by
-  cases equal
-  rfl
+      sourceAvailable inputAvailable available source :=
+  ModuleStructuralCertification.Layer.sourceAvailable_castType
+    inputAvailable available equal source
 
-@[simp] theorem sourceAvailable_moduleInput
-    (inputAvailable : body.ports.inputs.Label → Prop)
-    (available : Availability body childContracts)
-    (input : body.ports.inputs.Label) :
-    sourceAvailable inputAvailable available (.moduleInput input) =
-      inputAvailable input := rfl
-
-@[simp] theorem sourceAvailable_instanceOutput
-    (inputAvailable : body.ports.inputs.Label → Prop)
-    (available : Availability body childContracts)
-    (child : body.instancePorts.Name)
-    (output : (body.instancePorts.ports child).outputs.Label) :
-    sourceAvailable inputAvailable available (.instanceOutput child output) =
-      outputAvailable available child output := rfl
-
-/-- Witness that an output is available by naming a previously called rule
-that writes it. -/
 theorem sourceAvailable_of_instanceOutput
     {inputAvailable : body.ports.inputs.Label → Prop}
     {available : Availability body childContracts}
@@ -107,27 +97,24 @@ theorem sourceAvailable_of_instanceOutput
     (written : output ∈
       (RuleOccurrence.mk child rule : RuleOccurrence body childContracts).writes) :
     sourceAvailable inputAvailable available (.instanceOutput child output) :=
-  ⟨rule, called, written⟩
+  ModuleStructuralCertification.Layer.sourceAvailable_of_instanceOutput
+    called written
 
 theorem outputAvailable_of_covers
     {available : Availability body childContracts}
     (covers : CoversAllRules body childContracts available)
     (child : body.instancePorts.Name)
     (output : (body.instancePorts.ports child).outputs.Label) :
-    outputAvailable available child output := by
-  have written := (childContracts child).output_is_written output
-  rw [ModuleCycleContract.writtenOutputs] at written
-  rcases List.mem_flatMap.mp written with ⟨rule, _, outputMem⟩
-  exact ⟨rule, covers child rule, outputMem⟩
+    outputAvailable available child output :=
+  ModuleStructuralCertification.Layer.outputAvailable_of_covers
+    covers child output
 
 theorem sourceAvailable_of_covers
     {available : Availability body childContracts}
     (covers : CoversAllRules body childContracts available)
     (source : SignalSource body.ports body.instancePorts signalType) :
-    sourceAvailable (fun _ => True) available source := by
-  cases source with
-  | moduleInput _ => trivial
-  | instanceOutput child output => exact outputAvailable_of_covers covers child output
+    sourceAvailable (fun _ => True) available source :=
+  ModuleStructuralCertification.Layer.sourceAvailable_of_covers covers source
 
 theorem sourceAvailable_mono
     {leftInputs rightInputs : body.ports.inputs.Label → Prop}
@@ -136,40 +123,53 @@ theorem sourceAvailable_mono
     (availableMono : ∀ occurrence, occurrence ∈ left → occurrence ∈ right)
     {source : SignalSource body.ports body.instancePorts signalType}
     (available : sourceAvailable leftInputs left source) :
-    sourceAvailable rightInputs right source := by
-  cases source with
-  | moduleInput input => exact inputsMono input available
-  | instanceOutput child output =>
-      rcases available with ⟨rule, called, written⟩
-      exact ⟨rule, availableMono _ called, written⟩
+    sourceAvailable rightInputs right source :=
+  ModuleStructuralCertification.Layer.sourceAvailable_mono
+    inputsMono availableMono available
 
-inductive Schedule (body : ModuleBody) (childContracts : ChildCycleContracts body)
+abbrev Schedule (body : ModuleBody)
+    (childContracts : ChildCycleContracts body)
     (inputAvailable : body.ports.inputs.Label → Prop)
-    (Finish : Availability body childContracts → Prop) :
-    Availability body childContracts → Type 1
-  | done {available} (finished : Finish available) :
-      Schedule body childContracts inputAvailable Finish available
-  | call {available}
-      (occurrence : RuleOccurrence body childContracts)
-      (readsAvailable : ∀ input, input ∈ occurrence.reads →
-        sourceAvailable inputAvailable available
-          (body.wiring.instanceInput occurrence.child input))
-      (fresh : occurrence ∉ available)
-      (rest : Schedule body childContracts inputAvailable Finish
-        (occurrence :: available)) :
-      Schedule body childContracts inputAvailable Finish available
+    (Finish : Availability body childContracts → Prop)
+    (initial : Availability body childContracts) :=
+  ModuleStructuralCertification.Layer.Schedule body
+    (childStructuralRules body childContracts) inputAvailable Finish initial
 
 namespace Schedule
 
-def finalAvailability
+abbrev done
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {inputAvailable : body.ports.inputs.Label → Prop}
     {Finish : Availability body childContracts → Prop}
-    {initial : Availability body childContracts} :
-    Schedule body childContracts inputAvailable Finish initial →
-      Availability body childContracts
-  | .done (available := available) _ => available
-  | .call _ _ _ rest => rest.finalAvailability
+    {available : Availability body childContracts}
+    (finished : Finish available) :
+    Schedule body childContracts inputAvailable Finish available :=
+  ModuleStructuralCertification.Layer.Schedule.done finished
+
+abbrev call
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    {inputAvailable : body.ports.inputs.Label → Prop}
+    {Finish : Availability body childContracts → Prop}
+    {available : Availability body childContracts}
+    (occurrence : RuleOccurrence body childContracts)
+    (readsAvailable : ∀ input, input ∈ occurrence.reads →
+      sourceAvailable inputAvailable available
+        (body.wiring.instanceInput occurrence.child input))
+    (fresh : occurrence ∉ available)
+    (rest : Schedule body childContracts inputAvailable Finish
+      (occurrence :: available)) :
+    Schedule body childContracts inputAvailable Finish available :=
+  ModuleStructuralCertification.Layer.Schedule.call
+    occurrence readsAvailable fresh rest
+
+abbrev finalAvailability
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    {inputAvailable : body.ports.inputs.Label → Prop}
+    {Finish : Availability body childContracts → Prop}
+    {initial : Availability body childContracts}
+    (schedule : Schedule body childContracts inputAvailable Finish initial) :
+    Availability body childContracts :=
+  ModuleStructuralCertification.Layer.Schedule.finalAvailability schedule
 
 @[simp] theorem finalAvailability_done
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
@@ -195,7 +195,7 @@ def finalAvailability
     finalAvailability (.call occurrence readsAvailable fresh rest) =
       finalAvailability rest := rfl
 
-noncomputable def append
+noncomputable abbrev append
     {body : ModuleBody} {children : ChildCycleContracts body}
     {inputAvailable : body.ports.inputs.Label → Prop}
     {FirstFinish SecondFinish : Availability body children → Prop}
@@ -203,11 +203,8 @@ noncomputable def append
     (first : Schedule body children inputAvailable FirstFinish initial)
     (second : Schedule body children inputAvailable SecondFinish
       first.finalAvailability) :
-    Schedule body children inputAvailable SecondFinish initial := by
-  induction first with
-  | done _ => exact second
-  | call occurrence readsAvailable fresh rest induction =>
-      exact .call occurrence readsAvailable fresh (induction second)
+    Schedule body children inputAvailable SecondFinish initial :=
+  ModuleStructuralCertification.Layer.Schedule.append first second
 
 @[simp] theorem finalAvailability_append
     {body : ModuleBody} {children : ChildCycleContracts body}
@@ -217,76 +214,10 @@ noncomputable def append
     (first : Schedule body children inputAvailable FirstFinish initial)
     (second : Schedule body children inputAvailable SecondFinish
       first.finalAvailability) :
-    (first.append second).finalAvailability = second.finalAvailability := by
-  induction first with
-  | done _ => rfl
-  | call occurrence readsAvailable fresh rest induction =>
-      exact induction second
+    (first.append second).finalAvailability = second.finalAvailability :=
+  ModuleStructuralCertification.Layer.Schedule.finalAvailability_append first second
 
-/-! Call one rule for every member of a finite family. All reads must already
-be available before the family starts, so enumeration order is semantically
-irrelevant. -/
-
-private noncomputable def callFamilyFrom
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.ports.inputs.Label → Prop}
-    {Index : Type} (occurrence : Index → RuleOccurrence body childContracts)
-    (injective : Function.Injective occurrence)
-    (initial : Availability body childContracts)
-    (initialReads : ∀ index input, input ∈ (occurrence index).reads →
-      sourceAvailable inputAvailable initial
-        (body.wiring.instanceInput (occurrence index).child input))
-    (remaining : List Index) (remainingNodup : remaining.Nodup)
-    (available : Availability body childContracts)
-    (initialIncluded : ∀ called, called ∈ initial → called ∈ available)
-    (fresh : ∀ index, index ∈ remaining → occurrence index ∉ available)
-    (Finish : Availability body childContracts → Prop)
-    (finish : ∀ final,
-      (∀ called, called ∈ available → called ∈ final) →
-      (∀ index, index ∈ remaining → occurrence index ∈ final) →
-      (∀ called, called ∈ final →
-        called ∈ available ∨ ∃ index, index ∈ remaining ∧ called = occurrence index) →
-      Finish final) :
-    Schedule body childContracts inputAvailable Finish available :=
-  match remaining with
-  | [] => .done (finish available (fun _ member => member)
-      (fun _ member => nomatch member) (fun _ member => Or.inl member))
-  | index :: rest => by
-      have indexFresh : index ∉ rest := (List.nodup_cons.mp remainingNodup).1
-      let called := occurrence index
-      refine .call called ?_ (fresh index (by simp)) ?_
-      · intro input inputMem
-        exact sourceAvailable_mono (fun _ available => available)
-          initialIncluded (initialReads index input inputMem)
-      · apply callFamilyFrom occurrence injective initial initialReads rest
-          (List.nodup_cons.mp remainingNodup).2 (called :: available)
-        · intro previous member
-          exact List.mem_cons_of_mem called (initialIncluded previous member)
-        · intro next nextMem member
-          rcases List.mem_cons.mp member with equal | oldMember
-          · apply indexFresh
-            rw [← injective equal]
-            exact nextMem
-          · exact fresh next (List.mem_cons_of_mem index nextMem) oldMember
-        · intro final includes covers only
-          apply finish final
-          · intro previous member
-            exact includes previous (List.mem_cons_of_mem called member)
-          · intro selected selectedMem
-            rcases List.mem_cons.mp selectedMem with equal | tailMem
-            · subst selected
-              exact includes called (by simp)
-            · exact covers selected tailMem
-          · intro selected selectedMem
-            rcases only selected selectedMem with inExtended | fromTail
-            · rcases List.mem_cons.mp inExtended with equal | inAvailable
-              · exact Or.inr ⟨index, by simp, equal⟩
-              · exact Or.inl inAvailable
-            · rcases fromTail with ⟨next, nextMem, equal⟩
-              exact Or.inr ⟨next, List.mem_cons_of_mem index nextMem, equal⟩
-termination_by remaining.length
-
-noncomputable def callFamilyAfter
+noncomputable abbrev callFamilyAfter
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {inputAvailable : body.ports.inputs.Label → Prop}
     (initial : Availability body childContracts)
@@ -303,19 +234,10 @@ noncomputable def callFamilyAfter
         (∀ index, occurrence index ∈ final) ∧
         ∀ called, called ∈ final →
           called ∈ initial ∨ ∃ index, called = occurrence index) initial :=
-  callFamilyFrom occurrence injective initial readsAvailable indices.values
-    indices.nodup initial (fun _ member => member)
-    (fun index _ => fresh index) _
-    (fun _ includes covers only => ⟨includes, ⟨
-      (fun index => covers index
-        (ListIndex.get_eq (indices.locate index) ▸ List.get_mem _ _)),
-      (fun called member => by
-        rcases only called member with present | found
-        · exact Or.inl present
-        · rcases found with ⟨index, _, equal⟩
-          exact Or.inr ⟨index, equal⟩)⟩⟩)
+  ModuleStructuralCertification.Layer.Schedule.callFamilyAfter
+    initial indices occurrence injective fresh readsAvailable
 
-noncomputable def callFamily
+noncomputable abbrev callFamily
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {inputAvailable : body.ports.inputs.Label → Prop}
     {Index : Type} (indices : Enumeration Index)
@@ -328,16 +250,8 @@ noncomputable def callFamily
       (fun final =>
         (∀ index, occurrence index ∈ final) ∧
         ∀ called, called ∈ final → ∃ index, called = occurrence index) [] :=
-  callFamilyFrom occurrence injective [] readsAvailable indices.values indices.nodup []
-    (fun _ member => nomatch member) (fun _ _ member => nomatch member) _
-    (fun _ _ covers only => ⟨
-      (fun index => covers index
-        (ListIndex.get_eq (indices.locate index) ▸ List.get_mem _ _)),
-      (fun called member => by
-        rcases only called member with impossible | found
-        · cases impossible
-        · rcases found with ⟨index, _, equal⟩
-          exact ⟨index, equal⟩)⟩)
+  ModuleStructuralCertification.Layer.Schedule.callFamily
+    indices occurrence injective readsAvailable
 
 theorem finished
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
@@ -345,10 +259,19 @@ theorem finished
     {Finish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable Finish initial) :
-    Finish schedule.finalAvailability := by
-  induction schedule with
-  | done finished => exact finished
-  | call _ _ _ _ induction => exact induction
+    Finish schedule.finalAvailability :=
+  ModuleStructuralCertification.Layer.Schedule.finished schedule
+
+theorem initial_mem_final
+    {body : ModuleBody} {childContracts : ChildCycleContracts body}
+    {inputAvailable : body.ports.inputs.Label → Prop}
+    {Finish : Availability body childContracts → Prop}
+    {initial : Availability body childContracts}
+    (schedule : Schedule body childContracts inputAvailable Finish initial)
+    (occurrence : RuleOccurrence body childContracts) (member : occurrence ∈ initial) :
+    occurrence ∈ schedule.finalAvailability :=
+  ModuleStructuralCertification.Layer.Schedule.initial_mem_final
+    schedule occurrence member
 
 @[simp] theorem mem_finalAvailability_callFamilyAfter_iff
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
@@ -364,45 +287,29 @@ theorem finished
     (called : RuleOccurrence body childContracts) :
     called ∈ (callFamilyAfter initial indices occurrence injective fresh
       readsAvailable).finalAvailability ↔
-      called ∈ initial ∨ ∃ index, called = occurrence index := by
-  let family := callFamilyAfter initial indices occurrence injective fresh readsAvailable
-  constructor
-  · exact family.finished.2.2 called
-  · intro member
-    rcases member with old | ⟨index, equal⟩
-    · exact family.finished.1 called old
-    · rw [equal]
-      exact family.finished.2.1 index
+      called ∈ initial ∨ ∃ index, called = occurrence index :=
+  ModuleStructuralCertification.Layer.Schedule.mem_finalAvailability_callFamilyAfter_iff
+    initial indices occurrence injective fresh readsAvailable called
 
-/-- Change only the final obligation of a schedule. -/
-noncomputable def mapFinish
+noncomputable abbrev mapFinish
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {inputAvailable : body.ports.inputs.Label → Prop}
     {FirstFinish SecondFinish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable FirstFinish initial)
     (implies : ∀ available, FirstFinish available → SecondFinish available) :
-    Schedule body childContracts inputAvailable SecondFinish initial := by
-  induction schedule with
-  | done finished => exact .done (implies _ finished)
-  | call occurrence readsAvailable fresh rest induction =>
-      exact .call occurrence readsAvailable fresh induction
+    Schedule body childContracts inputAvailable SecondFinish initial :=
+  ModuleStructuralCertification.Layer.Schedule.mapFinish schedule implies
 
-/-- Replace a schedule's terminal obligation with another fact proved for its
-actual final availability. Unlike `mapFinish`, this does not require an
-implication that holds at every intermediate availability. -/
-noncomputable def replaceFinish
+noncomputable abbrev replaceFinish
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
     {inputAvailable : body.ports.inputs.Label → Prop}
     {FirstFinish SecondFinish : Availability body childContracts → Prop}
     {initial : Availability body childContracts}
     (schedule : Schedule body childContracts inputAvailable FirstFinish initial)
     (finished : SecondFinish schedule.finalAvailability) :
-    Schedule body childContracts inputAvailable SecondFinish initial := by
-  induction schedule with
-  | done _ => exact .done finished
-  | call occurrence readsAvailable fresh rest induction =>
-      exact .call occurrence readsAvailable fresh (induction finished)
+    Schedule body childContracts inputAvailable SecondFinish initial :=
+  ModuleStructuralCertification.Layer.Schedule.replaceFinish schedule finished
 
 end Schedule
 
@@ -444,17 +351,12 @@ structure RuleSchedules (body : ModuleBody)
 
 namespace RuleSchedules
 
-/-- Every child rule must occur in the parent state schedule or in at least one
-parent output schedule. This is the implementation-independent coverage
-obligation stored with a layer. -/
 def CoversChildren (schedules : RuleSchedules body childContracts contract) : Prop :=
   ∀ child rule,
     RuleOccurrence.mk child rule ∈ schedules.state.finalAvailability ∨
       ∃ parentRule, RuleOccurrence.mk child rule ∈
         (schedules.output parentRule).finalAvailability
 
-/-- When every child rule occurs in an output schedule, coverage follows
-without mentioning the (irrelevant) state schedule. -/
 theorem coversChildren_of_outputMembership
     (schedules : RuleSchedules body childContracts contract)
     (covered : ∀ child rule, ∃ parentRule,

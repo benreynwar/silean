@@ -3,6 +3,7 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.Internal.MuxStructure
 import Silean.Authoring.CircuitDescriptionSoundness
 import Silean.Primitives.Not
 
@@ -144,7 +145,7 @@ theorem result_of_realization (signalType : SignalType)
   obtain ⟨_, allowed, _⟩ :=
     (certification signalType).allows_of_realizes
       contractState step corresponds realizes
-  exact Mux.result_of_allowed signalType allowed
+  exact Mux.cycleContract.result signalType allowed
 
 end Internal
 
@@ -163,42 +164,14 @@ structures, so this comparison is noncomputable too; its equality is checked
 by the kernel rather than by a separate netlist interpreter.
 -/
 
-namespace Silean.Modules.Mux.Description.Internal
+namespace Silean.Modules.Mux.Internal
 
 open Silean Naming Authoring.CircuitDescription
-
-private theorem maskPorts (signalType : SignalType) :
-    (Mask.Naming.namingWith signalType (.positional _)).ports = Mask.Naming.ports signalType := by
-  cases signalType with
-  | bit =>
-    rw [Mask.Naming.namingWith.eq_1]
-    erw [ModuleNaming.ports_mpr_of_eq (Mask.moduleStructure.eq_1 .bit)]
-    erw [ModuleNaming.ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_1
-      Mask.interface Mask.bitModuleStructure)]
-    rfl
-  | vector length element =>
-    rw [Mask.Naming.namingWith.eq_2]
-    erw [ModuleNaming.ports_mpr_of_eq (Mask.moduleStructure.eq_1 (.vector length element))]
-    erw [ModuleNaming.ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_2
-      Mask.interface Mask.bitModuleStructure length element)]
-    rfl
-  | tuple fields =>
-    rw [Mask.Naming.namingWith.eq_3]
-    erw [ModuleNaming.ports_mpr_of_eq (Mask.moduleStructure.eq_1 (.tuple fields))]
-    erw [ModuleNaming.ports_mpr_of_eq (Composition.LeafwiseInterface.moduleStructure.eq_3
-      Mask.interface Mask.bitModuleStructure fields)]
-    rfl
 
 private theorem same (signalType : SignalType) :
     some (description signalType) = ofNaming (Mux.naming signalType) := by
   rfl
 
-/-! Exact translation is reflexivity. Name uniqueness additionally uses the
-port-projection lemmas above: production's recursive naming is transported
-across structural equalities. `erw` is important there because the participating
-structure definitions are not all reducible at the default rewrite transparency.
-No alternate label representation or changed production declaration is needed.
--/
 private theorem boundaryNamesUnique (signalType : SignalType) :
     (((description signalType).inputs.map (·.name)) ++
       ((description signalType).outputs.map (·.port.name))).Nodup :=
@@ -208,17 +181,25 @@ private theorem instanceNamesUnique (signalType : SignalType) :
     ((description signalType).children.map (·.name)).Nodup :=
   of_decide_eq_true rfl
 
-private theorem unique (signalType : SignalType) : (description signalType).UniqueNames := by
-  refine ⟨boundaryNamesUnique signalType, instanceNamesUnique signalType, ?_⟩
-  intro child member
-  change child ∈ [_, _, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal | equal <;> subst child <;>
-    constructor <;> simp only [maskPorts, BitwiseOr.Naming.namingWith_ports] <;>
-    exact of_decide_eq_true rfl
-
-theorem corresponds (signalType : SignalType) :
+theorem description_corresponds (signalType : SignalType) :
     Corresponds (description signalType) (Mux.naming signalType) :=
-  ⟨same signalType, unique signalType⟩
+  ⟨same signalType⟩
 
-end Silean.Modules.Mux.Description.Internal
+open Authoring.CircuitDescription.Description
+
+/-- Generated proof of the implementation-independent claim exposed by the
+public mux facade. -/
+theorem construction_correct (signalType : SignalType) :
+    (description signalType).ImplementsCycleContract
+      (cycleContract signalType) (Naming.ports signalType) := by
+  have corresponds := description_corresponds signalType
+  unfold Mux.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := instancePorts signalType,
+      wiring := wiring signalType })
+    (children := structuralChildren signalType)
+    corresponds (certification signalType)
+
+end Silean.Modules.Mux.Internal

@@ -4,7 +4,7 @@ import Silean.Authoring.ModuleRuleSchedules
 import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.EnabledResetRegister.Internal.EnabledResetRegisterStructure
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.ResetRegister.ResetRegisterDerived
 
 /-! Certification machinery for the authored enabled reset register. -/
@@ -71,7 +71,7 @@ private theorem implements :
     change hierStep.outputs .value =
       (hierStep.children .storage).outputs .value at boundaryOutput
     exact boundaryOutput.trans
-      (ResetRegister.value_of_allowed storageMatches.allowed)
+      (ResetRegister.cycleContract.value signalType resetValue storageMatches.allowed)
   · change storageNextState =
       (cycleContract signalType resetValue).stateRule.apply
         hierStep.inputs contractState
@@ -79,12 +79,12 @@ private theorem implements :
         bif hierStep.inputs .reset then resetValue
         else (hierStep.children .selection).outputs .result := by
       exact ResetRegister.next_stored_of_allowed storageMatches.allowed
-    have selected := Mux.result_of_allowed signalType selectionMatches.allowed
+    have selected := Mux.cycleContract.result signalType selectionMatches.allowed
     change (hierStep.children .selection).outputs .result =
       bif hierStep.inputs .enable then hierStep.inputs .value
         else (hierStep.children .storage).outputs .value at selected
     have storageCurrent :=
-      ResetRegister.value_of_allowed storageMatches.allowed
+      ResetRegister.cycleContract.value signalType resetValue storageMatches.allowed
     change (hierStep.children .storage).outputs .value =
       contractState .stored at storageCurrent
     funext statePort
@@ -133,24 +133,11 @@ private theorem same (signalType : SignalType)
   simp [circuit_description, enumeration]
   rfl
 
-private theorem unique (signalType : SignalType)
-    (resetValue : signalType.Denote) :
-    (description signalType resetValue).UniqueNames := by
-  simp only [circuit_description, description, construction,
-    ResetRegister.place]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal <;> subst child <;>
-    constructor <;> exact of_decide_eq_true rfl
-
 theorem description_corresponds (signalType : SignalType)
     (resetValue : signalType.Denote) :
     Corresponds (description signalType resetValue)
       (EnabledResetRegister.naming signalType resetValue) :=
-  ⟨same signalType resetValue, unique signalType resetValue⟩
+  ⟨same signalType resetValue⟩
 
 open Authoring.CircuitDescription.Description
 

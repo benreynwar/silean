@@ -1,4 +1,5 @@
 import Silean.Authoring.ModuleDesign
+import Silean.Modules.BitMux.BitMux
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.AndPrimitive
 import Silean.Primitives.NotPrimitive
@@ -12,11 +13,7 @@ open Silean.Authoring
 /-! Expanded typed structure for the reader-facing bit-mux description. -/
 
 module_design BitMux where
-  ports {
-    input select : .bit,
-    input whenFalse : .bit,
-    input whenTrue : .bit,
-    output result : .bit }
+  boundary (BitMux.ports) (naming := BitMux.Naming.ports)
   instances {
     invertSelect (name := .indexed "not" 0) := Primitives.notDesign,
     chooseFalse (name := .indexed "and" 0) := Primitives.andDesign,

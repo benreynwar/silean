@@ -2,8 +2,9 @@ import Silean.Authoring.ModuleDesign
 import Silean.Interfaces.FifoPorts
 import Silean.Modules.EnabledRegister.EnabledRegisterDerived
 import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
-import Silean.Modules.Mux.Mux
-import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControl
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.OneEntryFifo.Control.Internal.OneEntryFifoControlStructure
+import Silean.Modules.OneEntryFifo.OneEntryFifo
 import Silean.Naming.FifoPortsNaming
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.OrPrimitive
@@ -19,7 +20,7 @@ open Silean
 open Silean.Authoring
 
 module_design OneEntryFifo (signalType : SignalType) where
-  boundary (Interfaces.Fifo.ports signalType)
+  boundary (OneEntryFifo.ports signalType)
     (naming := Naming.FifoPorts.ports signalType)
   instances {
     validStorage := EnabledResetRegister.design .bit false,

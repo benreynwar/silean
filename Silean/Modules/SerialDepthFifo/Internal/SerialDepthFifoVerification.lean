@@ -1,6 +1,7 @@
 import Silean.Composition.FifoSerialCertification
-import Silean.Modules.OneEntryFifo.OneEntryFifoCycleBehavior
+import Silean.Modules.OneEntryFifo.OneEntryFifoDerived
 import Silean.Modules.SerialDepthFifo.SerialDepthFifo
+import Silean.Modules.SerialDepthFifo.Internal.SerialDepthFifoStructure
 
 namespace Silean.Modules.SerialDepthFifo
 

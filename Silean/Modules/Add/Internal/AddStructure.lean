@@ -1,7 +1,7 @@
 import Silean.Modules.Add.Add
 import Silean.Modules.Constant.Constant
 import Silean.Modules.FullAdder.FullAdderDerived
-import Silean.Modules.VectorConcat.VectorConcat
+import Silean.Modules.VectorConcat.VectorConcatDerived
 import Silean.Naming.SignalAdapterNaming
 
 namespace Silean.Modules.Add
@@ -154,24 +154,6 @@ def naming : (width : Nat) → ModuleNaming (Modules.Add.moduleStructure width)
           | .highAdder => FullAdder.design.naming
           | .highBit => Silean.Naming.SignalAdapter.combiner Modules.Add.highCombiner
           | .concat => VectorConcat.naming .bit width 1)
-
-theorem naming_ports (width : Nat) : (naming width).ports = ports width := by
-  cases width with
-  | zero =>
-      rw [naming.eq_1]
-      erw [ModuleNaming.ports_mpr_of_eq (by
-        rw [Modules.Add.moduleStructure.eq_def])]
-      rfl
-  | succ width =>
-      rw [naming.eq_2]
-      erw [ModuleNaming.ports_mpr_of_eq (by
-        rw [Modules.Add.moduleStructure.eq_def])]
-      rfl
-
-theorem portNames_nodup (width : Nat) :
-    (naming width).ports.names.Nodup := by
-  rw [naming_ports]
-  exact of_decide_eq_true rfl
 
 end Silean.Modules.Add.Naming
 

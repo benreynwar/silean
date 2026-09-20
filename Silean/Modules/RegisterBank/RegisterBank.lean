@@ -1,10 +1,7 @@
-import Silean.Authoring.ModuleDesign
-import Silean.Authoring.CircuitDescription
+import Silean.Authoring.ModuleCycleContract
+import Silean.Foundation.BitVector
 import Silean.Modules.BinaryToOneHot.BinaryToOneHot
-import Silean.Modules.CombMuxTree.CombMuxTree
-import Silean.Modules.EnabledRegister.EnabledRegisterDerived
-import Silean.Naming.PrimitiveNaming
-import Silean.Naming.SignalAdapterNaming
+import Silean.Naming.ModuleNaming
 
 namespace Silean.Modules.RegisterBank
 
@@ -13,11 +10,10 @@ open Silean.Authoring
 
 /-! # Register bank
 
-The hardware contains `2 ^ addressWidth` generated storage cells and write
-gates plus `readCount` generated mux trees. The indexed `module_design` is the
-reader-facing construction because it shows those families directly; a
-`CircuitDescription` loop would duplicate the generator without making the
-organization clearer. -/
+The public contract describes a bank of `2 ^ addressWidth` entries with one
+synchronous write port and independently addressed combinational read ports.
+The indexed generated hierarchy lives under `Internal/`.
+-/
 
 /-- A synchronous-write bank containing `2 ^ addressWidth` entries of `element`,
 with an independently addressed combinational output for each read port. -/
@@ -234,78 +230,6 @@ def ports (element : SignalType) (addressWidth readCount : Nat) :
 
 end Naming
 
-/-! ## Hardware structure -/
-
-def entryCombiner (element : SignalType)
-    (addressWidth : Nat) : Composition.SignalCombiner :=
-  .vector (entryCount addressWidth) element
-
-end Silean.Modules.RegisterBank
-
-namespace Silean.Modules
-
-open Silean
-open Silean.Authoring
-
-module_design RegisterBank (element : SignalType) (addressWidth : Nat)
-    (readCount : Nat) where
-  boundary (RegisterBank.ports element addressWidth readCount)
-    (naming := RegisterBank.Naming.ports element addressWidth readCount)
-  instances {
-    -- Decodes the binary write address into one-hot form.
-    decoder := BinaryToOneHot.design addressWidth,
-    -- Exposes the individual one-hot write-select bits.
-    decodeSplit :=
-      Naming.SignalAdapter.splitterDesign
-        (Composition.SignalSplitter.vector (RegisterBank.entryCount addressWidth) .bit),
-    -- Combines global write enable with one entry's select bit.
-    gate (index : Fin (RegisterBank.entryCount addressWidth) in
-        Enumeration.fin (RegisterBank.entryCount addressWidth))
-      (name := s!"write_gate_{index.val}") := Primitives.andDesign,
-    -- Stores one data entry.
-    storage (index : Fin (RegisterBank.entryCount addressWidth) in
-        Enumeration.fin (RegisterBank.entryCount addressWidth))
-      (name := s!"entry_{index.val}") := EnabledRegister.design element,
-    -- Collects all stored entries into a vector.
-    combine :=
-      Naming.SignalAdapter.combinerDesign
-        (RegisterBank.entryCombiner element addressWidth),
-    -- Selects the asynchronously read entry.
-    readMux (port : Fin readCount in Enumeration.fin readCount)
-      (name := s!"read_{port.val}_mux") :=
-        CombMuxTree.design element addressWidth }
-  wiring {
-    outputs {
-      -- Each read mux directly drives its corresponding bank output.
-      .readValue port := readMux(port)[.result] }
-    -- Decode the write address and expose each one-hot bit.
-    instance (.decoder) {
-      .value := input.writeAddress }
-    instance (.decodeSplit) {
-      .value := decoder.result }
-    -- Enable only the addressed entry when a write is requested.
-    instance (.gate index) {
-      .left := input.writeEnable,
-      .right := decodeSplit[index] }
-    -- Every entry sees the write value; its local gate controls loading.
-    instance (.storage index) {
-      .data := input.writeValue,
-      .enable := gate(index)[.output] }
-    -- Collect the entries and select one using the read address.
-    instance (.combine) {
-      index := storage(index)[.q] }
-    instance (.readMux port) {
-      .values := combine.value,
-      .index := input[.readAddress port] }
-  }
-
-end Silean.Modules
-
-
-namespace Silean.Modules.RegisterBank
-
-open Silean
-
 @[simp] theorem stateRule_apply_entries (element : SignalType) (addressWidth readCount : Nat)
     (inputs : (ports element addressWidth readCount).inputs.Values)
     (state : (stateMap element addressWidth).Values) :
@@ -361,81 +285,5 @@ theorem retained_entry_of_allowed
   exact nextEntries_other _ _ _ _ _ _ different
 
 end AllowedStep
-
-end Silean.Modules.RegisterBank
-
-namespace Silean.Modules.RegisterBank.Naming
-
-open Silean Silean.Naming
-
-def namingWith (element : SignalType) (addressWidth readCount : Nat)
-    (elementNaming : SignalTypeNaming element) :
-    ModuleNaming (Modules.RegisterBank.moduleStructure element addressWidth readCount) := by
-  unfold Modules.RegisterBank.moduleStructure
-  exact .composite ⟨"RegisterBank", "",
-      [.signalType element, .natural addressWidth, .natural readCount]⟩
-    (portsWithNaming element addressWidth readCount elementNaming)
-    (instanceNames element addressWidth readCount)
-    (fun
-      | .decoder => BinaryToOneHot.Naming.naming addressWidth
-      | .decodeSplit => Silean.Naming.SignalAdapter.splitter
-          (.vector (Modules.RegisterBank.entryCount addressWidth) .bit)
-      | .gate _ => Silean.Naming.Primitive.and
-      | .storage _ =>
-          EnabledRegister.namingWith element elementNaming
-      | .combine =>
-          Silean.Naming.SignalAdapter.combinerWithNaming
-            (Composition.SignalSplitter.vector
-            (Modules.RegisterBank.entryCount addressWidth) element).combiner
-            (.vector elementNaming)
-      | .readMux _ =>
-          CombMuxTree.Naming.namingWith element addressWidth elementNaming)
-
-def naming (element : SignalType) (addressWidth readCount : Nat) :
-    ModuleNaming (Modules.RegisterBank.moduleStructure element addressWidth readCount) :=
-  namingWith element addressWidth readCount (.positional element)
-
-end Silean.Modules.RegisterBank.Naming
-
-namespace Silean.Modules.RegisterBank
-
-open Silean
-open Silean.Authoring.CircuitDescription
-
-/-! ## Placement -/
-
-/-- Read ports produced by a placed register bank. -/
-structure PlacedOutputs (element : SignalType) (readCount : Nat) where
-  readValue : Fin readCount → Net element
-
-/-- Place a register bank under a caller-chosen instance name. -/
-noncomputable def placeNamed (name : Silean.Naming.SourceName)
-    (writeEnable : Net .bit) (writeAddress : Net (.vector addressWidth .bit))
-    (writeValue : Net element)
-    (readAddress : Fin readCount → Net (.vector addressWidth .bit)) :
-    Builder (PlacedOutputs element readCount) := do
-  let child ← Authoring.CircuitDescription.placeNamed name
-    (design element addressWidth readCount) fun
-      | .writeEnable => writeEnable
-      | .writeAddress => writeAddress
-      | .writeValue => writeValue
-      | .readAddress port => readAddress port
-  pure { readValue := fun port => child (.readValue port) }
-
-/-- Place a register bank using the next conventional indexed name. -/
-noncomputable def place
-    (writeEnable : Net .bit) (writeAddress : Net (.vector addressWidth .bit))
-    (writeValue : Net element)
-    (readAddress : Fin readCount → Net (.vector addressWidth .bit)) :
-    Builder (PlacedOutputs element readCount) := do
-  let child ← placeIndexed "register_bank"
-    (design element addressWidth readCount) fun
-      | .writeEnable => writeEnable
-      | .writeAddress => writeAddress
-      | .writeValue => writeValue
-      | .readAddress port => readAddress port
-  pure { readValue := fun port => child (.readValue port) }
-
-attribute [circuit_description] placeNamed place
 
 end Silean.Modules.RegisterBank

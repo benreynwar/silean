@@ -4,7 +4,7 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Modules.EnabledRegister.Internal.EnabledRegisterStructure
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.Register.RegisterDerived
 
 /-! Certification machinery for the authored enabled register. -/
@@ -74,7 +74,7 @@ private theorem implements :
     have storageNextValue :=
       Register.next_stored_of_allowed storageMatches.allowed
     change storageNextState .stored = storageInputs .input at storageNextValue
-    have selected := Mux.result_of_allowed signalType selectionMatches.allowed
+    have selected := Mux.cycleContract.result signalType selectionMatches.allowed
     change (hierStep.children .selection).outputs .result =
       bif hierStep.inputs .enable then hierStep.inputs .data
         else (hierStep.children .storage).outputs .output at selected
@@ -128,32 +128,9 @@ private theorem same (signalType : SignalType) :
   simp [inputMap, outputMap, ports]
   rfl
 
-private theorem unique (signalType : SignalType) :
-    (description signalType).UniqueNames := by
-  simp only [circuit_description, description, construction,
-    Register.place, Register.design, Register.designWith]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal
-  · subst child
-    constructor
-    · exact Mux.Naming.portNames_nodup signalType
-    · exact of_decide_eq_true rfl
-  · subst child
-    constructor
-    · rw [show (Register.Naming.namingWith signalType
-          (.positional signalType)).ports =
-          Register.Naming.portsWithNaming signalType (.positional signalType) by
-          simp [Register.Naming.namingWith]]
-      exact of_decide_eq_true rfl
-    · exact of_decide_eq_true rfl
-
 theorem description_corresponds (signalType : SignalType) :
     Corresponds (description signalType) (EnabledRegister.naming signalType) :=
-  ⟨same signalType, unique signalType⟩
+  ⟨same signalType⟩
 
 open Authoring.CircuitDescription.Description
 

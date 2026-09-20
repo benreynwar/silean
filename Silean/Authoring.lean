@@ -10,6 +10,7 @@ import Silean.Authoring.SignalSchema
 import Silean.Authoring.SignalSchemaDeclaration
 import Silean.Authoring.CircuitArithmetic
 import Silean.Authoring.CircuitDescriptionContracts
+import Silean.Authoring.FifoPorts
 
 /-! # Hardware authoring commands
 

@@ -66,10 +66,9 @@ def certified (splitter : SignalSplitter) :
   moduleStructure := .splitter splitter
   cycleContract := splitter.cycleContract
   certification := {
+    structural := splitter.structuralCertification,
     stateCorresponds := emptyStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := splitter.hasSolution,
-    structuralResultUnique := splitter.hasAtMostOneSolution,
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp
       splitter.implements }
 
@@ -126,10 +125,9 @@ def certified (combiner : SignalCombiner) :
   moduleStructure := .combiner combiner
   cycleContract := combiner.cycleContract
   certification := {
+    structural := combiner.structuralCertification,
     stateCorresponds := emptyStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := combiner.hasSolution,
-    structuralResultUnique := combiner.hasAtMostOneSolution,
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp
       combiner.implements }
 

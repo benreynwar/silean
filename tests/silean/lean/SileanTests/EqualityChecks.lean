@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.Equality.EqualityTheorems
+import Silean.Modules.Equality.EqualityDerived
 
 namespace SileanTests.Equality
 
@@ -63,13 +63,10 @@ def nestedDifferentInputs : (Modules.Equality.ports nestedTuple).inputs.Values
   (fun | .left | .right => ()) SignalMap.emptyValues).1 .result
 
 example (signalType : SignalType)
-    (inputs : (Modules.Equality.ports signalType).inputs.Values)
-    (outputs : (Modules.Equality.ports signalType).outputs.Values)
-    (holds : (Modules.Equality.outputRule signalType).Holds
-      inputs SignalMap.emptyValues outputs) :
-    outputs .result = true ↔ inputs .left = inputs .right :=
-  Modules.Equality.output_eq_true_iff_of_holds signalType inputs
-    SignalMap.emptyValues outputs holds
+    {step : (Modules.Equality.cycleContract signalType).Step}
+    (allowed : (Modules.Equality.cycleContract signalType).Allows step) :
+    step.outputs .result = true ↔ step.inputs .left = step.inputs .right :=
+  Modules.Equality.result_eq_true_iff_of_allowed signalType allowed
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

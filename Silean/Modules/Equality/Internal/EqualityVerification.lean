@@ -1,12 +1,11 @@
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
-import Silean.Modules.Equality.Equality
+import Silean.Modules.Equality.Internal.EqualityStructure
 
 /-! # Equality verification
 
-This file contains the schedules and recursive certification machinery for the
-hardware family defined in `Equality.lean`. Downstream modules should import
-`EqualityTheorems.lean` rather than depending on these proof details. -/
+This file contains the schedules and recursive certification machinery for
+structural equality. -/
 
 namespace Silean.Modules.Equality
 
@@ -66,7 +65,7 @@ private theorem bitImplements : Contracts.Cycle.ImplementsSolutions
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     change hierStep.outputs .result =
       SignalType.bit.equal (hierStep.inputs .left) (hierStep.inputs .right)
     have boundary := satisfies.1
@@ -256,8 +255,8 @@ private theorem aggregateImplements :
             (splitterInputs splitter hierStep.inputs .right) component) := by
     intro component
     have equation := (childMatch (componentInstance component)).ruleHolds Rule.apply
-    change (outputRule (splitter.ports.outputs.signalType component)).Holds _ _ _ at equation
-    rw [outputRule_holds_iff] at equation
+    change (applyRule (splitter.ports.outputs.signalType component)).Holds _ _ _ at equation
+    rw [applyRule_holds_iff] at equation
     have leftInput :
         ((aggregateBody splitter).wiring.childInputValues
           hierStep.inputs hierStep.childOutputs
@@ -282,7 +281,7 @@ private theorem aggregateImplements :
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     change hierStep.outputs .result = splitter.aggregateType.equal
       (hierStep.inputs .left) (hierStep.inputs .right)
     apply Bool.eq_iff_iff.mpr

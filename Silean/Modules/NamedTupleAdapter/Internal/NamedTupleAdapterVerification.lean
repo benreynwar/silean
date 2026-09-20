@@ -3,12 +3,15 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.NamedTupleAdapter.Internal.NamedTupleAdapterStructure
 
 namespace Silean.Modules.NamedTupleCombiner
 
 open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
+
+open Internal
 
 private theorem adapterInputValue (signals : SignalMap)
     (inputs : (ports signals).inputs.Values)
@@ -92,6 +95,8 @@ namespace Silean.Modules.NamedTupleSplitter
 open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
+
+open Internal
 
 private theorem moduleOutputValue (signals : SignalMap)
     (inputs : (ports signals).inputs.Values)

@@ -1,47 +1,24 @@
-import Silean.Authoring.CircuitDescription
+import Silean.Contracts.Fifo.FifoCycleBehavior
 import Silean.Modules.OneEntryFifo.OneEntryFifo
-import Silean.Naming.FifoSerialNaming
+
+/-! # Serial-depth FIFO
+
+A positive-depth FIFO formed by serially composing fall-through one-entry
+FIFO behaviors. This file is the human-facing semantic interface: it states
+the recursive exact-cycle behavior, its contract, and the laws needed to use
+that contract.
+
+The recursive hardware hierarchy is deliberately not duplicated as a
+handwritten builder program. It lives under `Internal`; placement and
+certification are exposed by `SerialDepthFifoDerived.lean`.
+-/
 
 namespace Silean.Modules.SerialDepthFifo
 
 open Silean
 open Contracts.Fifo.Cycle
-open OneEntryFifo
 
-/-! # Serial-depth FIFO
-
-A positive-depth FIFO assembled by connecting fall-through one-entry FIFOs in
-series. The public `depth` is the total number of entries.
-
-This module deliberately keeps its recursive `ModuleStructure` as the primary
-hardware definition instead of adding a `CircuitDescription.Builder` version.
-The hierarchy itself changes with `depth`, and each recursive step is exactly
-the already-certified generic `FifoSerial` composition. A second handwritten
-builder recursion would duplicate that programmatic construction without
-making the hardware easier to understand.
--/
-
-/-! `additionalDepth` counts entries after the required first entry. It is an
-internal recursion index; the public API below takes the FIFO's actual positive
-depth. Ordinary Lean recursion is intentional here because each step wraps a
-smaller, differently typed hierarchy rather than declaring a fixed child set. -/
-
-def moduleStructureFromAdditional (signalType : SignalType)
-    :
-    (additionalDepth : Nat) → ModuleStructure (Silean.Interfaces.Fifo.ports signalType)
-  | 0 => OneEntryFifo.moduleStructure signalType
-  | additionalDepth + 1 =>
-      Composition.FifoSerial.moduleStructure signalType
-        (OneEntryFifo.moduleStructure signalType)
-        (moduleStructureFromAdditional signalType additionalDepth)
-
-def cycleBehaviorFromAdditional (signalType : SignalType) :
-    (additionalDepth : Nat) → CycleBehavior signalType
-  | 0 => OneEntryFifo.cycleBehavior signalType
-  | additionalDepth + 1 =>
-      (OneEntryFifo.cycleBehavior signalType).serial
-        (cycleBehaviorFromAdditional signalType additionalDepth)
-
+/-- Number of entries after the required first entry. -/
 def additionalDepth (depth : Nat) : Nat := depth - 1
 
 theorem additionalDepth_eq {depth : Nat} (positive : 0 < depth) :
@@ -49,10 +26,12 @@ theorem additionalDepth_eq {depth : Nat} (positive : 0 < depth) :
   unfold additionalDepth
   omega
 
-def moduleStructure (signalType : SignalType)
-    (depth : Nat) (_positive : 0 < depth) :
-    ModuleStructure (Silean.Interfaces.Fifo.ports signalType) :=
-  moduleStructureFromAdditional signalType (additionalDepth depth)
+def cycleBehaviorFromAdditional (signalType : SignalType) :
+    (additionalDepth : Nat) → CycleBehavior signalType
+  | 0 => OneEntryFifo.cycleBehavior signalType
+  | additionalDepth + 1 =>
+      (OneEntryFifo.cycleBehavior signalType).serial
+        (cycleBehaviorFromAdditional signalType additionalDepth)
 
 def cycleBehavior (signalType : SignalType) (depth : Nat) (_positive : 0 < depth) :
     CycleBehavior signalType :=
@@ -74,89 +53,42 @@ def cycleContract (signalType : SignalType) (depth : Nat) (positive : 0 < depth)
     Contracts.Cycle.ModuleCycleContract (Silean.Interfaces.Fifo.ports signalType) :=
   (cycleBehavior signalType depth positive).cycleContract
 
-end Silean.Modules.SerialDepthFifo
+section AllowedStep
 
-namespace Silean.Modules.SerialDepthFifo.Naming
+variable {signalType : SignalType} {depth : Nat} {positive : 0 < depth}
+  {step : (cycleContract signalType depth positive).Step}
+  (allowed : (cycleContract signalType depth positive).Allows step)
 
-open Silean Silean.Naming
+include allowed
 
-def namingFromAdditional (signalType : SignalType)
-    (typeNaming : SignalTypeNaming signalType) :
-    (additionalDepth : Nat) →
-      ModuleNaming (Modules.SerialDepthFifo.moduleStructureFromAdditional signalType additionalDepth)
-  | 0 => Modules.OneEntryFifo.namingWith signalType typeNaming
-  | additionalDepth + 1 =>
-      Composition.FifoSerial.Naming.serialNamingWith signalType typeNaming (additionalDepth + 2)
-        (Modules.OneEntryFifo.namingWith signalType typeNaming)
-        (namingFromAdditional signalType typeNaming additionalDepth)
+/-- The forward outputs are those computed by the composed behavior. -/
+theorem forward_of_allowed :
+    step.outputs .outputValid =
+        ((cycleBehavior signalType depth positive).forward
+          (step.inputs .inputValid) (step.inputs .inputData)
+          step.currentState).1 ∧
+      step.outputs .outputData =
+        ((cycleBehavior signalType depth positive).forward
+          (step.inputs .inputValid) (step.inputs .inputData)
+          step.currentState).2 :=
+  ((cycleBehavior signalType depth positive).forwardRule_holds_iff
+    step.inputs step.currentState step.outputs).mp (allowed.1 .forward)
 
-def depthNamingWith (signalType : SignalType)
-    (typeNaming : SignalTypeNaming signalType)
-    (depth : Nat) (positive : 0 < depth) :
-    ModuleNaming (Modules.SerialDepthFifo.moduleStructure signalType depth positive) :=
-  namingFromAdditional signalType typeNaming
-    (Modules.SerialDepthFifo.additionalDepth depth)
+/-- Input readiness is that computed by the composed behavior. -/
+theorem inputReady_of_allowed :
+    step.outputs .inputReady =
+      (cycleBehavior signalType depth positive).ready
+        (step.inputs .outputReady) step.currentState :=
+  ((cycleBehavior signalType depth positive).readyRule_holds_iff
+    step.inputs step.currentState step.outputs).mp (allowed.1 .ready)
 
-def depthNaming (signalType : SignalType) (depth : Nat) (positive : 0 < depth) :
-    ModuleNaming (Modules.SerialDepthFifo.moduleStructure signalType depth positive) :=
-  depthNamingWith signalType (.positional signalType) depth positive
+/-- The next state is the composed behavior's state transition. -/
+theorem nextState_of_allowed :
+    step.nextState =
+      (cycleBehavior signalType depth positive).nextState
+        step.inputs step.currentState := by
+  simpa [cycleContract] using allowed.2
 
-end Silean.Modules.SerialDepthFifo.Naming
-
-namespace Silean.Modules.SerialDepthFifo
-
-open Silean Silean.Naming
-open Silean.Authoring.CircuitDescription
-
-/-- The complete recursively assembled design with authored payload names. -/
-@[reducible] def designWith (signalType : SignalType)
-    (typeNaming : SignalTypeNaming signalType)
-    (depth : Nat) (positive : 0 < depth) : NamedModule :=
-  ⟨Silean.Interfaces.Fifo.ports signalType,
-    moduleStructure signalType depth positive,
-    Naming.depthNamingWith signalType typeNaming depth positive⟩
-
-/-- The complete recursively assembled design with positional payload names. -/
-@[reducible] def design (signalType : SignalType)
-    (depth : Nat) (positive : 0 < depth) : NamedModule :=
-  designWith signalType (.positional signalType) depth positive
-
-/-! ## Placement -/
-
-/-- Place a positive-depth serial FIFO under a caller-chosen instance name. -/
-noncomputable def placeNamed (name : SourceName)
-    (depth : Nat) (positive : 0 < depth)
-    (inputValid : Net .bit) (inputData : Net signalType)
-    (outputReady reset : Net .bit) :
-    Builder (OneEntryFifo.PlacedOutputs signalType) := do
-  let child ← Authoring.CircuitDescription.placeNamed name
-    (design signalType depth positive) fun
-      | .inputValid => inputValid
-      | .inputData => inputData
-      | .outputReady => outputReady
-      | .reset => reset
-  pure {
-    outputValid := child .outputValid
-    outputData := child .outputData
-    inputReady := child .inputReady }
-
-/-- Place a positive-depth serial FIFO using the next conventional indexed
-name. -/
-noncomputable def place (depth : Nat) (positive : 0 < depth)
-    (inputValid : Net .bit) (inputData : Net signalType)
-    (outputReady reset : Net .bit) :
-    Builder (OneEntryFifo.PlacedOutputs signalType) := do
-  let child ← placeIndexed "serial_depth_fifo"
-    (design signalType depth positive) fun
-      | .inputValid => inputValid
-      | .inputData => inputData
-      | .outputReady => outputReady
-      | .reset => reset
-  pure {
-    outputValid := child .outputValid
-    outputData := child .outputData
-    inputReady := child .inputReady }
-
-attribute [circuit_description] placeNamed place
+end AllowedStep
 
 end Silean.Modules.SerialDepthFifo

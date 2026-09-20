@@ -1,5 +1,5 @@
-import Silean.Modules.BitMux.BitMux
-import Silean.Modules.Mux.Mux
+import Silean.Modules.BitMux.BitMuxDerived
+import Silean.Modules.Mux.MuxDerived
 
 /-! Concise selection vocabulary for circuit descriptions.
 

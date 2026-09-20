@@ -69,51 +69,6 @@ def splitter (value : Composition.SignalSplitter) : ModuleNaming (.splitter valu
 def combiner (value : Composition.SignalCombiner) : ModuleNaming (.combiner value) :=
   combinerWithNaming value (.positional value.aggregateType)
 
-/-- The default names of a vector combiner are collision-free for every
-symbolic vector length. This is useful when a fixed composite places the
-combiner through the checked circuit-description interface. -/
-theorem vectorCombiner_portNames_nodup (length : Nat) (elementType : SignalType) :
-    (combiner (.vector length elementType)).ports.names.Nodup := by
-  change
-    ((List.finRange length).map
-      (fun component => SourceName.indexed "component" component.val) ++
-      [SourceName.indexed "aggregate" 0]).Nodup
-  rw [List.nodup_append]
-  constructor
-  · exact List.nodup_map_of_injective _ (by
-      intro left right equal
-      cases SourceName.indexed.inj equal
-      exact Fin.ext (by assumption)) (List.finRange_nodup length)
-  constructor
-  · simp
-  · intro componentName inComponents aggregateName inAggregate equal
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at inAggregate
-    rcases List.mem_map.mp inComponents with ⟨component, _, componentEqual⟩
-    rw [← componentEqual, inAggregate] at equal
-    have stemEqual := (SourceName.indexed.inj equal).1
-    simp at stemEqual
-
-/-- The default names of a vector splitter are collision-free for every
-symbolic vector length. -/
-theorem vectorSplitter_portNames_nodup (length : Nat) (elementType : SignalType) :
-    (splitter (.vector length elementType)).ports.names.Nodup := by
-  change
-    ([SourceName.indexed "aggregate" 0] ++
-      (List.finRange length).map
-        (fun component => SourceName.indexed "component" component.val)).Nodup
-  rw [List.nodup_append]
-  constructor
-  · simp
-  constructor
-  · exact (List.nodup_append.mp
-      (vectorCombiner_portNames_nodup length elementType)).1
-  · intro aggregateName inAggregate componentName inComponents equal
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at inAggregate
-    rcases List.mem_map.mp inComponents with ⟨component, _, componentEqual⟩
-    rw [inAggregate, ← componentEqual] at equal
-    have stemEqual := (SourceName.indexed.inj equal).1
-    simp at stemEqual
-
 /-- A splitter structure paired with caller-supplied aggregate naming. -/
 @[reducible] def splitterDesignWithNaming (value : Composition.SignalSplitter)
     (aggregateNaming : SignalTypeNaming value.aggregateType) : NamedModule where

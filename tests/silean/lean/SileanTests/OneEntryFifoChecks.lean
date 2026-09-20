@@ -1,5 +1,5 @@
 import Silean.Contracts.Cycle.CycleEvaluation
-import Silean.Modules.OneEntryFifo.OneEntryFifoCycleTheorems
+import Silean.Modules.OneEntryFifo.OneEntryFifoDerived
 
 namespace SileanTests.OneEntryFifo
 
@@ -58,10 +58,10 @@ example : ((OneEntryFifo.cycleContract .bit).evaluateStep
     ((OneEntryFifo.cycleContract .bit).evaluateStep_allowed _ _)]
   rfl
 
-example : Authoring.CircuitDescription.Corresponds
-    (OneEntryFifo.Description.description .bit)
-    (OneEntryFifo.naming .bit) :=
-  OneEntryFifo.Description.authored_definition_corresponds .bit
+example : Authoring.CircuitDescription.Description.ImplementsCycleContract
+    (OneEntryFifo.description .bit) (OneEntryFifo.cycleContract .bit)
+    (Naming.FifoPorts.ports .bit) :=
+  OneEntryFifo.construction_correct .bit
 
 /-! Backpressure holds both occupied state fields and deasserts input ready. -/
 

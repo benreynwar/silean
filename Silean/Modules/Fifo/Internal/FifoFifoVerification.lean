@@ -1,6 +1,6 @@
 import Silean.Contracts.Fifo.FifoCycleRefinement
 import Silean.Contracts.Fifo.FifoPortContract
-import Silean.Modules.Fifo.FifoCycleTheorems
+import Silean.Modules.Fifo.Internal.FifoCycleVerification
 import Silean.Modules.Fifo.FifoProperties
 
 namespace Silean.Modules.Fifo.Internal
@@ -38,8 +38,8 @@ def fifoRefinement (element : SignalType)
     · change Properties.Invariant addressWidth
         ((cycleContract element addressWidth).evaluate inputs state).2
       unfold Properties.Invariant Properties.occupancy
-      rw [Properties.Evaluation.evaluated_next_readPointer,
-        Properties.Evaluation.evaluated_next_writePointer]
+      rw [Properties.Internal.Evaluation.evaluated_next_readPointer,
+        Properties.Internal.Evaluation.evaluated_next_writePointer]
       simp [reset, nextReadPointer, nextWritePointer,
         EnabledResetCounter.nextValue, Properties.pointerValue,
         Properties.capacity, BitVector.cardinality_eq_pow,
@@ -51,8 +51,8 @@ def fifoRefinement (element : SignalType)
         ((cycleContract element addressWidth).evaluate inputs state).2).length = 0
       rw [Properties.contents_length]
       unfold Properties.occupancy
-      rw [Properties.Evaluation.evaluated_next_readPointer,
-        Properties.Evaluation.evaluated_next_writePointer]
+      rw [Properties.Internal.Evaluation.evaluated_next_readPointer,
+        Properties.Internal.Evaluation.evaluated_next_writePointer]
       simp [reset, nextReadPointer, nextWritePointer,
         EnabledResetCounter.nextValue, Properties.pointerValue,
         CircularBuffer.distance]
@@ -62,9 +62,9 @@ def fifoRefinement (element : SignalType)
     simp only [certified_cycleContract]
     change (stateMap element addressWidth).Values at state
     change inputs .reset = false at notReset
-    have nextValid := Properties.Evaluation.next_preserves_invariant element
+    have nextValid := Properties.Internal.Evaluation.next_preserves_invariant element
       addressWidth state inputs valid
-    have outputsEq := Properties.Evaluation.evaluated_outputs element addressWidth
+    have outputsEq := Properties.Internal.Evaluation.evaluated_outputs element addressWidth
       state inputs
     have ordinary := Properties.contentsOf_next_of_notReset addressWidth
       (state .entries) (state .readPointer) (state .writePointer)
@@ -85,9 +85,9 @@ def fifoRefinement (element : SignalType)
         inputReadyEq, outputValidEq, outputDataEq]
       unfold logicalQueue Properties.contents
       rw [
-        Properties.Evaluation.evaluated_next_readPointer,
-        Properties.Evaluation.evaluated_next_writePointer,
-        Properties.Evaluation.evaluated_next_entries]
+        Properties.Internal.Evaluation.evaluated_next_readPointer,
+        Properties.Internal.Evaluation.evaluated_next_writePointer,
+        Properties.Internal.Evaluation.evaluated_next_entries]
       rw [notReset]
       let oldQueue := List.map wrapPayload
         (Properties.contentsOf addressWidth (state .entries)

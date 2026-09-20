@@ -91,8 +91,8 @@ equivalence to Lean equality.
 type-correct field. The selected `SignalMap.Label` determines its signal type directly;
 no positional field witness or type transport is exposed.
 `Modules/TupleField/Internal/TupleFieldVerification.lean` proves the wrapper's
-direct field-selection cycle contract, while `TupleFieldTheorems.lean` exposes
-the supported boundary result.
+direct field-selection cycle contract, while `TupleFieldDerived.lean` exposes
+placement and the supported structural result.
 
 ## Meaning and certification
 
@@ -158,26 +158,36 @@ their executable enumeration lists those constructors directly. A public
 closure theorem composes reusable closure laws from the generic leafwise
 hierarchy and child modules, so clients need not unfold those identities.
 
-Reusable modules have one directory each and a uniform public boundary:
-`moduleStructure`, `cycleContract`, `certification`, `certified`, and `design`.
-Ordinary fixed composites use the authoring declarations, keep expanded
-structure and certification under `Internal/`, and expose reusable proof
-results through a sibling `*Theorems.lean` file. Recursive/generated modules
-(`Add`, `BinaryToOneHot`, `CombMuxTree`, `Constant`, `Equality`, `Increment`,
-`Mask`, and `Register`) keep their dependent construction in ordinary Lean.
-`Equality`, `BinaryToOneHot`, `CombMuxTree`, `Add`, `Increment`, and `Register`
-keep their recursive hardware definitions in the main file, recursive
-certification under `Internal/`, and public structural laws in sibling theorem
-files.
+Reusable modules have one directory each. Their main file owns the readable
+construction when one exists, the natural behavior, the cycle contract, and
+direct contract laws. Expanded structure and certification live under
+`Internal/`; a sibling `*Derived.lean` facade exposes placement and public
+results that depend on those internals. Recursive/generated modules use the
+contract-first variant when a builder would merely duplicate their dependent
+construction. Some older modules still use sibling `*Theorems.lean` facades
+while they await migration. The comparison/selection/storage stack
+(`Equality`, `EqualsConstant`, `BinaryToOneHot`, `CombMuxTree`, and
+`RegisterBank`) uses this organization throughout. The same boundary is used
+by the authored PicoRV `Alu`, `Regs`, and memory `Lookahead` clients; their
+public main files do not import their generated structures.
 The reduction specializations (`All`, `Any`) and binary-leafwise
 specializations (`BitwiseAnd`, `BitwiseOr`, `BitwiseXor`) also remain direct
 ordinary-Lean instantiations of their generic `Composition/` machinery. These
 are intentional exceptions to fixed-module syntax, not alternate public APIs.
-The PicoRV32 decoder capture stage separates its readable hardware, exact cycle
-contract, and emission naming in `PicoRV/Decoder/DecoderCaptureStage.lean`
-from child schedules, state correspondence, and correctness proof in
-`PicoRV/Decoder/Internal/DecoderCaptureStageVerification.lean`; its
-supported result is exposed by `DecoderCaptureStageTheorems.lean`.
+The seven PicoRV32 decoder components follow the same split. Their main files
+own readable behavior and exact cycle contracts; the authored capture,
+immediate, and match-gate components also own their concise constructions.
+Generated structures, schedules, correspondence, and substantial bit proofs
+remain under `PicoRV/Decoder/Internal/`, while sibling `*Derived.lean` files
+expose placement and supported structural results.
+The PicoRV32 control components use the same organization. Each main file owns
+its ports, source-level contract and laws, and concise construction; the eight
+phase transitions share only the genuine common boundary and contract shape in
+`ControlPhaseTransition.lean`. Placement and certified structural results are
+in the corresponding `*Derived.lean` facade, while expanded structures and
+proof machinery remain under `PicoRV/Control/Internal/`. `ControlNext.lean`
+is the readable composition of those public child facades, and the registered
+top-level `Control` remains the intentional contract-first integration shell.
 The decoder,
 mux-tree, and register-bank contracts share `BitVector.toIndex` from the
 foundation arithmetic utilities. The XOR primitive and `HalfAdder` provide the
@@ -205,29 +215,26 @@ state or reset input. `EnabledResetCounter` composes Increment and
 EnabledResetRegister into the generic synchronous state element used by FIFO
 pointers; its public
 contract describes modular arithmetic rather than feedback wiring.
-`Mux`, `AddSub`, and `EnabledResetCounter` keep readable structure and natural
-contract laws in their main sources, public guarantees in `*Theorems.lean`,
-and structural certification under `Internal/`. Recursive `Add` and
-`Increment` retain ordinary Lean hardware construction in their main files
-while moving schedules and inductive certification under `Internal/`.
+`AddSub` and `EnabledResetCounter` keep readable constructions and natural
+contract laws in their main sources, while their `Derived` facades expose
+placement and internal-backed guarantees. Recursive `Add` and `Increment` use
+small contract-first main files and keep their structural recursion and
+inductive certification under `Internal/`.
 `Fifo` is the certified pointer-and-register-bank composition: two
 zero-reset counters feed FifoPointerControl, whose addresses and transfer
 enables drive RegisterBank and the counters. Its contract owns logical pointer
 and entry state and remains independent of those four structural children.
 Reset is synchronous: it wins in pointer next state without suppressing the
 current pre-edge handshake or clearing storage.
-`Fifo/FifoPointerControl.lean` contains its combinational equations and
-complete thirteen-child design; `FifoPointerControlTheorems.lean` exposes its
-public behavior, while `Internal/FifoPointerControlVerification.lean` contains
-its child certificates, schedule, and structural proof.
-`Modules/Fifo/Fifo.lean` contains the readable `module_design`, exact cycle
-behavior, and public contract laws. `FifoCycleTheorems.lean` exposes the exact
-cycle guarantee backed by `Internal/FifoCycleVerification.lean`.
-`FifoFifoTheorems.lean` then exposes the separate latency-independent FIFO
-certification backed by `Internal/FifoFifoVerification.lean`.
-`FifoProperties` gives this cycle contract its logical queue interpretation and
-proves the reachable occupancy invariant, empty/full boundaries, and exact
-ordinary-cycle enqueue/dequeue behavior. FIFO-local circular-buffer arithmetic
+`Fifo/FifoPointerControl.lean` contains its readable combinational construction,
+equations, and contract laws. Its thirteen-child expansion and certification
+live under `Internal`, while `FifoPointerControlDerived.lean` exposes placement
+and correctness. `Modules/Fifo/Fifo.lean` contains the readable construction,
+exact cycle behavior, contract laws, and logical queue definitions.
+`FifoDerived.lean` exposes placement plus both the exact-cycle guarantee and
+the separate latency-independent FIFO certification. `FifoProperties.lean`
+states the public queue laws; their circular-buffer proof implementation is in
+`Internal/FifoPropertiesVerification.lean`. FIFO-local circular-buffer arithmetic
 lives in `Modules/Fifo/CircularBuffer.lean`. `Contracts.Fifo.FifoCertified` uses those facts to
 prove the pointer structure satisfies the shared `Contracts/Fifo/FifoContract.lean`
 boundary contract; it does not inspect structural children.
@@ -235,9 +242,10 @@ The serial FIFO family uses `Interfaces.Fifo`, the shared resettable boundary.
 `Contracts.Fifo.Cycle` turns ready/valid/reset functions into cycle contracts
 and composes their behavior serially. `Composition.FifoSerial` constructs and
 certifies a two-child serial hierarchy using only child public contracts and
-refinements. `SerialDepthFifo` is the concrete recursive positive-depth module
-that applies those generic composition laws. Structural module files do not own
-trace execution machinery.
+refinements. `SerialDepthFifo.lean` is the small public recursive behavior and
+contract. Its positive-depth hierarchy and recursive proofs live under
+`Internal`, and `SerialDepthFifoDerived.lean` exposes naming, placement, and
+certification. Structural module files do not own trace execution machinery.
 
 ## Naming and backend
 

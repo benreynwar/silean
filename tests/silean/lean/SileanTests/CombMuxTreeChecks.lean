@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import Silean.Modules.CombMuxTree.CombMuxTreeTheorems
+import Silean.Modules.CombMuxTree.CombMuxTreeDerived
 import Silean.Composition.SignalLogic
 
 namespace SileanTests.CombMuxTree
@@ -60,15 +60,12 @@ def aggregateResult := ((Modules.CombMuxTree.cycleContract pairBits 2).evaluate
 
 #guard pairBits.equal aggregateResult (false, (true, ()))
 
-example (inputs : (Modules.CombMuxTree.ports element width).inputs.Values)
-    (outputs : (Modules.CombMuxTree.ports element width).outputs.Values)
-    (holds : (Modules.CombMuxTree.outputRule element width).Holds
-      inputs SignalMap.emptyValues outputs) :
-    outputs .result = inputs .values
-      ⟨BitVector.toNat width (inputs .index),
-        BitVector.toNat_lt_cardinality width (inputs .index)⟩ :=
-  Modules.CombMuxTree.result_of_holds element width inputs SignalMap.emptyValues
-    outputs holds
+example {step : (Modules.CombMuxTree.cycleContract element width).Step}
+    (allowed : (Modules.CombMuxTree.cycleContract element width).Allows step) :
+    step.outputs .result = step.inputs .values
+      ⟨BitVector.toNat width (step.inputs .index),
+        BitVector.toNat_lt_cardinality width (step.inputs .index)⟩ :=
+  Modules.CombMuxTree.result_at_index_of_allowed element width allowed
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1

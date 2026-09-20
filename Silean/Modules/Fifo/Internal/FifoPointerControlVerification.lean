@@ -2,7 +2,8 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Modules.Fifo.FifoPointerControl
-import Silean.Modules.Equality.EqualityTheorems
+import Silean.Modules.Fifo.Internal.FifoPointerControlStructure
+import Silean.Modules.Equality.EqualityDerived
 
 /-! Certification machinery for the authored FIFO pointer controller. -/
 
@@ -153,7 +154,7 @@ private theorem implements :
   have writeAddressValue : writeAddress = pointerAddress writePointer := by
     rw [writeAddressSplit, writeSplitOutputs]
     rfl
-  have addressEqualityOutput := Equality.result_of_allowed
+  have addressEqualityOutput := Equality.cycleContract.result
     (addressType addressWidth) (childMatches .addressEquality).allowed
   change (hierStep.children .addressEquality).outputs .result =
     (addressType addressWidth).equal

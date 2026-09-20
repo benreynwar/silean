@@ -65,26 +65,26 @@ structure EndpointContext where
   /-- Names and port shapes of every child instance. -/
   instancePorts : InstancePorts
 
-def EndpointContext.moduleInput (context : EndpointContext)
+@[reducible] def EndpointContext.moduleInput (context : EndpointContext)
     (port : context.ports.inputs.Label) :
     SignalSource context.ports context.instancePorts
       (context.ports.inputs.signalType port) :=
   .moduleInput port
 
-def EndpointContext.moduleOutput (context : EndpointContext)
+@[reducible] def EndpointContext.moduleOutput (context : EndpointContext)
     (port : context.ports.outputs.Label) :
     SignalSink context.ports context.instancePorts
       (context.ports.outputs.signalType port) :=
   .moduleOutput port
 
-def EndpointContext.instanceOutput (context : EndpointContext)
+@[reducible] def EndpointContext.instanceOutput (context : EndpointContext)
     (name : context.instancePorts.Name)
     (port : (context.instancePorts.ports name).outputs.Label) :
     SignalSource context.ports context.instancePorts
       ((context.instancePorts.ports name).outputs.signalType port) :=
   .instanceOutput name port
 
-def EndpointContext.instanceInput (context : EndpointContext)
+@[reducible] def EndpointContext.instanceInput (context : EndpointContext)
     (name : context.instancePorts.Name)
     (port : (context.instancePorts.ports name).inputs.Label) :
     SignalSink context.ports context.instancePorts

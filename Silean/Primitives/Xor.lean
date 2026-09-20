@@ -62,10 +62,9 @@ def xorCertified : Contracts.Cycle.ModuleCycleCertified xor.ports where
   moduleStructure := .primitive xor
   cycleContract := xorCycleContract
   certification := {
+    structural := xor.structuralCertification,
     stateCorresponds := stateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := Primitive.hasSolution xor,
-    structuralResultUnique := Primitive.hasAtMostOneSolution xor,
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp implements }
 
 end Silean.Primitives

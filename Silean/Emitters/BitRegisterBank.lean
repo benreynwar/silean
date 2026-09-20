@@ -1,5 +1,5 @@
 import Silean.FIRRTL.Emit
-import Silean.Modules.RegisterBank.RegisterBank
+import Silean.Modules.RegisterBank.RegisterBankDerived
 
 namespace Silean.Emitters.BitRegisterBank
 

@@ -74,20 +74,22 @@ abbrev ruleSchedules := derivedRuleSchedules.schedules
 theorem coversChildren : ruleSchedules.CoversChildren :=
   derivedRuleSchedules.coversChildren
 
-
+theorem structuralCertification :
+    ModuleStructuralCertification
+      SileanTests.Fixtures.HierarchicalDualNot.moduleStructure :=
+  ruleSchedules.structuralCertification coversChildren layerChildren
 
 theorem hasAtMostOneSolution :
     SileanTests.Fixtures.HierarchicalDualNot.moduleStructure.HasAtMostOneSolution :=
-  ruleSchedules.hasAtMostOneSolution coversChildren layerChildren
+  structuralCertification.hasAtMostOneSolution
 
 def dualNotCertified : Contracts.Cycle.ModuleCycleCertified SileanTests.Fixtures.DualNot.ports where
   moduleStructure := SileanTests.Fixtures.HierarchicalDualNot.moduleStructure
   cycleContract := SileanTests.Fixtures.DualNot.cycleContract
   certification := {
+    structural := structuralCertification
     stateCorresponds := stateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := ruleSchedules.hasSolution coversChildren layerChildren,
-    structuralResultUnique := hasAtMostOneSolution,
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp implements }
 
 end SileanTests.HierarchicalDualNotCertification

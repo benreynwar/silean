@@ -119,7 +119,7 @@ noncomputable def certify
     FifoCertified ports payloadTypes where
   moduleStructure := cycleCertified.moduleStructure
   contract := fifoContract
-  hasSolution := cycleCertified.hasStructuralResult
+  hasSolution := cycleCertified.structuralCertification.hasSolution
   implements := by
     intro initialState inputs outputs finalState execution
     rcases cycleCertified.hasCorrespondingState initialState with

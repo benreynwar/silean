@@ -3,23 +3,34 @@ import Silean.Authoring.CircuitDescriptionAttributes
 import Silean.Naming.ModuleNaming
 
 /-! A checked-translation boundary, not a replacement structural semantics.
-Descriptions retain actual named children; equality therefore checks more than
-module keys or interfaces. Lists also preserve declaration order. Authoring nets
-are symbolic references: their validity is established by matching the complete
-description extracted from a typed production body, not by trusting the builder.
+Descriptions retain canonical description-local endpoint identities as well as
+reader-facing names and actual child modules. Equality therefore checks more
+than module keys or interfaces without treating emitted names as semantic keys.
+Lists also preserve declaration order. Authoring nets are symbolic references:
+their validity is established by matching the complete description extracted
+from a typed production body, not by trusting the builder.
 -/
 
 namespace Silean.Authoring.CircuitDescription
 
 open Silean Naming
 
+structure PortId where
+  index : Nat
+deriving DecidableEq, Repr
+
+structure ChildId where
+  index : Nat
+deriving DecidableEq, Repr
+
 structure Port where
+  id : PortId
   name : SourceName
   signalType : SignalType
 
 inductive Source where
-  | input (name : SourceName)
-  | child (instanceName portName : SourceName)
+  | input (port : PortId)
+  | child (child : ChildId) (port : PortId)
 deriving DecidableEq, Repr
 
 structure Connection where
@@ -27,6 +38,7 @@ structure Connection where
   source : Source
 
 structure Child where
+  id : ChildId
   name : SourceName
   module : NamedModule
   inputs : List Connection
@@ -39,23 +51,27 @@ structure NamedWire where
   source : Source
 
 structure Description where
+  valid : Bool := true
   inputs : List Port := []
   outputs : List Connection := []
   children : List Child := []
   namedWires : List NamedWire := []
 
-def portList (signals : SignalMap) (names : SignalMapNaming signals) : List Port :=
-  signals.labels.values.map fun label => ⟨names.name label, signals.signalType label⟩
+@[reducible] def portId (signals : SignalMap) (label : signals.Label) : PortId :=
+  ⟨(signals.labels.ordinal label).val⟩
 
-def sourceDescription {body : ModuleBody}
-    (ports : ModulePortsNaming body.ports)
-    (instanceName : body.instancePorts.Name → SourceName)
-    (childPorts : (child : body.instancePorts.Name) →
-      ModulePortsNaming (body.instancePorts.ports child)) :
+@[reducible] def childId (instances : InstancePorts) (child : instances.Name) : ChildId :=
+  ⟨(instances.names.ordinal child).val⟩
+
+def portList (signals : SignalMap) (names : SignalMapNaming signals) : List Port :=
+  signals.labels.values.map fun label =>
+    ⟨portId signals label, names.name label, signals.signalType label⟩
+
+def sourceDescription {body : ModuleBody} :
     SignalSource body.ports body.instancePorts signalType → Source
-  | .moduleInput port => .input (ports.inputs.name port)
-  | .instanceOutput child port => .child (instanceName child)
-      ((childPorts child).outputs.name port)
+  | .moduleInput port => .input (portId body.ports.inputs port)
+  | .instanceOutput child port => .child (childId body.instancePorts child)
+      (portId (body.instancePorts.ports child).outputs port)
 
 /-- Extract every boundary port, child, and driven sink from a composite's
 naming witness. -/
@@ -67,17 +83,19 @@ naming witness. -/
     (childNaming : (child : body.instancePorts.Name) →
       ModuleNaming (children child))
     (namedWires : List (Naming.NamedWire body) := []) : Description :=
-  let source := fun {signalType} => sourceDescription (body := body)
-    ports instanceName (fun child => (childNaming child).ports) (signalType := signalType)
+  let source := fun {signalType} => sourceDescription (body := body) (signalType := signalType)
   { inputs := portList body.ports.inputs ports.inputs
     outputs := body.ports.outputs.labels.values.map fun port =>
-      ⟨⟨ports.outputs.name port, body.ports.outputs.signalType port⟩,
+      ⟨⟨portId body.ports.outputs port, ports.outputs.name port,
+          body.ports.outputs.signalType port⟩,
         source (body.wiring.moduleOutput port)⟩
     children := body.instancePorts.names.values.map fun child =>
-      { name := instanceName child
+      { id := childId body.instancePorts child
+        name := instanceName child
         module := ⟨body.instancePorts.ports child, children child, childNaming child⟩
         inputs := (body.instancePorts.ports child).inputs.labels.values.map fun port =>
-          ⟨⟨(childNaming child).ports.inputs.name port,
+          ⟨⟨portId (body.instancePorts.ports child).inputs port,
+              (childNaming child).ports.inputs.name port,
               (body.instancePorts.ports child).inputs.signalType port⟩,
             source (body.wiring.instanceInput child port)⟩ }
     namedWires := namedWires.map fun wire =>
@@ -104,15 +122,10 @@ def ofNaming {modulePorts : ModulePorts} {moduleStructure : ModuleStructure modu
     ofNaming (ModuleNaming.composite key ports instanceName childNaming namedWires) =
       some (ofCompositeNaming ports instanceName childNaming namedWires) := rfl
 
-/-- Unique names at each namespace prevent erasure from merging labels.
-Child port uniqueness covers outputs too, including unused outputs. -/
-def Description.UniqueNames (description : Description) : Prop :=
-  ((description.inputs.map (·.name)) ++
-    (description.outputs.map (·.port.name))).Nodup ∧
-  (description.children.map (·.name)).Nodup ∧
-  ∀ child ∈ description.children,
-    child.module.naming.ports.names.Nodup ∧
-    (child.inputs.map (·.port.name)).Nodup
+/-- A successfully constructed description. This distinguishes the convenience
+`build` failure sentinel without assigning semantic significance to names. -/
+def Description.Valid (description : Description) : Prop :=
+  description.valid = true
 
 /-- The per-module certificate checks the translation, not hardware behavior. -/
 structure Corresponds {body : ModuleBody}
@@ -120,15 +133,30 @@ structure Corresponds {body : ModuleBody}
       ModuleStructure (body.instancePorts.ports child)}
     (description : Description) (naming : ModuleNaming (.composite body children)) : Prop where
   same : some description = ofNaming naming
-  unique : description.UniqueNames
+
+theorem ofNaming_some_valid {modulePorts : ModulePorts}
+    {moduleStructure : ModuleStructure modulePorts}
+    (naming : ModuleNaming moduleStructure) {description : Description}
+    (same : ofNaming naming = some description) : description.Valid := by
+  cases naming <;> simp [ofNaming] at same
+  rw [← same]
+  rfl
+
+theorem Corresponds.valid {body : ModuleBody}
+    {children : (child : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports child)}
+    {description : Description}
+    {naming : ModuleNaming (.composite body children)}
+    (certificate : Corresponds description naming) : description.Valid := by
+  exact ofNaming_some_valid naming certificate.same.symm
 
 /-! ## Draft construction
 
 `Description` remains the resolved, checked-translation boundary used by the
 soundness development above. The builder works in a separate draft language so
 authors may declare a typed wire before its driver is available. Finalization
-resolves every wire to an ordinary structural source and retains only its
-emission name; neither `Description` nor structural semantics has an
+resolves every wire to an ordinary structural source and retains the wire name
+as emission metadata; neither `Description` nor structural semantics has an
 unresolved-wire case. -/
 
 inductive NetOrigin where
@@ -146,6 +174,7 @@ structure DraftConnection where
   driver : Net port.signalType
 
 structure DraftChild where
+  id : ChildId
   name : SourceName
   module : NamedModule
   inputs : List DraftConnection
@@ -276,7 +305,8 @@ def finalizeChild (wires : List WireDraft)
     (child : DraftChild) : Except BuildError Child :=
   match finalizeConnections wires child.inputs with
   | .error error => .error error
-  | .ok inputs => .ok { name := child.name, module := child.module, inputs := inputs }
+  | .ok inputs => .ok
+      { id := child.id, name := child.name, module := child.module, inputs := inputs }
 
 def finalizeChildren (wires : List WireDraft) :
     List DraftChild → Except BuildError (List Child)
@@ -333,14 +363,21 @@ def finalizeDraft (draft : Draft) : Except BuildError Description :=
         .error .duplicateWireName
 
 /-- Sentinel returned by the convenience `build` projection on failure. Its
-duplicate boundary names make `Description.UniqueNames` unprovable, so it
-cannot acquire a production correspondence certificate. -/
+explicit invalid status prevents it from matching any extracted production
+description. -/
 def invalidDescription : Description :=
-  { inputs := [⟨"__invalid_build__", .bit⟩, ⟨"__invalid_build__", .bit⟩] }
+  { valid := false }
 
-theorem invalidDescription_not_unique : ¬ invalidDescription.UniqueNames := by
-  intro unique
-  simpa [invalidDescription] using unique.1
+theorem invalidDescription_not_valid : invalidDescription.valid = false := rfl
+
+theorem invalidDescription_not_corresponds {body : ModuleBody}
+    {children : (child : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports child)}
+    (naming : ModuleNaming (.composite body children)) :
+    ¬ Corresponds invalidDescription naming := by
+  intro certificate
+  have valid := certificate.valid
+  simp [Description.Valid, invalidDescription] at valid
 
 end Internal
 
@@ -348,21 +385,25 @@ end Internal
 def buildResult (action : Builder Unit) : Except BuildError Description :=
   Internal.finalizeDraft (action {}).2
 
-/-- Finalize a construction. On failure this returns a deliberately invalid
-sentinel which cannot satisfy `Corresponds.unique`; use `buildResult` directly
-when diagnostics are needed. -/
+/-- Finalize a construction. On failure this returns an explicitly invalid
+sentinel which cannot correspond to an extracted production description; use
+`buildResult` directly when diagnostics are needed. -/
 def build (action : Builder Unit) : Description :=
   match buildResult action with
   | .ok description => description
   | .error _ => Internal.invalidDescription
 
 def input (name : SourceName) (signalType : SignalType) : Builder (Net signalType) :=
-  fun state => (⟨.source (.input name)⟩,
-    { state with inputs := state.inputs ++ [⟨name, signalType⟩] })
+  fun state =>
+    let id : PortId := ⟨state.inputs.length⟩
+    (⟨.source (.input id)⟩,
+      { state with inputs := state.inputs ++ [⟨id, name, signalType⟩] })
 
 def output (name : SourceName) (net : Net signalType) : Builder Unit :=
-  fun state => ((), { state with outputs := state.outputs ++
-    [{ port := ⟨name, signalType⟩, driver := net }] })
+  fun state =>
+    let id : PortId := ⟨state.outputs.length⟩
+    ((), { state with outputs := state.outputs ++
+      [{ port := ⟨id, name, signalType⟩, driver := net }] })
 
 /-- A construction tied to one typed module boundary.  The boundary naming is
 supplied once when the construction is built.  Existing unbound `Builder`
@@ -411,13 +452,15 @@ not declare it: `buildResult` obtains the complete canonical input list from
 the module boundary. -/
 def input (port : ports.inputs.Label) :
     ModuleBuilder ports (Net (ports.inputs.signalType port)) :=
-  ⟨fun naming => pure ⟨.source (.input (naming.inputs.name port))⟩⟩
+  ⟨fun _ => pure ⟨.source (.input (portId ports.inputs port))⟩⟩
 
 /-- Drive one declared boundary output with a net of its required type. -/
 def output (port : ports.outputs.Label)
     (net : Net (ports.outputs.signalType port)) : ModuleBuilder ports Unit :=
-  ⟨fun naming =>
-    CircuitDescription.output (naming.outputs.name port) net⟩
+  ⟨fun naming state =>
+    ((), { state with outputs := state.outputs ++
+      [{ port := ⟨portId ports.outputs port, naming.outputs.name port,
+          ports.outputs.signalType port⟩, driver := net }] })⟩
 
 /-- Run and validate a typed module construction without discarding build
 diagnostics.  Every declared input is emitted once in canonical boundary
@@ -560,18 +603,21 @@ def placeNamed (name : SourceName) (module : NamedModule)
     (inputs : (port : module.ports.inputs.Label) → Net (module.ports.inputs.signalType port)) :
     Builder ((port : module.ports.outputs.Label) → Net (module.ports.outputs.signalType port)) :=
   fun state =>
+    let id : ChildId := ⟨state.children.length⟩
     let indexedInstanceCounts :=
       match name with
       | .indexed stem _ =>
           incrementIndexedInstanceCount stem state.indexedInstanceCounts
       | _ => state.indexedInstanceCounts
-    (fun port => ⟨.source (.child name (module.naming.ports.outputs.name port))⟩,
+    (fun port => ⟨.source (.child id (portId module.ports.outputs port))⟩,
       { state with
         children := state.children ++
-          [{ name := name
+          [{ id := id
+             name := name
              module := module
              inputs := module.ports.inputs.labels.values.map fun port =>
-               { port := ⟨module.naming.ports.inputs.name port,
+               { port := ⟨portId module.ports.inputs port,
+                   module.naming.ports.inputs.name port,
                    module.ports.inputs.signalType port⟩
                  driver := inputs port } }]
         indexedInstanceCounts := indexedInstanceCounts })

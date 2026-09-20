@@ -112,31 +112,6 @@ def naming (signalType : SignalType) :
     ModuleNaming (Modules.BitwiseXor.moduleStructure signalType) :=
   namingWith signalType (.positional signalType)
 
-/-- Recursive implementation details do not change the requested XOR boundary
-naming. -/
-theorem namingWith_ports (signalType : SignalType)
-    (typeNaming : SignalTypeNaming signalType) :
-    (namingWith signalType typeNaming).ports =
-      portsWithNaming signalType typeNaming := by
-  change
-    (@Silean.Naming.BinaryLeafwise.namingWith operationInstance gateInstance
-      "bitwise_xor" "xor" Silean.Naming.Primitive.xor signalType
-      typeNaming).ports = portsWithNaming signalType typeNaming
-  rw [@Silean.Naming.BinaryLeafwise.namingWith_ports
-    operationInstance gateInstance]
-  rfl
-
-/-- Positional XOR naming has the declared positional boundary. -/
-theorem naming_ports (signalType : SignalType) :
-    (naming signalType).ports = ports signalType :=
-  namingWith_ports signalType (.positional signalType)
-
-/-- The emitted boundary names of bitwise XOR are collision-free. -/
-theorem portNames_nodup (signalType : SignalType) :
-    (naming signalType).ports.names.Nodup := by
-  rw [naming_ports]
-  exact of_decide_eq_true rfl
-
 end Naming
 
 @[reducible] def designWith (signalType : SignalType)

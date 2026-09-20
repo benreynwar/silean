@@ -60,10 +60,9 @@ def orCertified : Contracts.Cycle.ModuleCycleCertified or.ports where
   moduleStructure := .primitive or
   cycleContract := orCycleContract
   certification := {
+    structural := or.structuralCertification,
     stateCorresponds := orStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := Primitive.hasSolution or,
-    structuralResultUnique := Primitive.hasAtMostOneSolution or,
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp orImplements }
 end Silean.Primitives
 

@@ -529,7 +529,7 @@ def portsWithNaming (signalType : SignalType)
 def ports (signalType : SignalType) : ModulePortsNaming (Modules.Mask.ports signalType) :=
   portsWithNaming signalType (.positional signalType)
 
-def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
+private def namingCore : (signalType : SignalType) → SignalTypeNaming signalType →
     ModuleNaming (Modules.Mask.moduleStructure signalType)
   | .bit, _ => by
       rw [Modules.Mask.moduleStructure,
@@ -549,7 +549,7 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
           | .combiner .result => "combine")
         (fun
           | .splitter .unit => Silean.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
-          | .component component => namingWith elementType (typeNaming.component component)
+          | .component component => namingCore elementType (typeNaming.component component)
           | .combiner .result => Silean.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
   | .tuple fields, typeNaming => by
       rw [Modules.Mask.moduleStructure,
@@ -564,7 +564,7 @@ def namingWith : (signalType : SignalType) → SignalTypeNaming signalType →
         (fun
           | .splitter .unit => Silean.Naming.SignalAdapter.splitterWithNaming splitter typeNaming
           | .component component =>
-              namingWith (fields.typeAt component) (typeNaming.component component)
+              namingCore (fields.typeAt component) (typeNaming.component component)
           | .combiner .result => Silean.Naming.SignalAdapter.combinerWithNaming splitter.combiner typeNaming)
 termination_by signalType => signalType.complexity
 decreasing_by
@@ -572,6 +572,11 @@ decreasing_by
   · have smaller := SignalTypes.complexity_typeAt_lt
       fields component
     exact smaller
+
+def namingWith (signalType : SignalType) (typeNaming : SignalTypeNaming signalType) :
+    ModuleNaming (Modules.Mask.moduleStructure signalType) :=
+  (namingCore signalType typeNaming).withPorts
+    (portsWithNaming signalType typeNaming)
 
 def naming (signalType : SignalType) :
     ModuleNaming (Modules.Mask.moduleStructure signalType) :=

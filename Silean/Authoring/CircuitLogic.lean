@@ -4,7 +4,7 @@ import Silean.Modules.BitwiseOr.BitwiseOr
 import Silean.Modules.BitwiseXor.BitwiseXor
 import Silean.Modules.Constant.Constant
 import Silean.Modules.Mask.Mask
-import Silean.Modules.Equality.Equality
+import Silean.Modules.Equality.EqualityDerived
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.And
 import Silean.Primitives.Eq

@@ -1,6 +1,7 @@
 import Silean.Authoring.CircuitLogic
+import Silean.Authoring.CircuitDescriptionContracts
 import Silean.Authoring.ModuleCycleContract
-import Silean.Modules.OneEntryFifo.Control.Internal.OneEntryFifoControlStructure
+import Silean.Authoring.ModulePorts
 
 /-! # One-entry FIFO control
 
@@ -14,51 +15,29 @@ data-path elements in the parent. It is not intended as a general-purpose
 public module.
 -/
 
-namespace Silean.Modules.OneEntryFifo.Control.Description
-
-open Silean
-open Silean.Authoring.CircuitDescription
-open scoped Silean.Authoring
-
-noncomputable def construction : Builder Unit := do
-  let storedValid ← input "storedValid" .bit
-  let downstreamReady ← input "downstreamReady" .bit
-  output "upstreamReady" (← downstreamReady ||| (← !! storedValid))
-  output "storageUpdate" (← downstreamReady === storedValid)
-
-noncomputable def description : Description :=
-  build construction
-
-end Silean.Modules.OneEntryFifo.Control.Description
-
 namespace Silean.Modules.OneEntryFifo.Control
 
 open Silean
 open Silean.Authoring
 open Authoring.CircuitDescription
+open scoped Authoring
 
-/-! ## Placement -/
+module_ports ports where
+  input storedValid : .bit,
+  input downstreamReady : .bit,
+  output upstreamReady : .bit,
+  output storageUpdate : .bit
 
-/-- Place the FIFO control child under a caller-chosen instance name. The
-result is `(upstreamReady, storageUpdate)`. -/
-noncomputable def placeNamed (name : Silean.Naming.SourceName)
-    (storedValid downstreamReady : Net .bit) :
-    Builder (Net .bit × Net .bit) := do
-  let child ← Authoring.CircuitDescription.placeNamed name design fun
-    | .storedValid => storedValid
-    | .downstreamReady => downstreamReady
-  pure (child .upstreamReady, child .storageUpdate)
+open ports
 
-/-- Place the FIFO control child using the next conventional indexed name.
-The result is `(upstreamReady, storageUpdate)`. -/
-noncomputable def place (storedValid downstreamReady : Net .bit) :
-    Builder (Net .bit × Net .bit) := do
-  let child ← placeIndexed "one_entry_fifo_control" design fun
-    | .storedValid => storedValid
-    | .downstreamReady => downstreamReady
-  pure (child .upstreamReady, child .storageUpdate)
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let storedValid ← input .storedValid
+  let downstreamReady ← input .downstreamReady
+  output .upstreamReady (← downstreamReady ||| (← !! storedValid))
+  output .storageUpdate (← downstreamReady === storedValid)
 
-attribute [circuit_description] placeNamed place
+noncomputable def description : Description :=
+  ModuleBuilder.build Naming.ports construction
 
 /-! ## Exact combinational behavior -/
 
@@ -73,5 +52,14 @@ module_cycle_contract cycleContract for ports where
   state_rule where
     reads := []
     next := {}
+
+section AllowedStep
+
+variable {step : cycleContract.Step}
+  (allowed : cycleContract.Allows step)
+
+include allowed
+
+end AllowedStep
 
 end Silean.Modules.OneEntryFifo.Control

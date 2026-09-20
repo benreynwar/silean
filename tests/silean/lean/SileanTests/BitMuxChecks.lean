@@ -1,4 +1,4 @@
-import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.BitMux.BitMuxDerived
 
 namespace SileanTests.BitMux
 
@@ -18,9 +18,9 @@ def result (select whenFalse whenTrue : Bool) : Bool :=
 #guard !result true true false
 #guard result true false true
 
-example : Authoring.CircuitDescription.Corresponds
-    Modules.BitMux.Description.description Modules.BitMux.naming :=
-  Modules.BitMux.Description.authored_definition_corresponds
+example : Modules.BitMux.description.ImplementsCycleContract
+    Modules.BitMux.cycleContract Modules.BitMux.Naming.ports :=
+  Modules.BitMux.construction_correct
 
 example {step : Modules.BitMux.moduleStructure.Step}
     (realizes : Modules.BitMux.moduleStructure.Realizes step) :

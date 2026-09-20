@@ -1,4 +1,5 @@
 import Silean.Contracts.Cycle.CycleLayerSchedule
+import Silean.Semantics.StructuralRuleDerivation
 import Lean.Elab.Tactic
 
 namespace Silean.Contracts.Cycle.Certification.Layer.ScheduleDerivation
@@ -28,13 +29,6 @@ structure DerivedRuleSchedules (body : ModuleBody)
     (contract : ModuleCycleContract body.ports) where
   schedules : RuleSchedules body childContracts contract
   coversChildren : schedules.CoversChildren
-
-/-- One state-ready schedule that also calls every child rule. This is useful
-for structural uniqueness proofs that do not have a parent cycle contract. -/
-structure DerivedCompleteSchedule (body : ModuleBody)
-    (childContracts : ChildCycleContracts body) where
-  schedule : StateSchedule body childContracts
-  coversAllRules : CoversAllRules body childContracts schedule.finalAvailability
 
 def outputSchedulesFromCertificates
     {body : ModuleBody} {childContracts : ChildCycleContracts body}
@@ -86,169 +80,6 @@ theorem coversChildren_of_certificates
   exact (certificates.get (body.instancePorts.names.locate child) |>.get
     ((childContracts child).ruleNames.locate rule)).down
 
-/-- Turn one availability proof per declared read into the universal premise
-required by `Schedule.call`.  The tactic constructs this dependent list one
-read at a time, keeping kernel reduction local to a single wiring endpoint. -/
-theorem readsAvailable_of_certificates
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (inputAvailable : body.ports.inputs.Label → Prop)
-    (available : Availability body childContracts)
-    (occurrence : RuleOccurrence body childContracts)
-    (certificates : DependentList (fun input => PLift
-      (sourceAvailable inputAvailable available
-        (body.wiring.instanceInput occurrence.child input))) occurrence.reads) :
-    ∀ input, input ∈ occurrence.reads →
-      sourceAvailable inputAvailable available
-        (body.wiring.instanceInput occurrence.child input) := by
-  letI : DecidableEq
-      (body.instancePorts.ports occurrence.child).inputs.Label :=
-    (body.instancePorts.ports occurrence.child).inputs.labels.decidableEq
-  intro input member
-  exact (certificates.get (ListIndex.ofMem member)).down
-
-def moduleInputReadyBool
-    {body : ModuleBody}
-    (inputAvailable : body.ports.inputs.Label → Prop)
-    (decideInput : ∀ input, Decidable (inputAvailable input))
-    (input : body.ports.inputs.Label) : Bool :=
-  @decide (inputAvailable input) (decideInput input)
-
-theorem moduleInputAvailable_of_bool_eq_true
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (inputAvailable : body.ports.inputs.Label → Prop)
-    (decideInput : ∀ input, Decidable (inputAvailable input))
-    (available : Availability body childContracts)
-    (input : body.ports.inputs.Label)
-    (ready : moduleInputReadyBool inputAvailable decideInput input = true) :
-    sourceAvailable inputAvailable available (.moduleInput input) :=
-  @of_decide_eq_true _ (decideInput input) ready
-
-theorem enumerationValue_mem
-    {α : Type} (enumeration : Enumeration α) (value : α) :
-    value ∈ enumeration.values :=
-  ListIndex.get_eq (enumeration.locate value) ▸ List.get_mem _ _
-
-theorem signalLabel_mem_allGroup (signals : SignalMap)
-    (label : signals.Label) : label ∈ (SignalGroup.all signals).labels := by
-  rw [SignalGroup.all_labels]
-  exact enumerationValue_mem signals.labels label
-
-/-- If a child contract has exactly one output rule, every child output is
-written by that rule. This supports symbolically sized output families without
-enumerating their labels during elaboration. -/
-theorem output_written_by_only_rule
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (child : body.instancePorts.Name)
-    (rule : (childContracts child).RuleName)
-    (only : (childContracts child).ruleNames.values = [rule])
-    (output : (body.instancePorts.ports child).outputs.Label) :
-    output ∈ (RuleOccurrence.mk child rule :
-      RuleOccurrence body childContracts).writes := by
-  have written := (childContracts child).output_is_written output
-  rw [ModuleCycleContract.writtenOutputs, only] at written
-  simpa [RuleOccurrence.writes] using written
-
-/-- Availability through a decidable wiring branch follows by checking both
-branches. Generated wiring for symbolic `Fin` ranges commonly has this form. -/
-theorem sourceAvailable_decidable_rec
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.ports.inputs.Label → Prop}
-    {available : Availability body childContracts}
-    {signalType : SignalType} {condition : Prop}
-    (whenFalse : ¬condition → SignalSource body.ports
-      body.instancePorts signalType)
-    (whenTrue : condition → SignalSource body.ports
-      body.instancePorts signalType)
-    (decision : Decidable condition)
-    (falseAvailable : ∀ proof, sourceAvailable inputAvailable available
-      (whenFalse proof))
-    (trueAvailable : ∀ proof, sourceAvailable inputAvailable available
-      (whenTrue proof)) :
-    sourceAvailable inputAvailable available
-      (@Decidable.rec condition
-        (fun _ => SignalSource body.ports
-          body.instancePorts signalType)
-        whenFalse whenTrue decision) := by
-  cases decision with
-  | isFalse proof => exact falseAvailable proof
-  | isTrue proof => exact trueAvailable proof
-
-def childFreshBool
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (available : Availability body childContracts)
-    (occurrence : RuleOccurrence body childContracts) : Bool :=
-  letI := body.instancePorts.names.decidableEq
-  decide (occurrence.child ∉ available.map RuleOccurrence.child)
-
-theorem child_fresh_of_bool_eq_true
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (available : Availability body childContracts)
-    (occurrence : RuleOccurrence body childContracts)
-    (fresh : childFreshBool available occurrence = true) :
-    occurrence.child ∉ available.map RuleOccurrence.child := by
-  letI := body.instancePorts.names.decidableEq
-  have fresh' : decide
-      (occurrence.child ∉ available.map RuleOccurrence.child) = true := by
-    simpa [childFreshBool] using fresh
-  exact of_decide_eq_true fresh'
-
-theorem fresh_of_child_bool_eq_true
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (available : Availability body childContracts)
-    (occurrence : RuleOccurrence body childContracts)
-    (fresh : childFreshBool available occurrence = true) :
-    occurrence ∉ available := by
-  have childFresh := child_fresh_of_bool_eq_true available occurrence fresh
-  intro member
-  exact childFresh (List.mem_map.mpr ⟨occurrence, member, rfl⟩)
-
-theorem fresh_after_family
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    {inputAvailable : body.ports.inputs.Label → Prop}
-    (initial : Availability body childContracts)
-    {Index : Type} (indices : Enumeration Index)
-    (occurrence : Index → RuleOccurrence body childContracts)
-    (injective : Function.Injective occurrence)
-    (fresh : ∀ index, occurrence index ∉ initial)
-    (readsAvailable : ∀ index input, input ∈ (occurrence index).reads →
-      sourceAvailable inputAvailable initial
-        (body.wiring.instanceInput (occurrence index).child input))
-    (candidate : RuleOccurrence body childContracts)
-    (oldFresh : candidate ∉ initial)
-    (familyChildrenDifferent : ∀ index,
-      candidate.child ≠ (occurrence index).child) :
-    candidate ∉ (Schedule.callFamilyAfter initial indices occurrence injective
-      fresh readsAvailable).finalAvailability := by
-  intro member
-  rw [Schedule.mem_finalAvailability_callFamilyAfter_iff] at member
-  rcases member with old | ⟨index, equal⟩
-  · exact oldFresh old
-  · exact familyChildrenDifferent index (congrArg RuleOccurrence.child equal)
-
-theorem fresh_cons_of_child_disjoint
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (candidate head : RuleOccurrence body childContracts)
-    (tail : Availability body childContracts)
-    (different : candidate.child ≠ head.child)
-    (freshTail : candidate ∉ tail) :
-    candidate ∉ head :: tail := by
-  intro member
-  rcases List.mem_cons.mp member with equal | inTail
-  · exact different (congrArg RuleOccurrence.child equal)
-  · exact freshTail inTail
-
-theorem fresh_cons_of_different
-    {body : ModuleBody} {childContracts : ChildCycleContracts body}
-    (candidate head : RuleOccurrence body childContracts)
-    (tail : Availability body childContracts)
-    (different : candidate ≠ head)
-    (freshTail : candidate ∉ tail) :
-    candidate ∉ head :: tail := by
-  intro member
-  rcases List.mem_cons.mp member with equal | inTail
-  · exact different equal
-  · exact freshTail inTail
-
 /-- Direct certificates for each required parent output establish the output
 boundary without searching the scheduled rules again. -/
 theorem boundaryReady_of_certificates
@@ -291,8 +122,9 @@ namespace Silean.Contracts.Cycle.Certification.Layer
 open Lean Elab Tactic Meta
 
 private inductive FinishKind where
-  | outputs (labels : Expr)
-  | state
+  | outputs (childContracts labels : Expr)
+  | state (childContracts : Expr)
+  | trivial
 
 private inductive OrderStep where
   | call (occurrence : Expr)
@@ -327,7 +159,9 @@ private def proveOutputMembershipBySimp
     (type : Expr) : MetaM Expr := do
   let goal ← mkFreshExprSyntheticOpaqueMVar type
   let (remaining, _) ← Lean.Elab.runTactic goal.mvarId!
-    (← `(tactic| simp [RuleOccurrence.writes]))
+    (← `(tactic| simp [RuleOccurrence.writes, childStructuralRules,
+      ModuleCycleContract.structuralRules,
+      ModuleStructuralCertification.Layer.RuleOccurrence.writes]))
   for current in remaining do
     current.withContext do
       let target ← current.getType
@@ -371,7 +205,8 @@ private def proveOccurrenceFamilyInjective (type : Expr)
   for current in afterIntro do
     let (next, _) ← Lean.Elab.runTactic current
       (← `(tactic|
-        have childEqual := congrArg RuleOccurrence.child equal))
+        have childEqual := congrArg
+          ModuleStructuralCertification.Layer.RuleOccurrence.child equal))
     afterHave := afterHave ++ next
   let mut remaining := []
   for current in afterHave do
@@ -384,8 +219,10 @@ private def proveOccurrenceFamilyInjective (type : Expr)
 
 private def proveChildDifferent (left right : Expr)
     (description : MessageData) : MetaM Expr := do
-  let leftChild ← mkAppM ``RuleOccurrence.child #[left]
-  let rightChild ← mkAppM ``RuleOccurrence.child #[right]
+  let leftChild ← mkAppM
+    ``ModuleStructuralCertification.Layer.RuleOccurrence.child #[left]
+  let rightChild ← mkAppM
+    ``ModuleStructuralCertification.Layer.RuleOccurrence.child #[right]
   let equality ← mkAppM ``Eq #[leftChild, rightChild]
   let type ← mkAppM ``Not #[equality]
   let goal ← mkFreshExprSyntheticOpaqueMVar type
@@ -519,11 +356,13 @@ private partial def proveFreshFromAvailability (candidate available : Expr)
       catch _ => pure none
       match childDifferent? with
       | some different =>
-          proof ← mkAppM ``ScheduleDerivation.fresh_cons_of_child_disjoint
+          proof ← mkAppM
+            ``ModuleStructuralCertification.Layer.ScheduleDerivation.fresh_cons_of_child_disjoint
             #[candidate, entry, tail, different, proof]
       | none =>
           let different ← proveOccurrenceDifferent candidate entry description
-          proof ← mkAppM ``ScheduleDerivation.fresh_cons_of_different
+          proof ← mkAppM
+            ``ModuleStructuralCertification.Layer.ScheduleDerivation.fresh_cons_of_different
             #[candidate, entry, tail, different, proof]
       tail ← mkAppM ``List.cons #[entry, tail]
     unless ← withTransparency .all <| isDefEq tail available do
@@ -540,21 +379,25 @@ private partial def proveFreshFromAvailability (candidate available : Expr)
     else
       peeling := false
   for family in families do
-    let familyFinal ← mkAppM ``Schedule.finalAvailability #[family.schedule]
+    let familyFinal ← mkAppM
+      ``ModuleStructuralCertification.Layer.Schedule.finalAvailability
+      #[family.schedule]
     if ← withTransparency .all <| isDefEq familyFinal familyTail then
       let oldFresh ← proveFreshFromAvailability candidate family.initial
         families description
       let familyDifferent ← withLocalDeclD `index family.indexType fun index => do
         let called := mkApp family.occurrence index
-        let proof ← proveChildDifferent candidate called description
+        let proof ← proveOccurrenceDifferent candidate called description
         mkLambdaFVars #[index] proof
-      let mut proof ← mkAppM ``ScheduleDerivation.fresh_after_family
+      let mut proof ← mkAppM
+        ``ModuleStructuralCertification.Layer.ScheduleDerivation.fresh_after_family
         #[family.initial, family.indices, family.occurrence, family.injective,
           family.fresh, family.reads, candidate, oldFresh, familyDifferent]
       let mut tail := familyTail
       for head in precedingCalls.reverse do
         let different ← proveChildDifferent candidate head description
-        proof ← mkAppM ``ScheduleDerivation.fresh_cons_of_child_disjoint
+        proof ← mkAppM
+          ``ModuleStructuralCertification.Layer.ScheduleDerivation.fresh_cons_of_child_disjoint
           #[candidate, head, tail, different, proof]
         tail ← mkAppM ``List.cons #[head, tail]
       return proof
@@ -595,32 +438,44 @@ private def occurrenceProjection (projection : Name) (occurrence : Expr) : MetaM
   pure (mkAppN (mkConst projection) #[arguments[0]!, arguments[1]!, occurrence])
 
 private def occurrenceChild (occurrence : Expr) : MetaM Expr :=
-  occurrenceProjection ``RuleOccurrence.child occurrence
+  occurrenceProjection
+    ``ModuleStructuralCertification.Layer.RuleOccurrence.child occurrence
 
 private partial def normalizeFinalAvailability (available : Expr) : MetaM Expr := do
   let (name, arguments) := available.getAppFnArgs
-  unless name == ``Schedule.finalAvailability && !arguments.isEmpty do
+  unless name ==
+      ``ModuleStructuralCertification.Layer.Schedule.finalAvailability &&
+      !arguments.isEmpty do
     return available
   let schedule := arguments.back!
   let (scheduleName, scheduleArguments) := schedule.getAppFnArgs
-  if scheduleName == ``Schedule.call && !scheduleArguments.isEmpty then
-    return ← normalizeFinalAvailability (← mkAppM ``Schedule.finalAvailability
+  if scheduleName == ``ModuleStructuralCertification.Layer.Schedule.call &&
+      !scheduleArguments.isEmpty then
+    return ← normalizeFinalAvailability (← mkAppM
+      ``ModuleStructuralCertification.Layer.Schedule.finalAvailability
       #[scheduleArguments.back!])
-  if scheduleName == ``Schedule.append && !scheduleArguments.isEmpty then
-    return ← normalizeFinalAvailability (← mkAppM ``Schedule.finalAvailability
+  if scheduleName == ``ModuleStructuralCertification.Layer.Schedule.append &&
+      !scheduleArguments.isEmpty then
+    return ← normalizeFinalAvailability (← mkAppM
+      ``ModuleStructuralCertification.Layer.Schedule.finalAvailability
       #[scheduleArguments.back!])
-  if scheduleName == ``Schedule.done && scheduleArguments.size >= 2 then
+  if scheduleName == ``ModuleStructuralCertification.Layer.Schedule.done &&
+      scheduleArguments.size >= 2 then
     return scheduleArguments[scheduleArguments.size - 2]!
   return available
 
 private def familyProviderFromAvailability? (available : Expr) :
     MetaM (Option FamilyProvider) := do
   let (finalName, finalArguments) := available.getAppFnArgs
-  unless finalName == ``Schedule.finalAvailability && !finalArguments.isEmpty do
+  unless finalName ==
+      ``ModuleStructuralCertification.Layer.Schedule.finalAvailability &&
+      !finalArguments.isEmpty do
     return none
   let schedule := finalArguments.back!
   let (scheduleName, scheduleArguments) := schedule.getAppFnArgs
-  unless scheduleName == ``Schedule.callFamilyAfter && scheduleArguments.size >= 7 do
+  unless scheduleName ==
+      ``ModuleStructuralCertification.Layer.Schedule.callFamilyAfter &&
+      scheduleArguments.size >= 7 do
     return none
   let initial := scheduleArguments[scheduleArguments.size - 7]!
   let indices := scheduleArguments[scheduleArguments.size - 5]!
@@ -630,7 +485,8 @@ private def familyProviderFromAvailability? (available : Expr) :
   let reads := scheduleArguments.back!
   let indicesType ← withTransparency .reducible <| whnf (← inferType indices)
   let indexType := indicesType.getAppArgs[0]!
-  let finished ← mkAppM ``Schedule.finished #[schedule]
+  let finished ← mkAppM
+    ``ModuleStructuralCertification.Layer.Schedule.finished #[schedule]
   let familyFacts := mkProj ``And 1 finished
   let includesFamily := mkProj ``And 0 familyFacts
   let member ← withLocalDeclD `index indexType fun index =>
@@ -643,7 +499,8 @@ private partial def providersFromAvailability (available : Expr) :
   let available ← normalizeFinalAvailability available
   if let some family ← familyProviderFromAvailability? available then
     let (oldConcrete, oldFamilies) ← providersFromAvailability family.initial
-    let finished ← mkAppM ``Schedule.finished #[family.schedule]
+    let finished ← mkAppM
+      ``ModuleStructuralCertification.Layer.Schedule.finished #[family.schedule]
     let includesOld := mkProj ``And 0 finished
     let mut concrete : List ConcreteProvider := []
     for provider in oldConcrete do
@@ -692,7 +549,7 @@ private def findProviderMembership (occurrence available : Expr) : MetaM Expr :=
       let index ← instantiateMVars index
       unless index.hasMVar do
         return (← instantiateMVars (mkApp family.member index))
-  throwError "scheduled rules do not contain child rule:{indentExpr occurrence}"
+  throwError "scheduled rules do not contain child rule ({concrete.length} concrete providers, {families.length} families):{indentExpr occurrence}\nin availability:{indentExpr available}"
 
 private def mkInputDecidableEq (body : Expr) : MetaM Expr := do
   let ports ← mkAppM ``ModuleBody.ports #[body]
@@ -713,14 +570,15 @@ private def mkDecideInput (inputAvailable inputDecidableEq : Expr) : MetaM Expr 
     whnf (mkApp abstracted inputDecidableEq)
 
 private def mkSourceAvailableExpr
-    (body childContracts inputAvailable available source : Expr) : MetaM Expr := do
+    (body childRules inputAvailable available source : Expr) : MetaM Expr := do
   let signalType := (← withTransparency .reducible <| whnf (← inferType source))
     |>.getAppArgs.back!
-  pure <| mkAppN (mkConst ``sourceAvailable)
-    #[body, childContracts, signalType, inputAvailable, available, source]
+  pure <| mkAppN
+    (mkConst ``ModuleStructuralCertification.Layer.sourceAvailable)
+    #[body, childRules, signalType, inputAvailable, available, source]
 
 private partial def proveSourceAvailable
-    (body childContracts inputAvailable decideInput available source : Expr)
+    (body childRules inputAvailable decideInput available source : Expr)
     (concreteProviders : List ConcreteProvider)
     (familyProviders : List FamilyProvider)
     (location : MessageData) : MetaM Expr := do
@@ -741,7 +599,7 @@ private partial def proveSourceAvailable
           if groupName == ``SignalGroup.all && !groupArguments.isEmpty then
             let signals := groupArguments.back!
             let proof ← mkAppM
-              ``ScheduleDerivation.signalLabel_mem_allGroup
+              ``ModuleStructuralCertification.Layer.ScheduleDerivation.signalLabel_mem_allGroup
               #[signals, input]
             unless ← withTransparency .reducible <|
                 isDefEq (← inferType proof) required do
@@ -752,7 +610,7 @@ private partial def proveSourceAvailable
           let allGroup ← mkAppM ``SignalGroup.all #[parent]
           if ← withTransparency .all <| isDefEq group allGroup then
             let proof ← mkAppM
-              ``ScheduleDerivation.signalLabel_mem_allGroup
+              ``ModuleStructuralCertification.Layer.ScheduleDerivation.signalLabel_mem_allGroup
               #[parent, input]
             unless ← withTransparency .all <|
                 isDefEq (← inferType proof) required do
@@ -769,14 +627,16 @@ private partial def proveSourceAvailable
           let (labelsName, labelsArguments) := reducedLabels.getAppFnArgs
           if labelsName == ``Enumeration.values && !labelsArguments.isEmpty then
             let enumeration := labelsArguments.back!
-            let proof ← mkAppM ``ScheduleDerivation.enumerationValue_mem
+            let proof ← mkAppM
+              ``ModuleStructuralCertification.Layer.ScheduleDerivation.enumerationValue_mem
               #[enumeration, input]
             unless ← withTransparency .all <|
                 isDefEq (← inferType proof) required do
               throwError "enumeration membership has the wrong type"
             return proof
         catch _ => pure ()
-    let check := mkAppN (mkConst ``ScheduleDerivation.moduleInputReadyBool)
+    let check := mkAppN
+      (mkConst ``ModuleStructuralCertification.Layer.ScheduleDerivation.moduleInputReadyBool)
       #[body, inputAvailable, decideInput, input]
     unless ← withTransparency .all <| isDefEq check (mkConst ``true) do
       try
@@ -796,8 +656,8 @@ private partial def proveSourceAvailable
           throwError "invalid structural schedule at {location}: uses an unavailable parent input:{indentExpr input}\nrequired by:{indentExpr inputAvailable}"
     let checkProof ← mkEqRefl check
     pure <| mkAppN
-      (mkConst ``ScheduleDerivation.moduleInputAvailable_of_bool_eq_true)
-      #[body, childContracts, inputAvailable, decideInput, available, input,
+      (mkConst ``ModuleStructuralCertification.Layer.ScheduleDerivation.moduleInputAvailable_of_bool_eq_true)
+      #[body, childRules, inputAvailable, decideInput, available, input,
         checkProof]
   else if constructor == ``SignalSource.instanceOutput && arguments.size >= 4 then
     let sourceChild := arguments[arguments.size - 2]!
@@ -806,11 +666,13 @@ private partial def proveSourceAvailable
       let provider := providerInfo.occurrence
       let providerChild ← occurrenceChild provider
       if ← sameExpr providerChild sourceChild then
-        let writes ← mkAppM ``RuleOccurrence.writes #[provider]
-        let providerRule ← mkAppM ``RuleOccurrence.rule #[provider]
+        let writes ← mkAppM
+          ``ModuleStructuralCertification.Layer.RuleOccurrence.writes #[provider]
+        let providerRule ← mkAppM
+          ``ModuleStructuralCertification.Layer.RuleOccurrence.rule #[provider]
         let mut writtenProof? : Option Expr := none
-        let childContract := mkApp childContracts sourceChild
-        let names ← mkAppM ``ModuleCycleContract.ruleNames #[childContract]
+        let rules := mkApp childRules sourceChild
+        let names ← mkAppM ``ModuleStructuralRules.ruleNames #[rules]
         let ruleType := (← whnf (← inferType names)).getAppArgs[0]!
         let ruleValues := mkAppN (mkConst ``Enumeration.values [.zero])
           #[ruleType, names]
@@ -821,8 +683,8 @@ private partial def proveSourceAvailable
           if ← sameExpr onlyRule providerRule then
             let onlyProof ← mkEqRefl ruleValues
             writtenProof? := some (mkAppN
-              (mkConst ``ScheduleDerivation.output_written_by_only_rule)
-              #[body, childContracts, sourceChild, providerRule, onlyProof,
+              (mkConst ``ModuleStructuralCertification.Layer.ScheduleDerivation.output_written_by_only_rule)
+              #[body, childRules, sourceChild, providerRule, onlyProof,
                 sourceOutput])
         if writtenProof?.isNone then
           let writtenOutputs? ← try
@@ -837,8 +699,9 @@ private partial def proveSourceAvailable
           if let some proof ← observing? (proveOutputMembershipBySimp membership) then
             writtenProof? := some proof
         if let some written := writtenProof? then
-          return mkAppN (mkConst ``sourceAvailable_of_instanceOutput)
-            #[body, childContracts, inputAvailable, available, sourceChild,
+          return mkAppN
+            (mkConst ``ModuleStructuralCertification.Layer.sourceAvailable_of_instanceOutput)
+            #[body, childRules, inputAvailable, available, sourceChild,
               providerRule, sourceOutput, providerInfo.member, written]
     for family in familyProviders do
       let index ← mkFreshExprMVar (some family.indexType)
@@ -848,8 +711,10 @@ private partial def proveSourceAvailable
         let index ← instantiateMVars index
         unless index.hasMVar do
           let provider := mkApp family.occurrence index
-          let writes ← mkAppM ``RuleOccurrence.writes #[provider]
-          let providerRule ← mkAppM ``RuleOccurrence.rule #[provider]
+          let writes ← mkAppM
+            ``ModuleStructuralCertification.Layer.RuleOccurrence.writes #[provider]
+          let providerRule ← mkAppM
+            ``ModuleStructuralCertification.Layer.RuleOccurrence.rule #[provider]
           let writtenOutputs? ← try
             pure (some (← exprList writes))
           catch _ => pure none
@@ -859,8 +724,8 @@ private partial def proveSourceAvailable
               if ← sameExpr written sourceOutput then
                 writtenProof? := some (← membershipAt writes writtenIndex)
           if writtenProof?.isNone then
-            let childContract := mkApp childContracts sourceChild
-            let names ← mkAppM ``ModuleCycleContract.ruleNames #[childContract]
+            let rules := mkApp childRules sourceChild
+            let names ← mkAppM ``ModuleStructuralRules.ruleNames #[rules]
             let ruleType := (← whnf (← inferType names)).getAppArgs[0]!
             let ruleValues := mkAppN (mkConst ``Enumeration.values [.zero])
               #[ruleType, names]
@@ -871,8 +736,8 @@ private partial def proveSourceAvailable
               if ← sameExpr onlyRule providerRule then
                 let onlyProof ← mkEqRefl ruleValues
                 writtenProof? := some (mkAppN
-                  (mkConst ``ScheduleDerivation.output_written_by_only_rule)
-                  #[body, childContracts, sourceChild, providerRule, onlyProof,
+                  (mkConst ``ModuleStructuralCertification.Layer.ScheduleDerivation.output_written_by_only_rule)
+                  #[body, childRules, sourceChild, providerRule, onlyProof,
                     sourceOutput])
           if writtenProof?.isNone then
             let membership ← mkAppM ``List.Mem #[sourceOutput, writes]
@@ -880,8 +745,9 @@ private partial def proveSourceAvailable
               writtenProof? := some proof
           if let some written := writtenProof? then
             let called := mkApp family.member index
-            let proof := mkAppN (mkConst ``sourceAvailable_of_instanceOutput)
-              #[body, childContracts, inputAvailable, available, sourceChild,
+            let proof := mkAppN
+              (mkConst ``ModuleStructuralCertification.Layer.sourceAvailable_of_instanceOutput)
+              #[body, childRules, inputAvailable, available, sourceChild,
                 providerRule, sourceOutput, called, written]
             let proof ← instantiateMVars proof
             try
@@ -890,7 +756,7 @@ private partial def proveSourceAvailable
               throwError "invalid family availability proof at {location}: {error.toMessageData}{indentExpr proof}"
             return proof
     throwError
-      "invalid structural schedule at {location}: uses a child output that no earlier rule has produced ({familyProviders.length} available families):{indentExpr reduced}"
+      "invalid structural schedule at {location}: uses a child output that no earlier rule has produced ({concreteProviders.length} concrete providers, {familyProviders.length} available families):{indentExpr reduced}"
   else if constructor == ``Decidable.rec && arguments.size == 5 then
     let whenFalse := arguments[2]!
     let whenTrue := arguments[3]!
@@ -900,17 +766,18 @@ private partial def proveSourceAvailable
     let falseType := (← withTransparency .all <| whnf (← inferType whenFalse)).bindingDomain!
     let falseAvailable ← withLocalDeclD `notCondition falseType fun proof => do
       let branchSource := mkApp whenFalse proof
-      let branchProof ← proveSourceAvailable body childContracts inputAvailable
+      let branchProof ← proveSourceAvailable body childRules inputAvailable
         decideInput available branchSource concreteProviders familyProviders location
       mkLambdaFVars #[proof] branchProof
     let trueType := (← withTransparency .all <| whnf (← inferType whenTrue)).bindingDomain!
     let trueAvailable ← withLocalDeclD `condition trueType fun proof => do
       let branchSource := mkApp whenTrue proof
-      let branchProof ← proveSourceAvailable body childContracts inputAvailable
+      let branchProof ← proveSourceAvailable body childRules inputAvailable
         decideInput available branchSource concreteProviders familyProviders location
       mkLambdaFVars #[proof] branchProof
-    pure <| mkAppN (mkConst ``ScheduleDerivation.sourceAvailable_decidable_rec)
-      #[body, childContracts, inputAvailable, available, signalType,
+    pure <| mkAppN
+      (mkConst ``ModuleStructuralCertification.Layer.ScheduleDerivation.sourceAvailable_decidable_rec)
+      #[body, childRules, inputAvailable, available, signalType,
         arguments[0]!, whenFalse, whenTrue, decision, falseAvailable,
         trueAvailable]
   else if constructor == ``Eq.rec && arguments.size == 6 then
@@ -920,14 +787,14 @@ private partial def proveSourceAvailable
     let innerSource := arguments[3]!
     let to := arguments[4]!
     let equality := arguments[5]!
-    let innerProof ← proveSourceAvailable body childContracts inputAvailable
+    let innerProof ← proveSourceAvailable body childRules inputAvailable
       decideInput available innerSource concreteProviders familyProviders location
     let proofMotive ← withLocalDeclD `target type fun target => do
       let equalityType ← mkAppM ``Eq #[sourceAt, target]
       withLocalDeclD `equality equalityType fun targetEquality => do
         let transported := mkAppN reduced.getAppFn
           #[type, sourceAt, sourceMotive, innerSource, target, targetEquality]
-        let property ← mkSourceAvailableExpr body childContracts
+        let property ← mkSourceAvailableExpr body childRules
           inputAvailable available transported
         mkLambdaFVars #[target, targetEquality] property
     let sourceLevels := reduced.getAppFn.constLevels!
@@ -935,17 +802,18 @@ private partial def proveSourceAvailable
     pure <| mkAppN proofRec
       #[type, sourceAt, proofMotive, innerProof, to, equality]
   else
-    let property ← mkSourceAvailableExpr body childContracts
+    let property ← mkSourceAvailableExpr body childRules
       inputAvailable available reduced
     let (proof, goals) ← casesOnWiringParameters property
     for goal in goals do
       goal.withContext do
         let target ← goal.getType
         let (targetName, targetArguments) := target.getAppFnArgs
-        unless targetName == ``sourceAvailable && targetArguments.size >= 6 do
+        unless targetName == ``ModuleStructuralCertification.Layer.sourceAvailable &&
+            targetArguments.size >= 6 do
           throwError "`derive_schedule` could not expose wiring at {location}:{indentExpr target}"
         let specializedBody := targetArguments[targetArguments.size - 6]!
-        let specializedChildContracts := targetArguments[targetArguments.size - 5]!
+        let specializedChildRules := targetArguments[targetArguments.size - 5]!
         let specializedInputAvailable := targetArguments[targetArguments.size - 3]!
         let specializedAvailable := targetArguments[targetArguments.size - 2]!
         let specializedSource := targetArguments.back!
@@ -965,24 +833,26 @@ private partial def proveSourceAvailable
           | some family => pure [family]
           | none => pure familyProviders
         let branchProof ← proveSourceAvailable specializedBody
-          specializedChildContracts specializedInputAvailable specializedDecideInput
+          specializedChildRules specializedInputAvailable specializedDecideInput
           specializedAvailable specializedSource concrete specializedFamilies location
         goal.assign branchProof
     instantiateMVars proof
 
 private def buildReadCertificates
-    (body childContracts inputAvailable decideInput available occurrence : Expr)
+    (body childRules inputAvailable decideInput available occurrence : Expr)
     (concreteProviders : List ConcreteProvider)
     (familyProviders : List FamilyProvider)
     (step : Nat) : MetaM Expr := do
-  let reads ← mkAppM ``RuleOccurrence.reads #[occurrence]
+  let reads ← mkAppM
+    ``ModuleStructuralCertification.Layer.RuleOccurrence.reads #[occurrence]
   let inputs ← exprList reads
   let inputType := (← whnf (← inferType reads)).getAppArgs[0]!
-  let child ← mkAppM ``RuleOccurrence.child #[occurrence]
+  let child ← mkAppM
+    ``ModuleStructuralCertification.Layer.RuleOccurrence.child #[occurrence]
   let wiring ← mkAppM ``ModuleBody.wiring #[body]
   let valueFunction ← withLocalDeclD `input inputType fun input => do
     let source ← mkAppM ``Wiring.instanceInput #[wiring, child, input]
-    let property ← mkSourceAvailableExpr body childContracts
+    let property ← mkSourceAvailableExpr body childRules
       inputAvailable available source
     let lifted ← mkAppM ``PLift #[property]
     mkLambdaFVars #[input] lifted
@@ -992,7 +862,7 @@ private def buildReadCertificates
   for (input, reverseIndex) in inputs.reverse.zipIdx do
     let readIndex := inputs.length - reverseIndex - 1
     let source ← mkAppM ``Wiring.instanceInput #[wiring, child, input]
-    let proof ← proveSourceAvailable body childContracts inputAvailable decideInput
+    let proof ← proveSourceAvailable body childRules inputAvailable decideInput
       available source concreteProviders familyProviders m!"rule {step}, read {readIndex}"
     let liftedProof ← mkAppM ``PLift.up #[proof]
     certificates := mkAppN (mkConst ``DependentList.cons [.zero, .zero])
@@ -1017,18 +887,20 @@ private def isNullaryConstructorType (type : Expr) : MetaM Bool := do
 be enumerated during elaboration. The arbitrary input is pushed through the
 wiring function, after which the same source-availability logic applies. -/
 private def buildSymbolicReadsProof
-    (body childContracts inputAvailable decideInput available occurrence : Expr)
+    (body childRules inputAvailable decideInput available occurrence : Expr)
     (concreteProviders : List ConcreteProvider)
     (familyProviders : List FamilyProvider) (step : Nat) : MetaM Expr := do
-  let reads ← mkAppM ``RuleOccurrence.reads #[occurrence]
+  let reads ← mkAppM
+    ``ModuleStructuralCertification.Layer.RuleOccurrence.reads #[occurrence]
   let inputType := (← whnf (← inferType reads)).getAppArgs[0]!
-  let child ← mkAppM ``RuleOccurrence.child #[occurrence]
+  let child ← mkAppM
+    ``ModuleStructuralCertification.Layer.RuleOccurrence.child #[occurrence]
   let wiring ← mkAppM ``ModuleBody.wiring #[body]
   withLocalDeclD `input inputType fun input => do
     let memberType ← mkAppM ``List.Mem #[input, reads]
     withLocalDeclD `member memberType fun member => do
       let source ← mkAppM ``Wiring.instanceInput #[wiring, child, input]
-      let target ← mkSourceAvailableExpr body childContracts
+      let target ← mkSourceAvailableExpr body childRules
         inputAvailable available source
       let reducedReads ← withTransparency .all <| whnf reads
       if reducedReads.getAppFn.constName? == some ``List.nil then
@@ -1054,7 +926,7 @@ private def buildSymbolicReadsProof
             let specializedTarget ← goal.getType
             let targetArguments := specializedTarget.getAppArgs
             let specializedBody := targetArguments[targetArguments.size - 6]!
-            let specializedChildContracts :=
+            let specializedChildRules :=
               targetArguments[targetArguments.size - 5]!
             let specializedInputAvailable :=
               targetArguments[targetArguments.size - 3]!
@@ -1064,13 +936,13 @@ private def buildSymbolicReadsProof
             let specializedDecideInput ← mkDecideInput
               specializedInputAvailable inputDecidableEq
             let proof ← proveSourceAvailable specializedBody
-              specializedChildContracts specializedInputAvailable
+              specializedChildRules specializedInputAvailable
               specializedDecideInput specializedAvailable specializedSource
               concreteProviders familyProviders
               m!"rule {step}, symbolic read case"
             goal.assign proof
         return ← mkLambdaFVars #[input, member] (← instantiateMVars caseGoal)
-      let proof ← proveSourceAvailable body childContracts inputAvailable decideInput
+      let proof ← proveSourceAvailable body childRules inputAvailable decideInput
         available source concreteProviders familyProviders
           m!"rule {step}, symbolic read from {indentExpr reads} with evidence {indentExpr memberType}"
       mkLambdaFVars #[input, member] proof
@@ -1078,14 +950,16 @@ private def buildSymbolicReadsProof
 private def classifyFinish (Finish : Expr) : MetaM FinishKind := do
   let finish := Finish.getAppFnArgs
   if finish.1 == ``BoundaryReady && finish.2.size == 4 then
-    pure (.outputs finish.2[2]!)
+    pure (.outputs finish.2[1]! finish.2[2]!)
   else if finish.1 == ``ChildrenStateInputsReady && finish.2.size == 2 then
-    pure .state
+    pure (.state finish.2[1]!)
+  else if Finish.isLambda && Finish.bindingBody!.isConstOf ``True then
+    pure .trivial
   else
-    throwError "`derive_schedule` expects an `OutputSchedule` or `StateSchedule`, got final condition:{indentExpr Finish}"
+    throwError "`derive_schedule` expects a structural, output, or state schedule, got final condition:{indentExpr Finish}"
 
 private def buildOutputBoundary
-    (body childContracts inputAvailable decideInput available outputs : Expr)
+    (body childRules inputAvailable decideInput available outputs : Expr)
     (concreteProviders : List ConcreteProvider)
     (familyProviders : List FamilyProvider) : MetaM Expr := do
   let outputType := (← whnf (← inferType outputs)).getAppArgs[0]!
@@ -1096,13 +970,13 @@ private def buildOutputBoundary
       let memberType ← mkAppM ``List.Mem #[output, outputs]
       withLocalDeclD `member memberType fun member => do
         let source ← mkAppM ``Wiring.moduleOutput #[wiring, output]
-        let proof ← proveSourceAvailable body childContracts inputAvailable decideInput
+        let proof ← proveSourceAvailable body childRules inputAvailable decideInput
           available source concreteProviders familyProviders "symbolic required output"
         mkLambdaFVars #[output, member] proof
   let outputLabels := outputLabels?.get!
   let valueFunction ← withLocalDeclD `output outputType fun output => do
     let source ← mkAppM ``Wiring.moduleOutput #[wiring, output]
-    let property ← mkSourceAvailableExpr body childContracts
+    let property ← mkSourceAvailableExpr body childRules
       inputAvailable available source
     let lifted ← mkAppM ``PLift #[property]
     mkLambdaFVars #[output] lifted
@@ -1112,7 +986,7 @@ private def buildOutputBoundary
   for (output, reverseIndex) in outputLabels.reverse.zipIdx do
     let outputIndex := outputLabels.length - reverseIndex - 1
     let source ← mkAppM ``Wiring.moduleOutput #[wiring, output]
-    let proof ← proveSourceAvailable body childContracts inputAvailable decideInput
+    let proof ← proveSourceAvailable body childRules inputAvailable decideInput
       available source concreteProviders familyProviders m!"required output {outputIndex}"
     let liftedProof ← mkAppM ``PLift.up #[proof]
     certificates := mkAppN (mkConst ``DependentList.cons [.zero, .zero])
@@ -1129,7 +1003,7 @@ private def stateReadLabels (childContracts child : Expr) : MetaM Expr := do
   mkAppM ``SignalGroup.labels #[reads]
 
 private def buildStateChildCertificates
-    (body childContracts inputAvailable decideInput available child : Expr)
+    (body childRules childContracts inputAvailable decideInput available child : Expr)
     (concreteProviders : List ConcreteProvider)
     (familyProviders : List FamilyProvider) : MetaM Expr := do
   let inputs ← stateReadLabels childContracts child
@@ -1140,8 +1014,9 @@ private def buildStateChildCertificates
     let source ← mkAppM ``Wiring.instanceInput #[wiring, child, input]
     let signalType := (← withTransparency .reducible <| whnf (← inferType source))
       |>.getAppArgs.back!
-    let property := mkAppN (mkConst ``sourceAvailable)
-      #[body, childContracts, signalType, inputAvailable, available, source]
+    let property := mkAppN
+      (mkConst ``ModuleStructuralCertification.Layer.sourceAvailable)
+      #[body, childRules, signalType, inputAvailable, available, source]
     let lifted ← mkAppM ``PLift #[property]
     mkLambdaFVars #[input] lifted
   let mut certificates := mkAppN (mkConst ``DependentList.nil [.zero, .zero])
@@ -1150,7 +1025,7 @@ private def buildStateChildCertificates
   for (input, reverseIndex) in inputLabels.reverse.zipIdx do
     let inputIndex := inputLabels.length - reverseIndex - 1
     let source ← mkAppM ``Wiring.instanceInput #[wiring, child, input]
-    let proof ← proveSourceAvailable body childContracts inputAvailable decideInput
+    let proof ← proveSourceAvailable body childRules inputAvailable decideInput
       available source concreteProviders familyProviders
         m!"state input {inputIndex} of child {indentExpr child}"
     let liftedProof ← mkAppM ``PLift.up #[proof]
@@ -1231,7 +1106,7 @@ private def closeEmptyMembershipGoal? (goal : MVarId) : MetaM Bool :=
     return false
 
 private def buildStateBoundary
-    (body childContracts inputAvailable decideInput available : Expr)
+    (body childRules childContracts inputAvailable decideInput available : Expr)
     (concreteProviders : List ConcreteProvider)
     (familyProviders : List FamilyProvider) : MetaM Expr := do
   let directTarget := mkAppN (mkConst ``ChildrenStateInputsReady)
@@ -1294,12 +1169,21 @@ private def buildStateBoundary
           caseGoal.withContext do
             let target ← caseGoal.getType
             let (targetName, targetArguments) := target.getAppFnArgs
-            unless targetName == ``sourceAvailable && targetArguments.size >= 6 do
+            unless targetArguments.size >= 6 do
               throwError
                 "`derive_schedule` cannot expose this symbolic state boundary:{indentExpr target}"
             let specializedBody := targetArguments[targetArguments.size - 6]!
-            let specializedChildContracts :=
-              targetArguments[targetArguments.size - 5]!
+            let specializedChildRules ←
+              if targetName == ``sourceAvailable then
+                mkAppM ``childStructuralRules
+                  #[specializedBody,
+                    targetArguments[targetArguments.size - 5]!]
+              else if targetName ==
+                  ``ModuleStructuralCertification.Layer.sourceAvailable then
+                pure targetArguments[targetArguments.size - 5]!
+              else
+                throwError
+                  "`derive_schedule` cannot expose this symbolic state boundary:{indentExpr target}"
             let specializedInputAvailable :=
               targetArguments[targetArguments.size - 3]!
             let specializedAvailable := targetArguments[targetArguments.size - 2]!
@@ -1308,7 +1192,7 @@ private def buildStateBoundary
             let specializedDecideInput ← mkDecideInput
               specializedInputAvailable inputDecidableEq
             let proof ← proveSourceAvailable specializedBody
-              specializedChildContracts specializedInputAvailable specializedDecideInput
+              specializedChildRules specializedInputAvailable specializedDecideInput
               specializedAvailable specializedSource concreteProviders familyProviders
               "symbolic state boundary"
             caseGoal.assign proof
@@ -1323,8 +1207,9 @@ private def buildStateBoundary
       let source ← mkAppM ``Wiring.instanceInput #[wiring, child, input]
       let signalType := (← withTransparency .reducible <| whnf (← inferType source))
         |>.getAppArgs.back!
-      let property := mkAppN (mkConst ``sourceAvailable)
-        #[body, childContracts, signalType, inputAvailable, available, source]
+      let property := mkAppN
+        (mkConst ``ModuleStructuralCertification.Layer.sourceAvailable)
+        #[body, childRules, signalType, inputAvailable, available, source]
       let lifted ← mkAppM ``PLift #[property]
       mkLambdaFVars #[input] lifted
     let innerType := mkAppN (mkConst ``DependentList [.zero, .zero])
@@ -1334,7 +1219,7 @@ private def buildStateBoundary
     #[childType, outerValueFunction]
   let mut certificateKeys := mkApp (mkConst ``List.nil [.zero]) childType
   for child in childLabels.reverse do
-    let childCertificates ← buildStateChildCertificates body childContracts
+    let childCertificates ← buildStateChildCertificates body childRules childContracts
       inputAvailable decideInput available child concreteProviders familyProviders
     certificates := mkAppN (mkConst ``DependentList.cons [.zero, .zero])
       #[childType, outerValueFunction, child, certificateKeys,
@@ -1346,7 +1231,7 @@ private def buildStateBoundary
     #[body, childContracts, available, certificates]
 
 private partial def buildSchedule
-    (body childContracts inputAvailable decideInput Finish : Expr)
+    (body childRules inputAvailable decideInput Finish : Expr)
     (finishKind : FinishKind)
     (ordered : List OrderStep) (available : Expr)
     (concreteProviders : List ConcreteProvider)
@@ -1355,29 +1240,33 @@ private partial def buildSchedule
   match ordered with
   | [] =>
       let finished ← match finishKind with
-        | .outputs outputs =>
-            buildOutputBoundary body childContracts inputAvailable decideInput
+        | .outputs _ outputs =>
+            buildOutputBoundary body childRules inputAvailable decideInput
               available outputs concreteProviders familyProviders
-        | .state =>
-            buildStateBoundary body childContracts inputAvailable decideInput
+        | .state childContracts =>
+            buildStateBoundary body childRules childContracts inputAvailable decideInput
               available concreteProviders familyProviders
-      pure <| mkAppN (mkConst ``Schedule.done)
-        #[body, childContracts, inputAvailable, Finish, available, finished]
+        | .trivial => pure (mkConst ``True.intro)
+      pure <| mkAppN
+        (mkConst ``ModuleStructuralCertification.Layer.Schedule.done)
+        #[body, childRules, inputAvailable, Finish, available, finished]
   | .call occurrence :: rest =>
       let fresh ← proveFreshFromAvailability occurrence available familyProviders
         m!"freshness of rule {step}"
-      let occurrenceReads ← mkAppM ``RuleOccurrence.reads #[occurrence]
+      let occurrenceReads ← mkAppM
+        ``ModuleStructuralCertification.Layer.RuleOccurrence.reads #[occurrence]
       let concreteReads? ← try
         pure (some (← exprList occurrenceReads))
       catch _ => pure none
       let reads ← if concreteReads?.isSome then
-        let certificates ← buildReadCertificates body childContracts inputAvailable
+        let certificates ← buildReadCertificates body childRules inputAvailable
           decideInput available occurrence concreteProviders familyProviders step
         withTransparency .all <|
-          mkAppM ``ScheduleDerivation.readsAvailable_of_certificates
+          mkAppM
+            ``ModuleStructuralCertification.Layer.ScheduleDerivation.readsAvailable_of_certificates
             #[inputAvailable, available, occurrence, certificates]
       else
-        buildSymbolicReadsProof body childContracts inputAvailable decideInput
+        buildSymbolicReadsProof body childRules inputAvailable decideInput
           available occurrence concreteProviders familyProviders step
       let nextAvailable ← mkAppM ``List.cons #[occurrence, available]
       let occurrenceType ← inferType occurrence
@@ -1395,10 +1284,11 @@ private partial def buildSchedule
           let lifted ← mkAppM ``List.mem_cons_of_mem #[occurrence, oldMember]
           mkLambdaFVars #[index] lifted
         nextFamilies := nextFamilies ++ [{ family with member := member }]
-      let tail ← buildSchedule body childContracts inputAvailable decideInput Finish
+      let tail ← buildSchedule body childRules inputAvailable decideInput Finish
         finishKind rest nextAvailable nextConcrete nextFamilies (step + 1)
-      pure <| mkAppN (mkConst ``Schedule.call)
-        #[body, childContracts, inputAvailable, Finish, available,
+      pure <| mkAppN
+        (mkConst ``ModuleStructuralCertification.Layer.Schedule.call)
+        #[body, childRules, inputAvailable, Finish, available,
           occurrence, reads, fresh, tail]
   | .family indexType indices occurrence :: rest =>
       let injectiveType ← mkAppM ``Function.Injective #[occurrence]
@@ -1406,11 +1296,14 @@ private partial def buildSchedule
         m!"injectivity of rule family {step}"
       let fresh ← withLocalDeclD `index indexType fun index => do
         let called := mkApp occurrence index
-        let check ← mkAppM ``ScheduleDerivation.childFreshBool #[available, called]
+        let check ← mkAppM
+          ``ModuleStructuralCertification.Layer.ScheduleDerivation.childFreshBool
+          #[available, called]
         let proof ← if ← withTransparency .all <|
             isDefEq check (mkConst ``true) then
           let checkProof ← mkEqRefl check
-          mkAppM ``ScheduleDerivation.fresh_of_child_bool_eq_true
+          mkAppM
+            ``ModuleStructuralCertification.Layer.ScheduleDerivation.fresh_of_child_bool_eq_true
             #[available, called, checkProof]
         else
           proveFreshFromAvailability called available familyProviders
@@ -1418,13 +1311,17 @@ private partial def buildSchedule
         mkLambdaFVars #[index] proof
       let reads ← withLocalDeclD `index indexType fun index => do
         let called := mkApp occurrence index
-        let proof ← buildSymbolicReadsProof body childContracts inputAvailable
+        let proof ← buildSymbolicReadsProof body childRules inputAvailable
           decideInput available called concreteProviders familyProviders step
         mkLambdaFVars #[index] proof
-      let familySchedule ← mkAppM ``Schedule.callFamilyAfter
+      let familySchedule ← mkAppM
+        ``ModuleStructuralCertification.Layer.Schedule.callFamilyAfter
         #[available, indices, occurrence, injective, fresh, reads]
-      let familyFinal ← mkAppM ``Schedule.finalAvailability #[familySchedule]
-      let familyFinished ← mkAppM ``Schedule.finished #[familySchedule]
+      let familyFinal ← mkAppM
+        ``ModuleStructuralCertification.Layer.Schedule.finalAvailability
+        #[familySchedule]
+      let familyFinished ← mkAppM
+        ``ModuleStructuralCertification.Layer.Schedule.finished #[familySchedule]
       let includesOld := mkProj ``And 0 familyFinished
       let familyFacts := mkProj ``And 1 familyFinished
       let includesFamily := mkProj ``And 0 familyFacts
@@ -1443,17 +1340,19 @@ private partial def buildSchedule
         mkLambdaFVars #[index] (mkApp includesFamily index)
       nextFamilies := nextFamilies ++ [⟨indexType, available, indices, occurrence,
         injective, fresh, reads, familySchedule, familyMember⟩]
-      let tail ← buildSchedule body childContracts inputAvailable decideInput Finish
+      let tail ← buildSchedule body childRules inputAvailable decideInput Finish
         finishKind rest familyFinal nextConcrete nextFamilies (step + 1)
-      mkAppM ``Schedule.append #[familySchedule, tail]
+      mkAppM ``ModuleStructuralCertification.Layer.Schedule.append
+        #[familySchedule, tail]
 
 private def deriveScheduleExpr (target ordered : Expr) : MetaM Expr := do
   let target ← withTransparency .reducible <| whnf target
   let (targetName, targetArgs) := target.getAppFnArgs
-  unless targetName == ``Schedule && targetArgs.size == 5 do
+  unless targetName == ``ModuleStructuralCertification.Layer.Schedule &&
+      targetArgs.size == 5 do
     throwError "schedule derivation expects an output or state schedule type"
   let body := targetArgs[0]!
-  let childContracts := targetArgs[1]!
+  let childRules := targetArgs[1]!
   let inputAvailable ← instantiateMVars targetArgs[2]!
   let Finish ← instantiateMVars targetArgs[3]!
   let initial := targetArgs[4]!
@@ -1465,7 +1364,7 @@ private def deriveScheduleExpr (target ordered : Expr) : MetaM Expr := do
   let mut initialProviders : List ConcreteProvider := []
   for (occurrence, index) in initiallyAvailable.zipIdx do
     initialProviders := initialProviders ++ [⟨occurrence, ← membershipAt initial index⟩]
-  buildSchedule body childContracts inputAvailable decideInput Finish finishKind
+  buildSchedule body childRules inputAvailable decideInput Finish finishKind
     calls initial initialProviders [] 0
 
 private def ruleNamesValues (contract : Expr) : MetaM (Expr × Expr) := do
@@ -1490,20 +1389,23 @@ private def coverageProperty
   let occurrence := mkAppN (mkConst ``RuleOccurrence.mk)
     #[body, childContracts, child, rule]
   let state ← mkAppM ``RuleSchedules.state #[schedules]
-  let stateFinal ← mkAppM ``Schedule.finalAvailability #[state]
+  let stateFinal ← mkAppM
+    ``ModuleStructuralCertification.Layer.Schedule.finalAvailability #[state]
   let stateMember ← mkAppM ``List.Mem #[occurrence, stateFinal]
   let contract := (← whnf (← inferType schedules)).getAppArgs[2]!
   let ruleName ← mkAppM ``ModuleCycleContract.RuleName #[contract]
   let outputExists ← withLocalDeclD `name ruleName fun name => do
     let output ← mkAppM ``RuleSchedules.output #[schedules, name]
-    let outputFinal ← mkAppM ``Schedule.finalAvailability #[output]
+    let outputFinal ← mkAppM
+      ``ModuleStructuralCertification.Layer.Schedule.finalAvailability #[output]
     let member ← mkAppM ``List.Mem #[occurrence, outputFinal]
     let predicate ← mkLambdaFVars #[name] member
     mkAppM ``Exists #[predicate]
   mkAppM ``Or #[stateMember, outputExists]
 
 private def scheduleMemberAt (schedule : Expr) (orderedLength position : Nat) : MetaM Expr := do
-  let final ← mkAppM ``Schedule.finalAvailability #[schedule]
+  let final ← mkAppM
+    ``ModuleStructuralCertification.Layer.Schedule.finalAvailability #[schedule]
   membershipAt final (orderedLength - position - 1)
 
 private def buildCoverageProof
@@ -1572,12 +1474,14 @@ private def buildCoverageProof
     #[schedules, outerCertificates]
 
 private def proveScheduleMembership (occurrence schedule : Expr) : MetaM Expr := do
-  let final ← mkAppM ``Schedule.finalAvailability #[schedule]
+  let final ← mkAppM
+    ``ModuleStructuralCertification.Layer.Schedule.finalAvailability #[schedule]
   let target ← mkAppM ``List.Mem #[occurrence, final]
   let proof ← mkFreshExprSyntheticOpaqueMVar target
   let (simplifiedGoals, _) ← Lean.Elab.runTactic proof.mvarId!
-    (← `(tactic| simp only [Schedule.finalAvailability_call,
-      Schedule.finalAvailability_append]))
+    (← `(tactic| simp only
+      [ModuleStructuralCertification.Layer.Schedule.finalAvailability_call,
+       ModuleStructuralCertification.Layer.Schedule.finalAvailability_append]))
   let simplifiedGoal ← match simplifiedGoals with
     | [goal] => pure goal
     | _ => throwError "could not expose final schedule availability"
@@ -1705,9 +1609,12 @@ private def buildCoverageByTactic (orders schedules stateSchedule outputCertific
   instantiateMVars goal
 
 private def buildCompleteCoverageByTactic
-    (body childContracts schedule : Expr) : MetaM Expr := do
-  let final ← mkAppM ``Schedule.finalAvailability #[schedule]
-  let target ← mkAppM ``CoversAllRules #[body, childContracts, final]
+    (body childRules schedule : Expr) : MetaM Expr := do
+  let final ← mkAppM
+    ``ModuleStructuralCertification.Layer.Schedule.finalAvailability #[schedule]
+  let target ← mkAppM
+    ``ModuleStructuralCertification.Layer.CoversAllRules
+    #[body, childRules, final]
   let goal ← mkFreshExprSyntheticOpaqueMVar target
   let (afterIntro, _) ← Lean.Elab.runTactic goal.mvarId!
     (← `(tactic| intro child rule))
@@ -1717,11 +1624,9 @@ private def buildCompleteCoverageByTactic
     afterChildren := afterChildren ++ next
   let mut ruleGoals := []
   for current in afterChildren do
-    for structuralCase in (← caseStructuralIndexLocals current) do
-      let (cases, _) ← Lean.Elab.runTactic structuralCase
-        (← `(tactic| cases rule))
-      for ruleCase in cases do
-        ruleGoals := ruleGoals ++ (← caseEmptyOrUnitLocals ruleCase)
+    let (cases, _) ← Lean.Elab.runTactic current
+      (← `(tactic| cases rule))
+    ruleGoals := ruleGoals ++ cases
   for current in ruleGoals do
     current.withContext do
       let membership ← current.getType
@@ -1735,16 +1640,35 @@ private def buildCompleteCoverageByTactic
 private def deriveCompleteScheduleExpr (target ordered : Expr) : MetaM Expr := do
   let target ← withTransparency .reducible <| whnf target
   let (name, arguments) := target.getAppFnArgs
-  unless name == ``ScheduleDerivation.DerivedCompleteSchedule &&
+  unless name ==
+      ``ModuleStructuralCertification.Layer.ScheduleDerivation.DerivedCompleteSchedule &&
       arguments.size == 2 do
     throwError "`derive_complete_schedule` expects a `DerivedCompleteSchedule` goal"
   let body := arguments[0]!
-  let childContracts := arguments[1]!
-  let stateType ← mkAppM ``StateSchedule #[body, childContracts]
-  let schedule ← deriveScheduleExpr stateType ordered
-  let coverage ← buildCompleteCoverageByTactic body childContracts schedule
-  pure <| mkAppN (mkConst ``ScheduleDerivation.DerivedCompleteSchedule.mk)
-    #[body, childContracts, schedule, coverage]
+  let childRules := arguments[1]!
+  let ports ← mkAppM ``ModuleBody.ports #[body]
+  let inputs ← mkAppM ``ModulePorts.inputs #[ports]
+  let inputLabels ← mkAppM ``EnumeratedMap.keys #[inputs]
+  let inputType := (← withTransparency .reducible <|
+    whnf (← inferType inputLabels)).getAppArgs[0]!
+  let trueInputs ← withLocalDeclD `input inputType fun input =>
+    mkLambdaFVars #[input] (mkConst ``True)
+  let trueFinish ← withLocalDeclD `available
+      (← mkAppM ``ModuleStructuralCertification.Layer.Availability
+        #[body, childRules]) fun available =>
+    mkLambdaFVars #[available] (mkConst ``True)
+  let occurrenceType ← mkAppM
+    ``ModuleStructuralCertification.Layer.RuleOccurrence #[body, childRules]
+  let empty := mkApp (mkConst ``List.nil [.zero]) occurrenceType
+  let scheduleType ← mkAppM
+    ``ModuleStructuralCertification.Layer.Schedule
+    #[body, childRules, trueInputs, trueFinish, empty]
+  let schedule ← deriveScheduleExpr scheduleType ordered
+  let coverage ← buildCompleteCoverageByTactic body childRules schedule
+  pure <| mkAppN
+    (mkConst
+      ``ModuleStructuralCertification.Layer.ScheduleDerivation.DerivedCompleteSchedule.mk)
+    #[body, childRules, schedule, coverage]
 
 private def deriveSymbolicRuleSchedulesExpr
     (body childContracts contract orders ruleNameType : Expr) : MetaM Expr := do
@@ -1850,12 +1774,14 @@ elab_rules : tactic
         let target ← goal.getType
         let reducedTarget ← withTransparency .reducible <| whnf target
         let (_, targetArgs) := reducedTarget.getAppFnArgs
-        unless reducedTarget.getAppFn.constName? == some ``Schedule &&
+        unless reducedTarget.getAppFn.constName? ==
+            some ``ModuleStructuralCertification.Layer.Schedule &&
             targetArgs.size == 5 do
           throwError "`derive_schedule` expects an output or state schedule goal"
         let body ← withTransparency .reducible <| whnf targetArgs[0]!
-        let childContracts ← withTransparency .reducible <| whnf targetArgs[1]!
-        let occurrenceType ← mkAppM ``RuleOccurrence #[body, childContracts]
+        let childRules := targetArgs[1]!
+        let occurrenceType ← mkAppM
+          ``ModuleStructuralCertification.Layer.RuleOccurrence #[body, childRules]
         let orderedType := mkApp (mkConst ``List [.zero]) occurrenceType
         let ordered ← Term.elabTerm orderedSyntax (some orderedType)
         Term.synthesizeSyntheticMVarsNoPostponing
@@ -1868,13 +1794,15 @@ elab_rules : tactic
       goal.withContext do
         let target ← withTransparency .reducible <| whnf (← goal.getType)
         let (targetName, targetArgs) := target.getAppFnArgs
-        unless targetName == ``ScheduleDerivation.DerivedCompleteSchedule &&
+        unless targetName ==
+            ``ModuleStructuralCertification.Layer.ScheduleDerivation.DerivedCompleteSchedule &&
             targetArgs.size == 2 do
           throwError
             "`derive_complete_schedule` expects a `DerivedCompleteSchedule` goal"
         let body ← withTransparency .reducible <| whnf targetArgs[0]!
-        let childContracts ← withTransparency .reducible <| whnf targetArgs[1]!
-        let occurrenceType ← mkAppM ``RuleOccurrence #[body, childContracts]
+        let childRules := targetArgs[1]!
+        let occurrenceType ← mkAppM
+          ``ModuleStructuralCertification.Layer.RuleOccurrence #[body, childRules]
         let orderedType := mkApp (mkConst ``List [.zero]) occurrenceType
         let ordered ← Term.elabTerm orderedSyntax (some orderedType)
         Term.synthesizeSyntheticMVarsNoPostponing

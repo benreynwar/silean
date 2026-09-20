@@ -4,6 +4,7 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.OneEntryFifo.Control.OneEntryFifoControl
+import Silean.Modules.OneEntryFifo.Control.Internal.OneEntryFifoControlStructure
 
 /-! Certification machinery for the one-entry FIFO control child. -/
 
@@ -72,22 +73,26 @@ module_cycle_certification certification for moduleStructure via body
 
 end Silean.Modules.OneEntryFifo.Control
 
-namespace Silean.Modules.OneEntryFifo.Control.Description.Internal
+namespace Silean.Modules.OneEntryFifo.Control.Internal
 
 open Silean Naming Authoring.CircuitDescription
 
 private theorem same : some description = ofNaming Control.naming := by
   rfl
 
-private theorem unique : description.UniqueNames := by
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal <;> subst child <;>
-    constructor <;> exact of_decide_eq_true rfl
+theorem description_corresponds : Corresponds description Control.naming :=
+  ⟨same⟩
 
-theorem corresponds : Corresponds description Control.naming :=
-  ⟨same, unique⟩
+open Authoring.CircuitDescription.Description
 
-end Silean.Modules.OneEntryFifo.Control.Description.Internal
+theorem construction_correct :
+    ImplementsCycleContract Control.description cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold Control.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := { instancePorts := instancePorts, wiring := wiring })
+    (children := structuralChildren)
+    corresponds certification
+
+end Silean.Modules.OneEntryFifo.Control.Internal

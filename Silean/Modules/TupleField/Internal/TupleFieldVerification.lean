@@ -4,6 +4,7 @@ import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Contracts.Cycle.CycleScheduleDerivation
 import Silean.Modules.TupleField.TupleField
+import Silean.Modules.TupleField.Internal.TupleFieldStructure
 
 namespace Silean.Modules.TupleField
 
@@ -11,8 +12,7 @@ open Silean
 open Silean.Authoring
 open Contracts.Cycle.Certification.Layer
 
-private def splitter (signals : SignalMap) : Composition.SignalSplitter :=
-  .tuple signals.tupleFields
+open Internal
 
 private theorem outputSourceValue (signals : SignalMap) (field : signals.Label)
     (inputs : (ports signals field).inputs.Values)

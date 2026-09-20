@@ -1,6 +1,6 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.EnabledRegister.EnabledRegister
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.Register.RegisterDerived
 
 namespace Silean.Modules

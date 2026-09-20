@@ -7,7 +7,7 @@ namespace SileanTests.EnabledResetRegisterAuthoring
 
 open Silean
 
-#check Modules.EnabledResetRegister.value_of_allowed
+#check Modules.EnabledResetRegister.cycleContract.value
 #check Modules.EnabledResetRegister.next_stored_of_allowed
 #check Modules.EnabledResetRegister.next_stored_of_reset
 #check Modules.EnabledResetRegister.next_stored_of_enabled

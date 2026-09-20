@@ -60,10 +60,9 @@ def andCertified : Contracts.Cycle.ModuleCycleCertified and.ports where
   moduleStructure := .primitive and
   cycleContract := andCycleContract
   certification := {
+    structural := and.structuralCertification,
     stateCorresponds := andStateCorresponds,
     hasCorrespondingState := fun _ => ⟨SignalMap.emptyValues, trivial⟩,
-    hasStructuralResult := Primitive.hasSolution and,
-    structuralResultUnique := Primitive.hasAtMostOneSolution and,
     implements := Contracts.Cycle.implementsSolutions_iff_implements.mp andImplements }
 end Silean.Primitives
 

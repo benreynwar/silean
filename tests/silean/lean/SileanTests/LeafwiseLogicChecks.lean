@@ -1,4 +1,4 @@
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.Mux.MuxDerived
 import Silean.Semantics.StructuralExecution
 
 namespace SileanTests.LeafwiseLogic
@@ -16,7 +16,7 @@ def bitMaskInputs : (Modules.Mask.ports .bit).inputs.Values
 example : ∃ outputs nextState,
     (Modules.Mask.certified .bit).moduleStructure.Transition bitMaskInputs
       (emptyState (Modules.Mask.certified .bit)) outputs nextState :=
-  (Modules.Mask.certified .bit).hasStructuralResult.transition_exists
+  (Modules.Mask.certified .bit).structuralCertification.hasSolution.transition_exists
     bitMaskInputs (emptyState (Modules.Mask.certified .bit))
 
 abbrev vectorType : SignalType := .vector 3 .bit
@@ -39,7 +39,7 @@ example : ∃ outputs nextState,
     (Modules.BitwiseOr.certified vectorType).moduleStructure.Transition
       vectorOrInputs (emptyState (Modules.BitwiseOr.certified vectorType))
       outputs nextState :=
-  (Modules.BitwiseOr.certified vectorType).hasStructuralResult.transition_exists
+  (Modules.BitwiseOr.certified vectorType).structuralCertification.hasSolution.transition_exists
     vectorOrInputs (emptyState (Modules.BitwiseOr.certified vectorType))
 
 abbrev nestedFields : SignalTypes :=
@@ -63,7 +63,7 @@ def nestedMuxInputs : (Modules.Mux.ports nestedType).inputs.Values
 example : ∃ outputs nextState,
     (Modules.Mux.certified nestedType).moduleStructure.Transition nestedMuxInputs
       (emptyState (Modules.Mux.certified nestedType)) outputs nextState :=
-  (Modules.Mux.certified nestedType).hasStructuralResult.transition_exists
+  (Modules.Mux.certified nestedType).structuralCertification.hasSolution.transition_exists
     nestedMuxInputs (emptyState (Modules.Mux.certified nestedType))
 
 example {outputs nextState}
@@ -72,6 +72,6 @@ example {outputs nextState}
       outputs nextState) :
     outputs .result = nestedTrue := by
   simpa [nestedMuxInputs] using
-    Modules.Mux.Description.result_of_realization nestedType transition
+    Modules.Mux.result_of_realization nestedType transition
 
 end SileanTests.LeafwiseLogic
