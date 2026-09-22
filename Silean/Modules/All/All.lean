@@ -23,6 +23,10 @@ private theorem and_eq_true_iff (left right : SignalType.bit.Denote) :
   change ((left && right) = true ↔ left = true ∧ right = true)
   cases left <;> cases right <;> simp
 
+private theorem bool_and_eq_true_iff (left right : Bool) :
+    (left && right) = true ↔ left = true ∧ right = true := by
+  cases left <;> cases right <;> simp
+
 private theorem fold_eq_true_iff : ∀ (tree : Composition.Reduction.Tree)
     (values : Fin tree.leafCount → SignalType.bit.Denote),
     Composition.Reduction.fold andOperation trueValue tree values = trueValue ↔
@@ -66,14 +70,14 @@ private theorem fold_eq_true_iff : ∀ (tree : Composition.Reduction.Tree)
           exact fun index => allTrue (Fin.natAdd left.leafCount index)
 
 def every : (width : Nat) →
-    (Fin width → SignalType.bit.Denote) → SignalType.bit.Denote
-  | 0, _ => trueValue
+    (Fin width → Bool) → Bool
+  | 0, _ => true
   | width + 1, values =>
-      andOperation (values 0) (every width fun index => values index.succ)
+      values 0 && every width (fun index => values index.succ)
 
 theorem every_eq_true_iff : ∀ (width : Nat)
-    (values : Fin width → SignalType.bit.Denote),
-    every width values = trueValue ↔ ∀ index, values index = trueValue
+    (values : Fin width → Bool),
+    every width values = true ↔ ∀ index, values index = true
   | 0, values => by
       constructor
       · intro _ index
@@ -82,7 +86,7 @@ theorem every_eq_true_iff : ∀ (width : Nat)
         rfl
   | width + 1, values => by
       simp only [every]
-      rw [and_eq_true_iff, every_eq_true_iff width]
+      rw [bool_and_eq_true_iff, every_eq_true_iff width]
       constructor
       · rintro ⟨headTrue, tailTrue⟩ index
         exact Fin.cases headTrue tailTrue index
@@ -92,15 +96,19 @@ theorem every_eq_true_iff : ∀ (width : Nat)
 private theorem fold_eq_every (tree : Composition.Reduction.Tree)
     (values : Fin tree.leafCount → SignalType.bit.Denote) :
     Composition.Reduction.fold andOperation trueValue tree values =
-      every tree.leafCount values := by
+      every tree.leafCount (fun index => show Bool from values index) := by
   apply Bool.eq_iff_iff.mpr
   constructor
   · intro foldTrue
-    exact (every_eq_true_iff _ _).mpr
-      ((fold_eq_true_iff tree values).mp foldTrue)
+    apply (every_eq_true_iff _ _).mpr
+    intro index
+    change values index = trueValue
+    exact (fold_eq_true_iff tree values).mp foldTrue index
   · intro everyTrue
-    exact (fold_eq_true_iff tree values).mpr
-      ((every_eq_true_iff _ _).mp everyTrue)
+    apply (fold_eq_true_iff tree values).mpr
+    intro index
+    change (show Bool from values index) = true
+    exact (every_eq_true_iff _ _).mp everyTrue index
 
 private def andStateCorresponds (_ : emptySignalMap.Values)
     (_ : (ModuleStructure.primitive Primitives.and).State) : Prop := True
@@ -230,10 +238,13 @@ theorem output_eq_true_iff_of_holds (width : Nat)
         rw [show (tree width).leafCount = width by
           simp [tree, Composition.Reduction.balancedTree]]
         exact index.isLt⟩
+    change (show Bool from inputs (input width index)) = true
     simpa [input, internal] using allTrue internal
   · intro allTrue index
     have result := allTrue (widthIndex width index)
     rw [input_widthIndex] at result
+    change (show Bool from inputs (.leaf index)) = true
+    change (show Bool from inputs (input width (widthIndex width index))) = true at result
     exact result
 
 /-! ## Hardware structure and certification -/

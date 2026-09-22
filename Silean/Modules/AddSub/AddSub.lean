@@ -1,89 +1,51 @@
-import Silean.Authoring.CircuitDescriptionContracts
-import Silean.Authoring.CircuitLogic
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModulePorts
-import Silean.Foundation.BitVector
-import Silean.Modules.Add.AddDerived
+import Silean.Modules.Arithmetic
 
-/-! # Fixed-width addition and subtraction
+/-! # General selectable fixed-width addition and subtraction
 
-The contract defines addition and subtraction directly with carry and borrow.
-The authored construction implements subtraction as `left + ~right + 1` using
-the recursive adder.
+`AddSub` shares the same static width and operand-interpretation policy as
+`Add` and `Sub`, while choosing the operation from a runtime input.  `false`
+selects addition and `true` selects left-minus-right subtraction.
 -/
 
 namespace Silean.Modules.AddSub
 
 open Silean
 open Silean.Authoring
-open Authoring.CircuitDescription
-open scoped Authoring
 
-module_ports ports (width : Nat) where
-  input left : .vector width .bit,
-  input right : .vector width .bit,
+module_ports ports (leftWidth : Nat) (rightWidth : Nat)
+    (leftSigned : Bool) (rightSigned : Bool) (extendOutput : Bool) where
+  input left : .vector leftWidth .bit,
+  input right : .vector rightWidth .bit,
   input subtract : .bit,
-  output result : .vector width .bit,
-  output carryOut : .bit
+  output result : .vector
+    (Arithmetic.resultWidth leftWidth rightWidth extendOutput) .bit
 
-def sumBit (left right carry : Bool) : Bool :=
-  Primitives.xorValue (Primitives.xorValue left right) carry
+/-- The encoded result selected from ordinary integer addition or
+subtraction. -/
+def resultValue (leftWidth rightWidth : Nat)
+    (leftSigned rightSigned extendOutput : Bool)
+    (left : Fin leftWidth → Bool) (right : Fin rightWidth → Bool)
+    (subtract : Bool) :
+    Fin (Arithmetic.resultWidth leftWidth rightWidth extendOutput) → Bool :=
+  let leftValue := Arithmetic.operandValue leftSigned leftWidth left
+  let rightValue := Arithmetic.operandValue rightSigned rightWidth right
+  Arithmetic.encode
+    (Arithmetic.resultWidth leftWidth rightWidth extendOutput)
+    (if subtract then leftValue - rightValue else leftValue + rightValue)
 
-def carryBit (left right carry : Bool) : Bool :=
-  (left && right) || (left && carry) || (right && carry)
-
-def borrowBit (left right borrow : Bool) : Bool :=
-  (!left && (right || borrow)) || (right && borrow)
-
-/-- Carry/borrow recursion underlying the independent arithmetic contract. -/
-def operate : (width : Nat) → (Fin width → Bool) →
-    (Fin width → Bool) → Bool → Bool → (Fin width → Bool) × Bool
-  | 0, _, _, subtract, chain =>
-      (fun index => Fin.elim0 index, if subtract then !chain else chain)
-  | width + 1, left, right, subtract, chain =>
-      let lower := operate width
-        (fun index => left index.castSucc)
-        (fun index => right index.castSucc) subtract chain
-      let incoming := if subtract then !lower.2 else lower.2
-      let high := sumBit (left (Fin.last width)) (right (Fin.last width)) incoming
-      let outgoing := if subtract then
-        borrowBit (left (Fin.last width)) (right (Fin.last width)) incoming
-      else carryBit (left (Fin.last width)) (right (Fin.last width)) incoming
-      (Fin.lastCases high lower.1, if subtract then !outgoing else outgoing)
-
-/-- Natural addition or subtraction, initialized with no carry or borrow. -/
-def addSubBits (width : Nat) (left right : Fin width → Bool) (subtract : Bool) :
-    (Fin width → Bool) × Bool :=
-  operate width left right subtract false
-
-module_cycle_contract cycleContract (width : Nat) for ports width where
+module_cycle_contract cycleContract (leftWidth : Nat) (rightWidth : Nat)
+    (leftSigned : Bool) (rightSigned : Bool) (extendOutput : Bool)
+    for ports leftWidth rightWidth leftSigned rightSigned extendOutput where
   state := emptySignalMap
   output_rule apply where
     reads := [left, right, subtract]
     writes := {
-      result := (addSubBits width left right subtract).1,
-      carryOut := (addSubBits width left right subtract).2 }
+      result := resultValue leftWidth rightWidth leftSigned rightSigned
+        extendOutput left right subtract }
   state_rule where
     reads := []
     next := {}
-
-/-- Broadcast shape used to present the subtraction bit to every operand bit. -/
-def subtractVector (width : Nat) : Composition.SignalCombiner :=
-  .vector width .bit
-
-open ports
-
-noncomputable def construction (width : Nat) : ModuleBuilder (ports width) Unit := do
-  let left ← input width .left
-  let right ← input width .right
-  let subtract ← input width .subtract
-  wire transformedRight ← right ^^^ (←
-    combine (subtractVector width) fun _ => subtract)
-  let added ← Add.place left transformedRight subtract
-  output width .result added.result
-  output width .carryOut added.carryOut
-
-noncomputable def description (width : Nat) : Description :=
-  ModuleBuilder.build (Naming.ports width) (construction width)
 
 end Silean.Modules.AddSub

@@ -23,6 +23,10 @@ private theorem or_eq_false_iff (left right : SignalType.bit.Denote) :
   change ((left || right) = false ↔ left = false ∧ right = false)
   cases left <;> cases right <;> simp
 
+private theorem bool_or_eq_false_iff (left right : Bool) :
+    (left || right) = false ↔ left = false ∧ right = false := by
+  cases left <;> cases right <;> simp
+
 private theorem fold_eq_false_iff : ∀ (tree : Composition.Reduction.Tree)
     (values : Fin tree.leafCount → SignalType.bit.Denote),
     Composition.Reduction.fold orOperation falseValue tree values = falseValue ↔
@@ -66,22 +70,22 @@ private theorem fold_eq_false_iff : ∀ (tree : Composition.Reduction.Tree)
           exact fun index => allTrue (Fin.natAdd left.leafCount index)
 
 def some : (width : Nat) →
-    (Fin width → SignalType.bit.Denote) → SignalType.bit.Denote
-  | 0, _ => falseValue
+    (Fin width → Bool) → Bool
+  | 0, _ => false
   | width + 1, values =>
-      orOperation (values 0) (some width fun index => values index.succ)
+      values 0 || some width (fun index => values index.succ)
 
-@[simp] theorem some_zero (values : Fin 0 → SignalType.bit.Denote) :
+@[simp] theorem some_zero (values : Fin 0 → Bool) :
     some 0 values = false := rfl
 
 @[simp] theorem some_succ (width : Nat)
-    (values : Fin (width + 1) → SignalType.bit.Denote) :
+    (values : Fin (width + 1) → Bool) :
     some (width + 1) values =
       (values 0 || some width fun index => values index.succ) := rfl
 
 theorem some_eq_false_iff : ∀ (width : Nat)
-    (values : Fin width → SignalType.bit.Denote),
-    some width values = falseValue ↔ ∀ index, values index = falseValue
+    (values : Fin width → Bool),
+    some width values = false ↔ ∀ index, values index = false
   | 0, values => by
       constructor
       · intro _ index
@@ -90,7 +94,7 @@ theorem some_eq_false_iff : ∀ (width : Nat)
         rfl
   | width + 1, values => by
       simp only [some]
-      rw [or_eq_false_iff, some_eq_false_iff width]
+      rw [bool_or_eq_false_iff, some_eq_false_iff width]
       constructor
       · rintro ⟨headTrue, tailTrue⟩ index
         exact Fin.cases headTrue tailTrue index
@@ -98,7 +102,7 @@ theorem some_eq_false_iff : ∀ (width : Nat)
         exact ⟨allTrue 0, fun index => allTrue index.succ⟩
 
 theorem some_eq_true_iff : ∀ (width : Nat)
-    (values : Fin width → SignalType.bit.Denote),
+    (values : Fin width → Bool),
     some width values = true ↔ ∃ index, values index = true
   | width, values => by
       classical
@@ -107,7 +111,7 @@ theorem some_eq_true_iff : ∀ (width : Nat)
         by_cases existsTrue : ∃ index, values index = true
         · exact existsTrue
         · exfalso
-          have allFalse : ∀ index, values index = falseValue := by
+          have allFalse : ∀ index, values index = false := by
             intro index
             exact eq_false_of_ne_true (fun isTrue => existsTrue ⟨index, isTrue⟩)
           have someFalse := (some_eq_false_iff width values).mpr allFalse
@@ -117,7 +121,7 @@ theorem some_eq_true_iff : ∀ (width : Nat)
         by_cases isTrue : some width values = true
         · exact isTrue
         · exfalso
-          have someFalse : some width values = falseValue :=
+          have someFalse : some width values = false :=
             eq_false_of_ne_true isTrue
           have allFalse := (some_eq_false_iff width values).mp someFalse
           rw [allFalse index] at value
@@ -126,17 +130,23 @@ theorem some_eq_true_iff : ∀ (width : Nat)
 private theorem fold_eq_some (tree : Composition.Reduction.Tree)
     (values : Fin tree.leafCount → SignalType.bit.Denote) :
     Composition.Reduction.fold orOperation falseValue tree values =
-      some tree.leafCount values := by
+      some tree.leafCount (fun index => show Bool from values index) := by
   apply Bool.eq_iff_iff.mpr
   constructor
   · intro foldTrue
-    by_cases someTrue : some tree.leafCount values = true
+    by_cases someTrue :
+        some tree.leafCount (fun index => show Bool from values index) = true
     · exact someTrue
     · exfalso
-      have someFalse : some tree.leafCount values = falseValue :=
+      have someFalse :
+          some tree.leafCount (fun index => show Bool from values index) = false :=
         eq_false_of_ne_true someTrue
+      have allFalse : ∀ index, values index = falseValue := by
+        intro index
+        change (show Bool from values index) = false
+        exact (some_eq_false_iff _ _).mp someFalse index
       have foldFalse := (fold_eq_false_iff tree values).mpr
-        ((some_eq_false_iff _ values).mp someFalse)
+        allFalse
       rw [foldFalse] at foldTrue
       contradiction
   · intro someTrue
@@ -147,8 +157,12 @@ private theorem fold_eq_some (tree : Composition.Reduction.Tree)
       have foldFalse :
           Composition.Reduction.fold orOperation falseValue tree values = falseValue :=
         eq_false_of_ne_true foldTrue
-      have someFalse := (some_eq_false_iff _ values).mpr
-        ((fold_eq_false_iff tree values).mp foldFalse)
+      have allFalse : ∀ index,
+          (show Bool from values index) = false := by
+        intro index
+        change values index = falseValue
+        exact (fold_eq_false_iff tree values).mp foldFalse index
+      have someFalse := (some_eq_false_iff _ _).mpr allFalse
       rw [someFalse] at someTrue
       contradiction
 
@@ -305,7 +319,10 @@ theorem output_eq_true_iff_of_holds (width : Nat)
     let internal : Fin (tree width).leafCount :=
       ⟨index.val, by exact lt_of_lt_of_eq index.isLt (by
         simp [Composition.Reduction.balancedTree])⟩
-    exact ⟨internal, by simpa [input, internal] using value⟩
+    refine ⟨internal, ?_⟩
+    change (show Bool from inputs (.leaf internal)) = true
+    change (show Bool from inputs (input width index)) = true at value
+    simpa [input, internal] using value
 
 /-! ## Hardware structure and certification -/
 

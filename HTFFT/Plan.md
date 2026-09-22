@@ -1,450 +1,547 @@
 # HTFFT port and verification plan
 
-> **Status: highly provisional living document.**
+> **Status: provisional living document.**
 >
-> This plan records the current starting point, not a settled design. It is
-> expected to change as the first arithmetic components are implemented, the
-> proof boundaries become clearer, and generated hardware is inspected. In
-> particular, names, hierarchy, contracts, parameterization, and milestone
-> order may all evolve. Update this document when implementation experience
-> invalidates an assumption rather than preserving an obsolete plan.
+> This records the current proof and implementation direction, not a frozen
+> architecture. Update it when implementation experience changes a boundary or
+> invalidates an assumption.
 
 ## Objective
 
-Port the current `htfft` hardware design into Lean as a Silean client design.
-The Silean structure will be the implementation under verification and the
-source from which RTL is generated. The existing VHDL and Python generators
-are design references and useful regression oracles; equivalence with that
-source is not the primary formal theorem.
+Implement an FFT as a Silean client design, generate its RTL, and establish two
+separate guarantees:
 
-The intended end result has two principal guarantees:
+1. **Exact hardware refinement:** the Silean circuit implements a specified
+   streaming fixed-point FFT, including arithmetic, ordering, state, framing,
+   and latency.
+2. **Numerical accuracy:** decoding that fixed-point result gives a value within
+   a proved error bound of Mathlib's complex `ZMod.dft`.
 
-1. the Silean hardware exactly implements a specified streaming fixed-point
-   FFT algorithm; and
-2. the decoded fixed-point result has a proved error bound relative to a
-   mathematical discrete Fourier transform.
+The existing `htfft` VHDL and Python are design references, not specifications
+that the new implementation must reproduce. We may deliberately correct or
+improve their arithmetic and structure.
 
-These are distinct claims. The first is an exact hardware-refinement result.
-The second is an approximation result accounting for input quantization,
-twiddle quantization, truncation, and any relevant range assumptions.
+## Proof architecture
+
+The intended theorem chain is:
+
+```text
+Silean streaming circuit
+        |
+        | exact structural, cycle, and trace refinement
+        v
+pure streaming fixed-point FFT
+        |
+        | exact packet/order correspondence
+        v
+pure fixed-point butterfly network
+        |
+        | decoding and numerical error bound
+        v
+exact complex butterfly network
+        |
+        | exact indexing and Cooley--Tukey theorems
+        v
+Mathlib ZMod.dft
+```
+
+Only the fixed-point-to-complex step is approximate. Hardware refinement and
+all indexing, scheduling, and packet-ordering results should be exact.
+
+Public specifications and contracts should use natural Lean mathematics.
+Bit-level layouts, instance names, schedules, and proof bookkeeping belong in
+structural or internal files unless they are genuinely part of the external
+behavior.
 
 ## Initial scope
 
-The first implementation should retain the important characteristics of the
-current design:
+The first complete design should support:
 
-- radix-2 FFT sizes that are powers of two;
-- a power-of-two number of samples consumed per cycle;
-- packed signed fixed-point complex samples;
-- an unrolled FFT over the samples consumed in one cycle;
-- subsequent streaming stages backed by memories;
-- configurable pipeline placement where it remains useful;
-- growth by one bit per real and imaginary component at each butterfly stage;
-- generated RTL suitable for synthesis and simulation.
+- power-of-two radix-2 transforms;
+- a power-of-two number of complex samples per cycle;
+- packed signed fixed-point complex data;
+- an unrolled FFT over the samples accepted together;
+- memory-backed streaming stages for the remaining transform;
+- explicit packet framing and a documented consecutive-input protocol;
+- one-bit component-width growth at each butterfly layer; and
+- synthesizable RTL with checked multiplier and memory inference.
 
-The current design assumes consecutively presented packet data and primarily
-tests back-to-back vectors. The first contract may state that environmental
-assumption explicitly. Supporting gaps, backpressure, floating point, or
-stage-specific precision trimming is outside the initial scope unless early
-work shows that one of these must be designed in from the start.
+Backpressure, arbitrary gaps, floating point, and configurable precision
+trimming are outside the initial scope. Configurable internal pipeline
+placement may be deferred until one fixed placement is certified.
 
-## Proposed proof layers
+## Settled decisions
 
-The current working decomposition is:
+These choices have been reviewed and should not be changed merely to simplify a
+proof:
+
+- Exact vectors use `Fin (2 ^ depth) → ℂ` and natural frequency ordering.
+- Mathlib's unnormalized, negative-exponent `ZMod.dft` is the authoritative
+  mathematical DFT. There is no project-local competing DFT definition.
+- Recursive DIT splits input indices as `2*k` and `2*k+1`. A butterfly writes
+  its sum at `k` and difference at `k + 2^depth`; no final permutation is
+  required for the recursive transform.
+- Fixed-point formats carry component width and fractional-bit count
+  independently. Growing the width does not implicitly move the binary point.
+  With the current policy, decoded butterfly layers therefore represent the
+  **unnormalized** transform unless an explicit rescaling operation is added.
+- Pure fixed-point values are scaled `Int`s. Representability and absence of
+  overflow are propositions rather than being hidden in the value type.
+- Complex multiplication combines each real or imaginary numerator at full
+  integer precision and rounds once. The initial rounding policy is nearest
+  with ties to even.
+- Wrapping is explicit. Useful accuracy theorems will assume and prove suitable
+  no-overflow conditions rather than treating modular wrap as a small error.
+
+## Current state
+
+### Pure fixed-point arithmetic
+
+Completed files are:
+
+- `HTFFT/Complex.lean`: a small generic complex-number vocabulary;
+- `HTFFT/FixedPoint.lean`: formats, exact rational decoding, quantization,
+  rounding, rescaling, representability, and explicit wrapping; and
+- `HTFFT/FixedPoint/Correctness.lean`: exact and bounded decoding laws for
+  rescaling, quantization, arithmetic, and non-wrapping values; and
+- `HTFFT/Butterfly.lean`: exact and fixed-point butterflies, a concrete
+  no-overflow predicate, and the shape of a local error statement; and
+- `HTFFT/Fixed/ButterflyCorrectness.lean`: the local no-overflow and numerical
+  error theorems for the fixed-point butterfly.
+
+Focused tests cover signed wrapping, binary-point preservation, negative and
+ties-to-even rounding, grid-aligned exact cases, and fused complex-product
+rounding.
+
+### Exact recursive FFT and DFT theorem
+
+Completed files are:
+
+- `HTFFT/Exact/Indexing.lean`: power-of-two vectors, even/odd splitting,
+  concatenation of equal halves, and fixed-width bit reversal; and
+- `HTFFT/Exact/Radix2.lean`: the canonical `Fin`/`ZMod` index equivalence,
+  exact negative-exponent twiddles, recursive DIT FFT, public half-evaluation
+  laws, and the pointwise correctness proposition; and
+- `HTFFT/Exact/DFT.lean`: Fourier-coefficient identities, the even/odd
+  Cooley--Tukey equations for both output halves, and the inductive proof that
+  the recursive transform equals `ZMod.dft` pointwise.
+
+Indexing checks cover depths zero through three. Exact checks include the
+length-one identity, the length-two sum/difference transform, and known impulse
+transforms at sizes two, four, and eight. Mathlib is pinned to `v4.32.1`,
+matching the project's Lean `4.32.1` toolchain.
+
+### Exact hardware-shaped layered network
+
+The exact layered-network foundation is complete. `HTFFT/Exact/Layered.lean`
+reuses the existing exact vector, bit reversal, and twiddle definitions. A
+`LayerPosition` exposes each stage as a contiguous group, a sum/difference
+branch, and an offset shared by one butterfly pair. Stage `s` pairs positions
+`2^s` apart, uses the length-`2^(s+1)` twiddle selected by the shared offset,
+and writes the sum before the difference.
+
+`layeredFFT` first bit-reverses the input and then folds stages in ascending
+order, from adjacent pairs through the full-vector layer. Its result is
+declared in natural-frequency order and has no final permutation. The
+explicit stage list and its append law allow the same pure network to be split
+later into combinational and memory-backed portions without putting timing or
+storage into this specification. `LayerBoundary`, `layeredPrefix`, and
+`layeredFFT_split` give that split a typed public interface at every boundary
+from zero through the complete transform.
+
+`HTFFT/Exact/LayeredCorrectness.lean` proves the semantic prefix invariant:
+every nonfinal prefix at successor depth is two independent lower-depth
+prefixes over the even and odd inputs. The final layer uses exactly the
+recursive combine indexing and twiddles. Induction therefore proves
+`layeredFFT_eq_radix2`, and `layeredFFT_agreesWithDFT` connects the result to
+Mathlib's unnormalized negative-exponent `ZMod.dft` in natural frequency order.
+
+Executable checks enumerate every layer position through depth three. Exact
+checks cover the depth-zero identity, the complete depth-one butterfly,
+offset-zero butterfly arithmetic at depths two and three, the DC output of the
+complete four- and eight-point layer chains, every split boundary of a
+three-stage network, and exact impulse transforms through depth three.
+
+The combined `lake build Silean SileanTests HTFFT HTFFTTests` gate passes
+3,876 jobs as of 2026-09-21.
+
+### Pure fixed-point layered network
+
+The public network and its numerical proof are complete.
+`HTFFT/Fixed/Layered.lean` defines a `Config` assigning a data format to every
+layer boundary, so stage `s` consumes boundary `s` and produces boundary `s+1`
+by construction. Product and twiddle formats and rounding modes remain
+stage-dependent.
+
+`TwiddleTable` contains only stored integer values. The separate
+`TwiddleAccuracy` proposition records representability and a uniform error for
+each stage against the exact root of unity. The pure fixed-point layer reuses
+the exact network's group/branch/offset indexing, bit reversal, and ascending
+stage list. Prefix, suffix, split, and complete-network operations therefore
+have the same shape as the exact layered model, without clocks or storage.
+
+The uniform bounds are represented by `Bounds`, with scalar Euclidean complex
+`magnitude` (`M_s`) and `error` (`E_s`) fields. `advanceBounds` uses
 
 ```text
-Silean structural circuit
-        |
-        | exact cycle and trace refinement
-        v
-streaming fixed-point FFT specification
-        |
-        | decoding and numerical error theorem
-        v
-mathematical complex DFT specification
+M_(s+1) = 2 M_s
+E_(s+1) = (2 + delta_s) E_s
+            + M_s delta_s
+            + R_s
 ```
 
-The structural proof should not depend on complex analysis. It should establish
-the exact Boolean, signed-integer, truncation, state, framing, and ordering
-behavior of the circuit. Mathematical reasoning should occur against the pure
-fixed-point specification exposed by that proof.
+where `delta_s` is the stored-twiddle error and `R_s` is the local fixed-point
+rounding allowance, all measured in ordinary complex magnitude. Exact FFT
+twiddles have norm one, so multiplication by them does not amplify error.
+`HTFFT/Fixed/Error.lean` proves the supporting generic norm laws and converts
+the componentwise fixed-point and rectangular-enclosure facts to Euclidean
+bounds with the exact factor `sqrt 2`. `HTFFT/Fixed/LayeredCorrectness.lean`
+lifts the local
+butterfly theorem through every prefix and proves complete-network bounds
+against both the exact layered FFT and Mathlib's DFT. Its corollaries cover
+decoded input bits (initial error zero), an arbitrary pre-quantization error,
+and inputs produced by the fixed-point quantizer (`sqrt 2` times one component
+LSB). The same
+induction proves that every result is representable under the explicit
+no-overflow hypothesis.
 
-## Likely source organization
-
-This is only a sketch. Files and boundaries should follow the proof rather than
-being created in advance merely to match this list.
+The magnitude recurrence has the proved closed form `M_s = 2^s M_0`. With
+exact twiddles and a constant local allowance `R`, the error recurrence has
+the proved closed form
 
 ```text
-HTFFT/
-|- Plan.md
-|- FixedPoint.lean
-|- Twiddle.lean
-|- Butterfly.lean
-|- UnrolledFFT.lean
-|- StreamingStage.lean
-|- InitialMemory.lean
-|- FinalMemory.lean
-|- HTFFT.lean
-|- Math/
-|  |- DFT.lean
-|  `- Error.lean
-|- Internal/
-|  |- ...Structure.lean
-|  `- ...Verification.lean
-`- Emitters/
-   `- HTFFT.lean
+E_s = 2^s E_0 + (2^s - 1) R.
 ```
 
-Public files should expose natural contracts and useful theorems. Detailed
-structure, schedules, and certification proofs can move under `Internal/` when
-the appropriate boundaries are known.
+Thus its baseline growth is linear in transform size `N = 2^s`, rather than
+the previous componentwise proof's `3^s = N^(log_2 3)`. Nonzero twiddle errors
+remain explicit in the recurrence rather than changing this hidden norm
+constant.
 
-## Phase 1: arithmetic foundations
+The current `R_s` deliberately charges the generic worst-case rounding
+allowance at every stage. A later refinement may certify smaller stage-specific
+bounds—including zero arithmetic error for stages whose exact `1` and `-i`
+twiddles only discard zero bits, and a half-LSB bound for nearest rounding—but
+this is not required for the first end-to-end accuracy theorem.
 
-Before building an FFT hierarchy, determine which reusable facilities Silean
-needs for this design. The likely minimum is:
+The formats already permit stage-dependent fractional-bit counts. A later
+width/accuracy trade-off should use this recurrence to decide where low bits
+may be discarded: a rounding error introduced at boundary `s` must be charged
+for its amplification through the remaining layers. This supports fixed-width
+schedules such as trading one fractional bit for one integer-growth bit, but
+the schedule should be selected from an explicit final error budget rather
+than from the old loose componentwise bound.
 
-- two's-complement interpretation of bit vectors and associated bounds;
-- sign extension and fixed-width slicing laws;
-- full-width signed multiplication;
-- exact fixed-point product truncation matching the intended hardware;
-- a synthesis-friendly pipelined multiplier;
-- a shift register or delay abstraction suitable for pipeline alignment; and
-- a synchronous memory abstraction with explicit read/write collision
-  behavior.
+### Concrete eight-point numerical theorem
 
-Reusable, design-independent components should live under `Silean/`; HTFFT
-packing, scaling, and numerical conventions should remain under `HTFFT/`.
+The first pure end-to-end numerical instance is complete. The reusable range
+layer is split by responsibility:
 
-The initial multiplier will be a structural composition of smaller modules.
-Memory still requires a separate decision about its primitive boundary.
-Generated RTL quality, RAM inference, and the existing Silean proof boundary
-should guide that choice.
+- `HTFFT/FixedPoint/Range.lean` converts symmetric raw component bounds into
+  representability and supplies conservative rounded-division bounds;
+- `HTFFT/Fixed/ButterflyRange.lean` proves that one initial-policy butterfly
+  maps a raw component bound `B` to `3*B+1` while discharging every internal
+  no-wrap boundary; and
+- `HTFFT/Fixed/LayeredRange.lean` composes that result across arbitrary layer
+  prefixes and derives the network's trace-shaped `NoOverflow` proposition
+  from a uniform input bound and static format capacities.
 
-### Initial structural multiplier decomposition
+`HTFFT/Fixed/Twiddle8Accuracy.lean` instantiates those generic results for the
+certified table. Its public decoded-input assumption is the natural statement
+`MagnitudeBound 1 (decodeVector config 0 input)`, not an internal overflow
+trace. The Q4.8 input has raw component bound `256`; conservative prefix bounds
+are `256`, `769`, `2308`, and `6925`, all supported by the one-bit-per-stage
+growth policy. The generated Q2.8 twiddles have raw component magnitude at
+most `256`.
 
-For the first implementation, multiplication will be a certified structural
-composition terminating in low-level Boolean, register, and constant
-primitives. Direct multiplication primitives may be added later for targets
-such as FPGAs, while retaining the same public multiplication contract. Radix-4
-Booth encoding is also deferred: the initial design will use ordinary binary
-partial products so that the arithmetic and compressor proofs can be
-established before introducing signed recoding and correction cases.
-
-The tentative module stack is:
+For decoded inputs with Euclidean magnitude at most one, the theorem compares
+the Q7.8 output pointwise with Mathlib's unnormalized `ZMod.dft` in
+natural-frequency order and proves the Euclidean error bound
 
 ```text
-PartialProductRow
-        |
-        v
-CarrySaveAdder (three operands to two)
-        |
-        v
-CarrySaveLayer (one parallel compression level)
-        |
-        v
-CarrySaveTree
-        |
-        v
-final full-width Add
-        |
-        v
-UnsignedMultiply
-        |
-        v
-ConditionalNegate wrappers
-        |
-        v
-SignedMultiply
-        |
-        v
-VectorDelay or registered compressor boundaries
-        |
-        v
-PipelinedSignedMultiply
+25 * sqrt 2 / 256 + 9 / 32768 ≈ 0.138381.
 ```
 
-Current implementation status:
+For intended rational inputs of Euclidean magnitude at most one, a second
+theorem includes the conservative `sqrt 2 / 256` input quantization error. It
+proves
 
-- [x] `VectorReindex`: generic pure-wiring reindexing for vectors of any
-  signal type, implemented by exactly one splitter and one combiner, with a
-  natural element-selection contract and structural certification.
-- [x] `PartialProductRow`: natural numerical contract, authored low-level
-  `Mask`/`VectorLayout` implementation, certification, and focused tests.
-- [x] `CarrySaveAdder`: natural three-to-two contract, one indexed
-  `FullAdder` per bit, fixed-width shifted carry, structural certification,
-  modular-sum theorem, and zero-/one-/multi-bit RTL checks. It deliberately
-  has no duplicate authored `ModuleBuilder` description; the indexed
-  `module_design` is its sole hardware representation.
-- [x] `CarrySaveLayer`: natural custom relational contract, indexed parallel
-  compressors, a flat intermediate vector followed by `VectorReindex` into
-  sum/carry interleaving, contract-independent structural certification,
-  direct relational proof through the public `CarrySaveAdder` arithmetic
-  theorem, closed hierarchy checks, and RTL compressor-count tests.
-- [x] `CarrySaveTree`: natural collection-level relational contract, recursive
-  `CarrySaveLayer` structure, exact zero-/one-/two-operand base cases, direct
-  structural certification and preservation proof, closed hierarchy checks,
-  and recursive RTL compressor-count tests. This successfully uses a custom
-  contract without a duplicate deterministic `ModuleCycleContract`.
-- [x] `UnsignedMultiply`: natural exact full-width product contract, one
-  indexed `PartialProductRow` per multiplier bit, `CarrySaveTree` reduction,
-  final `Add`, contract-independent structural certification, exact
-  realization theorem, zero-/asymmetric-width coverage, closed hierarchy
-  checks, and RTL-shape tests. The later signed and pipelined layers remain
-  dependent on it.
+```text
+33 * sqrt 2 / 256 + 13 / 32768 ≈ 0.182698.
+```
 
-The proposed responsibilities are:
+The certified Euclidean twiddle errors are `0`, `0`, and `sqrt 2 / 256`.
+The encoded-input corollary separately uses the componentwise quantizer fact
+to retain raw bound `257` for range certification. Sharpening exact early-stage
+arithmetic remains deferred rather than being mixed into this generic
+improvement.
 
-- `PartialProductRow` gates the multiplicand with one multiplier bit and places
-  the result at a fixed bit offset in a full product-width vector. It should be
-  built from `Mask` and `VectorLayout`. Its numerical theorem states that the
-  row denotes either zero or the multiplicand multiplied by the appropriate
-  power of two.
-- `CarrySaveAdder` compresses three equally wide operands into `sum` and
-  shifted `carry` operands using one `FullAdder` per bit and no inter-bit carry
-  propagation. Its contract states that the two outputs preserve the three
-  input operands' sum modulo the vector width.
-- `CarrySaveLayer` performs one parallel level of three-to-two compression and
-  passes through the zero, one, or two operands left outside complete triples.
-  It is public because it has its own useful boundary and semantic guarantee;
-  its indexed compressors and grouping remain internal.
-- `CarrySaveTree` publicly relates a collection of operands to two result
-  operands by preservation of their total modulo the common width. Collections
-  of zero, one, or two operands use the evident zero-padded or pass-through
-  representation. The eventual structure will recursively group larger
-  collections in threes and apply `CarrySaveAdder` until at most two operands
-  remain, but that grouping does not belong to the public semantic relation. A
-  dedicated three-to-two tree description will probably be clearer than
-  forcing this structure through the existing binary reduction tree.
-  The experiment succeeded: a parent module consumes the tree's
-  boundary preservation theorem directly, without learning the grouping or
-  requiring a parallel deterministic contract. `UnsignedMultiply` is the
-  first downstream test of that interface.
-- `UnsignedMultiply` creates one ordinary partial-product row per multiplier
-  bit, reduces the rows with `CarrySaveTree`, and combines the last two rows
-  with the existing `Add`. With a result width equal to the sum of the operand
-  widths, its public theorem gives exact natural-number multiplication.
-- `ConditionalNegate` computes either a vector or its two's-complement negation
-  using bitwise XOR with a broadcast control bit followed by `Add` with the
-  control as carry-in. It should expose both bit-level and integer
-  interpretation laws.
-- `SignedMultiply` conditionally converts both inputs to unsigned magnitudes,
-  applies `UnsignedMultiply`, and conditionally negates the full-width result
-  according to the XOR of the operand signs. Its public theorem gives exact
-  multiplication under two's-complement interpretation, including the
-  most-negative input values.
-- `VectorDelay` delays a vector by a statically known number of cycles using
-  the existing generic `Register` hierarchy. Its contract relates output to
-  the correspondingly earlier input without assuming initialized state before
-  the delay has elapsed.
-- `PipelinedSignedMultiply` supplies the multiplier interface required by the
-  butterfly and proves that pipeline placement affects latency but not the
-  product. A simple output delay may be useful first, but a useful high-speed
-  structural multiplier will eventually need registers at selected
-  carry-save-tree boundaries with all parallel paths kept aligned.
+### Reusable signed precision reduction
 
-The implementation should reuse the existing `Mask`, `FullAdder`, `Add`,
-`BitwiseXor`, `Constant`, `VectorLayout`, vector adapter, and generic `Register`
-modules. Fixed shifts in partial products are layouts and do not require a
-shift primitive.
+The first hardware arithmetic needed by the packed butterfly is complete.
+`Silean/Modules/SignedRoundShift` specifies an ordinary signed-integer
+operation: divide by a static power of two, round to nearest with ties to even,
+and encode at the retained width. The public contract is deliberately not
+about fixed-point formats. Its structural implementation uses fixed wiring for
+the retained, guard, sticky, and quotient-parity bits, followed by a certified
+incrementer and mux. The proof covers negative inputs, zero retained or
+discarded widths, and output wrapping.
 
-The arithmetic support for this stack is not itself hardware. It includes a
-two's-complement `BitVector.toInt`, sign and magnitude bounds, negation laws,
-extension laws, multiplication bounds, and lemmas that turn modular equalities
-into exact full-width multiplication results. These definitions should live in
-the reusable Silean bit-vector foundation rather than under HTFFT.
+`HTFFT/Silean/SignedRoundShift.lean` is the separate client bridge showing that
+this integer operation agrees with the pure fixed-point `roundRatio` and
+`encodeSigned` vocabulary. The module has only a structural implementation;
+no duplicate authored construction was introduced. Focused contract,
+hierarchy, and FIRRTL checks pass, as does the complete `SileanTests` target.
 
-The HTFFT-specific product truncation and binary-point adjustment must remain
-outside the generic multiplier. They belong in the fixed-point layer that
-selects the exact product slice used by the butterfly.
+The reusable addition hierarchy is also ready for the packed butterfly.
+Equal-width carry-aware building blocks are explicitly named `AddWithCarry`
+and `AddSubWithCarry`. General structural `Add`, `Sub`, and runtime-selectable
+`AddSub` modules accept independent operand widths, per-operand static
+signedness, and extended or truncating output. Their natural contracts use
+ordinary integer arithmetic followed by one explicit fixed-width encoding;
+the structural proofs connect sign/zero extension and the carry-aware children
+to those contracts. Circuit arithmetic notation now places these real modules
+instead of expanding an inline recipe.
 
-## Phase 2: fixed-point model and butterfly
+### Project-specific pipelined complex multiplication
 
-Define a pure representation of the packed complex format and its exact
-interpretation. The definitions must make explicit:
+The first HTFFT-specific structural arithmetic block is complete under
+`HTFFT/Silean/PipelinedSignedComplexMultiply/`. It deliberately does not live
+in `Silean/Modules`: the choice of four scalar products, fused real and
+imaginary numerators, one nearest-even reduction per completed component, and
+their common latency is part of the HTFFT arithmetic architecture rather than
+a general framework primitive.
 
-- real and imaginary component layout;
-- component width and two's-complement range;
-- binary-point position;
-- the effect of increasing total complex width by two bits;
-- multiplication result width;
-- the selected truncation slice; and
-- wrapping behavior wherever an operation is performed without extension.
+Its public trace contract interprets four component ports as signed integers,
+computes
 
-Define a pure `fixedButterfly` that reproduces this behavior exactly. Then port
-the pipelined butterfly into Silean and certify it against an exact cycle
-contract. Pipeline settings should change latency but not the fixed-point
-function computed for an aligned input triple.
+```text
+aReal * bReal - aImag * bImag
+aReal * bImag + aImag * bReal
+```
 
-Alongside exact certification, prove a local numerical lemma comparing the
-decoded fixed-point butterfly with the ideal normalized butterfly. This first
-lemma will test whether the proposed numerical representation and error style
-are workable before they are propagated through a full FFT.
+at full precision, rounds each completed numerator exactly once, and relates
+every available output to the input at the selected static latency. The
+structure uses four equal-latency `PipelinedSignedMultiply` children, an
+extended signed `Sub` and `Add`, two wire-only width normalizations, and two
+`SignedRoundShift` children. Its width API is total for all natural parameters:
+the numerator has one bit beyond the scalar-product width, retained width uses
+saturating Nat subtraction, and an excessive discard request therefore yields
+a zero-width result rather than an extra high-bit truncation policy.
 
-The butterfly is the first vertical milestone. It should emit compilable RTL
-and be regression-tested against independently calculated examples.
+The certification proof uses only the public structural and execution
+interfaces of those children. It extracts the four multiplier traces together
+from each parent execution so product alignment is preserved, then proves the
+natural delayed contract. The separate
+`HTFFT/Silean/PipelinedSignedComplexMultiply.lean` bridge shows that decoded
+contract results equal `Butterfly.Fixed.multiplyRounded` when fractional-bit
+positions match the selected discard and the unwrapped components fit the
+hardware result width. Focused checks cover zero and positive latency,
+asymmetric and zero widths, excessive discard, positive and negative ties,
+placement, hierarchy closure, FIRRTL shape, and the fixed-point bridge.
 
-## Phase 3: unrolled FFT
+### Project-specific pipelined fixed-point butterfly
 
-Port the recursive unrolled FFT construction into ordinary Lean definitions.
-The likely form is a hierarchy containing two half-size transforms followed by
-a layer of butterflies. Keep input bit reversal as a separately specified
-permutation.
+The complete packed butterfly is implemented under
+`HTFFT/Silean/PipelinedFixedButterfly/`. Its public contract is the natural
+pure `Butterfly.Fixed.butterfly` calculation over decoded packed inputs, with
+the upper and lower complex results encoded at the output boundary. The
+contract contains no child wires or register state.
 
-Prove in stages that:
+The width policy is now explicit. A `w`-bit data component and its twiddle are
+multiplied with fused full-precision numerators, rounded once back to the data
+binary point, and narrowed or wrapped at the `w`-bit product boundary. The
+final signed Add/Sub extends to `w+1` bits. The fractional-bit count is
+unchanged and there is no post-addition low-bit trimming. A static carrier
+condition states when the generic complex-multiplier output contains the whole
+selected product boundary.
 
-1. the Silean hierarchy implements a pure recursive fixed-point transform;
-2. bit reversal is the required permutation;
-3. the corresponding exact-twiddle recursive transform computes the chosen DFT
-   convention; and
-4. quantized twiddles and arithmetic truncation introduce bounded error.
+The structural pipeline has synchronized optional input registers, the nested
+complex-multiplier latency and optional pre-rounding register, an optional
+completed-product register, exact delay of the `a` path, and synchronized
+optional output registers. Structural certification and the all-time trace
+theorem use only public child interfaces. The unconditional decoded theorem
+equals the wrapped pure butterfly; a second theorem removes the wraps under
+the pure model's `NoOverflow` hypothesis. Focused checks cover all sixteen
+optional-stage combinations, arithmetic and ties, an actual fully pipelined
+execution, zero-width closure, placement, hierarchy, and FIRRTL shape.
 
-A concrete small transform, probably eight points, should be completed before
-committing to the final generic proof interface. Generalization over an FFT
-depth `k`, with size `2 ^ k`, is likely to be easier than using an arbitrary
-size plus a power-of-two hypothesis.
+## Remaining work
 
-## Phase 4: streaming stage
+### 1. Define and bound the pure fixed-point network
 
-Port and certify one generic memory-backed FFT stage. Its public behavioral
-contract should describe the logical data transformation and cycle schedule,
-not merely repeat its internal counters and RAM contents.
+1. [x] Instantiate the same topology with the fixed-point butterfly and stored
+   twiddle values.
+2. [x] Define the decoding relation from each fixed format to complex values.
+3. [x] Prove a local butterfly bound accounting for:
+   - existing error in both inputs;
+   - twiddle quantization error;
+   - multiplication and addition rounding; and
+   - the no-overflow hypotheses needed to exclude wraparound.
+4. [x] Track both a magnitude bound and an error bound through every layer. The
+   magnitude invariant is required because twiddle error is multiplied by the
+   data magnitude.
+5. [x] Compose the layer bounds into a pointwise bound for the complete fixed-point
+   network.
 
-The proof will need to account for:
+Error and mathematical magnitude propagation now use ordinary complex
+magnitude. Componentwise bounds remain only at fixed-width representability
+and rectangular certificate boundaries.
+
+Provide two numerical statements where useful:
+
+- error relative to the exact values decoded from the actual input bits; and
+- error relative to pre-quantization inputs, with input quantization added as a
+  separate term.
+
+### 2. Certify twiddle tables
+
+The first generation and certification path is complete.
+`HTFFT/Fixed/TwiddleTable.lean` keeps three roles separate:
+
+- `RationalTwiddleTable` is executable rational approximation data;
+- `quantizeTwiddleTable` generates stored integers from explicit per-stage
+  formats and rounding modes; and
+- `TwiddleEnclosure` is a kernel-checked componentwise interval certificate
+  against the existing exact roots of unity.
+
+`twiddleAccuracy_of_enclosure` composes an enclosure, fixed-point quantization,
+and a representability proof into the `TwiddleAccuracy` interface used by the
+network theorem. Approximation data may therefore be produced inside Lean or
+externally, but it is trusted only after Lean checks the enclosure.
+
+`HTFFT/Fixed/Twiddle8.lean` provides the first concrete instance. It generates
+the complete Q2.8 table for an eight-point FFT. Mathlib's exact trigonometric
+identities reduce the nontrivial roots to `sqrt 2 / 2`; rational square bounds
+certify `181 / 256 ≤ sqrt 2 / 2 ≤ 182 / 256`. Every generated entry is
+representable, every rational center is encoded exactly, and the resulting
+per-stage enclosure radii are `0`, `0`, and `1 / 256`. Their certified
+Euclidean `TwiddleAccuracy` errors are `0`, `0`, and `sqrt 2 / 256`.
+
+### 3. Implement and certify the Silean butterfly and unrolled FFT
+
+1. [x] Implement and certify the fused pipelined signed complex multiplier,
+   including its fixed-point semantic bridge.
+2. [x] Implement the remainder of the packed fixed-point butterfly using reusable
+   Silean arithmetic and the certified multiplier.
+3. [x] Prove exact correspondence with the pure fixed-point butterfly, including
+   every slice, extension, rounding, and pipeline delay.
+4. Build the unrolled FFT from certified butterflies, reindexing, constants,
+   and registers.
+5. Prove exact correspondence with the pure fixed-point network.
+6. Emit and inspect a small transform before generalizing parameters.
+
+Pipeline placement affects latency and timing structure, not the mathematical
+result. Optimize it behind the public multiplication theorem when synthesis
+results justify doing so.
+
+### 4. Implement and certify streaming stages
+
+Give each memory-backed stage a natural data-transformation and cycle-schedule
+contract. Its invariant must cover:
 
 - read and write indices;
-- memory collision behavior;
-- selection and swapping of memory data and new input data;
+- memory collision semantics;
+- selection between stored and newly arriving data;
 - twiddle selection;
-- butterfly latency;
+- butterfly and memory latency;
 - reset or packet-boundary alignment; and
-- output lane ordering.
+- lane and sample ordering.
 
-The abstract contract state may differ substantially from the structural RAM
-and counter state if that makes the invariant clearer.
+Choose the memory primitive boundary based on both proof quality and generated
+RAM inference. The abstract contract state need not mirror structural RAMs and
+counters.
 
-## Phase 5: packet reordering and top level
+### 5. Compose packet reordering and the top level
 
-Port the initial and final memory blocks with permutation-oriented packet
-specifications. Compose them with the unrolled transform and remaining stages.
+Specify initial and final reorderers as packet permutations, then prove that:
 
-The initial top-level trace theorem should state, under a clearly documented
-input protocol, that:
-
-- each framed input packet contains exactly one `N`-sample vector;
-- output framing identifies exactly one corresponding output packet;
+- each accepted frame denotes one complete input vector;
+- output framing identifies one corresponding output vector;
 - packets remain in order;
-- the output packet equals the pure fixed-point FFT of the input packet; and
-- the promised steady-state sample throughput is maintained.
+- the output packet equals the pure fixed-point FFT result; and
+- the promised steady-state throughput and stated latency hold.
 
-Exact latency may be exposed as a parameter-dependent theorem, while the main
-functional theorem should avoid unnecessary dependence on internal pipeline
-placement.
+The first protocol may require consecutive packet samples and may omit
+ready/valid backpressure, but those environmental assumptions must be explicit.
 
-## Phase 6: global accuracy theorem
+### 6. State the final accuracy theorem
 
-Define a mathematical DFT with the same sign and indexing convention as the
-hardware. The fixed-point representation grows at every butterfly while the
-stored integer is not shifted, so the decoded output is expected to represent
-a normalized transform. The exact scaling convention must be stated and proved
-rather than inferred from tests.
+Compose the exact hardware theorem, packet correspondence, fixed-point error
+bound, exact-network equivalence, and recursive DFT theorem. The result should
+have the schematic form:
 
-The first global result should probably use a conservative pointwise maximum
-error. Maintain explicit stage invariants for:
-
-- maximum signal magnitude;
-- accumulated arithmetic error;
-- quantized-twiddle error;
-- multiplication truncation error; and
-- absence of unintended overflow or wraparound.
-
-An RMS or sharper norm bound can follow once the conservative theorem is
-complete. It may be useful to provide separate results relative to:
-
-1. the mathematical values decoded from the actual input bits; and
-2. pre-quantization mathematical inputs, adding an input-conversion term.
-
-## Twiddle tables
-
-Twiddle bit patterns are hardware data; their closeness to roots of unity is a
-mathematical fact. Initially keep these concerns separate, for example with a
-table and an associated accuracy certificate:
-
-```lean
-structure TwiddleTable where
-  bits : Fin count -> ComplexBits width
-
-structure TwiddleAccuracy (table : TwiddleTable ...) where
-  error : forall index,
-    norm (decode (table.bits index) - idealTwiddle index) <= delta
+```text
+valid input protocol
+∧ representable inputs
+∧ certified twiddles
+∧ proved no-overflow bounds
+→ norm (decode (hardwareOutput packet) - ZMod.dft input) ≤ globalErrorBound
 ```
 
-The precise definitions will depend on the available mathematical library and
-how constants are generated. Possible approaches include Lean-generated
-tables, checked rational interval certificates, or checked constants generated
-by a small external tool. This choice is intentionally left open for now.
+The theorem must state the precise input interpretation, output scaling,
+ordering, latency, and norm. With the currently selected constant fractional
+bit count, the target is the unnormalized DFT.
 
-## Validation strategy
+## Milestones
 
-Proof is the primary objective, but generated-hardware regression remains
-valuable. At useful milestones:
+- [x] Pure fixed-point representation and butterfly specification.
+- [x] Exact indexing, twiddle, and recursive radix-2 interfaces.
+- [x] One-step Cooley--Tukey theorem and recursive equality with `ZMod.dft`.
+- [x] Exact bit-reversed iterative-network interface and depth-zero-through-three checks.
+- [x] Prefix/suffix decomposition and equality of the layered network with the recursive FFT and DFT.
+- [x] Local and network-wide fixed-point magnitude/error bounds.
+- [x] Certified twiddle-table generator and concrete eight-point Q2.8 table.
+- [x] Concrete eight-point no-overflow derivation and pointwise numerical
+  bounds against Mathlib's DFT, for both decoded and pre-quantization inputs.
+- [x] Certified Silean butterfly.
+- [ ] Certified and emitted small unrolled FFT, then generalized construction.
+- [ ] Certified streaming stage and memory primitive.
+- [ ] Packet reorderers and composed streaming FFT.
+- [ ] Final end-to-end accuracy theorem.
+- [ ] Repository-wide proof-trust audit: review and replace production uses of
+  `native_decide` and check for other unsafe or non-kernel-checked proof
+  shortcuts. Existing occurrences are concentrated in `PicoRV/` and
+  `SailBridge/`; uses confined to tests and executable examples are acceptable.
 
-- build the Lean development without `sorry`, project axioms, or unsafe proof
-  shortcuts;
-- emit RTL and lower it through the supported toolchain;
-- simulate against deterministic vectors and the existing `htfft` tests where
-  their interface assumptions still match;
-- inspect inferred multipliers and memories;
-- compare latency, throughput, and resource use with the existing design; and
-- add focused checks for theorem interfaces and recursive absence of
-  blackboxes.
+## Validation policy
 
-These tests validate tooling and synthesis expectations; they do not replace
-the Silean structural certification.
+At each relevant milestone:
 
-## Near-term milestones
+- build without `sorry`, project axioms, or unsafe proof shortcuts;
+- do not introduce `native_decide` into production proofs;
+- add focused executable and theorem-interface regressions;
+- verify the reusable `Silean` and `SileanTests` targets remain green;
+- close and inspect the generated module hierarchy;
+- emit and lower RTL;
+- simulate deterministic vectors;
+- inspect multiplier and RAM inference; and
+- compare latency, throughput, and resource use with the reference design where
+  the comparison remains meaningful.
 
-The tentative order is:
+Simulation and comparison are supporting evidence, not substitutes for
+structural certification.
 
-1. settle the exact fixed-point encoding and write executable examples;
-2. add or select signed multiplication and pipeline-delay support;
-3. implement and certify one butterfly;
-4. prove a local butterfly error bound;
-5. implement, certify, and emit a small unrolled FFT;
-6. generalize the unrolled construction;
-7. implement and certify one streaming stage;
-8. implement the initial and final reordering memories;
-9. compose and certify the complete streaming transform; and
-10. prove and refine the global accuracy bound.
+## Open decisions
 
-Milestones after the butterfly are deliberately subject to reordering.
-
-## Open questions
-
-The following should remain visible until experiments or proofs answer them:
-
-- What exact parameter subset should the first complete transform support?
-- Which arithmetic and memory operations belong in reusable Silean rather than
-  in the client design?
-- What primitive boundary gives good DSP and block-RAM inference?
-- Should configurable pipeline placement be preserved initially or introduced
-  after a single fixed pipeline is certified?
-- What is the cleanest packet-level contract for a continuously streaming
-  design without ready/valid signals?
-- Which range invariant is sufficient to rule out unintended intermediate
-  overflow?
-- How should certified twiddle constants be produced?
-- Should the mathematical accuracy development add a root Mathlib dependency
-  or live in a small companion package?
-- Which norm gives a useful first bound without making the initial proof
-  disproportionately difficult?
-- How much of the original parameter generator should become dependent Lean
-  structure, and how much should remain explicit configuration data?
+- What transform sizes and samples-per-cycle configurations define the first
+  complete supported subset?
+- What internal multiplier pipeline placement gives acceptable timing?
+- What memory primitive and collision semantics give both a clean proof and
+  reliable block-RAM inference?
+- What packet contract best describes continuous operation without
+  ready/valid signals?
+- When should the checked rational-enclosure input be automated by an external
+  certificate generator for larger tables?
+- Which stage-dependent fractional-bit schedule gives the best width/accuracy
+  trade-off for the first hardware configuration?
+- Which configuration data should become dependent Lean structure, and which
+  should remain explicit parameters?
 
 ## Immediate next step
 
-Inventory the current fixed-point behavior of the reference butterfly and the
-relevant Silean arithmetic/emission facilities. From that, write the proposed
-`ComplexBits`, signed decoding, fixed-point scaling, and exact `fixedButterfly`
-definitions, together with small executable examples. Revisit this plan after
-that experiment before fixing the wider hierarchy.
+Define the first small unrolled Silean FFT from the certified butterfly,
+bit-reversal wiring, certified twiddle constants, and explicit inter-stage
+register placement. Keep stage-dependent fractional-bit scheduling as an
+explicit reviewed configuration decision rather than silently trimming low
+bits inside the butterfly.

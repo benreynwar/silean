@@ -71,6 +71,7 @@ end
 
 inductive ModuleParameter where
   | natural (value : Nat)
+  | boolean (value : Bool)
   | signalType (value : SignalType)
 deriving DecidableEq, Repr
 
@@ -84,6 +85,7 @@ def ModuleParameter.of [ToModuleParameter α] (value : α) : ModuleParameter :=
   ToModuleParameter.encode value
 
 instance : ToModuleParameter Nat := ⟨.natural⟩
+instance : ToModuleParameter Bool := ⟨.boolean⟩
 instance : ToModuleParameter SignalType := ⟨.signalType⟩
 
 structure ModuleKey where

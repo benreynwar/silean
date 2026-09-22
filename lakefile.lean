@@ -4,8 +4,14 @@ open Lake DSL
 
 package «silean» where
 
+require mathlib from git
+  "https://github.com/leanprover-community/mathlib4.git" @ "v4.32.1"
+
 @[default_target]
 lean_lib «Silean» where
+
+@[default_target]
+lean_lib «HTFFT» where
 
 @[default_target]
 lean_lib «RV32I» where
@@ -17,6 +23,11 @@ lean_lib «PicoRV» where
 lean_lib «SileanTests» where
   srcDir := "tests/silean/lean"
   roots := #[`SileanTests]
+
+@[default_target]
+lean_lib «HTFFTTests» where
+  srcDir := "tests/htfft/lean"
+  roots := #[`HTFFTTests]
 
 @[default_target]
 lean_lib «PicoRVTests» where
@@ -43,6 +54,9 @@ lean_exe «emit-picorv-decoder-capture» where
 
 lean_exe «emit-picorv-control» where
   root := `PicoRV.Emitters.PicoRVControl
+
+lean_exe «emit-picorv-control-phase-decode» where
+  root := `PicoRV.Emitters.PicoRVControlPhaseDecode
 
 lean_exe «emit-picorv-datapath» where
   root := `PicoRV.Emitters.PicoRVDatapath

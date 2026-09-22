@@ -175,12 +175,37 @@ theorem shape. The two supported patterns are “readable authored construction
 plus correspondence” and “small public contract plus directly certified
 internal structure.” In both patterns, `Foo.lean` stays simple.
 
-`Add` and `Increment` are reference examples of the contract-first structural
-pattern. `CarrySaveAdder` is the reference for an indexed family of children:
-its `module_design` is the sole hardware representation rather than being
-duplicated as a recursive builder description. `AddSub` is the corresponding
-arithmetic example with a concise authored construction and an
-implementation-independent correctness theorem.
+`AddWithCarry` and `Increment` are reference examples of recursive
+contract-first structure. `CarrySaveAdder` is the reference for an indexed
+family of children: its `module_design` is the sole hardware representation
+rather than being duplicated as a recursive builder description. The general
+`Add`, `Sub`, and runtime-selectable `AddSub` modules are non-authored
+structural examples: their contracts use independently sized, statically
+signed operands and ordinary integer arithmetic, while their structures
+perform the required extension and reuse the carry-aware modules underneath.
+
+## Fixed-latency structural modules
+
+A pipelined module whose observable behavior is simply “apply this relation
+after a fixed number of cycles” should normally use `BoundaryTrace` and
+`FixedLatency.Holds`. Do not introduce a cycle contract or expose the physical
+register state merely to express that delay. The relation itself should still
+be ordinary Lean mathematics; pipeline placement belongs in a separate static
+configuration whose derived latency is the sum of its selected stages.
+
+For a multi-path structure, state explicitly which values are registered
+together and delay bypass paths to the same boundary. Prove the parent trace
+theorem from public child execution contracts, obtaining synchronized child
+executions from one observed parent execution. Bit layouts, intermediate
+carrier widths, and alignment registers belong in the structure and proof,
+not in the behavioral relation.
+
+Width changes that are externally meaningful must remain explicit in the
+contract. In particular, distinguish mathematical rescaling, signed wrapping
+or narrowing, and high-bit growth; do not describe these operations indirectly
+through slices or child-module behavior. A no-overflow theorem may then remove
+the explicit wraps under a separate range hypothesis without weakening the
+unconditional bit-accurate contract.
 
 ## Authoring interface
 
@@ -578,6 +603,31 @@ an alias and may still be useful. Introduce a second behavioral abstraction only
 when it expresses a genuinely different guarantee, such as a transaction- or
 trace-level contract.
 
+A pipelined module whose useful guarantee relates different cycles should
+state that guarantee over a state-free `BoundaryTrace`: a sequence of
+`BoundaryStep`s containing only each cycle's boundary inputs and outputs. Use
+`FixedLatency.Holds` for a relational result or `FixedLatency.Computes` for a
+deterministic sequence-level result. Its public facade should expose a theorem
+of the form `moduleStructure.Executes ... → contract
+execution.toBoundaryTrace`; callers should not reconstruct latency from
+register state or pass unrelated input and output lists separately.
+
+Compose deterministic pipeline stages with `FixedLatency.computes_serial`,
+equal-latency branches with `FixedLatency.computes_parallel`, and intervening
+combinational transformations with `computes_map_inputs` or
+`computes_map_outputs`. Use the corresponding relational forms only when the
+behavior is genuinely nondeterministic or relational. Do not hand-expand
+trace indices and latency arithmetic when these laws express the same proof.
+
+When several stateful children must remain aligned, call
+`execution.observe` once and project every required child with
+`observed.child`. All resulting child executions then come from the same
+cycle-indexed hierarchy sequence. Use each child's public execution theorem;
+do not reproduce a child's private pipeline invariant in the parent proof.
+`FixedLatency.relation_at_of_trace` is the standard bridge from a proved
+boundary-trace contract back to the original execution lists when a local
+arithmetic theorem needs concrete indexed values.
+
 When proving a parent module from its children, keep the returned
 `ChildContractMatch` intact. Use `childMatch.ruleHolds rule` for one declared
 output rule, `childMatch.boundaryOutput cycleContract.sumEquation` for a
@@ -778,6 +828,14 @@ module, making the complete supported interface available from the aggregate.
 Internal files must not be imported by unrelated modules as a shortcut around
 the public façade.
 
+Only broadly reusable hardware belongs in `Silean/Modules` and its aggregate.
+A circuit selected for one client's architecture or arithmetic policy should
+keep the same contract-first directory shape under that client, for example
+`HTFFT/Silean/Foo/`. Its tests belong in the client's regression tree. Shared
+children and genuinely general lemmas may remain in Silean, but project
+placement, certification, and semantic bridges should not be promoted into the
+framework catalog merely because they are structural hardware.
+
 An ordinary main file never imports a path under its own `Internal/` directory.
 `FooDerived.lean` is the single public exception: it is the facade specifically
 intended to turn internal generated artifacts into a supported API. Code
@@ -809,8 +867,9 @@ examples of the contract-first structural pattern. `EqualsConstant` is the
 authored comparison counterpart. Their direct PicoRV clients—`Alu`, `Regs`,
 and `MemoryLookahead`—show the authored pattern at larger scale: their main
 files own typed constructions and contracts, while placement and generated
-correctness live in `Derived` facades. `Register`, `Add`, `Increment`, and
-`SerialDepthFifo` provide further completed examples.
+correctness live in `Derived` facades. `Register`, `AddWithCarry`, the general
+`Add`/`Sub`/`AddSub` family, `Increment`, and `SerialDepthFifo` provide further
+completed examples.
 
 The register-to-FIFO stack shows that distinct contracts do not require one
 public file per proof layer. `OneEntryFifo.lean` owns the exact-cycle behavior;

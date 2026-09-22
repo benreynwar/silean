@@ -84,6 +84,22 @@ module_design IndexedChildren (count : Nat) where
 
 example : (IndexedChildren.design 2).key.family = "IndexedChildren" := rfl
 example : (IndexedChildren.design 2).key.specialization = [.natural 2] := rfl
+
+module_design BooleanParameter (enabled : Bool) where
+  ports {
+    input value : .bit,
+    output result : .bit }
+  instances {
+    invert := Primitives.notDesign }
+  wiring {
+    outputs {
+      .result := invert.output }
+    instance (.invert) {
+      .input := input.value }
+  }
+
+example : (BooleanParameter.design true).key.specialization =
+    [.boolean true] := rfl
 example : (IndexedChildren.Naming.instanceNames 2 (.workers 1)) =
     "worker_1" := rfl
 example : IndexedChildren.structuralChildren 2 (.workers 0) =

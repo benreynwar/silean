@@ -1,56 +1,79 @@
 import Silean.Modules.Add.Internal.AddVerification
-import Silean.Authoring.ModuleCycleCertification
+import Silean.Modules.Arithmetic.Internal.SignedExtendedBounds
 
-/-! Public adder declarations backed by the recursive implementation. -/
+/-! Public placement and correctness declarations for structural addition. -/
 
 namespace Silean.Modules.Add
 
 open Silean
 open Authoring.CircuitDescription
 
-/-- Place a fixed-width adder using the next conventional indexed name. -/
-noncomputable def place (left right : Net (.vector width .bit))
-    (carryIn : Net .bit) : Builder (ports.OutputNets width) :=
-  ports.placeIndexed width "add" (moduleStructure width) (Naming.naming width)
-    left right carryIn
+noncomputable def placeNamed (name : Naming.SourceName)
+    (leftSigned rightSigned extendOutput : Bool)
+    (left : Net (.vector leftWidth .bit))
+    (right : Net (.vector rightWidth .bit)) :
+    Builder (Net (.vector
+      (Arithmetic.resultWidth leftWidth rightWidth extendOutput) .bit)) := do
+  let outputs ← ports.placeNamed leftWidth rightWidth leftSigned rightSigned
+    extendOutput name
+    (moduleStructure leftWidth rightWidth leftSigned rightSigned extendOutput)
+    (naming leftWidth rightWidth leftSigned rightSigned extendOutput) left right
+  pure outputs.result
 
-attribute [circuit_description] place
+noncomputable def place
+    (leftSigned rightSigned extendOutput : Bool)
+    (left : Net (.vector leftWidth .bit))
+    (right : Net (.vector rightWidth .bit)) :
+    Builder (Net (.vector
+      (Arithmetic.resultWidth leftWidth rightWidth extendOutput) .bit)) := do
+  let outputs ← ports.placeIndexed leftWidth rightWidth leftSigned rightSigned
+    extendOutput "add"
+    (moduleStructure leftWidth rightWidth leftSigned rightSigned extendOutput)
+    (naming leftWidth rightWidth leftSigned rightSigned extendOutput) left right
+  pure outputs.result
 
-module_cycle_realization_bridge allowed_of_realization (width : Nat)
-  for moduleStructure width implementing cycleContract width using certification
+attribute [circuit_description] placeNamed place
 
-/-- Numerically, an allowed adder step produces the full sum across its result
-vector and carry-out bit. -/
-theorem numeric_value_of_allowed (width : Nat)
-    {step : (cycleContract width).Step}
-  (allowed : (cycleContract width).Allows step) :
-    BitVector.toNat width (step.outputs .result) +
-        2 ^ width * (step.outputs .carryOut).toNat =
-      BitVector.toNat width (step.inputs .left) +
-        BitVector.toNat width (step.inputs .right) +
-          (step.inputs .carryIn).toNat := by
-  rw [cycleContract.result width allowed, cycleContract.carryOut width allowed,
-    ← BitVector.cardinality_eq_pow]
-  simpa [totalValue] using Internal.naturalValues_numeric width
-    (step.inputs .left) (step.inputs .right) (step.inputs .carryIn)
+theorem result_of_realization (leftWidth rightWidth : Nat)
+    (leftSigned rightSigned extendOutput : Bool)
+    {step : (moduleStructure leftWidth rightWidth leftSigned rightSigned
+      extendOutput).Step}
+    (realizes : (moduleStructure leftWidth rightWidth leftSigned rightSigned
+      extendOutput).Realizes step) :
+    step.outputs .result = resultValue leftWidth rightWidth leftSigned
+      rightSigned extendOutput (step.inputs .left) (step.inputs .right) := by
+  obtain ⟨_, _, allowed⟩ := allowed_of_realization leftWidth rightWidth
+    leftSigned rightSigned extendOutput realizes
+  exact cycleContract.result leftWidth rightWidth leftSigned rightSigned
+    extendOutput allowed
 
-/-- The result vector is the low `width` bits of the ordinary input sum. -/
-theorem result_toNat_of_allowed (width : Nat)
-    {step : (cycleContract width).Step}
-    (allowed : (cycleContract width).Allows step) :
-    BitVector.toNat width (step.outputs .result) =
-      totalValue width (step.inputs .left) (step.inputs .right)
-        (step.inputs .carryIn) % BitVector.cardinality width := by
-  rw [cycleContract.result width allowed]
-  change BitVector.toNat width
-      (resultValue width (step.inputs .left) (step.inputs .right)
-        (step.inputs .carryIn)) = _
-  rw [resultValue, BitVector.toNat_ofNat]
+theorem implements_contract (leftWidth rightWidth : Nat)
+    (leftSigned rightSigned extendOutput : Bool) :
+    Contracts.Cycle.Implements
+      (moduleStructure leftWidth rightWidth leftSigned rightSigned extendOutput)
+      (cycleContract leftWidth rightWidth leftSigned rightSigned extendOutput)
+      (certification leftWidth rightWidth leftSigned rightSigned
+        extendOutput).stateCorresponds :=
+  (certification leftWidth rightWidth leftSigned rightSigned
+    extendOutput).implements
 
-/-- The recursive ripple implementation satisfies the exact cycle contract. -/
-theorem implements_contract (width : Nat) :
-    Contracts.Cycle.Implements (moduleStructure width) (cycleContract width)
-      (certification width).stateCorresponds :=
-  (certification width).implements
+/-- One-bit-extended equal-width signed addition preserves the exact integer
+sum rather than wrapping it. -/
+theorem resultValue_toInt_signed_extended (width : Nat)
+    (left right : Fin width → Bool) :
+    (BitVector.toBitVec (Arithmetic.resultWidth width width true)
+      (resultValue width width true true true left right)).toInt =
+      (BitVector.toBitVec width left).toInt +
+        (BitVector.toBitVec width right).toInt := by
+  rw [resultValue, Arithmetic.encode, BitVector.toBitVec_ofBitVec]
+  simp only [Arithmetic.operandValue, if_true]
+  apply BitVec.toInt_ofInt_eq_self
+  · simp [Arithmetic.resultWidth]
+  · simpa [Arithmetic.resultWidth] using
+      (Arithmetic.Internal.signed_add_bounds_extended width
+        (BitVector.toBitVec width left) (BitVector.toBitVec width right)).1
+  · simpa [Arithmetic.resultWidth] using
+      (Arithmetic.Internal.signed_add_bounds_extended width
+        (BitVector.toBitVec width left) (BitVector.toBitVec width right)).2
 
 end Silean.Modules.Add

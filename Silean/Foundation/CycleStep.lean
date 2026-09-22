@@ -1,4 +1,4 @@
-import Silean.Foundation.ModulePorts
+import Silean.Foundation.BoundaryStep
 
 namespace Silean
 
@@ -20,5 +20,23 @@ structure CycleStep (ports : ModulePorts) (State : Type) where
   currentState : State
   outputs : ports.outputs.Values
   nextState : State
+
+namespace CycleStep
+
+/-- Erase the state transition from a cycle, retaining its observable module
+boundary values. -/
+def boundary (step : CycleStep ports State) : BoundaryStep ports where
+  inputs := step.inputs
+  outputs := step.outputs
+
+@[simp] theorem boundary_inputs (step : CycleStep ports State) :
+    step.boundary.inputs = step.inputs :=
+  rfl
+
+@[simp] theorem boundary_outputs (step : CycleStep ports State) :
+    step.boundary.outputs = step.outputs :=
+  rfl
+
+end CycleStep
 
 end Silean

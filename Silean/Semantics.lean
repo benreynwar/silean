@@ -1,7 +1,11 @@
 import Silean.Semantics.Trace
+import Silean.Semantics.BoundaryTrace
+import Silean.Semantics.FixedLatency
+import Silean.Semantics.DelayLine
 import Silean.Semantics.StructuralEquations
 import Silean.Semantics.StructuralDependency
 import Silean.Semantics.StructuralExecution
+import Silean.Semantics.StructuralObservation
 
 /-! # Contract-independent semantics
 

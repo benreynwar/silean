@@ -1,5 +1,6 @@
 import Silean.Modules
 import SileanTests.FoundationChecks
+import SileanTests.BitVectorChecks
 import SileanTests.ValidReadyChecks
 import SileanTests.SignalExpectationChecks
 import SileanTests.ModuleResetContractChecks
@@ -7,6 +8,8 @@ import SileanTests.ModuleResetCertifiedChecks
 import SileanTests.EndpointChecks
 import SileanTests.SignalAdapterChecks
 import SileanTests.RegisterChecks
+import SileanTests.ShiftRegisterContractChecks
+import SileanTests.ShiftRegisterChecks
 import SileanTests.ResetRegisterChecks
 import SileanTests.EnabledResetCounterChecks
 import SileanTests.FifoChecks
@@ -30,6 +33,14 @@ import SileanTests.CarrySaveTreeContractChecks
 import SileanTests.CarrySaveTreeChecks
 import SileanTests.UnsignedMultiplyContractChecks
 import SileanTests.UnsignedMultiplyChecks
+import SileanTests.ConditionalNegateContractChecks
+import SileanTests.ConditionalNegateChecks
+import SileanTests.SignedMultiplyContractChecks
+import SileanTests.SignedMultiplyChecks
+import SileanTests.SignedRoundShiftContractChecks
+import SileanTests.SignedRoundShiftChecks
+import SileanTests.PipelinedSignedMultiplyContractChecks
+import SileanTests.PipelinedSignedMultiplyChecks
 import SileanTests.EqualsConstantChecks
 import SileanTests.BinaryToOneHotChecks
 import SileanTests.CombMuxTreeChecks
@@ -56,9 +67,15 @@ import SileanTests.HalfAdderChecks
 import SileanTests.HalfAdderAuthoringChecks
 import SileanTests.FullAdderChecks
 import SileanTests.FullAdderAuthoringChecks
+import SileanTests.AddWithCarryChecks
+import SileanTests.AddWithCarryAuthoringChecks
+import SileanTests.AddSubWithCarryChecks
+import SileanTests.AddSubWithCarryAuthoringChecks
 import SileanTests.AddChecks
-import SileanTests.AddAuthoringChecks
-import SileanTests.AddSubAuthoringChecks
+import SileanTests.SubChecks
+import SileanTests.AddSubChecks
+import SileanTests.ConditionalNegateAuthoringChecks
+import SileanTests.SignedMultiplyAuthoringChecks
 import SileanTests.IncrementAuthoringChecks
 import SileanTests.RegisterAuthoringChecks
 import SileanTests.ResetRegisterAuthoringChecks
@@ -68,7 +85,6 @@ import SileanTests.EnabledResetCounterAuthoringChecks
 import SileanTests.BitwiseXorChecks
 import SileanTests.BitwiseAndChecks
 import SileanTests.BitwiseOrChecks
-import SileanTests.AddSubChecks
 import SileanTests.IncrementChecks
 import SileanTests.FifoPointerControlChecks
 import SileanTests.FifoPointerControlAuthoringChecks
@@ -83,3 +99,6 @@ import SileanTests.FifoContractChecks
 import SileanTests.SerialDepthFifoChecks
 import SileanTests.SerialDepthFifoAuthoringChecks
 import SileanTests.SelectionAuthoringChecks
+import SileanTests.BoundaryTraceChecks
+import SileanTests.FixedLatencyChecks
+import SileanTests.StructuralObservationChecks

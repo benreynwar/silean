@@ -50,7 +50,8 @@ private def rootHasShape (leftWidth rightWidth expectedRows : Nat)
 
 #guard rootHasShape 4 0 0
   ["public module UnsignedMultiply_4_0", "output result : UInt<1>[4]",
-   "inst tree of carry_save_tree_zero_4", "inst add of add_ripple_4"]
+   "inst tree of carry_save_tree_zero_4",
+   "inst add of add_with_carry_ripple_4"]
 
 #guard rootHasShape 4 3 3
   ["public module UnsignedMultiply_4_3", "output result : UInt<1>[7]",
@@ -69,7 +70,7 @@ private def rootHasShape (leftWidth rightWidth expectedRows : Nat)
   | .ok text => contains text "public module UnsignedMultiply_4_3" &&
       contains text "module PartialProductRow_row_0_4_3" &&
       contains text "module carry_save_tree_recursive_7_3" &&
-      contains text "module add_ripple_7" &&
+      contains text "module add_with_carry_ripple_7" &&
       contains text "module FullAdder"
 
 end SileanTests.UnsignedMultiply

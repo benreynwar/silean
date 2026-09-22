@@ -1,5 +1,5 @@
 import Silean.Semantics.StructuralDependency
-import Silean.Semantics.Trace
+import Silean.Semantics.BoundaryTrace
 
 namespace Silean
 

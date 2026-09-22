@@ -90,6 +90,20 @@ theorem toNat_injective (width : Nat) : Function.Injective (toNat width) := by
       · exact highEqual
       · exact congrFun lowerEqual lower
 
+theorem toNat_eq_zero_iff (width : Nat) (bits : Fin width → Bool) :
+    toNat width bits = 0 ↔ ∀ index, bits index = false := by
+  constructor
+  · intro isZero
+    have allFalse : bits = fun _ => false := by
+      apply toNat_injective width
+      simpa using isZero
+    exact fun index => congrFun allFalse index
+  · intro allFalse
+    have bitsFalse : bits = fun _ => false := by
+      funext index
+      exact allFalse index
+    simp [bitsFalse]
+
 @[simp] theorem toNat_ofNat (width value : Nat) :
     toNat width (ofNat width value) = value % cardinality width := by
   rw [cardinality_eq_pow]
@@ -132,5 +146,71 @@ theorem testBit_toNat (width : Nat) (bits : Fin width → Bool)
     toNat width bits < cardinality width := toNat_lt_cardinality width bits
     _ = 2 ^ width := cardinality_eq_pow width
     _ ≤ 2 ^ index := Nat.pow_le_pow_right (by omega) outside
+
+/-! ## Native `BitVec` bridge
+
+Silean keeps hardware vectors in the uniform structural representation
+`Fin width → element`; a bit vector is therefore `Fin width → Bool`. Native
+`BitVec` remains the preferred packed representation for arithmetic that Lean
+already provides. The conversions below are a proved boundary between those
+roles rather than a second hardware-vector representation. -/
+
+/-- Pack a Silean LSB-first Boolean vector into Lean's native `BitVec`. -/
+def toBitVec (width : Nat) (bits : Fin width → Bool) : BitVec width :=
+  BitVec.ofNat width (toNat width bits)
+
+/-- Expose a native `BitVec` as Silean's LSB-first Boolean-vector
+representation. -/
+def ofBitVec {width : Nat} (bits : BitVec width) : Fin width → Bool :=
+  bits.getLsb
+
+/-- Packing preserves the unsigned natural-number interpretation. -/
+@[simp] theorem toBitVec_toNat (width : Nat) (bits : Fin width → Bool) :
+    (toBitVec width bits).toNat = toNat width bits := by
+  rw [toBitVec, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
+  simpa only [cardinality_eq_pow] using toNat_lt_cardinality width bits
+
+/-- Packing preserves each individual bit. -/
+@[simp] theorem getLsb_toBitVec (width : Nat) (bits : Fin width → Bool)
+    (index : Fin width) :
+    (toBitVec width bits).getLsb index = bits index := by
+  change (toBitVec width bits).toNat.testBit index.val = bits index
+  rw [toBitVec_toNat]
+  exact testBit_toNat width bits index
+
+/-- Packing Silean's low-bit encoding agrees with native `BitVec.ofNat`. -/
+@[simp] theorem toBitVec_ofNat (width value : Nat) :
+    toBitVec width (ofNat width value) = BitVec.ofNat width value := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [toBitVec_toNat, toNat_ofNat, cardinality_eq_pow,
+    BitVec.toNat_ofNat]
+
+/-- Unpacking preserves the unsigned natural-number interpretation. -/
+@[simp] theorem toNat_ofBitVec {width : Nat} (bits : BitVec width) :
+    toNat width (ofBitVec bits) = bits.toNat := by
+  have representation : ofBitVec bits = ofNat width bits.toNat := by
+    funext index
+    rfl
+  rw [representation, toNat_ofNat, Nat.mod_eq_of_lt]
+  simpa only [cardinality_eq_pow] using bits.isLt
+
+/-- Unpacking a packed Silean vector recovers every bit. -/
+@[simp] theorem ofBitVec_toBitVec (width : Nat) (bits : Fin width → Bool) :
+    ofBitVec (toBitVec width bits) = bits := by
+  funext index
+  change (toBitVec width bits).toNat.testBit index.val = bits index
+  rw [toBitVec_toNat]
+  exact testBit_toNat width bits index
+
+/-- Packing is injective because unpacking is its left inverse. -/
+theorem toBitVec_injective (width : Nat) : Function.Injective (toBitVec width) := by
+  intro left right equal
+  rw [← ofBitVec_toBitVec width left, ← ofBitVec_toBitVec width right, equal]
+
+/-- Packing an unpacked native vector recovers the native vector. -/
+@[simp] theorem toBitVec_ofBitVec {width : Nat} (bits : BitVec width) :
+    toBitVec width (ofBitVec bits) = bits := by
+  apply BitVec.eq_of_toNat_eq
+  rw [toBitVec_toNat, toNat_ofBitVec]
 
 end Silean.BitVector

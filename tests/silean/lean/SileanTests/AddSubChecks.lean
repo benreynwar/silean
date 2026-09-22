@@ -5,89 +5,68 @@ namespace SileanTests.AddSub
 
 open Silean Silean.FIRRTL
 
-def bits0 : Fin 0 → Bool := fun index => Fin.elim0 index
-def bits4Three : Fin 4 → Bool := fun | 0 | 1 => true | 2 | 3 => false
-def bits4Five : Fin 4 → Bool := fun | 0 | 2 => true | 1 | 3 => false
-def bits4Thirteen : Fin 4 → Bool := fun | 0 | 2 | 3 => true | 1 => false
-def bits4Fifteen : Fin 4 → Bool := fun _ => true
+def bits (width : Nat) (value : Int) : Fin width → Bool :=
+  BitVector.ofBitVec (BitVec.ofInt width value)
 
-def inputs (width : Nat) (left right : Fin width → Bool) (subtract : Bool) :
-    (Modules.AddSub.ports width).inputs.Values
+def inputs (leftWidth rightWidth : Nat)
+    (leftSigned rightSigned extendOutput : Bool)
+    (left : Fin leftWidth → Bool) (right : Fin rightWidth → Bool)
+    (subtract : Bool) :
+    (Modules.AddSub.ports leftWidth rightWidth leftSigned rightSigned
+      extendOutput).inputs.Values
   | .left => left
   | .right => right
   | .subtract => subtract
 
-def outputs (width : Nat) (left right : Fin width → Bool) (subtract : Bool) :=
-  ((Modules.AddSub.cycleContract width).evaluate
-    (inputs width left right subtract) SignalMap.emptyValues).1
+def outputs (leftWidth rightWidth : Nat)
+    (leftSigned rightSigned extendOutput : Bool)
+    (left : Fin leftWidth → Bool) (right : Fin rightWidth → Bool)
+    (subtract : Bool) :=
+  ((Modules.AddSub.cycleContract leftWidth rightWidth leftSigned rightSigned
+    extendOutput).evaluate
+      (inputs leftWidth rightWidth leftSigned rightSigned extendOutput left right
+        subtract)
+      SignalMap.emptyValues).1
 
 noncomputable example : Contracts.Cycle.ModuleCycleCertified
-    (Modules.AddSub.ports 4) :=
-  Modules.AddSub.certified 4
+    (Modules.AddSub.ports 4 3 true false true) :=
+  Modules.AddSub.certified 4 3 true false true
 
 example : Contracts.Cycle.Implements
-    (Modules.AddSub.moduleStructure 4) (Modules.AddSub.cycleContract 4)
-    (Modules.AddSub.certification 4).stateCorresponds :=
-  Modules.AddSub.implements_contract 4
+    (Modules.AddSub.moduleStructure 4 3 true false true)
+    (Modules.AddSub.cycleContract 4 3 true false true)
+    (Modules.AddSub.certification 4 3 true false true).stateCorresponds :=
+  Modules.AddSub.implements_contract 4 3 true false true
 
--- Width zero has no result bits; addition has no carry and subtraction has no borrow.
-#guard !(outputs 0 bits0 bits0 false .carryOut)
-#guard outputs 0 bits0 bits0 true .carryOut
+-- The runtime selector chooses between the same natural operations as Add/Sub.
+#guard BitVector.toBitVec 5
+    (outputs 4 3 true false true (bits 4 (-3)) (bits 3 5) false .result) ==
+  BitVec.ofInt 5 2
+#guard BitVector.toBitVec 5
+    (outputs 4 3 true false true (bits 4 (-3)) (bits 3 5) true .result) ==
+  BitVec.ofInt 5 (-8)
 
--- 3 + 5 = 8, while 3 - 5 wraps to 14 and borrows.
-#guard BitVector.toNat 4 (outputs 4 bits4Three bits4Five false .result) == 8
-#guard !(outputs 4 bits4Three bits4Five false .carryOut)
-#guard BitVector.toNat 4 (outputs 4 bits4Three bits4Five true .result) == 14
-#guard !(outputs 4 bits4Three bits4Five true .carryOut)
+-- The selected operation wraps when output extension is disabled.
+#guard BitVector.toBitVec 4
+    (outputs 4 4 false false false (bits 4 15) (bits 4 3) false .result) ==
+  BitVec.ofInt 4 18
+#guard BitVector.toBitVec 4
+    (outputs 4 4 false false false (bits 4 3) (bits 4 5) true .result) ==
+  BitVec.ofInt 4 (-2)
 
--- 13 - 5 = 8 without a borrow; 15 + 5 wraps and carries.
-#guard BitVector.toNat 4 (outputs 4 bits4Thirteen bits4Five true .result) == 8
-#guard outputs 4 bits4Thirteen bits4Five true .carryOut
-#guard BitVector.toNat 4 (outputs 4 bits4Fifteen bits4Five false .result) == 4
-#guard outputs 4 bits4Fifteen bits4Five false .carryOut
-
-example (width : Nat) (left right : Fin width → Bool) (subtract : Bool) :
-    BitVector.toNat width (outputs width left right subtract .result) =
-      bif subtract then
-        (BitVector.toNat width left + BitVector.cardinality width -
-          BitVector.toNat width right) % BitVector.cardinality width
-      else
-        (BitVector.toNat width left + BitVector.toNat width right) %
-          BitVector.cardinality width := by
-  simpa [outputs, inputs, Contracts.Cycle.ModuleCycleContract.evaluateStep] using
-    Modules.AddSub.result_toNat_of_allowed width
-      ((Modules.AddSub.cycleContract width).evaluateStep_allowed
-        (inputs width left right subtract) SignalMap.emptyValues)
-
-example (width : Nat) (left right : Fin width → Bool) :
-    outputs width left right true .carryOut =
-      decide (BitVector.toNat width right ≤ BitVector.toNat width left) := by
-  change @Eq Bool
-    (((Modules.AddSub.cycleContract width).evaluate
-      (inputs width left right true) SignalMap.emptyValues).1 .carryOut) _
-  have equation := Modules.AddSub.cycleContract.carryOut width
-    ((Modules.AddSub.cycleContract width).evaluateStep_allowed
-      (inputs width left right true) SignalMap.emptyValues)
-  change @Eq Bool
-    (((Modules.AddSub.cycleContract width).evaluate
-      (inputs width left right true) SignalMap.emptyValues).1 .carryOut)
-    (Modules.AddSub.addSubBits width left right true).2 at equation
-  exact equation.trans
-    (Modules.AddSub.addSubBits_carry_subtract width left right)
+#guard BitVector.toBitVec 0
+    (outputs 0 0 true true false (bits 0 0) (bits 0 0) true .result) ==
+  BitVec.ofInt 0 0
 
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
-#guard match renderRootModule (Modules.AddSub.naming 4) with
+#guard match renderRootModule (Modules.AddSub.naming 4 3 true false true) with
   | .error _ => false
   | .ok text =>
-      ["public module AddSub_4", "input left : UInt<1>[4]",
-       "input right : UInt<1>[4]", "input subtract : UInt<1>",
-       "output result : UInt<1>[4]", "output carryOut : UInt<1>",
-       "inst combiner_0", "inst bitwise_xor_0",
-       "inst add_0 of add_ripple_4",
-       "connect bitwise_xor_0.right, combiner_0.aggregate_0",
-       "connect add_0.right, transformedRight",
-       "connect add_0.carry_in, subtract"].all (contains text)
+      ["public module AddSub_4_3_true_false_true",
+       "input left : UInt<1>[4]", "input right : UInt<1>[3]",
+       "input subtract : UInt<1>", "output result : UInt<1>[5]",
+       "inst add_sub_with_carry_0"].all (contains text)
 
 end SileanTests.AddSub

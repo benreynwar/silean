@@ -1,8 +1,8 @@
-import Silean.Modules.Add.Add
+import Silean.Modules.AddWithCarry.AddWithCarry
 
 /-! Ripple-recursive arithmetic used only to verify the generated adder. -/
 
-namespace Silean.Modules.Add.Internal
+namespace Silean.Modules.AddWithCarry.Internal
 
 open Silean
 
@@ -129,4 +129,4 @@ theorem naturalValues_numeric (width : Nat)
     ← addBits_carry width left right carry]
   exact addBits_numeric width left right carry
 
-end Silean.Modules.Add.Internal
+end Silean.Modules.AddWithCarry.Internal

@@ -67,7 +67,7 @@ private theorem childStructuralCertifications
   | .tree => CarrySaveTree.structuralCertification
       (leftWidth + rightWidth) rightWidth
   | .zero => (Constant.certification .bit false).structural
-  | .add => (Add.certification (leftWidth + rightWidth)).structural
+  | .add => (AddWithCarry.certification (leftWidth + rightWidth)).structural
 
 /-- Contract-independent structural certification of the complete unsigned
 multiplier hierarchy. -/
@@ -196,12 +196,12 @@ theorem Internal.result_eq_of_realization (leftWidth rightWidth : Nat)
       _ = false := zeroOutput
   have addRealizes := ModuleStructure.child_realizes satisfies (.add)
   simp only [structuralChildren] at addRealizes
-  obtain ⟨_, _, addAllowed⟩ := Add.allowed_of_realization productWidth
+  obtain ⟨_, _, addAllowed⟩ := AddWithCarry.allowed_of_realization productWidth
     addRealizes
-  have addResult := Add.result_toNat_of_allowed productWidth addAllowed
+  have addResult := AddWithCarry.result_toNat_of_allowed productWidth addAllowed
   simp only [HierStep.step_inputs, HierStep.step_outputs] at addResult
   rw [addLeft, addRight, addCarry] at addResult
-  simp only [Add.totalValue, Bool.toNat_false, Nat.add_zero] at addResult
+  simp only [AddWithCarry.totalValue, Bool.toNat_false, Nat.add_zero] at addResult
 
   have parentResult : hierStep.outputs .result =
       (hierStep.children .add).outputs .result := by

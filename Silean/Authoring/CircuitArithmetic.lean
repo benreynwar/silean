@@ -1,16 +1,17 @@
 import Silean.Authoring.CircuitLogic
 import Silean.Modules.Add.AddDerived
 import Silean.Modules.AddSub.AddSubDerived
-import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.Sub.SubDerived
 
-/-! Fixed-width arithmetic for circuit descriptions.
+/-! Fixed-width arithmetic placement syntax for circuit descriptions.
 
 The suffixes on `+uu`, `+us`, `+su`, `+ss` and their subtraction counterparts
 state whether the left and right operands are interpreted as unsigned (`u`) or
 signed (`s`). These forms produce one more bit than the larger input. Appending
 `t`, as in `+ust`, selects a truncating form whose result has the larger input
-width. Results remain plain bit-vector nets, so each later arithmetic operation
-chooses its operand interpretations afresh.
+width. Each form places one genuine certified `Add` or `Sub` module. Results
+remain plain bit-vector nets, so each later arithmetic operation chooses its
+operand interpretations afresh.
 -/
 
 namespace Silean.Authoring
@@ -18,64 +19,19 @@ namespace Silean.Authoring
 open Silean
 open CircuitDescription
 
-/-- Extend an LSB-first vector, copying its sign bit when `signed` is true and
-filling with zero otherwise. A zero-width input always extends with zero. -/
-def extendLayout (signed : Bool) : (inputWidth outputWidth : Nat) →
-    Fin outputWidth → Modules.VectorLayout.BitSource inputWidth
-  | 0, _ => fun _ => .constant false
-  | inputWidth + 1, _ => fun index =>
-      if withinInput : index.val < inputWidth + 1 then
-        .input ⟨index.val, withinInput⟩
-      else if signed then
-        .input (Fin.last inputWidth)
-      else
-        .constant false
-
-/-- Extend a vector net, avoiding an identity layout when its width already
-matches the requested width. -/
-noncomputable def extend (signed : Bool) (outputWidth : Nat)
-    (value : Net (.vector inputWidth .bit)) :
-    Builder (Net (.vector outputWidth .bit)) :=
-  if sameWidth : inputWidth = outputWidth then
-    pure (sameWidth ▸ value)
-  else
-    Modules.VectorLayout.place
-      (extendLayout signed inputWidth outputWidth) value
-
-/-- Place addition at a caller-selected result width. -/
-noncomputable def addAtWidth (leftSigned rightSigned : Bool)
-    (resultWidth : Nat) (left : Net (.vector leftWidth .bit))
-    (right : Net (.vector rightWidth .bit)) :
-    Builder (Net (.vector resultWidth .bit)) := do
-  let extendedLeft ← extend leftSigned resultWidth left
-  let extendedRight ← extend rightSigned resultWidth right
-  let carryIn ← constant .bit false
-  pure (← Modules.Add.place extendedLeft extendedRight carryIn).result
-
-/-- Place subtraction at a caller-selected result width. -/
-noncomputable def subtractAtWidth (leftSigned rightSigned : Bool)
-    (resultWidth : Nat) (left : Net (.vector leftWidth .bit))
-    (right : Net (.vector rightWidth .bit)) :
-    Builder (Net (.vector resultWidth .bit)) := do
-  let extendedLeft ← extend leftSigned resultWidth left
-  let extendedRight ← extend rightSigned resultWidth right
-  let subtractMode ← constant .bit true
-  pure (← Modules.AddSub.place extendedLeft extendedRight subtractMode).result
-
 /-- Place addition with independently selected operand interpretations. -/
 noncomputable def addWith (leftSigned rightSigned : Bool)
     (left : Net (.vector leftWidth .bit))
     (right : Net (.vector rightWidth .bit)) :
     Builder (Net (.vector (max leftWidth rightWidth + 1) .bit)) :=
-  addAtWidth leftSigned rightSigned (max leftWidth rightWidth + 1) left right
+  Modules.Add.place leftSigned rightSigned true left right
 
 /-- Place subtraction with independently selected operand interpretations. -/
 noncomputable def subtractWith (leftSigned rightSigned : Bool)
     (left : Net (.vector leftWidth .bit))
     (right : Net (.vector rightWidth .bit)) :
     Builder (Net (.vector (max leftWidth rightWidth + 1) .bit)) :=
-  subtractAtWidth leftSigned rightSigned
-    (max leftWidth rightWidth + 1) left right
+  Modules.Sub.place leftSigned rightSigned true left right
 
 /-- Place truncating addition with independently selected operand
 interpretations. -/
@@ -83,7 +39,7 @@ noncomputable def addTruncatingWith (leftSigned rightSigned : Bool)
     (left : Net (.vector leftWidth .bit))
     (right : Net (.vector rightWidth .bit)) :
     Builder (Net (.vector (max leftWidth rightWidth) .bit)) :=
-  addAtWidth leftSigned rightSigned (max leftWidth rightWidth) left right
+  Modules.Add.place leftSigned rightSigned false left right
 
 /-- Place truncating subtraction with independently selected operand
 interpretations. -/
@@ -91,8 +47,21 @@ noncomputable def subtractTruncatingWith (leftSigned rightSigned : Bool)
     (left : Net (.vector leftWidth .bit))
     (right : Net (.vector rightWidth .bit)) :
     Builder (Net (.vector (max leftWidth rightWidth) .bit)) :=
-  subtractAtWidth leftSigned rightSigned
-    (max leftWidth rightWidth) left right
+  Modules.Sub.place leftSigned rightSigned false left right
+
+/-- Place runtime-selectable extended addition/subtraction. -/
+noncomputable def addSubWith (leftSigned rightSigned : Bool)
+    (left : Net (.vector leftWidth .bit))
+    (right : Net (.vector rightWidth .bit)) (subtract : Net .bit) :
+    Builder (Net (.vector (max leftWidth rightWidth + 1) .bit)) :=
+  Modules.AddSub.place leftSigned rightSigned true left right subtract
+
+/-- Place runtime-selectable truncating addition/subtraction. -/
+noncomputable def addSubTruncatingWith (leftSigned rightSigned : Bool)
+    (left : Net (.vector leftWidth .bit))
+    (right : Net (.vector rightWidth .bit)) (subtract : Net .bit) :
+    Builder (Net (.vector (max leftWidth rightWidth) .bit)) :=
+  Modules.AddSub.place leftSigned rightSigned false left right subtract
 
 noncomputable abbrev addUU (left : Net (.vector leftWidth .bit))
     (right : Net (.vector rightWidth .bit)) := addWith false false left right
@@ -153,8 +122,8 @@ scoped infixl:65 " -sut " => subtractSUT
 scoped infixl:65 " -sst " => subtractSST
 
 attribute [circuit_description]
-  extendLayout extend addAtWidth subtractAtWidth addWith subtractWith
-  addTruncatingWith subtractTruncatingWith
+  addWith subtractWith addTruncatingWith subtractTruncatingWith
+  addSubWith addSubTruncatingWith
   addUU addUS addSU addSS subtractUU subtractUS subtractSU subtractSS
   addUUT addUST addSUT addSST
   subtractUUT subtractUST subtractSUT subtractSST

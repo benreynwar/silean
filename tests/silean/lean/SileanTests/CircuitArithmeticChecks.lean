@@ -17,8 +17,7 @@ example : addDescription.outputs.map (fun output => output.port.signalType) =
     [.vector 5 .bit] := rfl
 
 example : addDescription.children.map (fun child => child.name) =
-    [.indexed "vector_layout" 0, .indexed "vector_layout" 1,
-      .indexed "constant" 0, .indexed "add" 0] := rfl
+    [.indexed "add" 0] := rfl
 
 private noncomputable def subtractDescription := build do
   let left ← input "left" (.vector 4 .bit)
@@ -29,8 +28,7 @@ example : subtractDescription.outputs.map (fun output => output.port.signalType)
     [.vector 5 .bit] := rfl
 
 example : subtractDescription.children.map (fun child => child.name) =
-    [.indexed "vector_layout" 0, .indexed "vector_layout" 1,
-      .indexed "constant" 0, .indexed "add_sub" 0] := rfl
+    [.indexed "sub" 0] := rfl
 
 private noncomputable def allOperatorsDescription := build do
   let left ← input "left" (.vector 2 .bit)
@@ -69,16 +67,28 @@ private noncomputable def equalWidthTruncatingDescription := build do
   let right ← input "right" (.vector 4 .bit)
   output "result" (← left +uut right)
 
--- Equal-width truncation does not place redundant identity layouts.
+-- The syntax places one real arithmetic module rather than expanding an
+-- inline implementation recipe.
 example : equalWidthTruncatingDescription.children.map (fun child => child.name) =
-    [.indexed "constant" 0, .indexed "add" 0] := rfl
+    [.indexed "add" 0] := rfl
+
+private noncomputable def addSubDescription := build do
+  let left ← input "left" (.vector 2 .bit)
+  let right ← input "right" (.vector 4 .bit)
+  let subtract ← input "subtract" .bit
+  output "result" (← addSubWith true true left right subtract)
+
+example : addSubDescription.children.map (fun child => child.name) =
+    [.indexed "add_sub" 0] := rfl
 
 def twoBits : Fin 2 → Bool
   | 0 => false
   | 1 => true
 
 -- Unsigned extension fills high bits with zero; signed extension copies bit 1.
-#guard !(Modules.VectorLayout.apply (extendLayout false 2 4) twoBits 3)
-#guard Modules.VectorLayout.apply (extendLayout true 2 4) twoBits 3
+#guard !(Modules.VectorLayout.apply
+  (Modules.VectorLayout.extensionLayout false 2 4) twoBits 3)
+#guard Modules.VectorLayout.apply
+  (Modules.VectorLayout.extensionLayout true 2 4) twoBits 3
 
 end SileanTests.CircuitArithmetic

@@ -43,6 +43,7 @@ where
 
 def renderModuleParameter : ModuleParameter → String
   | .natural value => toString value
+  | .boolean value => if value then "true" else "false"
   | .signalType signalType => renderSignalTypeKey signalType
 
 def renderModuleKey (key : ModuleKey) : String :=

@@ -1,13 +1,13 @@
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.ModulePorts
-import Silean.Foundation.BitVector
+import Silean.Modules.Arithmetic
 
-/-! # Fixed-width addition
+/-! # General fixed-width addition
 
-`Add` computes the wrapping result and carry-out of adding two equally wide
-LSB-first vectors and a carry-in. Its recursive ripple implementation is kept
-under `Internal/`; this file contains only the boundary and mathematical
-contract.
+`Add` interprets independently sized inputs according to static signedness
+parameters and adds them.  Its output either retains the wider input width or
+grows by one bit.  The contract is ordinary integer addition followed by the
+explicit fixed-width encoding boundary.
 -/
 
 namespace Silean.Modules.Add
@@ -15,35 +15,32 @@ namespace Silean.Modules.Add
 open Silean
 open Silean.Authoring
 
-module_ports ports (width : Nat) where
-  input left : .vector width .bit,
-  input right : .vector width .bit,
-  input carryIn (name := "carry_in") : .bit,
-  output result : .vector width .bit,
-  output carryOut (name := "carry_out") : .bit
+module_ports ports (leftWidth : Nat) (rightWidth : Nat)
+    (leftSigned : Bool) (rightSigned : Bool) (extendOutput : Bool) where
+  input left : .vector leftWidth .bit,
+  input right : .vector rightWidth .bit,
+  output result : .vector
+    (Arithmetic.resultWidth leftWidth rightWidth extendOutput) .bit
 
-/-- The ordinary natural-number sum represented by the inputs. -/
-def totalValue (width : Nat) (left right : Fin width → Bool)
-    (carryIn : Bool) : Nat :=
-  BitVector.toNat width left + BitVector.toNat width right + carryIn.toNat
+/-- The encoded sum of the naturally interpreted operands. -/
+def resultValue (leftWidth rightWidth : Nat)
+    (leftSigned rightSigned extendOutput : Bool)
+    (left : Fin leftWidth → Bool) (right : Fin rightWidth → Bool) :
+    Fin (Arithmetic.resultWidth leftWidth rightWidth extendOutput) → Bool :=
+  Arithmetic.encode
+    (Arithmetic.resultWidth leftWidth rightWidth extendOutput)
+    (Arithmetic.operandValue leftSigned leftWidth left +
+      Arithmetic.operandValue rightSigned rightWidth right)
 
-/-- The low `width` bits of the natural-number sum. -/
-def resultValue (width : Nat) (left right : Fin width → Bool)
-    (carryIn : Bool) : Fin width → Bool :=
-  BitVector.ofNat width (totalValue width left right carryIn)
-
-/-- The bit immediately above the fixed-width result. -/
-def carryValue (width : Nat) (left right : Fin width → Bool)
-    (carryIn : Bool) : Bool :=
-  (totalValue width left right carryIn).testBit width
-
-module_cycle_contract cycleContract (width : Nat) for ports width where
+module_cycle_contract cycleContract (leftWidth : Nat) (rightWidth : Nat)
+    (leftSigned : Bool) (rightSigned : Bool) (extendOutput : Bool)
+    for ports leftWidth rightWidth leftSigned rightSigned extendOutput where
   state := emptySignalMap
   output_rule apply where
-    reads := [left, right, carryIn]
+    reads := [left, right]
     writes := {
-      result := resultValue width left right carryIn,
-      carryOut := carryValue width left right carryIn }
+      result := resultValue leftWidth rightWidth leftSigned rightSigned
+        extendOutput left right }
   state_rule where
     reads := []
     next := {}

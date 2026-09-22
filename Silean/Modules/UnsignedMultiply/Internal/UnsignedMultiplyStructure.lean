@@ -1,6 +1,6 @@
 import Silean.Authoring.ModuleDesign
 import Silean.Composition.SignalAdapterImplementation
-import Silean.Modules.Add.AddDerived
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
 import Silean.Modules.CarrySaveTree.CarrySaveTreeDerived
 import Silean.Modules.Constant.Constant
 import Silean.Modules.PartialProductRow.PartialProductRowDerived
@@ -41,7 +41,7 @@ module_design UnsignedMultiply (leftWidth : Nat) (rightWidth : Nat) where
       (UnsignedMultiply.Internal.rowCombiner leftWidth rightWidth),
     tree := CarrySaveTree.design (leftWidth + rightWidth) rightWidth,
     zero := Constant.design .bit false,
-    add := Add.design (leftWidth + rightWidth) }
+    add := AddWithCarry.design (leftWidth + rightWidth) }
   wiring {
     outputs {
       .result := add.result }

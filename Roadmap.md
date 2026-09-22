@@ -188,51 +188,181 @@ The migration ledger is:
   certifying separately declared composites from complete schedules;
 - [x] remove unreferenced compatibility projections and duplicated
   cycle-specific derivation lemmas rather than retaining parallel APIs;
-- [x] structurally certify `CarrySaveLayer` and recursive `CarrySaveTree`
-  without giving either custom relational contract a duplicate deterministic
-  behavioral contract; and
 - [x] run focused authoring regressions followed by the complete reusable
   Silean test target and record the verified result.
 
-The CarrySaveLayer validation also introduced generic `VectorReindex`, a pure
-wiring module containing one splitter and one combiner. The layer now forms a
-simple flat intermediate vector and reindexes it into sum/carry interleaving;
-this preserves the intended hardware order while keeping dependent recursive
-routing out of the parent schedule proof.
+### Separate general arithmetic from carry-aware primitives
 
-### Build the reusable HTFFT multiplier foundation
+> **Status: complete and verified 2026-09-21.** `lake build Silean
+> SileanTests` passes 3,403 jobs. PicoRV migration remains deliberately outside
+> this work.
 
-> **Status: in progress.** `PartialProductRow`, `CarrySaveAdder`,
-> `CarrySaveLayer`, `CarrySaveTree`, and `UnsignedMultiply` are complete. The
-> next multiplier-stack dependency is `ConditionalNegate`. The unsigned
-> milestone is verified by `lake build Silean` (266 jobs) and
-> `lake build SileanTests` (348 jobs) on 2026-09-20.
+The former `Add` and `AddSub` names described equal-width, carry-aware building
+blocks rather than the arithmetic interface needed by fixed-point clients.
+They are now `AddWithCarry` and `AddSubWithCarry`. Their emitted module
+identities use the same explicit terminology. General structural `Add`, `Sub`,
+and runtime-selectable `AddSub` modules accept independent operand widths,
+static signedness for each operand, and a static choice between wider and
+truncating output. Their contracts interpret inputs as ordinary integers,
+perform ordinary integer arithmetic, and encode only at the result boundary.
 
-The carry-save layer has a natural fixed-width contract and a single indexed
-structural implementation containing one `FullAdder` per bit. Its certified
-public theorem preserves the three-input unsigned sum modulo the vector width;
-zero-, one-, and multi-bit checks cover behavior, hierarchy closure, and RTL
-shape. An authored `ModuleBuilder` duplicate is intentionally omitted because
-the indexed `module_design` already expresses the hardware directly.
+The implementation ledger is:
 
-`CarrySaveLayer` and `CarrySaveTree` now have custom relational contracts,
-indexed/recursive structures, contract-independent structural certifications,
-direct relational correctness theorems, closed hierarchy checks, and RTL-shape
-tests. The tree fixes the evident zero-, one-, and two-operand representations
-while leaving larger output pairs abstract; a parent consumes only preservation
-of the collection total and does not learn the internal grouping. This
-validates custom contracts as usable compositional module boundaries without
-introducing a parallel deterministic `ModuleCycleContract`.
+- [x] move and rename the equal-width carry-aware modules;
+- [x] add reusable Boolean module-specialization parameters and rendering;
+- [x] prove vector layouts implement native sign or zero extension;
+- [x] define natural contracts before the new structures;
+- [x] build and certify structural `Add`, `Sub`, and `AddSub` hierarchies using
+  only public facts about their children;
+- [x] make authoring arithmetic operators thin placements of those real
+  modules rather than inline pseudo-module recipes;
+- [x] migrate reusable carry-dependent consumers to `AddWithCarry`;
+- [x] cover signedness combinations, unequal and zero widths, extension,
+  wrapping, both runtime selector values, and FIRRTL emission in focused tests;
+- [x] run the complete reusable Silean regression and update this status.
 
-`UnsignedMultiply` is the first downstream validation of that interface. It
-constructs one ordinary partial-product row per right-operand bit, reduces the
-rows through `CarrySaveTree`, and resolves the last two operands with `Add`.
-Its independent natural contract states exact multiplication at the combined
-operand width; its cycle certification proves every structural realization
-satisfies that contract, including zero-width and asymmetric-width cases.
-Closed-hierarchy and RTL-shape tests cover the composition. The provisional
-full stack and its evolving proof obligations remain tracked in
-`HTFFT/Plan.md`.
+No deprecated aliases preserve the misleading old meanings of `Add` or
+`AddSub`: the corrected general modules intentionally reclaim those exact
+names, so both APIs cannot coexist under them. Reusable clients were migrated
+directly. PicoRV may be repaired separately once the base hierarchy settles.
+
+### Specify fixed-point FFT arithmetic independently of hardware
+
+> **Status: pure butterfly specification implemented and focused checks
+> passing 2026-09-20.** Hardware construction and the numerical bound proof
+> remain later milestones.
+
+The pure specification layer under `HTFFT/FixedPoint`, `HTFFT/Butterfly`, and
+`HTFFT/Fixed` does not import Silean hardware definitions. It represents
+fixed-point values as scaled `Int`s with explicit
+component width and fractional-bit count, exact `Rat` decoding, selectable
+rounding, and explicit two's-complement wrapping. Its initial butterfly policy
+uses fused full-precision complex products, round-to-nearest with ties to even,
+one-bit output growth, and explicit wrapping guarded by a named no-overflow
+predicate.
+
+The ordinary rational butterfly is separate from the fixed-point function. A
+componentwise local-error predicate states the intended shape of the later
+accuracy theorem. The old VHDL informed the arithmetic review but is not
+maintained as a second Lean model or regression target. `lake build HTFFT
+HTFFTTests` passes 10 jobs.
+
+### Prove the exact recursive radix-two FFT correct
+
+> **Status: complete 2026-09-21.** This recursive theorem is now also the
+> reference used to certify the bit-reversed layered network below.
+
+Mathlib is pinned to `v4.32.1`, matching the project toolchain. The standalone
+`HTFFT.Exact` namespace represents a depth-indexed vector naturally as
+`Fin (2 ^ depth) → ℂ`. Its public indexing operations use Mathlib's finite
+equivalences for even/odd splitting, first/second-half concatenation, exact-width
+bit reversal, and the canonical `Fin (2 ^ depth) ≃ ZMod (2 ^ depth)` DFT
+boundary.
+
+The recursive DIT transform splits source indices into `2*k` and `2*k+1`, then
+places sums at `k` and differences at `k + 2^depth`. Public first-half and
+second-half Cooley--Tukey theorems reindex Mathlib's DFT sum and prove the
+required `stdAddChar` identities. Their induction proves
+`radix2_agreesWithDFT : Radix2AgreesWithDFT`. Exact impulse checks cover sizes
+two, four, and eight.
+
+### Define the exact hardware-shaped FFT network
+
+> **Status: exact foundation complete 2026-09-21.** No fixed-point FFT network
+> or Silean FFT hardware has been introduced yet.
+
+`HTFFT.Exact.Layered` now describes the pure iterative topology independently
+of clocks, memories, and fixed-point arithmetic. A public layer position names
+the contiguous group, sum/difference branch, and shared within-half offset.
+Stage zero pairs adjacent values; each following stage doubles the spacing and
+group size. Each layer uses the matching exact twiddle, and the complete
+network is input bit reversal followed by stages in ascending order with no
+final permutation.
+
+The ordered stage list remains explicit. `LayerBoundary`, `layeredPrefix`, and
+`layeredFFT_split` prove that any `take`/`drop` boundary preserves the complete
+pure transform, permitting a future hardware proof to assign the prefix and
+suffix to combinational and memory-backed organizations.
+
+The correctness proof shows that bit reversal separates even and odd inputs,
+every nonfinal prefix acts independently on the resulting halves, and the
+final layer has exactly the recursive FFT's indexing and twiddle selection.
+This yields `layeredFFT_eq_radix2` and the pointwise
+`layeredFFT_agreesWithDFT`. Executable indexing and split checks plus exact
+impulse examples cover depths zero through three. The combined `HTFFT`,
+`HTFFTTests`, `Silean`, and `SileanTests` build passes 3,798 jobs, verified
+2026-09-21.
+
+### Build the first certified HTFFT hardware arithmetic block
+
+> **Status: complete and verified 2026-09-21.** The combined `lake build
+> Silean SileanTests HTFFT HTFFTTests` gate passes 3,866 jobs.
+
+The project-specific pipelined signed complex multiplier now lives under
+`HTFFT/Silean/PipelinedSignedComplexMultiply/`, rather than in the reusable
+Silean module catalog. Its natural trace contract specifies one fused
+nearest-even rounding step after each full-precision real or imaginary
+numerator. Four equal-latency signed multipliers feed certified extended
+signed subtraction and addition. An optional synchronized register can delay
+the combined real and imaginary numerators before the two signed round/shift
+blocks.
+
+Structural certification and the all-time delayed trace theorem are complete.
+The parent proof consumes only public child structural and execution facts and
+extracts all four multiplier traces from the same parent witnesses to preserve
+alignment. A separate fixed-point theorem connects decoded outputs to
+`HTFFT.Butterfly.Fixed.multiplyRounded` under the binary-point relation and
+representability hypotheses. Focused regressions cover arithmetic, ties,
+zero-width and excessive-discard boundaries, latency, placement, hierarchy,
+and FIRRTL shape. The next hardware step is the complete packed butterfly
+contract and structure; it should use this multiplier rather than reopen its
+internal product pipeline.
+
+### Build the project-specific pipelined fixed-point butterfly
+
+> **Status: complete and verified 2026-09-21.** The combined `lake build
+> Silean SileanTests HTFFT HTFFTTests` gate passes 3,876 jobs.
+
+This milestone first makes fixed-latency behavior easier to state and compose
+without exposing either contract state or structural state. The reusable
+foundation now has a state-free `BoundaryStep`, a `BoundaryTrace` consisting
+of a sequence of those steps, and a standard projection from the existing
+state-threaded `Trace` and `ModuleStructure.Executes` semantics. This is an
+observable specification layer, not a replacement for `CycleStep`,
+`HierStep`, or structural execution.
+
+The remaining ledger is:
+
+- [x] define the general fixed-latency relation over `BoundaryTrace` and its
+  serial and synchronized-parallel composition laws;
+- [x] validate that interface on `ShiftRegister`,
+  `OptionalShiftRegister`, keeping their contracts natural and
+  implementation-independent, and `PipelinedSignedMultiply`;
+- [x] provide reusable synchronized child-execution observation where the
+  structural proof pattern genuinely repeats;
+- [x] finish the complex multiplier's aggregate optional pre-rounding stage,
+  trace proof, fixed-point bridge, public API migration, and regressions;
+- [x] freeze the butterfly width, rescaling, narrowing, wrapping, and
+  representability policy before its structural implementation;
+- [x] define the complete butterfly contract and reviewed pipeline
+  configuration;
+- [x] build and certify the structural butterfly using only public child
+  interfaces; and
+- [x] prove agreement with the pure fixed-point butterfly and cover every
+  pipeline configuration, latency, hierarchy, and FIRRTL shape in focused and
+  combined regressions.
+
+The selected boundary policy keeps the data binary point fixed. The fused
+complex product rounds once, is explicitly narrowed or wrapped to the input
+component width, and the final signed Add/Sub grows each component by exactly
+one high bit. No low bits are discarded after that final Add/Sub. The
+unconditional trace theorem is bit-accurate to the pure wrapped butterfly;
+the separate `NoOverflow` bridge identifies the decoded output with the
+pre-wrap pure result.
+
+Do not broaden this milestone to an FFT layer, unrolled network, or streaming
+memory organization. Those remain later stages after the butterfly arithmetic
+and its temporal composition interface are stable.
 
 The two principal remaining processor proofs are complementary:
 
