@@ -1,280 +1,186 @@
 # Silean source map
 
-This document describes current source ownership. `Architecture.md` explains
-the concepts and proof boundary; `../Roadmap.md` records remaining work.
+This document answers where a Silean concept lives. For why the layers are
+separate, see [Architecture.md](Architecture.md). For conventions when adding a
+module, see [ModuleOrganization.md](ModuleOrganization.md). Current project
+work belongs in the [roadmap](../../Roadmap.md), not here.
 
-## Public aggregates
+## Public entry points
 
-| Import | Contents |
+| Import | Purpose |
 | --- | --- |
-| `Silean` | Complete library: foundation, semantics, contracts, modules, naming, and FIRRTL |
-| `Silean.Foundation` | Foundational signal, label, port, and state-shape vocabulary |
-| `Silean.Structure` | Child port collections, endpoints, wiring, bodies, and recursive structures |
-| `Silean.Interfaces` | Reusable port groups with small boundary-level behavioral interpretations |
-| `Silean.Primitives` | All supported single-bit primitive leaves and contracts |
-| `Silean.Semantics` | Contract-independent structural equations, dependencies, and execution |
-| `Silean.Contracts` | Cycle, reset, and FIFO contracts together with their proof machinery |
-| `Silean.Composition` | Generic certified tools that construct modules from other modules |
-| `Silean.Modules` | Concrete reusable hardware module designs and their public results |
-| `Silean.Naming` | Generic naming metadata plus primitive, adapter, and reusable composition naming |
-| `Silean.FIRRTL` | Generic traversal, rendering, validation, and emission |
+| `Silean` | Complete public library |
+| `Silean.Foundation` | Signal shapes, labels, values, ports, and state shapes |
+| `Silean.Structure` | Primitives, module bodies, and concrete recursive structures |
+| `Silean.Semantics` | Contract-independent equations, execution, traces, and structural certification |
+| `Silean.Contracts` | Reusable behavioral contract forms and their certification machinery |
+| `Silean.Interfaces` | Reusable interpretations of groups of boundary ports |
+| `Silean.Composition` | Generic module constructions parameterized by children or operations |
+| `Silean.Primitives` | Supported primitive leaves and their public behavior |
+| `Silean.Modules` | Concrete reusable hardware modules |
+| `Silean.Authoring` | Commands and helpers that generate ordinary Silean definitions |
+| `Silean.Naming` | Emission naming metadata |
+| `Silean.FIRRTL` | FIRRTL traversal, validation, rendering, and emission |
 
-## Authoring
-
-| Source | Responsibility |
-| --- | --- |
-| `Authoring/SignalSchema.lean` | The thin authoring name for hierarchical `SignalTypeNaming` metadata |
-| `Authoring/SignalSchemaDeclaration.lean` | Parameterizable `signal_schema` declarations that generate typed labels, signal maps, aggregate types, typed field accessors, and naming |
-| `Authoring/ModulePorts.lean` | Concise port declarations and schema-derived port naming |
-| `Authoring/ModuleDesign.lean` | Self-contained ordinary composite declarations, including schema-aware recursive naming |
-| `Authoring/ModuleCycleContract.lean` | Natural named output and next-state rule declarations with generated contract plumbing and rule laws |
-| `Authoring/ModuleChildCertifications.lean` | Proof-side association of each structural child with one canonical certification, deriving its contract, certified hierarchy, and structure-match proof |
-| `Authoring/ModuleRuleSchedules.lean` | Visible child-rule ordering with generated schedule types and validity derivation |
-| `Authoring/ModuleCycleCertification.lean` | Assembly of validated schedules, state correspondence, and implementation evidence into the standard layer and concrete certification, with a derived public bundle |
-
-Internal files import the narrow dependency they need. The aggregates are
-entry points for consumers and do not create compatibility namespaces.
-
-Directories and namespaces use the same ownership boundaries: contracts are
-under `Silean.Contracts`, generic module constructors under
-`Silean.Composition`, interfaces under `Silean.Interfaces`, and concrete
-designs under `Silean.Modules`. Definitions that are methods of a foundational
-type remain in that type's namespace even when their implementation lives in a
-later layer; for example, structural semantics defines
-`ModuleStructure.IsSolution`, not `Semantics.ModuleStructure.IsSolution`.
-Filenames are globally distinctive so editor tabs, searches, and diagnostics
-identify a source without requiring its full path.
+Library sources should import the narrowest layer they need. Applications may
+use `import Silean` when the complete API is more convenient.
 
 ## Foundation and structure
 
-| Source | Responsibility |
-| --- | --- |
-| `Foundation/SignalType.lean` | Bit, vector, and tuple shapes and their Lean values |
-| `Foundation/Enumeration.lean` | Stable finite identity enumeration and dependent maps |
-| `Foundation/SignalMap.lean` | Symbolically labelled typed signal collections and values |
-| `Foundation/SignalSelection.lean` | Typed ordered subsets of signal maps |
-| `Foundation/SignalGroup.lean` | Label-preserving typed views of signals inside a larger signal map |
-| `Foundation/SignalLayout.lean` | Positions, packing, unpacking, and immediate-component access for aggregate signals |
-| `Foundation/ModulePorts.lean` | Connectivity-only input and output maps |
-| `Foundation/StructuralState.lean` | Primitive-local and recursively labelled state shapes |
-| `Foundation/BitVector.lean` | LSB-first finite bit-vector arithmetic and indexing laws |
-| `Foundation/DeriveEnumeration.lean` | Derivation support for finite symbolic label enumerations |
-| `Structure/Primitive.lean` | Open primitive leaf descriptions, equations, state, and dependencies |
-| `Structure/ModuleBody.lean` | One uninstantiated structural layer: child boundaries, typed endpoints, and total wiring |
-| `Structure/ModuleStructure.lean` | Primitive, adapter, explicit blackbox, and recursively owned composite hierarchy; recursive closure check |
-
-## Interfaces
+`Silean/Foundation/` owns the typed vocabulary used by every later layer.
 
 | Source | Responsibility |
 | --- | --- |
-| `Interfaces/ValidReady.lean` | Direction-correct valid/ready sink and source selections, shared cycle samples, and finite transferred-payload extraction |
-| `Interfaces/FifoPorts.lean` | Canonical FIFO boundary labels and its valid/ready sink and source selections |
+| `SignalType.lean` | Bit, vector, and tuple shapes and their Lean denotations |
+| `Enumeration.lean`, `DeriveEnumeration.lean` | Stable finite symbolic identities |
+| `SignalMap.lean` | Labelled dependently typed collections of signals and values |
+| `SignalSelection.lean`, `SignalGroup.lean` | Typed subsets and label-preserving views |
+| `SignalLayout.lean` | Packing, unpacking, positions, and aggregate field access |
+| `ModulePorts.lean` | Typed input and output boundaries |
+| `BoundaryStep.lean`, `CycleStep.lean` | Shared boundary and stateful step records |
+| `StructuralState.lean` | Primitive-local and recursively labelled state shapes |
+| `BitVector.lean` | LSB-first finite Boolean-vector arithmetic and laws |
 
-An interface selects and interprets part of a module boundary. The valid/ready
-interfaces say when a payload transfer occurs, but do not specify FIFO
-ordering, capacity, latency, or reset behavior.
-
-`Foundation/SignalLayout.lean` provides the label-directed aggregate value
-machinery, while `Composition/SignalAdapter.lean` defines the closed, lossless
-immediate-component structural leaves used by `ModuleStructure`. `SignalLayout`
-also
-provides the generic label-directed view between a `SignalMap` and its
-canonical tuple representation, including pack/unpack and field-access laws;
-tuple adapter ports use the original typed labels directly while the FIRRTL
-backend maps those labels to the corresponding aggregate fields.
-`Composition/SignalAdapterImplementation.lean` owns their equations, cycle
-contracts, and certificates; `Composition/SignalLogic.lean` contains generic
-signal-value logic laws, including recursive value equality and its
-equivalence to Lean equality.
-
-`Modules/TupleField/TupleField.lean` wraps a tuple splitter to expose one
-type-correct field. The selected `SignalMap.Label` determines its signal type directly;
-no positional field witness or type transport is exposed.
-`Modules/TupleField/Internal/TupleFieldVerification.lean` proves the wrapper's
-direct field-selection cycle contract, while `TupleFieldDerived.lean` exposes
-placement and the supported structural result.
-
-## Meaning and certification
+`Silean/Structure/` owns hardware syntax, without behavioral contracts or an
+evaluation order.
 
 | Source | Responsibility |
 | --- | --- |
-| `Semantics/Trace.lean` | Generic relational finite traces and their composition laws |
-| `Semantics/StructuralEquations.lean` | `HierStep`, order-independent structural solutions, and generic assembly of a composite solution from consistent child solutions |
-| `Semantics/StructuralDependency.lean` | Semantic dependency rules and at-most-one solutions |
-| `Semantics/StructuralExecution.lean` | Contract-independent one-cycle transitions and finite relational executions |
-| `Contracts/SignalExpectation.lean` | Recursive zero/one/don't-care expectations and matching for signal values and labelled maps |
-| `Contracts/Cycle/CycleContract.lean` | Rule-local output behavior and explicit-input state transitions |
-| `Contracts/Cycle/CycleEvaluation.lean` | Deterministic cycle-contract application and relational laws |
-| `Contracts/Cycle/CycleImplementation.lean` | State correspondence, refinement, certified structures, and parametric certified layers |
-| `Contracts/Cycle/CycleLayerSchedule.lean` | The single child-implementation-independent schedule representation over a module body and its child contracts |
-| `Contracts/Cycle/CycleLayerSemantics.lean` | Generic replay and structural-uniqueness proofs over contract-only layer schedules |
-| `Contracts/Cycle/CycleLayerExistence.lean` | Private proof evaluator and generic structural-existence proof over the same schedules |
-| `Contracts/Cycle/CycleLayerConstruction.lean` | `ChildContractMatch` projections for parent proofs and generic scheduled-layer certification assembly; raw child-step reconstruction remains internal here |
-| `Contracts/Reset/ResetContract.lean` | Contract-only synchronous-reset synchronization and ternary finite-trace behavior |
-| `Contracts/Reset/ResetImplementation.lean` | Non-vacuous structural totality and direct structural-trace refinement for reset contracts, without a public state mapping |
-| `Contracts/Fifo/FifoContract.lean` | Interface-based, latency-independent reset-synchronized FIFO traces, reusable queue laws, and non-vacuous certified bundles |
-| `Contracts/Fifo/FifoPortContract.lean` | Standard FIFO contract specialized to the canonical FIFO interface |
-| `Contracts/Fifo/FifoCycleBehavior.lean` | Exact ready/valid cycle behavior and its serial behavioral composition |
-| `Contracts/Fifo/FifoCycleRefinement.lean` | Private-proof adapter from exact cycle certification and a logical queue invariant to FIFO certification |
-| `Composition/LeafwiseComposition.lean` | Generic split/component/combine hierarchy and shared component scheduling |
-| `Composition/BinaryLeafwise.lean` | Certified recursive construction for stateless binary leafwise operations |
-| `Composition/Reduction.lean` | Generic balanced reduction hierarchy parameterized by a binary operation and identity |
-| `Composition/FifoSerialComposition.lean` | Generic two-child serial FIFO structural layer |
-| `Composition/FifoSerialCertification.lean` | Contract-parametric cycle certification of the serial layer |
-| `Composition/FifoSerialRefinement.lean` | Preservation of latency-independent FIFO behavior under serial composition |
+| `Primitive.lean` | Primitive ports, state, equations, and dependencies |
+| `ModuleBody.lean` | One hierarchy layer: parent boundary, child boundaries, and total typed wiring |
+| `ModuleStructure.lean` | Concrete primitive, adapter, and recursively composite structures |
 
-Schedules are proof data. They neither belong to `ModuleStructure` nor define
-its meaning.
+## Structural meaning and time
 
-The exact shared pattern and the boundary between generic hierarchy mechanics
-and module semantics are reviewed in `LeafwiseComposition.md`.
+`Silean/Semantics/` gives structures their mathematical meaning independently
+of any particular contract.
 
-## Hardware and behavior
+| Source | Responsibility |
+| --- | --- |
+| `StructuralEquations.lean` | `HierStep` and simultaneous structural solutions |
+| `StructuralDependency.lean` | Boundary dependency rules, uniqueness, and structural certification |
+| `StructuralRuleSemantics.lean` | Semantic composition of child dependency rules |
+| `StructuralRuleSchedule.lean` | Checked schedules over child structural rules |
+| `StructuralRuleDerivation.lean` | Deriving usable parent rules from schedules |
+| `StructuralRuleExistence.lean` | Constructing solutions from complete schedules |
+| `StructuralExecution.lean` | Transitions and finite execution of concrete hierarchies |
+| `StructuralObservation.lean` | Boundary observation, child projections, and concrete-to-body-trace bridges |
+| `Trace.lean` | Generic finite relational traces and composition laws |
+| `BoundaryTrace.lean` | State-free sequences of boundary observations |
+| `ModuleBodyTrace.lean` | Synchronized parent and immediate-child traces for a `ModuleBody` |
+| `DelayLine.lean` | Pure finite delay-line semantics used by temporal proofs |
+| `FixedLatency.lean` | Pointwise fixed-latency trace relations and composition |
+| `FramedLatency.lean` | Marker-delimited fixed-size frame relations and composition |
 
-`Primitives/` contains one file per supported single-bit primitive. Generic
-module-building mechanisms live in `Composition/`; `Modules/` contains concrete
-reusable structures, certification, public behavioral theorems, and each
-module's naming metadata. `Constant` uses the generic
-leafwise component/combiner hierarchy with empty input families and
-value-dependent recursive leaves. `Composition.Reduction` owns generic balanced
-finite reduction construction and proof machinery; `All` instantiates it with AND and
-true while exposing a separate, natural every-input contract. `Equality`
-recursively splits aggregates, compares corresponding children, and reduces
-their result-bit family through `All`, while its contract exposes only natural
-value equality. `VectorConcat` splits two vectors of a common element type and
-combines their elements in left-then-right order, while exposing only natural
-index laws and keeping aggregate elements intact. `BinaryToOneHot` interprets
-LSB-first input bits numerically and implements the one-hot result through a
-recursive decoder, two masks, and `VectorConcat`. `VectorSplit` partitions a
-vector through existing generic adapters. `CombMuxTree` recursively applies
-that partition, two smaller trees, and `Mux` while exposing direct numeric
-selection as its contract. `RegisterBank` uses `BinaryToOneHot` and a family of
-generic enabled registers for synchronous writes, then combines their current
-values once and gives every indexed combinational read port its own
-`CombMuxTree`; its contract
-uses an ordinary vector state and functional replacement rather than exposing
-the hierarchy. Register-bank child identities are a private named inductive;
-their executable enumeration lists those constructors directly. A public
-closure theorem composes reusable closure laws from the generic leafwise
-hierarchy and child modules, so clients need not unfold those identities.
+The important boundary is that schedules prove existence and uniqueness; they
+do not define the meaning of a structure.
 
-Reusable modules have one directory each. Their main file owns the readable
-construction when one exists, the natural behavior, the cycle contract, and
-direct contract laws. Expanded structure and certification live under
-`Internal/`; a sibling `*Derived.lean` facade exposes placement and public
-results that depend on those internals. Recursive/generated modules use the
-contract-first variant when a builder would merely duplicate their dependent
-construction. Some older modules still use sibling `*Theorems.lean` facades
-while they await migration. The comparison/selection/storage stack
-(`Equality`, `EqualsConstant`, `BinaryToOneHot`, `CombMuxTree`, and
-`RegisterBank`) uses this organization throughout. The same boundary is used
-by the authored PicoRV `Alu`, `Regs`, and memory `Lookahead` clients; their
-public main files do not import their generated structures.
-The reduction specializations (`All`, `Any`) and binary-leafwise
-specializations (`BitwiseAnd`, `BitwiseOr`, `BitwiseXor`) also remain direct
-ordinary-Lean instantiations of their generic `Composition/` machinery. These
-are intentional exceptions to fixed-module syntax, not alternate public APIs.
-The seven PicoRV32 decoder components follow the same split. Their main files
-own readable behavior and exact cycle contracts; the authored capture,
-immediate, and match-gate components also own their concise constructions.
-Generated structures, schedules, correspondence, and substantial bit proofs
-remain under `PicoRV/Decoder/Internal/`, while sibling `*Derived.lean` files
-expose placement and supported structural results.
-The PicoRV32 control components use the same organization. Each main file owns
-its ports, source-level contract and laws, and concise construction; the eight
-phase transitions share only the genuine common boundary and contract shape in
-`ControlPhaseTransition.lean`. Placement and certified structural results are
-in the corresponding `*Derived.lean` facade, while expanded structures and
-proof machinery remain under `PicoRV/Control/Internal/`. `ControlNext.lean`
-is the readable composition of those public child facades, and the registered
-top-level `Control` remains the intentional contract-first integration shell.
-The decoder,
-mux-tree, and register-bank contracts share `BitVector.toIndex` from the
-foundation arithmetic utilities. The XOR primitive and `HalfAdder` provide the
-first arithmetic layer used by the ripple incrementer. HalfAdder owns two
-independent output rules and composes XOR/AND structurally; its public
-arithmetic law depends only on its contract results. `FullAdder` adds the
-three-input layer with two HalfAdders and an OR gate while exposing only its
-direct Boolean and numeric contract. `Add` recursively composes FullAdders for
-two arbitrary LSB-first vectors and exposes the complete result-plus-carry
-numeric identity. `BitwiseXor` adds generic leafwise XOR for arbitrary signal
-shapes. `AddSub` combines it with Add behind an independent direct
-carry/borrow contract and exposes modular arithmetic plus no-borrow laws.
-`Increment` builds the next arithmetic
-layer: its public behavior is addition of one modulo the vector
-cardinality, while its private recursive helper carries from lower indices into
-one HalfAdder at each successive high index. `ResetRegister` composes Constant,
-Mux, and Register for synchronous configured reset; `EnabledResetRegister`
-wraps that certified storage with enable/hold selection and gives reset highest
-priority. Neither requires reset-aware primitives. `FifoPointerControl` owns
-the natural contract and certified combinational structure for interpreting
-address-plus-wrap pointers. Direct splitters expose address and wrap bits, one
-generic address Equality and one primitive wrap equality distinguish empty
-from full, and ordinary gates derive valid/ready transfer enables. It has no
-state or reset input. `EnabledResetCounter` composes Increment and
-EnabledResetRegister into the generic synchronous state element used by FIFO
-pointers; its public
-contract describes modular arithmetic rather than feedback wiring.
-`AddSub` and `EnabledResetCounter` keep readable constructions and natural
-contract laws in their main sources, while their `Derived` facades expose
-placement and internal-backed guarantees. Recursive `Add` and `Increment` use
-small contract-first main files and keep their structural recursion and
-inductive certification under `Internal/`.
-`Fifo` is the certified pointer-and-register-bank composition: two
-zero-reset counters feed FifoPointerControl, whose addresses and transfer
-enables drive RegisterBank and the counters. Its contract owns logical pointer
-and entry state and remains independent of those four structural children.
-Reset is synchronous: it wins in pointer next state without suppressing the
-current pre-edge handshake or clearing storage.
-`Fifo/FifoPointerControl.lean` contains its readable combinational construction,
-equations, and contract laws. Its thirteen-child expansion and certification
-live under `Internal`, while `FifoPointerControlDerived.lean` exposes placement
-and correctness. `Modules/Fifo/Fifo.lean` contains the readable construction,
-exact cycle behavior, contract laws, and logical queue definitions.
-`FifoDerived.lean` exposes placement plus both the exact-cycle guarantee and
-the separate latency-independent FIFO certification. `FifoProperties.lean`
-states the public queue laws; their circular-buffer proof implementation is in
-`Internal/FifoPropertiesVerification.lean`. FIFO-local circular-buffer arithmetic
-lives in `Modules/Fifo/CircularBuffer.lean`. `Contracts.Fifo.FifoCertified` uses those facts to
-prove the pointer structure satisfies the shared `Contracts/Fifo/FifoContract.lean`
-boundary contract; it does not inspect structural children.
-The serial FIFO family uses `Interfaces.Fifo`, the shared resettable boundary.
-`Contracts.Fifo.Cycle` turns ready/valid/reset functions into cycle contracts
-and composes their behavior serially. `Composition.FifoSerial` constructs and
-certifies a two-child serial hierarchy using only child public contracts and
-refinements. `SerialDepthFifo.lean` is the small public recursive behavior and
-contract. Its positive-depth hierarchy and recursive proofs live under
-`Internal`, and `SerialDepthFifoDerived.lean` exposes naming, placement, and
-certification. Structural module files do not own trace execution machinery.
+## Behavioral contracts
 
-## Naming and backend
+`Silean/Contracts/` contains reusable specification styles. A module may also
+use an ordinary project-specific predicate when none of these is the natural
+interface.
 
-`Naming/` owns generic executable naming metadata in `Silean.Naming`, including
-the shared FIFO boundary naming used by every FIFO implementation and the
-generic binary-leafwise, reduction-tree, and serial-FIFO hierarchy traversals.
-Authoring declarations generate a module's default `naming`, while specialized
-or recursive modules may keep additional naming builders in
-`Silean.Modules.<Module>.Naming` inside the module's source file. `FIRRTL/` owns only backend operations in
-`Silean.FIRRTL`: hierarchy traversal, identifier and definition validation,
-FIRRTL 4 text rendering, and the shared emitter command-line shell.
+| Area | Responsibility |
+| --- | --- |
+| `Cycle/CycleContract.lean` | Named exact output rules and next-state behavior |
+| `Cycle/CycleEvaluation.lean` | Deterministic evaluation and relational laws for cycle contracts |
+| `Cycle/CycleImplementation.lean` | State correspondence and concrete certification |
+| `Cycle/CycleTrace.lean` | Trace consequences of cycle certification |
+| `Cycle/CycleLayerSchedule.lean` | Contract-level schedules over immediate children |
+| `Cycle/CycleLayerSemantics.lean` | Generic replay and uniqueness for those schedules |
+| `Cycle/CycleLayerExistence.lean` | Generic structural existence for those schedules |
+| `Cycle/CycleLayerConstruction.lean` | Public child-contract matches and certification assembly |
+| `Cycle/CycleScheduleDerivation.lean` | Derived cycle schedule support |
+| `Reset/` | Reset-synchronized trace contracts and implementations |
+| `Fifo/` | Exact and latency-independent FIFO behavior and refinement |
+| `SignalExpectation.lean` | Recursive zero, one, and don't-care expectations |
 
-Configured reusable-library top levels live in `Silean/Emitters/`; PicoRV's
-top levels live in `PicoRV/Emitters/`. They select an ordinary Lean
-module structure and naming value and call either the blackbox-capable renderer
-or the closed renderer with a `HasNoBlackboxes` proof. They contain no alternate
-circuit representation.
+`Silean/Interfaces/` is deliberately weaker than a behavioral contract. For
+example, `ValidReady.lean` identifies transfers on a group of ports, while
+`FifoPorts.lean` supplies the canonical FIFO boundary; neither alone specifies
+queue ordering or capacity.
 
-## Regression ownership
+## Authoring
 
-- `tests/silean/lean/SileanTests/Fixtures/` and
-  `tests/picorv/lean/PicoRVTests/Fixtures/` contain test-only designs and shared check inputs used
-  by multiple regressions. Nothing in the reusable library imports this
-  directory.
-- `tests/{silean,picorv}/lean/` contains Lean compile-time and executable checks.
-- `SileanTests.lean` and `PicoRVTests.lean` are the aggregate regression targets.
-- `tests/{silean,picorv}/` also contains cocotb tests and per-design simulator configuration,
-  including randomized ready/valid scoreboard coverage for the configured
-  generic FIFO built from a register bank with read and write pointers.
-- `Makefile` runs Lean emission, CIRCT `firtool`, Verilator, and cocotb.
-- `build/` contains generated FIRRTL, SystemVerilog, and simulator artifacts;
-  it is never a semantic or proof input.
+`Silean/Authoring/` removes repeated typed boilerplate. Its commands elaborate
+to definitions in the foundation, structure, naming, and contract layers; it
+does not introduce another semantics.
+
+| Source | Responsibility |
+| --- | --- |
+| `SignalSchemaDeclaration.lean` | `signal_schema` declarations for reusable aggregate shapes, labels, accessors, and naming |
+| `ModulePorts.lean` | `module_ports` declarations and generated typed boundary helpers |
+| `ModuleInstances.lean`, `ModuleWiring.lean` | Lower-level child-family and wiring declarations |
+| `ModuleDesign.lean` | `module_design`, including concrete and unresolved immediate children |
+| `ModuleCycleContract.lean` | `module_cycle_contract` and generated public rule equations |
+| `ModuleChildCertifications.lean` | Association of concrete children with their public certifications |
+| `ModuleRuleSchedules.lean` | `module_rule_schedules` and contract-independent `module_complete_schedule` |
+| `ModuleCycleCertification.lean` | Final assembly of exact cycle certification |
+
+`CircuitDescription.lean` and its logic, arithmetic, selection, contract, and
+soundness companions provide an optional human-oriented builder notation used
+by some existing modules. A circuit description is not the production
+structure: when one is retained, a correspondence proof connects it to the
+`ModuleStructure`. New modules should not add this second presentation unless
+it materially improves readability.
+
+`SignalSchema.lean` is the small authoring-facing alias for aggregate naming
+metadata, and `FifoPorts.lean` supplies builder adapters for the shared FIFO
+interface.
+
+## Composition, primitives, and modules
+
+`Silean/Composition/` owns constructions that are generic in a signal shape,
+operation, or certified child:
+
+- lossless aggregate splitters and combiners;
+- recursive signal logic;
+- leafwise unary and binary construction;
+- balanced reduction; and
+- serial FIFO composition and refinement.
+
+`Silean/Primitives/` owns supported primitive leaves. Files ending in
+`Primitive.lean` define their structural equations; the corresponding short
+module files expose their public behavior and designs.
+
+`Silean/Modules/` owns concrete reusable hardware. Each nontrivial module has a
+small public definition file, an optional `Derived` facade, and implementation
+and proof details under its own `Internal/` directory. The exact convention is
+described in [ModuleOrganization.md](ModuleOrganization.md).
+
+Client-specific hardware stays with its client. In particular, fixed-point FFT
+policy and streaming FFT modules belong under `HTFFT/`, while PicoRV-specific
+hardware belongs under `PicoRV/`. A useful component moves into
+`Silean/Modules/` only when its interface is genuinely reusable.
+
+## Naming and emission
+
+`Silean/Naming/ModuleNaming.lean` defines recursive emission metadata.
+Specialized files provide naming for primitives, signal adapters, generic
+leafwise structures, reductions, and FIFO composition.
+
+`Silean/FIRRTL/` owns the backend:
+
+| Source | Responsibility |
+| --- | --- |
+| `Traversal.lean` | Recursive collection of definitions from a named structure |
+| `Render.lean` | Validation and FIRRTL 4 text generation |
+| `Emit.lean` | Shared command-line emission support |
+
+Configured library entry points live in `Silean/Emitters/`. Generated FIRRTL,
+SystemVerilog, and simulator output under `build/` are regression artifacts and
+never proof inputs.
+
+## Tests
+
+- `tests/silean/lean/SileanTests/` contains Lean-facing library regressions.
+- `tests/htfft/` and `tests/picorv/` contain client regressions.
+- `tests/*/Fixtures/` contains test-only designs and shared inputs; reusable
+  library code must not import it.
+- The top-level `Makefile` coordinates Lean emission, CIRCT lowering,
+  Verilator, and cocotb where configured.
+
+The formal boundary currently ends at `ModuleStructure`. Backend lowering and
+simulation provide valuable validation, but are not inputs to Lean correctness
+theorems.

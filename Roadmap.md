@@ -1,146 +1,141 @@
 # Silean roadmap
 
+This is the project-level roadmap. It records current direction and remaining
+work, not the history of every intermediate design. The detailed FFT plan is
+in [`HTFFT/Plan.md`](HTFFT/Plan.md).
+
 ## Destination
 
-Silean is an experiment in writing structural hardware and useful correctness
-proofs in the same Lean program. Designs should remain close enough to a
-conventional hierarchical HDL that hardware engineers can recognize ports,
-instances, wiring, state, and reusable modules.
+Silean explores writing recognizable structural hardware and useful
+correctness proofs in the same Lean program. A concrete `ModuleStructure`
+denotes simultaneous structural equations. Independent proofs establish that
+those equations have one result and that the result satisfies a natural
+behavioral specification. The same structure is used for FIRRTL emission.
 
-A concrete `ModuleStructure` denotes simultaneous structural equations.
-Proofs establish that those equations have a unique result and that the result
-satisfies an independently written behavioral contract. FIRRTL is emitted from
-the same structure.
+The current main client is HTFFT: a streaming fixed-point FFT with an exact
+hardware-refinement proof and a numerical error bound against Mathlib's DFT.
+PicoRV remains a second, currently paused client for eventual equivalence and
+architectural-refinement work.
 
-The two substantial clients currently exercise different parts of the design:
+## Established foundation
 
-- **HTFFT** develops a streaming fixed-point FFT with an exact structural proof
-  and a numerical error bound against Mathlib's DFT.
-- **PicoRV** targets a source-faithful configured PicoRV32 implementation and a
-  public refinement theorem about architectural and memory-mapped-I/O behavior.
+The framework currently supports:
 
-## Established capabilities
+- recursive bit, vector, and named-tuple signal shapes;
+- finite symbolic labels and dependently typed signal maps;
+- primitive, splitter, combiner, and composite structures;
+- total typed wiring and recursively owned concrete hierarchy;
+- simultaneous structural equations and finite execution;
+- contract-independent schedules proving existence and uniqueness;
+- exact cycle contracts for local one-cycle behavior;
+- state-free boundary traces with fixed- and framed-latency relations;
+- unresolved immediate children in a `ModuleBody` for top-down development;
+- synchronized body traces and a bridge from concrete composite execution;
+- authoring macros for boundaries, structures, contracts, and proof schedules;
+- ordinary Lean construction for recursive or generated families; and
+- direct FIRRTL generation with CIRCT, Verilator, and cocotb regression.
 
-### Structural framework
+The reusable hardware library includes registers, optional and required shift
+registers, muxes, logic, counters, adapters, register banks, FIFOs, structural
+ROMs, fixed-width rounding, and signed and unsigned arithmetic with unequal
+operand widths. Certified pipelined multiplication and butterfly modules that
+encode HTFFT-specific arithmetic policy remain under `HTFFT/`.
 
-- Recursive bit, vector, and named-tuple signal shapes.
-- Finite symbolic labels and dependently typed signal maps.
-- Primitive, splitter, combiner, and composite module structures.
-- Total same-shaped wiring and recursively owned concrete hierarchies.
-- Simultaneous structural equations through one recursive `HierStep`.
-- Finite execution for concrete hierarchies.
-- Contract-independent structural-rule schedules proving existence and
-  hierarchy-wide uniqueness.
-- Cycle contracts where exact one-cycle behavior is the natural interface.
-- State-free boundary traces, fixed-latency and framed-latency relations, and
-  composition laws for higher-level temporal contracts.
-- `ModuleBody` outlines and synchronized body traces for top-down proofs over
-  unresolved immediate children.
-- A bridge from observed execution of a concrete composite to the same body
-  trace and child projections used by its conditional proof.
-- Concise authoring declarations for ordinary modules, with recursive and
-  generated families written in ordinary Lean where that is clearer.
-- Direct FIRRTL generation, CIRCT/Verilator lowering, and cocotb regression.
+## Architectural commitments
 
-### Reusable hardware
+These decisions should change only in response to concrete implementation
+experience:
 
-The library includes registers, optional and required shift registers, muxes,
-logic, counters, adapters, register banks, FIFOs, structural ROMs, and general
-signed or unsigned arithmetic with unequal widths. Carry-aware primitives have
-explicit names; ordinary `Add`, `Sub`, and `AddSub` expose natural integer
-contracts. The pointer FIFO has a public proof against its bounded abstract FIFO
-contract.
+- `ModuleStructure` contains executable structural hardware, not behavioral
+  contracts, evaluation schedules, or unresolved blackboxes.
+- Structure denotes simultaneous equations. Schedules are proof witnesses for
+  existence and uniqueness, not circuit meaning.
+- Structural certification is independent of contract style.
+- Public contracts use natural Lean and do not expose child instances, wiring,
+  physical state trees, emitted names, or proof bookkeeping.
+- Exact cycle, fixed-latency, framed, reset, FIFO, and custom relational
+  contracts coexist; no single contract type is privileged.
+- Top-down proofs use `ModuleBody` traces and explicit child predicates.
+  Replacing an unresolved child with a concrete design preserves the body and
+  its conditional proof.
+- Emitted names are metadata. Typed endpoints and preserved structural IDs are
+  semantic identity.
+- `module_design` or an ordinary Lean structural definition is authoritative.
+  An additional human-facing circuit description is justified only when it
+  materially improves readability.
+- Helpers should capture repeated construction or proof patterns, not conceal
+  one awkward client proof.
+- When a proof is unexpectedly difficult, inspect the abstraction boundary
+  before adding module-specific machinery.
 
-### Client foundations
+## Current priority: complete HTFFT
 
-HTFFT has a complete exact FFT/DFT theorem, pure fixed-point model and numerical
-error propagation, certified twiddle tables, certified butterfly and unrolled
-FFT hardware, natural streaming contracts, conditional top-level and
-rolled-stage-chain proofs, and a generic pure rolled-stage schedule proof.
-Current and remaining HTFFT work is tracked in
-[`HTFFT/Plan.md`](HTFFT/Plan.md).
+The following foundation is complete:
 
-PicoRV has a concrete configured hierarchy with certified component structures
-and top-level structural existence and uniqueness. Exact equivalence with the
-selected upstream Verilog and architectural refinement to the clean `RV32I/`
-model remain separate open proofs.
+- equality of the exact radix-2 network with Mathlib's `ZMod.dft`;
+- a hardware-shaped exact network with explicit ordering;
+- a pure fixed-point network with no-overflow conditions and global error
+  propagation;
+- certified twiddle generation and a closed eight-point accuracy example;
+- certified arithmetic, complex multiplication, butterfly, and unrolled FFT
+  hardware;
+- natural framed contracts for the streaming top level and its immediate
+  children;
+- conditional top-level and rolled-stage-chain proofs over unresolved
+  children; and
+- the generic pure scheduling theorem for one rolled `FFTStage`, including
+  rephasing, delay-line independence, operand pairing, twiddle addressing,
+  marker timing, and complete-frame correctness.
 
-The repository keeps reusable framework code in `Silean/`, the clean
-architecture in `RV32I/`, the processor client in `PicoRV/`, optional
-generated-Sail validation in `SailBridge/`, and project-specific FFT work in
-`HTFFT/`.
+The next work is the concrete generic `FFTStage`:
 
-## Framework invariants
+1. Build its permanent hierarchy from explicit shift registers, phase control,
+   muxes, the certified twiddle ROM, and certified butterflies.
+2. State its exact structural latency and required alignment paths.
+3. Prove concrete execution refines the completed pure stage schedule using
+   only public child interfaces.
+4. Discharge the existing framed `FFTStage` contract without changing that
+   contract to fit the implementation.
+5. Inspect, emit, and simulate at least one closed configuration.
 
-These choices are settled unless implementation experience reveals a concrete
-problem:
+After the stage:
 
-- Emitted names are metadata, not semantic identity. Authoring descriptions
-  preserve description-local structural IDs; an emitter may separately reject
-  name collisions.
-- `ModuleStructure` describes executable structural hardware. Unresolved
-  children live in a `ModuleBody`, not in a fake executable blackbox with
-  invented or unconstrained semantics.
-- A body proof receives ordinary explicit propositions about child traces.
-  There is no required contract shape, automatic assumption collector, or
-  proof-obligation descriptor.
-- Replacing an unresolved child expression with a concrete design should retain
-  the same generated ports, child interfaces, wiring, and body. A second
-  outline-only authoring language is not needed.
-- Structural existence and uniqueness are independent of behavioral contract
-  style. Cycle contracts may contribute fine-grained dependency rules, while a
-  conservative whole-module structural rule remains available.
-- Contract state should be natural for the specification and need not reproduce
-  the structural state tree.
-- High-level modules need not use cycle contracts when a temporal, framed, or
-  observational contract is more natural.
-- Public contracts should be natural Lean. Instance names, emitted names,
-  internal layouts, and proof bookkeeping should not leak into them.
-- New helpers should capture repeated construction or proof patterns, not hide
-  a one-off module argument.
-- Client compatibility must not distort a cleaner reusable interface. Migrate a
-  temporarily stale client separately when framework changes settle.
+1. implement and certify the initial and final shift-register packet
+   reorderers against their existing framed permutation contracts;
+2. replace the remaining unresolved children and close the complete hierarchy;
+3. emit and simulate the complete streaming FFT; and
+4. compose exact hardware refinement, ordering, no-overflow, numerical error,
+   and the exact DFT theorem into the final hardware-to-DFT bound.
 
-## Current constraints
+Configuration choices, the frame protocol, proof layering, deferred precision
+policies, and milestone details remain in [`HTFFT/Plan.md`](HTFFT/Plan.md).
 
-- Signal semantics are two-state Boolean semantics.
-- A single global clock is implicit throughout a hierarchy.
-- Reset is synchronous and module-specific.
-- The formal correctness boundary currently ends at `ModuleStructure`.
-  Emitted FIRRTL and SystemVerilog are regression-tested but are not yet proved
-  semantics-preserving.
-- Intentional external RTL has no special semantic blackbox facility. If added,
-  it should be verified against an ordinary Silean reference design and differ
-  only at emission.
+## Framework work driven by HTFFT
 
-## Active work
+Framework changes should be made when the concrete stage or reorderer proofs
+demonstrate a reusable need. Likely areas are:
 
-### Complete the HTFFT hierarchy
+- small trace-composition laws for synchronized fixed-latency children;
+- concise structural schedules for regular indexed families;
+- reusable reasoning about shift-register networks; and
+- clearer diagnostics where dependent wiring or schedule elaboration fails.
 
-The immediate project task is a concrete generic rolled `FFTStage`. Its pure
-commutator-bank scheduling theorem is complete. The next refinement builds the
-stage from explicit shift registers, phase control, a certified ROM, and
-certified butterflies, then proves its public framed contract from child
-interfaces.
+Do not add RAM inference, external-module semantics, automatic blackbox
+obligation collection, or another contract hierarchy speculatively. The first
+HTFFT target deliberately uses explicit shift registers.
 
-After that, implement the initial and final shift-register packet reorderers,
-replace the remaining unresolved children in the existing top-level bodies,
-close and inspect the hierarchy, emit and simulate RTL, and compose the final
-hardware-to-DFT accuracy theorem. The detailed order, protocol, proof boundary,
-and open configuration choices live in
-[`HTFFT/Plan.md`](HTFFT/Plan.md).
+A separate repository-wide proof-trust review remains required. Production
+proofs must be kernel-checkable and free of `sorry`, project axioms,
+`native_decide`, and unsafe shortcuts. Tests and executable checks may use
+appropriate evaluation mechanisms.
 
-### Prove equivalence with the configured PicoRV Verilog
+## Paused PicoRV direction
 
-Connect the exact `picorv32.v` revision and configuration recorded in
-[`docs/picorv/PicoRV32Plan.md`](docs/picorv/PicoRV32Plan.md) to the certified
-Silean PicoRV structure. The existing scoped `mem_valid` comparison covers
-only part of this goal. Define and review the exact equivalence statement and
-proof boundary before extending the implementation.
+PicoRV currently has a concrete configured hierarchy with component
+certifications and top-level structural existence and uniqueness. It is not the
+current priority and may temporarily lag framework changes.
 
-### Refine the Silean PicoRV model to RV32I
-
-The source-equivalence and architectural-refinement proofs are complementary:
+When resumed, its two distinct goals are:
 
 ```text
 configured upstream picorv32.v
@@ -150,56 +145,28 @@ certified Silean PicoRV structure
 clean RV32I execution
 ```
 
-Follow the stages in
-[`docs/picorv/PicoRV32Plan.md`](docs/picorv/PicoRV32Plan.md):
-
-1. define the external memory environment and memory-mapped-I/O region;
-2. define observable completed bus transactions, retirement, trap, and
-   termination without adding emitted RVFI hardware;
-3. relate reachable PicoRV contract state to committed RV32I state plus
-   explicit in-flight instruction and memory-operation information;
-4. prove one complete ADDI slice, including memory stalls and stuttering;
-5. extend to loads and stores before generalizing across the instruction set;
-   and
-6. derive the public I/O-trace theorem, retaining ordinary-memory
-   correspondence where needed.
-
-The clean `RV32I/` model is the direct architectural target. Its independent
-agreement with generated Sail stays isolated in `SailBridge/`. Safety and
-progress are separate; eventual progress needs an explicit responsiveness or
-fairness assumption for memory.
-
-### Improve reusable proof ergonomics when demanded by clients
-
-- Keep child-contract matching, schedule derivation, and wiring normalization
-  small without hiding module-specific reasoning.
-- Add a balanced priority-mux tree with first-true-wins semantics and an
-  explicit default when a real client is ready to use it.
-- Profile expensive decoder and top-level elaboration before changing APIs;
-  prefer shared normalization or elaboration improvements over local hacks.
-- Perform a repository-wide proof-trust audit. Production proofs should avoid
-  `native_decide`, `sorry`, project axioms, and unsafe shortcuts; tests and
-  executable examples may use suitable evaluation mechanisms.
+The detailed proof boundary and staged instruction plan remain in
+[`docs/picorv/PicoRV32Plan.md`](docs/picorv/PicoRV32Plan.md). Source
+equivalence, architectural safety, and progress under memory fairness must stay
+separate theorems.
 
 ## Longer-term work
 
-- Prove a semantics-preservation bridge from the supported closed
-  `ModuleStructure` subset to emitted FIRRTL, or introduce a smaller checked
-  backend representation if that yields a clearer theorem.
-- Add other temporal contract forms only as concrete designs require them.
-- Consider memory-array structural primitives only when a design needs them;
-  the current HTFFT plan deliberately uses shift registers.
-- Consider intentional external-module emission only with an ordinary verified
-  Silean reference design.
+- Prove semantics preservation from the supported closed `ModuleStructure`
+  subset to emitted FIRRTL, or introduce a smaller checked backend boundary.
+- Add temporal contract forms only when a concrete design requires them.
+- Consider memory-array structural primitives only when a target actually
+  needs them.
+- Treat intentional external RTL as an emission substitution for a verified
+  Silean reference design, rather than giving it unconstrained semantics.
 
-## Completion standards
+## Completion standard
 
 A feature is complete only when:
 
-- its public structure and natural contract are clear;
-- relevant existence, uniqueness, or non-vacuity conditions are proved;
-- parent proofs depend on public child interfaces rather than hidden
-  implementations;
-- documentation states the actual correctness boundary;
-- production proofs are kernel-checkable and free of placeholders; and
-- the appropriate Lean and generated-hardware regressions pass.
+- its public boundary and natural contract are clear;
+- its simultaneous structural equations are shown non-vacuous and unique;
+- its correctness theorem uses public child interfaces;
+- documentation states the actual formal boundary;
+- production proofs are kernel-checkable and placeholder-free; and
+- proportionate Lean and generated-hardware regressions pass.

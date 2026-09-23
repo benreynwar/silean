@@ -1,278 +1,336 @@
 # Silean architecture
 
-Silean describes a hardware hierarchy, gives that hierarchy an
-order-independent meaning, and proves that the meaning satisfies separately
-written behavioral contracts. The same hierarchy is traversed directly when
-emitting FIRRTL; there is no lowered circuit representation in between.
+Silean is an embedded structural hardware language and verification framework
+in Lean. A design is an ordinary typed Lean value describing ports, child
+instances, wiring, primitive equations, and state. Independent Lean
+specifications describe what that hardware should do.
 
-This document describes the current design. [SourceMap.md](SourceMap.md) maps
-the concepts to files, [ModuleOrganization.md](ModuleOrganization.md) describes
-the intended public and internal layout of a reusable module, and
-[../Roadmap.md](../Roadmap.md) lists only future work.
+The central architectural decision is to keep three concerns separate:
 
-## Correctness boundary
+1. **Structural meaning:** which simultaneous equations define the hardware?
+2. **Executability:** do those equations have one result for every input and
+   current state?
+3. **Behavioral correctness:** does that result satisfy the natural property
+   expected at the module boundary?
 
-The formal chain is:
+They are related by proofs, but none is defined in terms of the others. This
+lets a module use an exact cycle contract, a fixed-latency function, a framed
+packet relation, or a custom observational theorem without changing what its
+hardware structure means.
+
+This document explains that model. [SourceMap.md](SourceMap.md) maps concepts
+to files, [ModuleOrganization.md](ModuleOrganization.md) gives conventions for
+individual modules, and the project-wide [roadmap](../../Roadmap.md) records
+current and future work.
+
+## The overall picture
+
+For a concrete design, the main relationships are:
 
 ```text
-typed ModuleStructure
-        |
-        v
-simultaneous structural equations
-        |
-        v
-exact cycle contract
-        |
-        +--> reset-synchronized trace contract
-        |
-        +--> latency-independent FIFO contract
+authoring
+    |
+    v
+ModuleStructure ----> simultaneous equations ----> execution
+    |                         |
+    |                         +---- structural rules
+    |                                      |
+    |                                      v
+    |                              existence / uniqueness
+    |
+    +---- refinement proof ----> natural behavioral contract
 ```
 
-Lean checks this chain through the abstract FIFO behavior. It does not yet
-prove that FIRRTL rendering, CIRCT lowering, or SystemVerilog simulation
-preserves the structural equations. Generated hardware is covered by an
-end-to-end regression, not by a backend-correctness theorem.
+For a top-down design whose children are not implemented yet:
 
-## Typed signals and boundaries
+```text
+ModuleBody + synchronized child traces + wiring
+                         |
+                         | child predicates
+                         v
+                 parent trace predicate
 
-`SignalType` is recursive:
+concrete composite execution
+            |
+            +---- generic projection ----> the same ModuleBody trace
+```
+
+The second path is not an executable blackbox semantics. It is an ordinary
+conditional theorem about interfaces and wiring. Once concrete children are
+supplied, their execution discharges those same child predicates.
+
+## Typed boundaries
+
+`SignalType` describes recursively shaped values:
 
 - `.bit` denotes `Bool`;
-- `.vector length element` denotes `Fin length -> element.Denote`; and
-- `.tuple fields` denotes a dependent nested product.
+- `.vector length element` denotes `Fin length → element.Denote`; and
+- `.tuple fields` denotes a dependently typed collection of named fields.
 
-`SignalMap` adds finite symbolic labels to signal types. `ModulePorts` contains
-one labelled input map and one labelled output map. Labels are part of the
-types used by wiring, so a connection identifies ports by name and can only
-connect equal signal shapes.
+`SignalMap` adds finite typed labels, and `ModulePorts` pairs an input map with
+an output map. Labels and signal shapes occur in the types of endpoints and
+wiring, so a child input cannot accidentally be connected to an unrelated or
+differently shaped signal.
 
-`Enumeration`, `ListIndex`, `DependentList`, and `EnumeratedMap` provide finite
-typed lookup. They retain the evidence needed to index heterogeneous maps
-without converting module code to untyped numeric positions.
+Most module boundaries are declared with `module_ports`:
 
-## Structural hardware
+```lean
+module_ports ports (width : Nat) where
+  input left : .vector width .bit,
+  input right : .vector width .bit,
+  output result : .vector width .bit
+```
 
-A `ModuleBody` is one uninstantiated hierarchy layer. It owns:
+The command generates the input and output label types, their `SignalMap`s,
+the resulting `ModulePorts`, emission naming, and typed helpers for authoring
+and child placement. It only describes the boundary; it does not attach
+behavior or implementation.
 
-- the parent ports;
-- the labelled boundaries of every child instance; and
-- total wiring for every parent output and child input.
+`signal_schema` provides the corresponding convenience for reusable named
+aggregate signals. It generates the tuple shape, typed field labels and
+accessors, and naming schema together. The underlying structural signal type
+remains independent of those emitted field names.
 
-Every sink has exactly one same-typed source. Reusing a source gives fan-out.
-Undriven sinks and shape-mismatched connections cannot be constructed.
+These commands are boilerplate generators, not a second language with a
+different meaning. Their products are ordinary Lean definitions. Generated or
+recursive families can use ordinary Lean directly when that is clearer.
 
-`ModuleStructure` completes the hierarchy by choosing one of five forms:
+## Bodies and concrete structures
 
-- a `Primitive` leaf with output and next-state equations;
-- an explicit `blackbox` leaf whose equations are assumed;
-- a lossless aggregate `splitter`;
-- a lossless aggregate `combiner`; or
-- a `composite` body with a complete structure for each child.
+A `ModuleBody` is one permanent hierarchy layer. It contains:
 
-Splitters and combiners are structural leaves rather than programmable
-primitives. Their low-level shapes and inverse value operations live in
-`Composition.SignalAdapter` because `ModuleStructure` must mention them.
-Their equations and cycle certificates live later in
-`SignalAdapterImplementation`.
+- the parent boundary;
+- the typed boundary of every immediate child; and
+- one same-shaped source for every parent output and child input.
 
-A structure contains no contract, schedule, evaluator, emitted name, or
-backend metadata. Its state is derived recursively from primitive-local state;
-a stateless hierarchy therefore has zero state labels rather than a separate
-stateless representation.
+Every sink therefore has exactly one driver. Reusing a source gives fan-out,
+while undriven sinks and shape mismatches are excluded by construction.
 
-`ModuleStructure.HasNoBlackboxes` recursively states that the complete
-hierarchy has no opaque leaves. `hasNoBlackboxes` is its executable Boolean
-check, with a proof that the Boolean and proposition agree. Closed FIRRTL entry
-points require this evidence.
+A `ModuleStructure` chooses an implementation recursively. It has four forms:
 
-## Order-independent structural meaning
+- a `Primitive` with output and next-state equations;
+- a lossless aggregate splitter;
+- a lossless aggregate combiner; or
+- a composite `ModuleBody` with one concrete `ModuleStructure` for each child.
 
-`HierStep` assigns boundary inputs and outputs at every occurrence in a
-hierarchy and current and next state at stateful leaves.
-`ModuleStructure.IsSolution` requires:
+Structural state is derived from the primitive-local state throughout that
+tree. A stateless hierarchy simply has no state labels.
 
-- every primitive or adapter equation to hold;
-- every child `HierStep` to solve that child's equations, with its stored
-  inputs equal to the values supplied by the parent wiring;
-  and
-- every parent output to equal its wired source.
+`module_design` is the main command for writing a composite. In one declaration
+it combines either a new or reused boundary, fixed or indexed child families,
+optional named wires, and typed wiring:
+
+```lean
+module_design HalfAdder where
+  boundary (HalfAdder.ports) (naming := HalfAdder.Naming.ports)
+  instances {
+    sumGate := Primitives.xorDesign,
+    carryGate := Primitives.andDesign }
+  wiring {
+    outputs {
+      .sum := sumGate.output,
+      .carry := carryGate.output }
+    instance (.sumGate) {
+      .left := input.left,
+      .right := input.right }
+    instance (.carryGate) {
+      .left := input.left,
+      .right := input.right }
+  }
+```
+
+The command always generates the child interfaces, wiring, and `body`. When
+every child is concrete, it also generates `moduleStructure`, recursive
+naming, and the final named `design`.
+
+A child may instead be written as `unresolved (ports)`. It then contributes
+only its typed interface to the body. Replacing that expression with a
+concrete child design leaves the boundary and wiring unchanged and causes the
+same declaration to become executable. There is no fake state, transition
+relation, or unconstrained solution for an unresolved child.
+
+## Simultaneous structural meaning
+
+One `HierStep` contains parent boundary values, the corresponding assignment
+for every child recursively, and current and next structural state.
+`ModuleStructure.IsSolution` says that:
+
+- every primitive, splitter, and combiner equation holds;
+- every child assignment solves the child's equations;
+- every child input equals its parent-wired source; and
+- every parent output equals its wired source.
 
 This is a relation over simultaneous equations, not an evaluation algorithm.
-A proof schedule can demonstrate that a solution exists and is unique, but
-the schedule does not define what the circuit means. This distinction prevents
-an arbitrary evaluation order from assigning meaning to unsupported
-combinational feedback.
+Storage feedback is meaningful because current and next state are distinct.
+Unsupported combinational cycles do not acquire an accidental meaning from a
+chosen evaluation order.
 
-`ModuleStructure.Transition` and `Executes` chain the same relation over clock
-cycles. They remain independent of behavioral contracts.
+`Transition` and `Executes` chain the same relation across cycles. Observation
+then erases internal state and hierarchy to ordinary boundary steps and traces.
 
-## Exact cycle contracts
+## Existence and uniqueness
 
-`ModuleCycleContract` gives natural one-cycle behavior using its own labelled
-state. It contains named output rules and one next-state rule. Each output rule
-declares the exact inputs it reads and outputs it writes through typed,
-label-preserving `SignalGroup` values. The contract state
-need not have the same shape as the structural state.
+Behavioral correctness alone is insufficient: an inconsistent circuit could
+satisfy a theorem vacuously, while an ambiguous combinational network could
+have several results. Silean therefore proves structural existence and
+uniqueness independently of the chosen behavioral contract.
 
-`ModuleCycleCertification structure contract` contains:
+`ModuleStructuralRules` describe only which boundary inputs are needed to
+produce which outputs and next state. A complete, dependency-correct schedule
+over certified children constructs a solution and proves it unique.
+`ModuleStructuralCertification` connects those rules to a concrete structure.
 
-1. a relation between contract state and structural state;
-2. proof that every structural state has a corresponding contract state;
-3. existence of a structural solution for every input and state;
-4. uniqueness of that solution; and
-5. proof that every structural solution obeys the contract and preserves the
-   state relation.
+Exact cycle contracts can automatically erase to precise structural rules.
+Modules with another contract style can supply rules directly, and every
+structurally certified module also has a conservative whole-module rule.
 
-Quantifying over every solution keeps correctness independent of the schedule
-used to prove existence and uniqueness.
+The `module_complete_schedule` command is a readable way to give a
+contract-independent dependency order. The elaborator checks availability and
+coverage and produces the formal schedule proof. Schedules are proof witnesses:
+they neither define circuit meaning nor become hardware.
 
-`ModuleCycleCertified` bundles a concrete structure, contract, and
-certification for public use. `ModuleCycleCertifiedLayer` instead certifies an
-uninstantiated `ModuleBody`: for every family of children satisfying declared
-child contracts, the resulting parent structure satisfies its parent
-contract. This prevents parent proofs from depending on child internals.
+## Behavioral specifications
 
-### Proof schedules
+Silean does not require one universal contract type. A public specification
+should use the most natural Lean statement for the boundary.
 
-An output schedule calls the public child rules needed to establish one parent
-output rule. A state schedule calls the rules needed to supply every child's
-explicit next-state inputs and state result. `RuleSchedules.CoversChildren`
-requires the combined schedules to exercise every immediate child rule.
+### Exact cycle contracts
 
-The generic construction proves:
+`ModuleCycleContract` is useful for local hardware whose exact one-cycle
+behavior is the right abstraction. It has an independent behavioral state,
+named output rules, and one complete next-state rule. Each output rule declares
+the inputs it reads and outputs it determines.
 
-- scheduled reads are available before each call;
-- complete coverage gives at most one structural solution;
-- replaying the schedules with certified children constructs a solution; and
-- child solutions expose their public contract facts to the parent proof.
+`module_cycle_contract` generates the rule names, typed selections, equations,
+coverage proof, and assembled contract from a readable declaration:
 
-`RuleSchedules.certifiedLayer` packages those generic existence and uniqueness
-results with the module-specific state correspondence and `Implements` proof.
-Recursive module families use the same constructor at each base and
-successor/node layer; recursion only chooses the already-certified recursive
-child.
-
-## Worked composite: HalfAdder
-
-`Modules.HalfAdder` is the smallest complete example of the intended pattern.
-Its public boundary has two bit inputs, `left` and `right`, and two bit outputs,
-`sum` and `carry`. Its natural contract says:
-
-```text
-sum   = left XOR right
-carry = left AND right
+```lean
+module_cycle_contract cycleContract for ports where
+  state := emptySignalMap
+  output_rule sum where
+    reads := [left, right]
+    writes := { sum := sumValue left right }
+  output_rule carry where
+    reads := [left, right]
+    writes := { carry := carryValue left right }
+  state_rule where
+    reads := []
+    next := {}
 ```
 
-The structure has two named children:
+The generated equations form the public child interface used by parent proofs.
+The contract does not mention the child's gates or register layout.
 
-```text
-halfAdder
-|- sumGate   : XOR primitive
-`- carryGate : AND primitive
-```
+### State-free temporal contracts
 
-Both children read the parent inputs. The parent outputs are wired directly to
-their corresponding child outputs. The body mentions only the XOR and AND
-boundary contracts, not their structures.
+`BoundaryTrace` is a finite sequence of boundary input/output observations. It
+contains no structural or behavioral state.
 
-There is one parent output rule and schedule for each independent result. The
-sum schedule calls only the XOR rule; the carry schedule calls only the AND
-rule. Their union covers both child rules. Generic schedule theorems establish
-existence and uniqueness for any certified implementations of those child
-contracts.
+`FixedLatency` relates every available output to an earlier input through an
+ordinary Lean function. `FramedLatency` relates complete marked input and
+output frames after a fixed latency. An early marker invalidates the interrupted
+candidate frame and may begin a later valid one.
 
-The remaining `implements` proof applies each child's public contract fact and
-uses the two boundary wiring equalities. `certifiedLayer` therefore proves the
-wiring correct without unfolding either primitive implementation. Concrete
-XOR and AND structures are supplied afterward to obtain the public closed
-`HalfAdder.certified` value. `FullAdder` then uses the HalfAdder contract in
-exactly the same way rather than inspecting its gates.
+These forms describe pipelined arithmetic and streamed FFT modules more
+naturally than reproducing their register chains as contract state.
 
-## More abstract contracts
+### Other contracts
 
-Exact cycle contracts are deliberately not the only specification form.
+Reset-synchronized contracts constrain behavior only after reset and may use
+ternary output expectations. FIFO contracts observe accepted and produced
+valid/ready transfers through an abstract bounded queue, without fixing the
+implementation latency.
 
-### Reset contracts
+Nothing prevents a module from using a custom predicate instead. The framework
+requires explicit proofs at composition boundaries, not inheritance from one
+privileged contract class.
 
-`ModuleResetContract` describes finite traces after a synchronous reset. Its
-specification state may be any Lean type and has no public mapping to structural
-state. Behavior before reset is unconstrained. After reset, expected output
-bits may be zero, one, or `dontCare`.
+## Bottom-up composition
 
-The corresponding certificate still requires structural execution to exist,
-so an inconsistent circuit cannot satisfy the contract vacuously.
+In bottom-up certification, every child already has a concrete structure and a
+public contract or structural rule interface. The parent proof uses those
+interfaces rather than unfolding the child implementation.
 
-### FIFO contracts
+For exact cycle contracts, `module_rule_schedules` declares which child rules
+establish each parent output and next-state result. The elaborator checks
+dependency order and complete coverage. `module_cycle_certification` then
+packages the structural schedules, state correspondence, and module-specific
+behavioral proof.
 
-`FifoContract` observes valid/ready transfers rather than fixed output
-latency. Before the first reset it imposes no behavior. Reset synchronizes an
-empty bounded logical queue. Each ordinary cycle requires:
+The half adder is the smallest example. Its XOR and AND children are supplied
+after the body is certified generically against their public contracts.
+`FullAdder` then consumes the half-adder contract rather than inspecting its
+gates. Larger recursive and generated modules use the same principle, often
+with ordinary Lean definitions for the recursive family.
 
-```text
-old queue ++ accepted inputs = produced outputs ++ new queue
-```
+## Top-down composition
 
-This permits both fall-through and registered FIFOs while guaranteeing order,
-no invented output payloads, and bounded capacity. Over a reset-free suffix,
-produced payloads are a prefix of accepted payloads; they are equal when the
-final queue is empty.
+Top-down work starts from the same `ModuleBody` but permits unresolved child
+interfaces. One `ModuleBody.Step` bundles a parent boundary observation with
+one observation for every immediate child. A `ModuleBody.Trace` is a
+cycle-aligned list of those steps.
 
-The pointer FIFO is first certified against an exact cycle contract. A private
-`FifoCycleRefinement` relates its pointer/register-bank state to a logical
-queue and proves reset establishment, invariant preservation, capacity, and
-the transfer equation. `Modules.Fifo.fifoCertified` exposes only the structure
-and standard FIFO contract.
+`trace.WiringHolds` states that every parent output and child input agrees with
+the permanent body wiring. A module-specific theorem may combine this fact with
+arbitrary predicates on `trace.child childName` to prove an arbitrary predicate
+on `trace.parent`. The framework does not prescribe a contract kind or collect
+assumptions automatically.
 
-Lean reports these axioms for that public certificate and its structure and
-contract projection theorems:
+When all children become concrete, a generic bridge projects
+`ObservedExecutes` for the composite to the same body trace. It proves the
+wiring fact and identifies each child projection with that child's observed
+execution. The conditional top-down proof is therefore retained rather than
+rewritten when implementation proceeds.
 
-```text
-propext, Classical.choice, Quot.sound
-```
+HTFFT uses this style. Its complete streaming boundary and stage chain were
+proved first from natural framed contracts for the immediate children. The
+children can now be refined independently while the parent bodies and proofs
+remain fixed.
 
-They are Lean's standard logical/quotient axioms. The result depends on no
-project-defined axiom, `sorry`, `admit`, or unsafe definition.
+## Authoring identity, naming, and emission
 
-## Naming and FIRRTL
+Typed structural endpoints are the semantic identity of wiring.
+`CircuitDescription` also preserves description-local structural IDs for
+parent ports, child instances, and child ports. Reader-facing `SourceName`s are
+metadata and are not used to recover endpoint identity in correctness proofs.
 
-`ModuleNaming` is indexed by an exact `ModuleStructure`. It supplies stable
-definition keys, port names, instance names, and recursive child naming without
-being stored in the hardware structure. Generic naming traversals live under
-`Naming/`; module-specific naming normally lives beside its module.
+This matters because emitted names may be chosen, parameterized, or rejected
+for collisions without changing the circuit's meaning. `ModuleNaming` is
+indexed by the concrete structure and supplies definition keys, port names,
+instance names, and recursive child naming for emission.
 
-The FIRRTL renderer traverses `ModuleStructure` directly. It supports
-primitives, adapters, blackboxes, and composites, validates names and
-definitions, and emits FIRRTL 4 text. Configured executable emitters live in
-`Emitters/`. The Nix regression lowers FIRRTL with CIRCT, compiles with
-Verilator, and tests with cocotb.
+The FIRRTL renderer traverses `ModuleStructure` directly. It supports the
+concrete primitive, splitter, combiner, and composite forms, validates emitted
+definitions and names, and produces FIRRTL text. Configured regressions lower
+that text with CIRCT and simulate generated SystemVerilog.
 
-This backend path is executable evidence only. A semantics-preservation proof
-from structural equations to FIRRTL remains future work.
+## Formal boundary and deliberate limits
 
-## Deliberate limits
+Lean currently proves properties through `ModuleStructure` and its execution.
+It does not prove that FIRRTL rendering, CIRCT lowering, or SystemVerilog
+simulation preserves those equations. Backend compilation and simulation are
+important regression evidence, not part of the formal theorem.
 
-- Signals are two-state; `X`, `Z`, analogue behavior, timing, metastability,
-  and clock-domain crossings are not modeled.
-- There is one implicit global clock. Reset behavior is represented explicitly
-  in ports and contracts.
-- Blackboxes are explicit assumptions. Closedness proves their absence but
-  does not prove the FIRRTL backend.
-- Schedules are proof witnesses, not synthesis directives or stored hardware.
-- High-level correctness depends on the chosen contract. Exact cycle, reset,
-  and FIFO contracts express different observable guarantees.
+Other current limits are:
 
-## Dependency direction
+- signal values are two-state; `X`, `Z`, analogue behavior, timing,
+  metastability, and clock-domain crossings are not modeled;
+- one global clock is implicit, while reset is explicit and module-specific;
+- unresolved children cannot be executed or emitted; and
+- progress properties may require explicit environmental assumptions.
 
-The intended source direction is:
+## Architectural lessons so far
 
-```text
-Foundation
-  -> low-level adapter shapes / Structure
-  -> Semantics and Contracts
-  -> generic Composition and adapter certification
-  -> concrete Modules
-  -> Naming and FIRRTL
-```
-
-Generic Composition imports neither concrete Modules nor Naming. Tests and
-configured emitters sit above the reusable library.
+- Keeping structure and natural specification separate makes both easier to
+  read and reuse.
+- Existence and uniqueness belong to structural semantics, not to one
+  particular behavioral contract.
+- Contract state should describe the behavior, not mirror the implementation's
+  register tree.
+- Top-down proofs need synchronized boundary traces and explicit assumptions,
+  not executable blackboxes.
+- Emitted names are metadata, not semantic identity.
+- Macros are valuable when they remove repeated typed boilerplate, but
+  recursive and unusual constructions should remain ordinary Lean.
+- When a compositional proof becomes awkward, it is worth checking the
+  framework boundary before adding module-specific proof machinery.
