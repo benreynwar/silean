@@ -9,3 +9,10 @@ import HTFFTTests.PipelinedSignedComplexMultiplyContractChecks
 import HTFFTTests.PipelinedSignedComplexMultiplyChecks
 import HTFFTTests.PipelinedFixedButterflyContractChecks
 import HTFFTTests.PipelinedFixedButterflyChecks
+import HTFFTTests.UnrolledFFTContractChecks
+import HTFFTTests.UnrolledFFTChecks
+import HTFFTTests.FFTStageContractChecks
+import HTFFTTests.FFTStageScheduleChecks
+import HTFFTTests.FFTStageChainBodyChecks
+import HTFFTTests.FFTContractChecks
+import HTFFTTests.FFTBodyChecks
