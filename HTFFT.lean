@@ -19,6 +19,12 @@ import HTFFT.Fixed.LayeredCorrectness
 import HTFFT.Fixed.Twiddle8Accuracy
 import HTFFT.Silean.PipelinedSignedComplexMultiply
 import HTFFT.Silean.PipelinedFixedButterfly
+import HTFFT.Silean.FFTConfiguration
+import HTFFT.Silean.UnrolledFFTLayer
+import HTFFT.Silean.UnrolledFFTNetwork
+import HTFFT.Silean.UnrolledFFT
+import HTFFT.Silean.FFTStage
+import HTFFT.Silean.FFT
 
 /-! Specifications, numerical proofs, and project-specific Silean hardware for
 the HTFFT project. -/

@@ -172,6 +172,22 @@ def encodeComplex (componentWidth : Nat) (value : HTFFT.Complex Int) :
     HTFFT.Butterfly.Fixed.wrapComplex, HTFFT.Complex.map,
     interpretSigned, encodeSigned, wrapSigned]
 
+/-- Re-encoding the signed interpretation of an existing packed complex word
+recovers every bit of that word. -/
+@[simp] theorem encodeComplex_decodeComplex (componentWidth : Nat)
+    (value : Fin (componentWidth + componentWidth) → Bool) :
+    encodeComplex componentWidth (decodeComplex componentWidth value) =
+      value := by
+  funext index
+  refine Fin.addCases ?_ ?_ index
+  · intro low
+    simp [encodeComplex, encodeComponent, decodeComplex, lowComponent]
+  · intro high
+    simp only [encodeComplex, encodeComponent, decodeComplex,
+      encodeSigned_interpretSigned, BitVector.ofBitVec_toBitVec]
+    rw [Fin.addCases_right]
+    rfl
+
 @[simp] theorem encodeComplex_wrapComplex (format : Format)
     (value : HTFFT.Complex Int) :
     encodeComplex format.width

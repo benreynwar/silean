@@ -172,6 +172,22 @@ theorem butterflyLayer_second (config : Config depth)
         (table.value stage offset)).lower := by
   simp [butterflyLayer]
 
+/-- A fixed-point butterfly layer already stores every output in the
+canonical signed representative of its output format. -/
+theorem wrapComplex_butterflyLayer (config : Config depth)
+    (table : TwiddleTable depth) (stage : Fin depth) (input : Vector depth) :
+    (fun index => Butterfly.Fixed.wrapComplex
+      (config.boundaryFormat stage.succ)
+      (butterflyLayer config table stage input index)) =
+      butterflyLayer config table stage input := by
+  funext outputIndex
+  let position := (Exact.layerIndexEquiv depth stage).symm outputIndex
+  by_cases upper : position.branch = 0
+  · simp [butterflyLayer, position, upper, Butterfly.Fixed.butterfly,
+      Config.butterfly]
+  · simp [butterflyLayer, position, upper, Butterfly.Fixed.butterfly,
+      Config.butterfly]
+
 /-- Apply an explicitly selected sequence of fixed-point layers. -/
 def applyButterflyLayers (config : Config depth) (table : TwiddleTable depth)
     (stages : List (Fin depth)) (input : Vector depth) : Vector depth :=
@@ -242,6 +258,68 @@ theorem layeredPrefix_boundarySucc (config : Config depth)
   rw [layeredPrefix, Exact.butterflyStagePrefix_boundarySucc,
     applyButterflyLayers_append]
   rfl
+
+/-- Canonical signed representatives remain canonical while an ascending
+prefix of butterfly stages is applied to an already reordered vector. -/
+theorem wrapComplex_applyButterflyStagePrefix_of_canonical
+    (config : Config depth) (table : TwiddleTable depth)
+    (input : Vector depth)
+    (inputCanonical :
+      (fun index => Butterfly.Fixed.wrapComplex (config.boundaryFormat 0)
+        (input index)) = input)
+    (boundary : Exact.LayerBoundary depth) :
+    (fun index => Butterfly.Fixed.wrapComplex
+      (config.boundaryFormat boundary)
+      (applyButterflyLayers config table
+        (Exact.butterflyStagePrefix depth boundary) input index)) =
+      applyButterflyLayers config table
+        (Exact.butterflyStagePrefix depth boundary) input := by
+  induction boundary using Fin.induction with
+  | zero =>
+      simpa [Exact.butterflyStagePrefix, Exact.butterflyStages] using
+        inputCanonical
+  | succ stage _ =>
+      rw [Exact.butterflyStagePrefix_boundarySucc,
+        applyButterflyLayers_append]
+      exact wrapComplex_butterflyLayer config table stage _
+
+/-- Canonical signed representatives remain canonical through every prefix of
+the fixed-point network.  The only assumption is that the supplied input is
+already canonical at boundary zero. -/
+theorem wrapComplex_layeredPrefix_of_canonical
+    (config : Config depth) (table : TwiddleTable depth)
+    (input : Vector depth)
+    (inputCanonical :
+      (fun index => Butterfly.Fixed.wrapComplex (config.boundaryFormat 0)
+        (input index)) = input)
+    (boundary : Exact.LayerBoundary depth) :
+    (fun index => Butterfly.Fixed.wrapComplex
+      (config.boundaryFormat boundary)
+      (layeredPrefix config table boundary input index)) =
+      layeredPrefix config table boundary input := by
+  have reversedCanonical :
+      (fun index => Butterfly.Fixed.wrapComplex (config.boundaryFormat 0)
+        (Exact.bitReverse input index)) = Exact.bitReverse input := by
+    funext index
+    exact congrFun inputCanonical (Exact.bitReverseIndex index)
+  exact wrapComplex_applyButterflyStagePrefix_of_canonical config table
+    (Exact.bitReverse input) reversedCanonical boundary
+
+/-- The complete fixed-point FFT is canonical whenever its input words are
+canonical. -/
+theorem wrapComplex_layeredFFT_of_canonical
+    (config : Config depth) (table : TwiddleTable depth)
+    (input : Vector depth)
+    (inputCanonical :
+      (fun index => Butterfly.Fixed.wrapComplex (config.boundaryFormat 0)
+        (input index)) = input) :
+    (fun index => Butterfly.Fixed.wrapComplex
+      (config.boundaryFormat (Fin.last depth))
+      (layeredFFT config table input index)) =
+      layeredFFT config table input := by
+  simpa only [layeredPrefix_final] using
+    wrapComplex_layeredPrefix_of_canonical config table input
+      inputCanonical (Fin.last depth)
 
 /-- Splitting the pure fixed-point layer sequence does not change its result. -/
 theorem layeredFFT_split (config : Config depth) (table : TwiddleTable depth)

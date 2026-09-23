@@ -43,6 +43,8 @@ import SileanTests.PipelinedSignedMultiplyChecks
 import SileanTests.EqualsConstantChecks
 import SileanTests.BinaryToOneHotChecks
 import SileanTests.CombMuxTreeChecks
+import SileanTests.ROMContractChecks
+import SileanTests.ROMChecks
 import SileanTests.RegisterBankChecks
 import SileanTests.EnabledRegisterChecks
 import SileanTests.ModuleCycleEvaluationChecks

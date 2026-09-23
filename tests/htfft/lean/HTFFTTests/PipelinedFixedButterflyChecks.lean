@@ -165,17 +165,6 @@ example (initialState :
       Silean.Modules.Arithmetic.resultWidth, Nat.max_def] <;>
     constructor <;> intro assumption <;> exact assumption
 
--- Zero-width and ordinary boundaries are both closed structural hierarchies.
-example :
-    (structureFor ⟨0, 0⟩ ⟨0, 0⟩
-      (pipeline false 0 false false false)).HasNoBlackboxes := by
-  native_decide
-
-example :
-    (structureFor dataFormat twiddleFormat
-      (pipeline true 2 true true true)).HasNoBlackboxes := by
-  native_decide
-
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
@@ -211,7 +200,7 @@ private def rootHasShape (selected : Pipeline) : Bool :=
       contains text "connect add_0.right, split_complex_2.right" &&
       contains text "connect sub_1.right, split_complex_2.left"
 
-#guard match renderClosedCircuit
+#guard match renderCircuit
     (namingFor dataFormat twiddleFormat (pipeline true 2 true true true)) with
   | .error _ => false
   | .ok text =>

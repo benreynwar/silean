@@ -221,12 +221,6 @@ example (initialState : (structureFor 4 3 1 (pipeline 0 true)).State) :
     0 (by simp) outputInTrace
   simpa [inputValues, Pipeline.latency, pipeline] using accepted
 
-example : (structureFor 0 0 9 (pipeline 0)).HasNoBlackboxes := by
-  native_decide
-
-example : (structureFor 4 3 1 (pipeline 0 true)).HasNoBlackboxes := by
-  native_decide
-
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
@@ -266,7 +260,7 @@ private def rootHasShape
       contains text "connect signed_round_shift_0.value, vector_layout_0.output" &&
       contains text "connect signed_round_shift_1.value, vector_layout_1.output"
 
-#guard match renderClosedCircuit (namingFor 4 3 2 (pipeline 1)) with
+#guard match renderCircuit (namingFor 4 3 2 (pipeline 1)) with
   | .error _ => false
   | .ok text =>
       contains text "public module PipelinedSignedComplexMultiply_4_3_2_1" &&

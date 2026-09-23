@@ -146,6 +146,23 @@ def butterflyStageSuffix (depth : Nat) (boundary : LayerBoundary depth) :
     List (Fin depth) :=
   (butterflyStages depth).drop boundary.val
 
+/-- Advancing a boundary removes exactly the stage named by the old boundary
+from the front of the remaining suffix. -/
+theorem butterflyStageSuffix_castSucc (stage : Fin depth) :
+    butterflyStageSuffix depth stage.castSucc =
+      stage :: butterflyStageSuffix depth stage.succ := by
+  simp [butterflyStageSuffix, butterflyStages, List.drop_eq_getElem_cons]
+
+@[simp] theorem butterflyStagePrefix_final (depth : Nat) :
+    butterflyStagePrefix depth (Fin.last depth) = butterflyStages depth := by
+  unfold butterflyStagePrefix butterflyStages
+  have stages : List.take (Fin.last depth).val (List.finRange depth) =
+      List.finRange depth := by
+    change List.take depth (List.finRange depth) = List.finRange depth
+    simpa only [List.length_finRange] using
+      (List.take_length (l := List.finRange depth))
+  exact stages
+
 /-- Advancing a boundary by one appends exactly the stage named by the old
 boundary. -/
 theorem butterflyStagePrefix_boundarySucc (stage : Fin depth) :
@@ -155,7 +172,7 @@ theorem butterflyStagePrefix_boundarySucc (stage : Fin depth) :
 
 /-- Apply an explicitly selected sequence of butterfly layers from left to
 right.  Keeping the sequence explicit permits a later implementation to split
-the same mathematical network into combinational and memory-backed portions. -/
+the same mathematical network into combinational and streamed portions. -/
 noncomputable def applyButterflyLayers (depth : Nat)
     (stages : List (Fin depth)) (input : Vector depth ℂ) : Vector depth ℂ :=
   stages.foldl (fun current stage => butterflyLayer depth stage current) input

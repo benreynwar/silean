@@ -30,6 +30,7 @@ import Silean.Modules.Mask.Mask
 import Silean.Modules.BitwiseOr.BitwiseOr
 import Silean.Modules.BinaryToOneHot.BinaryToOneHotDerived
 import Silean.Modules.CombMuxTree.CombMuxTreeDerived
+import Silean.Modules.ROM.ROMDerived
 import Silean.Modules.RegisterBank.RegisterBankDerived
 import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.EnabledRegister.EnabledRegisterDerived
