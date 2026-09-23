@@ -55,15 +55,6 @@ noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.CarrySaveAdder.ports 4) :=
   Modules.CarrySaveAdder.certified 4
 
-example : (Modules.CarrySaveAdder.moduleStructure 0).HasNoBlackboxes := by
-  native_decide
-
-example : (Modules.CarrySaveAdder.moduleStructure 1).HasNoBlackboxes := by
-  native_decide
-
-example : (Modules.CarrySaveAdder.moduleStructure 4).HasNoBlackboxes := by
-  native_decide
-
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
@@ -95,7 +86,7 @@ private def rendersWithAdderCount (width expected : Nat)
    "connect combiner_0.component_3, full_adder_3.sum",
    "connect vector_layout_0.input, combiner_1.aggregate_0"]
 
-#guard match renderClosedCircuit (Modules.CarrySaveAdder.naming 4) with
+#guard match renderCircuit (Modules.CarrySaveAdder.naming 4) with
   | .error _ => false
   | .ok text => contains text "public module CarrySaveAdder_4" &&
       contains text "module FullAdder"

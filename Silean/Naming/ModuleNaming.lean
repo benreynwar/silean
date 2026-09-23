@@ -148,11 +148,6 @@ inductive ModuleNaming : {ports : ModulePorts} → ModuleStructure ports → Typ
       (state : SignalMapNaming primitive.localState)
       (operation : PrimitiveOperation primitive) :
       ModuleNaming (.primitive primitive)
-  | blackbox {behavior : Primitive}
-      (key : ModuleKey)
-      (ports : ModulePortsNaming behavior.ports)
-      (state : SignalMapNaming behavior.localState) :
-      ModuleNaming (.blackbox behavior)
   | splitter (splitter : Composition.SignalSplitter)
       (key : ModuleKey) (ports : ModulePortsNaming splitter.ports) :
       ModuleNaming (.splitter splitter)
@@ -174,7 +169,6 @@ namespace ModuleNaming
 
 def key : ModuleNaming moduleStructure → ModuleKey
   | .primitive key _ _ _ => key
-  | .blackbox key _ _ => key
   | .splitter _ key _ => key
   | .combiner _ key _ => key
   | .composite key _ _ _ _ => key
@@ -183,7 +177,6 @@ def ports {modulePorts : ModulePorts}
     {moduleStructure : ModuleStructure modulePorts} :
     ModuleNaming moduleStructure → ModulePortsNaming modulePorts
   | .primitive _ ports _ _ => ports
-  | .blackbox _ ports _ => ports
   | .splitter _ _ ports => ports
   | .combiner _ _ ports => ports
   | .composite _ ports _ _ _ => ports
@@ -191,7 +184,6 @@ def ports {modulePorts : ModulePorts}
 def withKey (newKey : ModuleKey) :
     (naming : ModuleNaming moduleStructure) → ModuleNaming moduleStructure
   | .primitive _ ports state operation => .primitive newKey ports state operation
-  | .blackbox _ ports state => .blackbox newKey ports state
   | .splitter adapter _ ports => .splitter adapter newKey ports
   | .combiner adapter _ ports => .combiner adapter newKey ports
   | .composite _ ports instanceName childNaming namedWires =>
@@ -202,7 +194,6 @@ def withPorts {modulePorts : ModulePorts}
     {moduleStructure : ModuleStructure modulePorts} →
       (naming : ModuleNaming moduleStructure) → ModuleNaming moduleStructure
   | _, .primitive key _ state operation => .primitive key newPorts state operation
-  | _, .blackbox key _ state => .blackbox key newPorts state
   | _, .splitter adapter key _ => .splitter adapter key newPorts
   | _, .combiner adapter key _ => .combiner adapter key newPorts
   | _, .composite key _ instanceName childNaming namedWires =>

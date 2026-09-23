@@ -18,7 +18,6 @@ import SileanTests.LeafwiseLogicChecks
 import SileanTests.BitMuxChecks
 import SileanTests.ModuleCycleContractChecks
 import SileanTests.HierarchyChecks
-import SileanTests.ModuleClosureChecks
 import SileanTests.StructuralEquationsChecks
 import SileanTests.StructuralExecutionChecks
 import SileanTests.VectorConcatChecks
@@ -101,4 +100,6 @@ import SileanTests.SerialDepthFifoAuthoringChecks
 import SileanTests.SelectionAuthoringChecks
 import SileanTests.BoundaryTraceChecks
 import SileanTests.FixedLatencyChecks
+import SileanTests.FramedLatencyChecks
 import SileanTests.StructuralObservationChecks
+import SileanTests.ModuleBodyTraceChecks

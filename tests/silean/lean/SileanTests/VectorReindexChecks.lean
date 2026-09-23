@@ -20,4 +20,15 @@ example :
       (certification (.vector 4 .bit) 3 3 reverseThree).stateCorresponds :=
   implements_contract (.vector 4 .bit) 3 3 reverseThree
 
+-- Element shape is part of emission identity.  Equal layouts over different
+-- element types must not collide in one closed hierarchy.
+example :
+    (naming (.vector 4 .bit) 3 3 reverseThree).key.specialization =
+      [.signalType (.vector 4 .bit), .natural 3, .natural 3] := rfl
+
+example :
+    (naming .bit 3 3 reverseThree).key ≠
+      (naming (.vector 4 .bit) 3 3 reverseThree).key := by
+  decide
+
 end SileanTests.VectorReindexChecks

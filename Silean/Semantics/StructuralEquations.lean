@@ -142,7 +142,6 @@ composite. Current and next state are derived from `children`. -/
 def HierStep {ports : ModulePorts} (module : ModuleStructure ports) : Type :=
   match module with
   | .primitive primitive => CycleStep primitive.ports primitive.localState.Values
-  | .blackbox behavior => CycleStep behavior.ports behavior.localState.Values
   | .splitter splitter => CombinationalHierStep splitter.ports
   | .combiner combiner => CombinationalHierStep combiner.ports
   | .composite body childStructure =>
@@ -155,7 +154,6 @@ def inputs {ports : ModulePorts} {module : ModuleStructure ports} :
     HierStep module → ports.inputs.Values :=
   match module with
   | .primitive _ => fun step => CycleStep.inputs step
-  | .blackbox _ => fun step => CycleStep.inputs step
   | .splitter _ => fun step => CombinationalHierStep.inputs step
   | .combiner _ => fun step => CombinationalHierStep.inputs step
   | .composite _ _ => fun step => CompositeHierStep.inputs step
@@ -164,7 +162,6 @@ def outputs {ports : ModulePorts} {module : ModuleStructure ports} :
     HierStep module → ports.outputs.Values :=
   match module with
   | .primitive _ => fun step => CycleStep.outputs step
-  | .blackbox _ => fun step => CycleStep.outputs step
   | .splitter _ => fun step => CombinationalHierStep.outputs step
   | .combiner _ => fun step => CombinationalHierStep.outputs step
   | .composite _ _ => fun step => CompositeHierStep.outputs step
@@ -173,7 +170,6 @@ def currentState {ports : ModulePorts} (module : ModuleStructure ports) :
     HierStep module → module.State :=
   match module with
   | .primitive _ => fun step => CycleStep.currentState step
-  | .blackbox _ => fun step => CycleStep.currentState step
   | .splitter _ => fun _ => SignalMap.emptyValues
   | .combiner _ => fun _ => SignalMap.emptyValues
   | .composite _ childStructure => fun step name =>
@@ -184,7 +180,6 @@ def nextState {ports : ModulePorts} (module : ModuleStructure ports) :
     HierStep module → module.State :=
   match module with
   | .primitive _ => fun step => CycleStep.nextState step
-  | .blackbox _ => fun step => CycleStep.nextState step
   | .splitter _ => fun _ => SignalMap.emptyValues
   | .combiner _ => fun _ => SignalMap.emptyValues
   | .composite _ childStructure => fun step name =>
@@ -282,9 +277,6 @@ def ModuleStructure.IsSolution {ports : ModulePorts}
   match module with
   | ModuleStructure.primitive gate => fun hierStep =>
       gate.IsSolution hierStep.inputs hierStep.currentState
-        hierStep.nextState hierStep.outputs
-  | ModuleStructure.blackbox behavior => fun hierStep =>
-      behavior.IsSolution hierStep.inputs hierStep.currentState
         hierStep.nextState hierStep.outputs
   | ModuleStructure.splitter adapter => fun hierStep =>
       adapter.IsSolution hierStep.inputs hierStep.outputs

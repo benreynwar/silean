@@ -92,7 +92,7 @@ private def contains (text fragment : String) : Bool :=
       "inst entry_0", "inst entry_3",
       "inst read_0_mux"].all (contains text)
 
-#guard match renderClosedCircuit (Modules.RegisterBank.Naming.naming .bit 2 2) with
+#guard match renderCircuit (Modules.RegisterBank.Naming.naming .bit 2 2) with
   | .error _ => false
   | .ok text => ["input read_0_address : UInt<1>[2]",
       "input read_1_address : UInt<1>[2]",

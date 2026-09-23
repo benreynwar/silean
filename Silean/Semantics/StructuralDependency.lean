@@ -310,18 +310,6 @@ theorem Primitive.structuralCertification (primitive : Primitive) :
   hasSolution := primitive.hasSolution
   hasAtMostOneSolution := primitive.hasAtMostOneSolution
 
-/-- A behavioral blackbox has the same leaf-equation uniqueness as a concrete
-primitive; the distinction concerns implementation closure, not semantics. -/
-theorem Primitive.blackbox_hasAtMostOneSolution (behavior : Primitive) :
-    (ModuleStructure.blackbox behavior).HasAtMostOneSolution := by
-  intro left right leftSatisfies rightSatisfies inputsEqual statesEqual
-  cases left
-  cases right
-  simp_all only [ModuleStructure.IsSolution, HierStep.inputs,
-    HierStep.outputs, HierStep.currentState, HierStep.nextState,
-    Primitive.IsSolution, Primitive.OutputsSatisfy,
-    Primitive.NextStateSatisfy]
-
 def Composition.SignalSplitter.structuralRule
     (splitter : Composition.SignalSplitter) :
     StructuralRule (.splitter splitter) where

@@ -32,14 +32,6 @@ example (signalType : SignalType) (latency : Nat)
       execution.toBoundaryTrace :=
   Modules.OptionalShiftRegister.contract_of_execution signalType latency execution
 
-example :
-    (Modules.OptionalShiftRegister.moduleStructure .bit 0).HasNoBlackboxes := by
-  native_decide
-
-example :
-    (Modules.ShiftRegister.moduleStructure .bit 3 (by omega)).HasNoBlackboxes := by
-  native_decide
-
 private def occurrences (text fragment : String) : Nat :=
   (text.splitOn fragment).length - 1
 

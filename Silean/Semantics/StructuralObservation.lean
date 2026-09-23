@@ -1,4 +1,5 @@
 import Silean.Semantics.StructuralExecution
+import Silean.Semantics.ModuleBodyTrace
 
 namespace Silean
 
@@ -25,6 +26,132 @@ def ModuleStructure.ObservedTransition (module : ModuleStructure ports)
 satisfying hierarchy assignment. -/
 abbrev ModuleStructure.ObservedExecutes (module : ModuleStructure ports) :=
   Trace module.ObservedTransition
+
+namespace HierStep
+
+/-- Erase one hierarchy assignment to its state-free root boundary. -/
+def boundaryStep {module : ModuleStructure ports}
+    (hierStep : HierStep module) : BoundaryStep ports where
+  inputs := hierStep.inputs
+  outputs := hierStep.outputs
+
+@[simp] theorem boundaryStep_inputs {module : ModuleStructure ports}
+    (hierStep : HierStep module) :
+    hierStep.boundaryStep.inputs = hierStep.inputs :=
+  rfl
+
+@[simp] theorem boundaryStep_outputs {module : ModuleStructure ports}
+    (hierStep : HierStep module) :
+    hierStep.boundaryStep.outputs = hierStep.outputs :=
+  rfl
+
+/-- Erase a concrete composite hierarchy assignment to the parent and
+immediate-child boundaries of its permanent `ModuleBody`. -/
+def toBodyStep {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierStep : HierStep (.composite body children)) : body.Step where
+  parent := hierStep.boundaryStep
+  child := fun name => (hierStep.children name).boundaryStep
+
+@[simp] theorem toBodyStep_parent {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierStep : HierStep (.composite body children)) :
+    hierStep.toBodyStep.parent = hierStep.boundaryStep :=
+  rfl
+
+@[simp] theorem toBodyStep_child {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierStep : HierStep (.composite body children))
+    (name : body.instancePorts.Name) :
+    hierStep.toBodyStep.child name =
+      (hierStep.children name).boundaryStep :=
+  rfl
+
+/-- A concrete composite solution obeys the same body-wiring relation used by
+implementation-independent top-down proofs. -/
+theorem toBodyStep_wiringHolds {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    {hierStep : HierStep (.composite body children)}
+    (solution : (ModuleStructure.composite body children).IsSolution
+      hierStep) :
+    hierStep.toBodyStep.WiringHolds := by
+  constructor
+  · funext output
+    exact solution.1 output
+  · intro name
+    exact solution.2.1 name
+
+end HierStep
+
+namespace ModuleBody.Trace
+
+/-- Erase a synchronized list of concrete composite hierarchy assignments to
+an implementation-independent trace of their common body. -/
+def ofHierarchy {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierarchy : List (HierStep (.composite body children))) : body.Trace :=
+  hierarchy.map HierStep.toBodyStep
+
+@[simp] theorem ofHierarchy_parent {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierarchy : List (HierStep (.composite body children))) :
+    (ofHierarchy hierarchy).parent = hierarchy.map HierStep.boundaryStep := by
+  simp [ofHierarchy, parent]
+
+@[simp] theorem ofHierarchy_child {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierarchy : List (HierStep (.composite body children)))
+    (name : body.instancePorts.Name) :
+    (ofHierarchy hierarchy).child name =
+      hierarchy.map fun step => (step.children name).boundaryStep := by
+  simp [ofHierarchy, child]
+
+@[simp] theorem ofHierarchy_parent_inputs {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierarchy : List (HierStep (.composite body children))) :
+    (ofHierarchy hierarchy).parent.inputs =
+      hierarchy.map HierStep.inputs := by
+  simp [ofHierarchy, ModuleBody.Trace.parent, BoundaryTrace.inputs,
+    HierStep.toBodyStep, HierStep.boundaryStep]
+
+@[simp] theorem ofHierarchy_parent_outputs {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierarchy : List (HierStep (.composite body children))) :
+    (ofHierarchy hierarchy).parent.outputs =
+      hierarchy.map HierStep.outputs := by
+  simp [ofHierarchy, ModuleBody.Trace.parent, BoundaryTrace.outputs,
+    HierStep.toBodyStep, HierStep.boundaryStep]
+
+@[simp] theorem ofHierarchy_child_inputs {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierarchy : List (HierStep (.composite body children)))
+    (name : body.instancePorts.Name) :
+    ((ofHierarchy hierarchy).child name).inputs =
+      hierarchy.map fun step => (step.children name).inputs := by
+  simp [ofHierarchy, ModuleBody.Trace.child, BoundaryTrace.inputs,
+    HierStep.toBodyStep, HierStep.boundaryStep]
+
+@[simp] theorem ofHierarchy_child_outputs {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    (hierarchy : List (HierStep (.composite body children)))
+    (name : body.instancePorts.Name) :
+    ((ofHierarchy hierarchy).child name).outputs =
+      hierarchy.map fun step => (step.children name).outputs := by
+  simp [ofHierarchy, ModuleBody.Trace.child, BoundaryTrace.outputs,
+    HierStep.toBodyStep, HierStep.boundaryStep]
+
+end ModuleBody.Trace
 
 namespace ModuleStructure
 
@@ -181,6 +308,97 @@ theorem ObservedExecutes.child
       rw [currentStateEqual, nextStateEqual] at childTransition
       exact .cons (hierStep.children name).inputs
         (hierStep.children name).outputs childTransition induction
+
+/-- Erasing an observed concrete composite execution produces a body trace
+whose bundled boundaries obey the permanent body wiring. -/
+theorem ObservedExecutes.bodyTrace_wiringHolds
+    {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    {initialState finalState :
+      (ModuleStructure.composite body children).State}
+    {inputs : List body.ports.inputs.Values}
+    {hierarchy : List
+      (HierStep (ModuleStructure.composite body children))}
+    (execution : (ModuleStructure.composite body children).ObservedExecutes
+      initialState inputs hierarchy finalState) :
+    (ModuleBody.Trace.ofHierarchy hierarchy).WiringHolds := by
+  intro bodyStep member
+  rcases List.mem_map.mp member with ⟨hierStep, hierarchyMember, rfl⟩
+  exact HierStep.toBodyStep_wiringHolds
+    (execution.solution_of_mem hierStep hierarchyMember)
+
+/-- The child trace projected from a body trace is exactly the boundary trace
+of the concrete child execution projected from the same observed parent
+execution. -/
+theorem ObservedExecutes.child_toBoundaryTrace
+    {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    {initialState finalState :
+      (ModuleStructure.composite body children).State}
+    {inputs : List body.ports.inputs.Values}
+    {hierarchy : List
+      (HierStep (ModuleStructure.composite body children))}
+    (execution : (ModuleStructure.composite body children).ObservedExecutes
+      initialState inputs hierarchy finalState)
+    (name : body.instancePorts.Name) :
+    (execution.child name).toBoundaryTrace =
+      (ModuleBody.Trace.ofHierarchy hierarchy).child name := by
+  apply BoundaryTrace.ext
+  · rw [Trace.toBoundaryTrace_inputs]
+    exact (ModuleBody.Trace.ofHierarchy_child_inputs hierarchy name).symm
+  · rw [Trace.toBoundaryTrace_outputs]
+    exact (ModuleBody.Trace.ofHierarchy_child_outputs hierarchy name).symm
+
+/-- A concrete composite execution supplies exactly the artifact consumed by
+a top-down body theorem: a wiring-valid body trace with the same parent
+boundary trace and a concrete execution behind every child projection. -/
+theorem Executes.toBodyTrace
+    {body : ModuleBody}
+    {children : (name : body.instancePorts.Name) →
+      ModuleStructure (body.instancePorts.ports name)}
+    {initialState finalState :
+      (ModuleStructure.composite body children).State}
+    {inputs : List body.ports.inputs.Values}
+    {outputs : List body.ports.outputs.Values}
+    (execution : (ModuleStructure.composite body children).Executes
+      initialState inputs outputs finalState) :
+    ∃ bodyTrace : body.Trace,
+      bodyTrace.WiringHolds ∧
+      bodyTrace.parent = execution.toBoundaryTrace ∧
+      ∀ name,
+        ∃ childExecution : (children name).Executes (initialState name)
+            (bodyTrace.child name).inputs (bodyTrace.child name).outputs
+            (finalState name),
+          childExecution.toBoundaryTrace = bodyTrace.child name := by
+  rcases execution.observe with
+    ⟨hierarchy, observed, hierarchyOutputs⟩
+  let bodyTrace := ModuleBody.Trace.ofHierarchy hierarchy
+  refine ⟨bodyTrace, observed.bodyTrace_wiringHolds, ?_, ?_⟩
+  · apply BoundaryTrace.ext
+    · rw [Trace.toBoundaryTrace_inputs]
+      change (ModuleBody.Trace.ofHierarchy hierarchy).parent.inputs = inputs
+      rw [ModuleBody.Trace.ofHierarchy_parent_inputs]
+      exact observed.hierarchy_inputs
+    · rw [Trace.toBoundaryTrace_outputs]
+      change (ModuleBody.Trace.ofHierarchy hierarchy).parent.outputs = outputs
+      rw [ModuleBody.Trace.ofHierarchy_parent_outputs]
+      exact hierarchyOutputs
+  · intro name
+    have childExecution :
+        (children name).Executes (initialState name)
+          (bodyTrace.child name).inputs (bodyTrace.child name).outputs
+          (finalState name) := by
+      change (children name).Executes (initialState name)
+        ((ModuleBody.Trace.ofHierarchy hierarchy).child name).inputs
+        ((ModuleBody.Trace.ofHierarchy hierarchy).child name).outputs
+        (finalState name)
+      rw [ModuleBody.Trace.ofHierarchy_child_inputs,
+        ModuleBody.Trace.ofHierarchy_child_outputs]
+      exact observed.child name
+    refine ⟨childExecution, ?_⟩
+    apply BoundaryTrace.ext <;> simp
 
 end ModuleStructure
 

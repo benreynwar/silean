@@ -21,8 +21,10 @@ layers; they do not introduce a separate hardware representation or semantics.
 
 A typical composite module is authored in three stages:
 
-1. `module_design` declares its ports, child instances, wiring, and emission
-   naming. The lower-level `module_ports`, `module_instances`, and
+1. `module_design` declares its ports, child interfaces, wiring, and permanent
+   `ModuleBody`. Children may initially be `unresolved (ports)`; structural and
+   emission artifacts appear once every child right-hand side is a concrete
+   design. The lower-level `module_ports`, `module_instances`, and
    `module_wiring` commands are also available when those pieces need to be
    declared separately.
 2. `module_cycle_contract` declares the module's intended one-cycle behavior,

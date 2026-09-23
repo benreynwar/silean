@@ -22,12 +22,6 @@ example (leftWidth rightWidth : Nat)
         BitVector.toNat rightWidth (step.inputs .right) :=
   result_toNat_of_realization leftWidth rightWidth realizes
 
-example : (moduleStructure 0 0).HasNoBlackboxes := by native_decide
-example : (moduleStructure 0 4).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 0).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 3).HasNoBlackboxes := by native_decide
-example : (moduleStructure 3 5).HasNoBlackboxes := by native_decide
-
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
@@ -65,7 +59,7 @@ private def rootHasShape (leftWidth rightWidth expectedRows : Nat)
    "inst partial_product_row_4 of PartialProductRow_row_4_3_5",
    "inst tree of carry_save_tree_recursive_8_5"]
 
-#guard match renderClosedCircuit (naming 4 3) with
+#guard match renderCircuit (naming 4 3) with
   | .error _ => false
   | .ok text => contains text "public module UnsignedMultiply_4_3" &&
       contains text "module PartialProductRow_row_0_4_3" &&

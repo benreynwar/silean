@@ -5,11 +5,12 @@ namespace Silean.Authoring
 /-! # Composite module authoring
 
 `module_design` is the main design-side command for composite hardware. A
-single declaration combines a new or existing boundary, concrete child
-modules, optional named internal wires, typed wiring, and recursive emission
-naming. It expands through the
+single declaration combines a new or existing boundary, child interfaces,
+optional named internal wires, and typed wiring. Concrete children additionally
+supply recursive emission naming. It expands through the
 lower-level `module_ports`, `module_instances`, and `module_wiring` commands
-and then packages the result as a `Naming.NamedModule`.
+and, once every child is concrete, packages the result as a
+`Naming.NamedModule`.
 
 The generated `ModuleStructure` is deliberately independent of behavioral
 contracts and certification proofs. Those are authored separately so the same
@@ -30,6 +31,10 @@ declare_syntax_cat moduleDesignInstanceEntry
 syntax ident moduleInstanceModifier* " := " term : moduleDesignInstanceEntry
 syntax ident "(" ident " : " term " in " term ")" moduleInstanceModifier*
   " := " term : moduleDesignInstanceEntry
+syntax ident moduleInstanceModifier* " := " "unresolved" "(" term ")" :
+  moduleDesignInstanceEntry
+syntax ident "(" ident " : " term " in " term ")" moduleInstanceModifier*
+  " := " "unresolved" "(" term ")" : moduleDesignInstanceEntry
 
 declare_syntax_cat moduleDesignPorts
 syntax ident " { " modulePortEntry,* " }" : moduleDesignPorts
@@ -50,18 +55,22 @@ declare_syntax_cat moduleDesignWiring
 syntax ident " { " moduleWireGroup* " }" : moduleDesignWiring
 
 /--
-Declare one complete composite hardware design: its typed boundary, concrete
-child designs, optional named internal wires, wiring, and recursive emission
-naming. An inline `ports`
+Declare a composite hardware body, and a complete design when all children are
+concrete. Each child right-hand side is either a concrete design or
+`unresolved (ports)`. An unresolved child contributes its typed interface to
+the permanent body without inventing structural execution semantics. An inline `ports`
 section generates the ordinary boundary declarations; a `boundary` section
 instead reuses an existing typed boundary and its naming. A reused boundary
 may additionally provide `namingWith` when the command has component-naming
 parameters. The remaining
-generated declarations include `instancePorts`, `wiring`, `body`,
-`moduleStructure`, `naming`, and the final `design : Naming.NamedModule`.
-When component-naming parameters are present, it also generates `namingWith`
-and `designWith`; a child's `(naming := ...)` modifier describes how those
-parameters propagate through recursive emission without affecting structure.
+generated declarations always include `instancePorts`, `wiring`, and `body`.
+If every child is concrete, the command also generates `moduleStructure`,
+`naming`, and the final `design : Naming.NamedModule`. When component-naming
+parameters are present, a fully concrete declaration also generates
+`namingWith` and `designWith`; a child's `(naming := ...)` modifier describes
+how those parameters propagate through recursive emission without affecting
+structure. Thus resolving an outline only changes its child right-hand sides;
+the boundary, interfaces, wiring, and body declaration stay in place.
 
 The emitted module name defaults exactly to the declaration label, and typed
 module parameters automatically form its specialization key through
@@ -95,7 +104,8 @@ private structure FamilyDecl where
 private structure DesignInstanceDecl where
   label : TSyntax `ident
   modifiers : Array (TSyntax `moduleInstanceModifier)
-  design : TSyntax `term
+  design : Option (TSyntax `term)
+  ports : TSyntax `term
   family : Option FamilyDecl
   naming : Option (TSyntax `term)
 
@@ -115,15 +125,35 @@ private def parseDesignInstance (entry : TSyntax `moduleDesignInstanceEntry) :
     CommandElabM DesignInstanceDecl :=
   match entry with
   | `(moduleDesignInstanceEntry| $label:ident
+      $modifiers:moduleInstanceModifier* := unresolved ($ports:term)) => do
+      let (modifiers, naming) ← separateNaming modifiers
+      pure {
+        label, modifiers, design := none, ports, family := none, naming
+      }
+  | `(moduleDesignInstanceEntry| $label:ident
+      ($index:ident : $type:term in $enumeration:term)
+      $modifiers:moduleInstanceModifier* := unresolved ($ports:term)) => do
+      let (modifiers, naming) ← separateNaming modifiers
+      pure {
+        label, modifiers, design := none, ports
+        family := some { index, type, enumeration }
+        naming
+      }
+  | `(moduleDesignInstanceEntry| $label:ident
       $modifiers:moduleInstanceModifier* := $design:term) => do
       let (modifiers, naming) ← separateNaming modifiers
-      pure { label, modifiers, design, family := none, naming }
+      pure {
+        label, modifiers, design := some design
+        ports := ← `(($design).ports)
+        family := none, naming
+      }
   | `(moduleDesignInstanceEntry| $label:ident
       ($index:ident : $type:term in $enumeration:term)
       $modifiers:moduleInstanceModifier* := $design:term) => do
       let (modifiers, naming) ← separateNaming modifiers
       pure {
-        label, modifiers, design
+        label, modifiers, design := some design
+        ports := ← `(($design).ports)
         family := some { index, type, enumeration }
         naming
       }
@@ -145,18 +175,27 @@ where
 
 private def structureEntry (decl : DesignInstanceDecl) :
     CommandElabM (TSyntax `moduleInstanceEntry) :=
-  match decl.family with
-  | none =>
+  match decl.family, decl.design with
+  | none, some design =>
       `(moduleInstanceEntry| $(decl.label):ident
-        $(decl.modifiers):moduleInstanceModifier* := ($(decl.design)).moduleStructure)
-  | some family =>
+        $(decl.modifiers):moduleInstanceModifier* := ($design).moduleStructure)
+  | some family, some design =>
       `(moduleInstanceEntry| $(decl.label):ident
         ($(family.index):ident : $(family.type):term in $(family.enumeration):term)
-        $(decl.modifiers):moduleInstanceModifier* := ($(decl.design)).moduleStructure)
+        $(decl.modifiers):moduleInstanceModifier* := ($design).moduleStructure)
+  | none, none =>
+      `(moduleInstanceEntry| $(decl.label):ident
+        $(decl.modifiers):moduleInstanceModifier* : $(decl.ports))
+  | some family, none =>
+      `(moduleInstanceEntry| $(decl.label):ident
+        ($(family.index):ident : $(family.type):term in $(family.enumeration):term)
+        $(decl.modifiers):moduleInstanceModifier* : $(decl.ports))
 
 private def childNamingAlternative (custom : Bool) (decl : DesignInstanceDecl) :
     CommandElabM (TSyntax ``Lean.Parser.Term.matchAlt) := do
-  let defaultNaming ← `((($(decl.design))).naming)
+  let some design := decl.design
+    | throwErrorAt decl.label "unresolved child has no recursive naming"
+  let defaultNaming ← `((($design)).naming)
   let naming ← if custom then
       match decl.naming with
       | some naming => pure naming
@@ -232,8 +271,8 @@ elab_rules : command
 
     let declarations ← instanceEntries.mapM parseDesignInstance
     let structuralEntries ← declarations.mapM structureEntry
-    let childNamingAlternatives ← declarations.mapM (childNamingAlternative false)
-    let customChildNamingAlternatives ← declarations.mapM (childNamingAlternative true)
+    let allConcrete := declarations.all fun declaration =>
+      declaration.design.isSome
 
     let portsName := mkIdentFrom designName `ports
     let instancePortsName := mkIdentFrom designName `instancePorts
@@ -315,11 +354,8 @@ elab_rules : command
         for $portsTerm where
         $structuralEntries:moduleInstanceEntry,*
     )
-    elabCommand <| ← `(
-      module_wiring $wiringName $wiringParams:moduleWiringParam*
-        for $contextName $arguments:term* where
-        $wiringGroups:moduleWireGroup*
-    )
+    elaborateModuleWiringDeclaration wiringName wiringParams
+      (← `($contextName $arguments:term*)) wiringGroups allConcrete
     let namedWireTerms : Array (TSyntax `term) ← match namedWiresSection with
       | none => pure #[]
       | some namedWiresSection => do
@@ -339,17 +375,22 @@ elab_rules : command
     let namedWiresTerm ← `(
       ([$namedWireTerms:term,*] :
         List (Silean.Naming.NamedWire ($bodyName $arguments:term*))))
-    elabCommand <| ← `(
-      def $namingName $binders:bracketedBinder* :
-          Silean.Naming.ModuleNaming ($structureName $arguments:term*) := by
-        unfold $structureName
-        exact .composite ⟨$moduleName, $moduleVariant, $moduleSpecialization⟩
-          $portsNamingTerm
-          ($instanceNamesName $arguments:term*)
-          (fun $childNamingAlternatives:matchAlt*)
-          $namedWiresTerm
-    )
-    if let some customPortsNaming := customPortsNaming then
+    if allConcrete then
+      let childNamingAlternatives ← declarations.mapM
+        (childNamingAlternative false)
+      elabCommand <| ← `(
+        def $namingName $binders:bracketedBinder* :
+            Silean.Naming.ModuleNaming ($structureName $arguments:term*) := by
+          unfold $structureName
+          exact .composite ⟨$moduleName, $moduleVariant, $moduleSpecialization⟩
+            $portsNamingTerm
+            ($instanceNamesName $arguments:term*)
+            (fun $childNamingAlternatives:matchAlt*)
+            $namedWiresTerm
+      )
+    if allConcrete then if let some customPortsNaming := customPortsNaming then
+      let customChildNamingAlternatives ← declarations.mapM
+        (childNamingAlternative true)
       let some clause := namingClause
         | throwError "internal error: naming arguments disappeared"
       let `(modulePortsNamingClause| with $namingParams:modulePortsNamingParam,*) := clause
@@ -382,12 +423,13 @@ elab_rules : command
           ⟨$portsTerm, $structureName $arguments:term*,
             $namingWithName $arguments:term* $namingArguments:term*⟩
       )
-    elabCommand <| ← `(
-      @[reducible] def $bundleName $binders:bracketedBinder* :
-          Silean.Naming.NamedModule :=
-        ⟨$portsTerm, $structureName $arguments:term*,
-          $namingName $arguments:term*⟩
-    )
+    if allConcrete then
+      elabCommand <| ← `(
+        @[reducible] def $bundleName $binders:bracketedBinder* :
+            Silean.Naming.NamedModule :=
+          ⟨$portsTerm, $structureName $arguments:term*,
+            $namingName $arguments:term*⟩
+      )
     elabCommand <| ← `(end $designName)
 
 end Silean.Authoring

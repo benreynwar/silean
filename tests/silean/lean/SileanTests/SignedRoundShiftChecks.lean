@@ -51,7 +51,7 @@ private def rootHasShape (retainedWidth discardedWidth : Nat)
    "connect mux_0.whenFalse, vector_slice_0.result",
    "connect mux_0.whenTrue, increment_0.result"]
 
-#guard match renderClosedCircuit (naming 4 4) with
+#guard match renderCircuit (naming 4 4) with
   | .error _ => false
   | .ok text => contains text "public module SignedRoundShift_4_4" &&
       contains text "module increment_structural_4" &&

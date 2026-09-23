@@ -16,15 +16,6 @@ example (width operandCount : Nat) :
     ModuleStructuralCertification (moduleStructure width operandCount) :=
   structuralCertification width operandCount
 
-example : (moduleStructure 4 0).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 1).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 2).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 3).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 4).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 5).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 6).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 8).HasNoBlackboxes := by native_decide
-
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
@@ -32,7 +23,7 @@ private def occurrences (text fragment : String) : Nat :=
   (text.splitOn fragment).length - 1
 
 private def closedCircuitHasAdderCount (operandCount expected : Nat) : Bool :=
-  match renderClosedCircuit (naming 4 operandCount) with
+  match renderCircuit (naming 4 operandCount) with
   | .error _ => false
   | .ok text => contains text "public module carry_save_tree" &&
       occurrences text "inst carry_save_adder_" == expected

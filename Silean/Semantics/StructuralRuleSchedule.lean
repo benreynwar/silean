@@ -404,6 +404,141 @@ theorem initial_mem_final
   | call called _ _ _ induction =>
       exact induction (List.mem_cons_of_mem called member)
 
+/-! ## Ordered families
+
+`callFamilyAfter` is deliberately order-insensitive: every family member must
+be ready before the family starts.  Linear pipelines and other acyclic chains
+instead need later members to see the outputs of earlier members. -/
+
+/-- Call an explicit duplicate-free list in order.  The read obligation for a
+member is stated against the reverse of its chronological prefix because
+`Availability` stores the most recently called rule first. -/
+noncomputable def callListAfter
+    {inputAvailable : body.ports.inputs.Label → Prop}
+    (initial : Availability body childRules)
+    (ordered : List (RuleOccurrence body childRules))
+    (allNodup : (ordered.reverse ++ initial).Nodup)
+    (readsAvailable : ∀ before occurrence suffix,
+      ordered = before ++ occurrence :: suffix →
+      ∀ input, input ∈ occurrence.reads →
+        sourceAvailable inputAvailable (before.reverse ++ initial)
+          (body.wiring.instanceInput occurrence.child input)) :
+    Schedule body childRules inputAvailable
+      (fun final => final = ordered.reverse ++ initial) initial := by
+  induction ordered generalizing initial with
+  | nil =>
+      exact .done (by simp)
+  | cons occurrence rest induction =>
+      have extendedNodup : (rest.reverse ++ occurrence :: initial).Nodup := by
+        simpa [List.reverse_cons, List.append_assoc] using allNodup
+      refine .call occurrence ?_ ?_ ?_
+      · intro input member
+        exact readsAvailable [] occurrence rest rfl input member
+      · exact (List.nodup_append.mp extendedNodup).2.1 |>
+          List.nodup_cons.mp |>.1
+      · have tailReads : ∀ before selected suffix,
+            rest = before ++ selected :: suffix →
+            ∀ input, input ∈ selected.reads →
+              sourceAvailable inputAvailable
+                (before.reverse ++ occurrence :: initial)
+                (body.wiring.instanceInput selected.child input) := by
+          intro before selected suffix equal input member
+          have original : occurrence :: rest =
+              (occurrence :: before) ++ selected :: suffix := by
+            simp only [List.cons_append]
+            rw [equal]
+          simpa [List.reverse_cons, List.append_assoc] using
+            readsAvailable (occurrence :: before) selected suffix original
+              input member
+        simpa [List.reverse_cons, List.append_assoc] using
+          induction (occurrence :: initial) extendedNodup tailReads
+
+/-- Call every member of an enumeration sequentially.  Each member may read
+outputs of precisely the members preceding its constructive enumeration
+position. -/
+noncomputable def callSequentialFamilyAfter
+    {inputAvailable : body.ports.inputs.Label → Prop}
+    (initial : Availability body childRules)
+    {Index : Type} (indices : Enumeration Index)
+    (occurrence : Index → RuleOccurrence body childRules)
+    (injective : Function.Injective occurrence)
+    (allNodup : (indices.values.reverse.map occurrence ++ initial).Nodup)
+    (readsAvailable : ∀ index input, input ∈ (occurrence index).reads →
+      sourceAvailable inputAvailable
+        ((indices.locate index).preceding.reverse.map occurrence ++ initial)
+        (body.wiring.instanceInput (occurrence index).child input)) :
+    Schedule body childRules inputAvailable
+      (fun final => final = indices.values.reverse.map occurrence ++ initial)
+      initial := by
+  have listNodup :
+      ((indices.values.map occurrence).reverse ++ initial).Nodup := by
+    simpa [List.map_reverse] using allNodup
+  have mappedNodup : (indices.values.map occurrence).Nodup :=
+    List.nodup_map_of_injective occurrence injective indices.nodup
+  have listReads : ∀ before called suffix,
+      indices.values.map occurrence = before ++ called :: suffix →
+      ∀ input, input ∈ called.reads →
+        sourceAvailable inputAvailable (before.reverse ++ initial)
+          (body.wiring.instanceInput called.child input) := by
+    intro before called suffix orderedEqual input member
+    have calledMem : called ∈ indices.values.map occurrence := by
+      rw [orderedEqual]
+      simp
+    rcases List.mem_map.mp calledMem with
+      ⟨index, _, indexEqual⟩
+    subst called
+    let sourceIndex : ListIndex index indices.values := indices.locate index
+    let mappedIndex : ListIndex (occurrence index)
+        (indices.values.map occurrence) := sourceIndex.map occurrence
+    let explicitIndex : ListIndex (occurrence index)
+        (before ++ occurrence index :: suffix) :=
+      (.head : ListIndex (occurrence index) (occurrence index :: suffix))
+        |>.prependMany before
+    have precedingEqual :
+        mappedIndex.preceding = before := by
+      have transported := ListIndex.preceding_eq_of_list_eq
+        orderedEqual mappedNodup mappedIndex explicitIndex
+      calc
+        mappedIndex.preceding = explicitIndex.preceding := transported
+        _ = before := by
+          exact ListIndex.preceding_prependMany_head before
+            (occurrence index) suffix
+    have sourcePrecedingEqual :
+        sourceIndex.preceding.map occurrence = before := by
+      calc
+        sourceIndex.preceding.map occurrence =
+            (sourceIndex.map occurrence).preceding :=
+          (ListIndex.preceding_map occurrence sourceIndex).symm
+        _ = mappedIndex.preceding := rfl
+        _ = before := precedingEqual
+    have availabilityEqual :
+        sourceIndex.preceding.reverse.map occurrence = before.reverse := by
+      simpa [List.map_reverse] using congrArg List.reverse sourcePrecedingEqual
+    have childReads := readsAvailable index input member
+    change sourceAvailable inputAvailable
+      (sourceIndex.preceding.reverse.map occurrence ++ initial)
+      (body.wiring.instanceInput (occurrence index).child input) at childReads
+    rw [availabilityEqual] at childReads
+    exact childReads
+  simpa [List.map_reverse] using
+    callListAfter (inputAvailable := inputAvailable) initial
+      (indices.values.map occurrence) listNodup listReads
+
+/-- A family member with a smaller enumeration ordinal is available before a
+later member in a sequential family. -/
+theorem occurrence_mem_preceding_of_ordinal_lt
+    {Index : Type} (indices : Enumeration Index)
+    (occurrence : Index → RuleOccurrence body childRules)
+    (earlier later : Index)
+    (before : indices.ordinal earlier < indices.ordinal later) :
+    occurrence earlier ∈
+      (indices.locate later).preceding.reverse.map occurrence := by
+  apply List.mem_map.mpr
+  refine ⟨earlier, ?_, rfl⟩
+  simp only [List.mem_reverse]
+  exact ListIndex.mem_preceding_of_toFin_lt
+    (indices.locate earlier) (indices.locate later) before
+
 /-- Change only the terminal obligation of a schedule. -/
 noncomputable def mapFinish
     {inputAvailable : body.ports.inputs.Label → Prop}
@@ -416,6 +551,18 @@ noncomputable def mapFinish
   | done finished => exact .done (implies _ finished)
   | call occurrence readsAvailable fresh rest induction =>
       exact .call occurrence readsAvailable fresh induction
+
+@[simp] theorem finalAvailability_mapFinish
+    {inputAvailable : body.ports.inputs.Label → Prop}
+    {FirstFinish SecondFinish : Availability body childRules → Prop}
+    {initial : Availability body childRules}
+    (schedule : Schedule body childRules inputAvailable FirstFinish initial)
+    (implies : ∀ available, FirstFinish available → SecondFinish available) :
+    (schedule.mapFinish implies).finalAvailability =
+      schedule.finalAvailability := by
+  induction schedule with
+  | done _ => rfl
+  | call _ _ _ _ induction => exact induction
 
 /-- Replace the terminal obligation with a fact about the actual final
 availability. -/

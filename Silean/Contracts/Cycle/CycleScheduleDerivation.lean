@@ -211,7 +211,10 @@ private def proveOccurrenceFamilyInjective (type : Expr)
   let mut remaining := []
   for current in afterHave do
     let (next, _) ← Lean.Elab.runTactic current
-      (← `(tactic| injection childEqual <;> simp_all))
+      (← `(tactic|
+        first
+        | simpa using childEqual
+        | injection childEqual <;> simp_all))
     remaining := remaining ++ next
   unless remaining.isEmpty do
     throwError "`derive_schedule` could not prove {description}:{indentExpr type}"

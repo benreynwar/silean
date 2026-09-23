@@ -267,9 +267,6 @@ private def renderModuleBody :
   | .primitive _ ports state operation => do
       validateLocalNames (ports.names ++ state.names)
       pure (indentLines (renderPorts ports ++ primitiveStatements ports state operation))
-  | .blackbox _ ports state => do
-      validateLocalNames (ports.names ++ state.names)
-      pure (indentLines (renderPorts ports))
   | .splitter splitter _ ports => do
       validateLocalNames ports.names
       pure (indentLines (renderPorts ports ++ splitterStatements splitter ports))
@@ -282,14 +279,9 @@ private def renderModuleBody :
       pure (indentLines (renderPorts ports ++
         compositeStatements ports instanceName childNaming namedWires))
 
-private def isBlackbox : ModuleNaming moduleStructure → Bool
-  | .blackbox .. => true
-  | _ => false
-
 private def renderDefinition (isPublic : Bool) (module : NamedModule) : RenderResult String := do
   let body ← renderModuleBody module.naming
-  let qualifier := if isBlackbox module.naming then "extmodule"
-    else if isPublic then "public module" else "module"
+  let qualifier := if isPublic then "public module" else "module"
   pure s!"  {qualifier} {renderModuleKey module.key} :\n{body}"
 
 /-- Render only a hierarchy root's FIRRTL module definition. This is useful
@@ -323,15 +315,5 @@ def renderCircuit (naming : ModuleNaming moduleStructure) : RenderResult String 
   let rendered ← definitions.mapM fun definition =>
     renderDefinition (definition.key == rootKey) definition
   pure s!"FIRRTL version 4.0.0\ncircuit {renderModuleKey rootKey} :\n{String.intercalate "\n\n" rendered}\n"
-
-/-- Render a hierarchy only when the recursive structural check finds no
-behavioral blackboxes. Use `renderCircuit` when emitting intentional external
-modules or an incomplete design. `hasNoBlackboxes_eq_true_iff` proves once and
-for all that this executable check is equivalent to the logical property. -/
-def renderClosedCircuit (naming : ModuleNaming moduleStructure) : RenderResult String :=
-  if moduleStructure.hasNoBlackboxes then
-    renderCircuit naming
-  else
-    throw "cannot render a closed circuit whose hierarchy contains a blackbox"
 
 end Silean.FIRRTL

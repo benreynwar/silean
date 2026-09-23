@@ -31,10 +31,6 @@ noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.PartialProductRow.ports 4 3) :=
   Modules.PartialProductRow.certified 4 3 2
 
-example :
-    (Modules.PartialProductRow.moduleStructure 4 3 2).HasNoBlackboxes := by
-  native_decide
-
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 

@@ -418,8 +418,7 @@ def moduleStructure (binary : BinaryImplementation signalType operation)
         | .right => moduleStructure binary identityModule right
         | .combine => binary.moduleStructure
 
-/-- A reduction tree contains no blackboxes when its binary operation and
-empty-tree identity modules contain no blackboxes. -/
+/-- The cycle implementation associated with one reduction tree. -/
 private abbrev Implementation (binary : BinaryImplementation signalType operation)
     (identityModule : IdentityImplementation signalType identity)
     (tree : Tree) := Contracts.Cycle.ModuleCycleCertification

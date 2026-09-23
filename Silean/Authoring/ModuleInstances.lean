@@ -5,15 +5,17 @@ namespace Silean.Authoring
 
 /-! # Child instance authoring
 
-`module_instances` declares the concrete children placed inside one structural
-layer. It generates the child-name type and enumeration, each child's ports,
-the layer's `EndpointContext`, the selected child `ModuleStructure`s, and their
-emission names. Fixed children and indexed child families use the same
-dependent `InstancePorts` representation.
+`module_instances` declares the child interfaces at one structural layer. A
+child may supply either a concrete `ModuleStructure` or only its `ModulePorts`.
+The command always generates the child-name type and enumeration, each child's
+ports, the layer's `EndpointContext`, and emitted instance names. It generates
+the selected `ModuleStructure`s only when every child is concrete. Fixed
+children and indexed child families use the same dependent `InstancePorts`
+representation.
 
-This is the design-side half of hierarchy construction: it chooses actual
-child structures but says nothing about their behavioral contracts or proofs.
-`module_design` normally invokes this command, while
+This is the interface side of hierarchy construction. Concrete entries also
+choose actual child structures, but no entry says anything about behavioral
+contracts or proofs. `module_design` normally invokes this command, while
 `module_child_certifications` later associates those same children with
 certification evidence.
 -/
@@ -33,14 +35,18 @@ declare_syntax_cat moduleInstanceEntry
 syntax ident moduleInstanceModifier* " := " term : moduleInstanceEntry
 syntax ident "(" ident " : " term " in " term ")" moduleInstanceModifier*
   " := " term : moduleInstanceEntry
+syntax ident moduleInstanceModifier* " : " term : moduleInstanceEntry
+syntax ident "(" ident " : " term " in " term ")" moduleInstanceModifier*
+  " : " term : moduleInstanceEntry
 
 /--
-Declare the concrete children of an ordinary structural layer from their
-hardware structures. This design-side command generates only structural
-objects: instance labels and ports, the endpoint context, concrete child
-structures, and emitted instance names. Contracts and certifications are
-associated separately by `module_child_certifications` in proof-oriented code.
-An indexed entry supplies its index type and executable enumeration.
+Declare the children of an ordinary structural layer from concrete hardware
+structures (`child := structure`) or unresolved interfaces (`child : ports`).
+The command always generates instance labels and ports, the endpoint context,
+and emitted instance names. It generates `structuralChildren` only when every
+entry is concrete. Contracts and certifications are associated separately by
+`module_child_certifications` in proof-oriented code. An indexed entry supplies
+its index type and executable enumeration.
 -/
 syntax (name := moduleInstances)
   "module_instances " ident moduleInstancesParam* " for " term " where "
@@ -56,7 +62,7 @@ private structure FamilyDecl where
 private structure InstanceDecl where
   label : TSyntax `ident
   sourceName : TSyntax `term
-  moduleStructure : TSyntax `term
+  moduleStructure : Option (TSyntax `term)
   ports : TSyntax `term
   family : Option FamilyDecl
 
@@ -92,14 +98,23 @@ private def structurePorts (binders : Array (TSyntax ``Parser.Term.funBinder))
 private def parseInstanceDecl (binders : Array (TSyntax ``Parser.Term.funBinder))
     (entry : TSyntax `moduleInstanceEntry) :
     CommandElabM InstanceDecl := do
-  let (label, family, modifiers, moduleStructure) ← match entry with
+  let (label, family, modifiers, moduleStructure, directPorts) ← match entry with
     | `(moduleInstanceEntry| $label:ident $modifiers:moduleInstanceModifier*
         := $moduleStructure:term) =>
-        pure (label, none, modifiers, moduleStructure)
+        pure (label, none, modifiers, some moduleStructure, none)
     | `(moduleInstanceEntry| $label:ident
         ($index:ident : $type:term in $enumeration:term)
         $modifiers:moduleInstanceModifier* := $moduleStructure:term) =>
-        pure (label, some { index, type, enumeration }, modifiers, moduleStructure)
+        pure (label, some { index, type, enumeration }, modifiers,
+          some moduleStructure, none)
+    | `(moduleInstanceEntry| $label:ident $modifiers:moduleInstanceModifier*
+        : $ports:term) =>
+        pure (label, none, modifiers, none, some ports)
+    | `(moduleInstanceEntry| $label:ident
+        ($index:ident : $type:term in $enumeration:term)
+        $modifiers:moduleInstanceModifier* : $ports:term) =>
+        pure (label, some { index, type, enumeration }, modifiers,
+          none, some ports)
     | _ => throwUnsupportedSyntax
   let mut sourceName : Option (TSyntax `term) := none
   for modifier in modifiers do
@@ -121,7 +136,10 @@ private def parseInstanceDecl (binders : Array (TSyntax ``Parser.Term.funBinder)
     | some family => do
         let binder ← `(funBinder| ($(family.index) : $(family.type)))
         pure (binders.push binder)
-  let ports ← structurePorts familyBinders moduleStructure
+  let ports ← match moduleStructure, directPorts with
+    | some moduleStructure, none => structurePorts familyBinders moduleStructure
+    | none, some ports => pure ports
+    | _, _ => throwError "internal error: invalid child implementation choice"
   pure {
     label := label
     sourceName := resolvedSourceName
@@ -168,7 +186,9 @@ private def nameAlternative (decl : InstanceDecl) :
 private def structureAlternative (decl : InstanceDecl) :
     CommandElabM (TSyntax ``Parser.Term.matchAlt) := do
   let pattern ← instancePattern decl
-  `(matchAltExpr| | $pattern => $(decl.moduleStructure))
+  let some moduleStructure := decl.moduleStructure
+    | throwErrorAt decl.label "unresolved child has no ModuleStructure"
+  `(matchAltExpr| | $pattern => $moduleStructure)
 
 private def representationPayloadType (decl : InstanceDecl) : CommandElabM (TSyntax `term) :=
   match decl.family with
@@ -267,7 +287,8 @@ elab_rules : command
     let constructors ← declarations.mapM constructorSyntax
     let portAlternatives ← declarations.mapM portsAlternative
     let nameAlternatives ← declarations.mapM nameAlternative
-    let structureAlternatives ← declarations.mapM structureAlternative
+    let allConcrete := declarations.all fun declaration =>
+      declaration.moduleStructure.isSome
 
     let instanceIdent := mkIdentFrom instancePortsName `Instance
     let instanceRepresentationIdent :=
@@ -380,13 +401,15 @@ elab_rules : command
         ports := $parentPorts
         instancePorts := $instancePortsName $arguments:term*
     )
-    elabCommand <| ← `(
-      @[reducible] def $structuralChildrenIdent $binders:bracketedBinder*
-          (child : ($instancePortsName $arguments:term*).Name) :
-          Silean.ModuleStructure
-            (($instancePortsName $arguments:term*).ports child) :=
-        match child with $structureAlternatives:matchAlt*
-    )
+    if allConcrete then
+      let structureAlternatives ← declarations.mapM structureAlternative
+      elabCommand <| ← `(
+        @[reducible] def $structuralChildrenIdent $binders:bracketedBinder*
+            (child : ($instancePortsName $arguments:term*).Name) :
+            Silean.ModuleStructure
+              (($instancePortsName $arguments:term*).ports child) :=
+          match child with $structureAlternatives:matchAlt*
+      )
     elabCommand <| ← `(
       @[reducible, simp] private def $instanceNamesIdent $binders:bracketedBinder*
           (child : ($instancePortsName $arguments:term*).Name) :

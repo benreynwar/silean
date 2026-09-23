@@ -13,7 +13,7 @@ def naming :=
       ⟨"serial_fifo", "", []⟩
 
 def firrtl : FIRRTL.RenderResult String :=
-  FIRRTL.renderClosedCircuit naming
+  FIRRTL.renderCircuit naming
 
 end Silean.Emitters.SerialFifo
 

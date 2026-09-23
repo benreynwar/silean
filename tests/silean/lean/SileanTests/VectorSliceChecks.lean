@@ -11,12 +11,6 @@ noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.VectorSlice.ports .bit 2 3 1) :=
   Modules.VectorSlice.certified .bit 2 3 1
 
-example : (Modules.VectorSlice.moduleStructure .bit 2 3 1).HasNoBlackboxes := by
-  simp only [ModuleStructure.HasNoBlackboxes]
-  intro child
-  cases child <;>
-    simp [ModuleStructure.HasNoBlackboxes]
-
 def inputs : (Modules.VectorSlice.ports .bit 2 3 1).inputs.Values
   | .value => fun | 0 => false | 1 => false | 2 => true
                   | 3 => false | 4 => true | 5 => false

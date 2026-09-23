@@ -24,9 +24,6 @@ example (width : Nat) {step : (moduleStructure width).Step}
         BitVector.toBitVec width (step.inputs .value) :=
   result_toBitVec_of_realization width realizes
 
-example : (moduleStructure 0).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4).HasNoBlackboxes := by native_decide
-
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
@@ -54,7 +51,7 @@ private def rootHasShape (width : Nat) (fragments : List String) : Bool :=
    "connect bitwise_xor_0.left, value",
    "connect add_with_carry_0.left, transformedValue"]
 
-#guard match renderClosedCircuit (naming 4) with
+#guard match renderCircuit (naming 4) with
   | .error _ => false
   | .ok text => contains text "public module ConditionalNegate_4" &&
       contains text "module bitwise_xor" &&

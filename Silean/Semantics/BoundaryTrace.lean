@@ -72,6 +72,34 @@ def outputs {ports : ModulePorts}
     trace.outputs.length = trace.length := by
   simp [outputs]
 
+/-- A boundary trace is determined by its input and output sequences. -/
+@[ext] theorem ext {ports : ModulePorts}
+    {left right : BoundaryTrace ports}
+    (inputsEqual : left.inputs = right.inputs)
+    (outputsEqual : left.outputs = right.outputs) :
+    left = right := by
+  induction left generalizing right with
+  | nil =>
+      cases right with
+      | nil => rfl
+      | cons _ _ => simp at inputsEqual
+  | cons leftStep leftRest induction =>
+      cases right with
+      | nil => simp at inputsEqual
+      | cons rightStep rightRest =>
+          simp only [inputs_cons, List.cons.injEq] at inputsEqual
+          simp only [outputs_cons, List.cons.injEq] at outputsEqual
+          rcases inputsEqual with ⟨headInputs, tailInputs⟩
+          rcases outputsEqual with ⟨headOutputs, tailOutputs⟩
+          have headEqual : leftStep = rightStep := by
+            cases leftStep
+            cases rightStep
+            simp_all
+          subst rightStep
+          have tailEqual := induction tailInputs tailOutputs
+          subst rightRest
+          rfl
+
 @[simp] theorem ofLists_inputs {ports : ModulePorts}
     {inputValues : List ports.inputs.Values}
     {outputValues : List ports.outputs.Values}
@@ -155,6 +183,28 @@ def toBoundaryTrace
     (trace : Trace Step initialState inputValues outputValues finalState) :
     trace.toBoundaryTrace.outputs = outputValues := by
   apply BoundaryTrace.ofLists_outputs
+
+@[simp] theorem toBoundaryTrace_nil
+    {ports : ModulePorts}
+    {Step : ports.inputs.Values → State →
+      ports.outputs.Values → State → Prop}
+    (state : State) :
+    (Trace.nil (Step := Step) state).toBoundaryTrace = [] := by
+  apply BoundaryTrace.ext <;> simp
+
+@[simp] theorem toBoundaryTrace_cons
+    {ports : ModulePorts}
+    {Step : ports.inputs.Values → State →
+      ports.outputs.Values → State → Prop}
+    {currentState nextState finalState : State}
+    {remainingInputs : List ports.inputs.Values}
+    {remainingOutputs : List ports.outputs.Values}
+    (input : ports.inputs.Values) (output : ports.outputs.Values)
+    (transition : Step input currentState output nextState)
+    (rest : Trace Step nextState remainingInputs remainingOutputs finalState) :
+    (Trace.cons input output transition rest).toBoundaryTrace =
+      { inputs := input, outputs := output } :: rest.toBoundaryTrace := by
+  apply BoundaryTrace.ext <;> simp
 
 @[simp] theorem toBoundaryTrace_length
     {ports : ModulePorts}

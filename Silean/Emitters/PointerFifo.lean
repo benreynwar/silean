@@ -13,7 +13,7 @@ def naming :=
     StructuredPayload.naming).withKey ⟨"pointer_fifo", "", []⟩
 
 def firrtl : FIRRTL.RenderResult String :=
-  FIRRTL.renderClosedCircuit naming
+  FIRRTL.renderCircuit naming
 
 end Silean.Emitters.PointerFifo
 

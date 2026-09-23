@@ -153,14 +153,6 @@ example (initialState : (moduleStructure 0 4 2).State) :
       result_toInt_of_execution 0 4 2 execution 0 (by simp) outputInTrace
     _ = 0 := by native_decide
 
--- Zero-width and asymmetric boundaries remain closed structural hierarchies.
-example : (moduleStructure 0 0 0).HasNoBlackboxes := by native_decide
-example : (moduleStructure 0 4 2).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 0 1).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 3 0).HasNoBlackboxes := by native_decide
-example : (moduleStructure 4 3 1).HasNoBlackboxes := by native_decide
-example : (moduleStructure 3 5 3).HasNoBlackboxes := by native_decide
-
 private def contains (text fragment : String) : Bool :=
   (text.splitOn fragment).length > 1
 
@@ -191,7 +183,7 @@ private def rootHasShape (leftWidth rightWidth latency : Nat) : Bool :=
       contains text "connect register_2.in, register_1.out" &&
       contains text "connect result, register_2.out"
 
-#guard match renderClosedCircuit (naming 4 3 3) with
+#guard match renderCircuit (naming 4 3 3) with
   | .error _ => false
   | .ok text => contains text "public module PipelinedSignedMultiply_4_3_3" &&
       contains text "module SignedMultiply_4_3" &&

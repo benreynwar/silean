@@ -36,6 +36,33 @@ def Computes (latency : Nat) (function : α → β)
     (inputs : List α) (outputs : List β) : Prop :=
   Relates latency (fun input output => output = function input) inputs outputs
 
+/-- Project a deterministic port-record contract onto the payload sequences
+selected from its input and output records.  This is the standard bridge from
+a public module contract to the value-level computations used for serial
+composition. -/
+theorem computes_of_holds_projection
+    {ports : ModulePorts} {latency : Nat} {α β : Type}
+    {function : α → β} {trace : BoundaryTrace ports}
+    (inputProjection : ports.inputs.Values → α)
+    (outputProjection : ports.outputs.Values → β)
+    (holds : Holds latency
+      (fun input output =>
+        outputProjection output = function (inputProjection input)) trace) :
+    Computes latency function
+      (trace.inputs.map inputProjection)
+      (trace.outputs.map outputProjection) := by
+  unfold Holds Relates at holds
+  unfold Computes Relates
+  constructor
+  · simpa only [List.length_map] using holds.1
+  · intro t inputInTrace outputInTrace
+    have originalInputInTrace : t < trace.inputs.length := by
+      simpa using inputInTrace
+    have originalOutputInTrace : t + latency < trace.outputs.length := by
+      simpa using outputInTrace
+    have related := holds.2 t originalInputInTrace originalOutputInTrace
+    simpa only [List.get_eq_getElem, List.getElem_map] using related
+
 /-- Read a fixed-latency relation at one valid delayed position. -/
 theorem relation_at
     {α β : Type} {latency : Nat} {relation : α → β → Prop}

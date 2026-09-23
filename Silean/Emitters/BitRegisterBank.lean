@@ -9,7 +9,7 @@ def naming :=
   (Modules.RegisterBank.Naming.naming .bit 2 1).withKey
     ⟨"bit_register_bank", "", []⟩
 
-def firrtl : FIRRTL.RenderResult String := FIRRTL.renderClosedCircuit naming
+def firrtl : FIRRTL.RenderResult String := FIRRTL.renderCircuit naming
 
 end Silean.Emitters.BitRegisterBank
 

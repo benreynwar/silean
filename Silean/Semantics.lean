@@ -1,8 +1,10 @@
 import Silean.Semantics.Trace
 import Silean.Semantics.BoundaryTrace
 import Silean.Semantics.FixedLatency
+import Silean.Semantics.FramedLatency
 import Silean.Semantics.DelayLine
 import Silean.Semantics.StructuralEquations
+import Silean.Semantics.ModuleBodyTrace
 import Silean.Semantics.StructuralDependency
 import Silean.Semantics.StructuralExecution
 import Silean.Semantics.StructuralObservation

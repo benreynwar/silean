@@ -240,7 +240,7 @@ theorem childSolutionsMatchContracts_of_subsingletonState
 /-! ## Assembling a scheduled layer certificate
 
 The schedules and their coverage proof establish the two generic structural
-facts required by every non-blackbox layer: a solution exists and is unique.
+facts required by every structural layer: a solution exists and is unique.
 A module still supplies its state correspondence and the meaningful proof that
 every structural solution implements its contract.  Keeping this constructor
 here prevents module files from repeatedly rebuilding the same certification

@@ -12,9 +12,6 @@ noncomputable example : Contracts.Cycle.ModuleCycleCertified
     (Modules.EqualsConstant.ports threeBits) :=
   Modules.EqualsConstant.certified threeBits five
 
-example : (Modules.EqualsConstant.moduleStructure threeBits five).HasNoBlackboxes := by
-  native_decide
-
 def matchingInputs : (Modules.EqualsConstant.ports threeBits).inputs.Values
   | .value => five
 

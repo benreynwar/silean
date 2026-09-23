@@ -33,7 +33,8 @@ module_design VectorReindex (element : SignalType) (inputWidth : Nat)
     (outputWidth : Nat)
     (layout : Fin outputWidth → Fin inputWidth)
     (variant := VectorReindex.Internal.variant layout)
-    (specialization := [.natural inputWidth, .natural outputWidth])
+    (specialization :=
+      [.signalType element, .natural inputWidth, .natural outputWidth])
     with (elementNaming : Naming.SignalTypeNaming element :=
       .positional element) where
   boundary (VectorReindex.ports element inputWidth outputWidth)

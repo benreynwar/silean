@@ -75,6 +75,17 @@ def prependMany {α : Type u} {value : α} {values : List α}
   | [] => index
   | _ :: rest => .tail (index.prependMany rest)
 
+/-- Locate a value inside one selected list of a flattened family. -/
+def flatMap {α : Type u} {β : Type v} (transform : α → List β)
+    {outer : α} {outers : List α} {value : β}
+    (outerIndex : ListIndex outer outers)
+    (innerIndex : ListIndex value (transform outer)) :
+    ListIndex value (outers.flatMap transform) :=
+  match outerIndex with
+  | .head => innerIndex.appendRight _
+  | .tail index =>
+      (flatMap transform index innerIndex).prependMany _
+
 def finRange : (index : Fin width) → ListIndex index (List.finRange width) := by
   induction width with
   | zero => exact fun index => Fin.elim0 index
@@ -89,6 +100,71 @@ def toFin {α : Type u} {value : α} {values : List α} :
   | .head => 0
   | .tail index => index.toFin.succ
 
+/-- Transporting only the selected value does not change its list position. -/
+theorem toFin_val_transport {α : Type u} {left right : α}
+    {values : List α} (equal : left = right)
+    (index : ListIndex left values) :
+    ((equal ▸ index : ListIndex right values).toFin.val) = index.toFin.val := by
+  cases equal
+  rfl
+
+@[simp] theorem toFin_map_val {α : Type u} {β : Type v}
+    (transform : α → β) {value : α} {values : List α}
+    (index : ListIndex value values) :
+    (index.map transform).toFin.val = index.toFin.val := by
+  induction index with
+  | head => rfl
+  | tail _ induction => simp [map, toFin, induction]
+
+/-- Values preceding the selected occurrence, in their original list order. -/
+def preceding {α : Type u} {value : α} {values : List α} :
+    ListIndex value values → List α
+  | .head => []
+  | .tail (other := other) index => other :: index.preceding
+
+@[simp] theorem preceding_head {α : Type u} (value : α) (rest : List α) :
+    preceding (.head : ListIndex value (value :: rest)) = [] := rfl
+
+@[simp] theorem preceding_tail {α : Type u} {value other : α}
+    {rest : List α} (index : ListIndex value rest) :
+    preceding (.tail index : ListIndex value (other :: rest)) =
+      other :: index.preceding := rfl
+
+@[simp] theorem preceding_map {α : Type u} {β : Type v}
+    (transform : α → β) {value : α} {values : List α}
+    (index : ListIndex value values) :
+    (index.map transform).preceding = index.preceding.map transform := by
+  induction index with
+  | head => rfl
+  | tail _ induction => simp [map, preceding, induction]
+
+@[simp] theorem preceding_prependMany_head {α : Type u}
+    (precedingValues : List α) (value : α) (rest : List α) :
+    ((.head : ListIndex value (value :: rest)).prependMany precedingValues).preceding =
+      precedingValues := by
+  induction precedingValues with
+  | nil => rfl
+  | cons head tail induction => simp [prependMany, induction]
+
+/-- A strictly earlier constructive position occurs among the values preceding
+the later position. -/
+theorem mem_preceding_of_toFin_lt {α : Type u}
+    {left right : α} {values : List α}
+    (leftIndex : ListIndex left values) (rightIndex : ListIndex right values)
+    (earlier : leftIndex.toFin.val < rightIndex.toFin.val) :
+    left ∈ rightIndex.preceding := by
+  induction rightIndex generalizing left with
+  | head =>
+      cases leftIndex <;> simp_all [toFin]
+  | @tail other rest rightIndex induction =>
+      cases leftIndex with
+      | head => simp [preceding]
+      | tail leftIndex =>
+          simp only [toFin] at earlier
+          simp only [preceding, List.mem_cons]
+          exact Or.inr
+            (induction leftIndex (Nat.succ_lt_succ_iff.mp earlier))
+
 /-- Forget the computational position and recover ordinary list membership. -/
 theorem mem {α : Type u} {value : α} {values : List α}
     (index : ListIndex value values) : value ∈ values := by
@@ -101,6 +177,12 @@ theorem get_eq {α : Type u} {value : α} {values : List α}
   induction index with
   | head => rfl
   | tail _ induction => exact induction
+
+@[simp] theorem finRange_toFin_val (index : Fin width) :
+    (finRange index).toFin.val = index.val := by
+  have selected := (finRange index).get_eq
+  have valuesEqual := congrArg Fin.val selected
+  simpa using valuesEqual
 
 /-- The witness can be used as a bounded index and retrieves the value named
 in its type. -/
@@ -136,6 +218,17 @@ theorem eq_of_nodup {α : Type u} {value : α} {values : List α}
       | tail right =>
           congr
           exact induction (List.nodup_cons.mp nodup).2 right
+
+/-- Positions transported across equal duplicate-free lists have the same
+chronological prefix. -/
+theorem preceding_eq_of_list_eq {α : Type u} {value : α}
+    {leftValues rightValues : List α}
+    (equal : leftValues = rightValues) (nodup : leftValues.Nodup)
+    (leftIndex : ListIndex value leftValues)
+    (rightIndex : ListIndex value rightValues) :
+    leftIndex.preceding = rightIndex.preceding := by
+  subst rightValues
+  exact congrArg preceding (eq_of_nodup nodup leftIndex rightIndex)
 
 end ListIndex
 
@@ -255,6 +348,19 @@ theorem nodup_map_of_injective (transform : α → β)
         exact fresh source sourceMem (injective equal.symm).symm
       · exact nodup_map_of_injective transform injective tailNodup
 
+/-- Reversing a duplicate-free list preserves duplicate-freedom. -/
+theorem nodup_reverse_of_nodup : ∀ {values : List α},
+    values.Nodup → values.reverse.Nodup
+  | [], _ => .nil
+  | head :: tail, .cons fresh tailNodup => by
+      rw [List.reverse_cons]
+      apply List.nodup_append.mpr
+      refine ⟨nodup_reverse_of_nodup tailNodup, by simp, ?_⟩
+      intro value inTail rightValue inHead equal
+      simp only [List.mem_reverse] at inTail
+      simp only [List.mem_singleton] at inHead
+      exact fresh value inTail (equal.trans inHead).symm
+
 theorem finRange_nodup : ∀ width, (List.finRange width).Nodup
   | 0 => .nil
   | width + 1 => by
@@ -335,6 +441,44 @@ example : (Enumeration.fin 3).values = [0, 1, 2] := rfl
   locate
     | .inl value => (left.locate value).map Sum.inl |>.appendRight _
     | .inr value => (right.locate value).map Sum.inr |>.prependMany _
+
+/-- Lexicographic enumeration of a Cartesian product. -/
+@[reducible] def product (left : Enumeration α) (right : Enumeration β) :
+    Enumeration (α × β) where
+  values := left.values.flatMap fun leftValue =>
+    right.values.map fun rightValue => (leftValue, rightValue)
+  nodup := by
+    have all : ∀ (values : List α), values.Nodup →
+        (values.flatMap fun leftValue =>
+          right.values.map fun rightValue =>
+            (leftValue, rightValue)).Nodup := by
+      intro values nodup
+      induction nodup with
+      | nil => simp
+      | @cons head tail fresh tailNodup induction =>
+          rw [List.flatMap_cons]
+          apply List.nodup_append.mpr
+          refine ⟨
+            List.nodup_map_of_injective (fun rightValue => (head, rightValue))
+              (by intro first second equal; exact congrArg Prod.snd equal)
+              right.nodup,
+            induction, ?_⟩
+          intro pair inHead _ inTail equal
+          rcases List.mem_map.mp inHead with ⟨rightValue, _, rfl⟩
+          rcases List.mem_flatMap.mp inTail with
+            ⟨leftValue, leftValueInTail, pairInRight⟩
+          rcases List.mem_map.mp pairInRight with
+            ⟨otherRight, _, pairEqual⟩
+          have headEqual : head = leftValue := by
+            exact congrArg Prod.fst (equal.trans pairEqual.symm)
+          exact fresh leftValue leftValueInTail headEqual
+    exact all left.values left.nodup
+  locate pair :=
+    ListIndex.flatMap
+      (fun leftValue => right.values.map fun rightValue =>
+        (leftValue, rightValue))
+      (left.locate pair.1)
+      ((right.locate pair.2).map fun rightValue => (pair.1, rightValue))
 
 example : (Enumeration.sum examplePorts (Enumeration.fin 2)).values =
     [.inl .enable, .inl .data, .inr 0, .inr 1] := rfl

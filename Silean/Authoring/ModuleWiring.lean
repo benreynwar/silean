@@ -109,9 +109,15 @@ private def inputAlternative (contextName : TSyntax `ident)
   let source ← elaborateModuleWireSource contextName source
   `(matchAltExpr| | $instancePattern, $sink => $source)
 
-elab_rules : command
-  | `(module_wiring $wiringName:ident $params:moduleWiringParam*
-        for $context:term where $groups:moduleWireGroup*) => do
+/--
+Shared implementation of `module_wiring`. Outline authoring sets
+`emitStructure := false` so that the same wiring and body are generated before
+every child implementation is available.
+-/
+def elaborateModuleWiringDeclaration (wiringName : TSyntax `ident)
+    (params : Array (TSyntax `moduleWiringParam)) (context : TSyntax `term)
+    (groups : Array (TSyntax `moduleWireGroup))
+    (emitStructure : Bool := true) : CommandElabM Unit := do
     let parsedParams ← params.mapM parseParam
     let binders := parsedParams.map (·.binder)
     let arguments := parsedParams.map (·.argument)
@@ -155,11 +161,17 @@ elab_rules : command
           Silean.ModuleBody :=
         ⟨$context, $wiringName $arguments:term*⟩
     )
-    elabCommand <| ← `(
-      @[reducible] def $moduleStructureName $binders:bracketedBinder* :
-          Silean.ModuleStructure ($context).ports :=
-        .composite ($bodyName $arguments:term*)
-          ($structuralChildrenName $arguments:term*)
-    )
+    if emitStructure then
+      elabCommand <| ← `(
+        @[reducible] def $moduleStructureName $binders:bracketedBinder* :
+            Silean.ModuleStructure ($context).ports :=
+          .composite ($bodyName $arguments:term*)
+            ($structuralChildrenName $arguments:term*)
+      )
+
+elab_rules : command
+  | `(module_wiring $wiringName:ident $params:moduleWiringParam*
+        for $context:term where $groups:moduleWireGroup*) =>
+      elaborateModuleWiringDeclaration wiringName params context groups
 
 end Silean.Authoring
