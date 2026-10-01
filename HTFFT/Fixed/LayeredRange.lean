@@ -12,48 +12,6 @@ from a public decoded-value bound. -/
 def VectorBound (bound : Int) (values : Vector depth) : Prop :=
   ∀ index, ComplexBound bound (values index)
 
-/-- Convert a natural decoded componentwise magnitude bound back into the
-corresponding raw-integer bound. -/
-theorem complexBound_of_decode_le (format : Format)
-    (value : HTFFT.Complex Int) (bound : Int)
-    (decodedBound :
-      componentNorm (decodeComplex format value) ≤
-        (bound : ℝ) / format.scale) :
-    ComplexBound bound value := by
-  have scalePositive : (0 : ℝ) < format.scale := by
-    simp [Format.scale]
-  have realPart :
-      (decodeComplex format value).re =
-        (value.real : ℝ) / format.scale := by
-    simp only [decodeComplex, FixedPoint.decodeComplex, HTFFT.Complex.map,
-      FixedPoint.decode,
-      rationalComplexToComplex_re]
-    rw [Rat.cast_divInt]
-    norm_cast
-  have imagPart :
-      (decodeComplex format value).im =
-        (value.imag : ℝ) / format.scale := by
-    simp only [decodeComplex, FixedPoint.decodeComplex, HTFFT.Complex.map,
-      FixedPoint.decode,
-      rationalComplexToComplex_im]
-    rw [Rat.cast_divInt]
-    norm_cast
-  have realDecoded :=
-    (abs_re_le_componentNorm (decodeComplex format value)).trans decodedBound
-  have imagDecoded :=
-    (abs_im_le_componentNorm (decodeComplex format value)).trans decodedBound
-  rw [realPart, abs_div, abs_of_pos scalePositive] at realDecoded
-  rw [imagPart, abs_div, abs_of_pos scalePositive] at imagDecoded
-  have realRaw : |(value.real : ℝ)| ≤ bound := by
-    apply (div_le_div_iff_of_pos_right scalePositive).mp
-    simpa using realDecoded
-  have imagRaw : |(value.imag : ℝ)| ≤ bound := by
-    apply (div_le_div_iff_of_pos_right scalePositive).mp
-    simpa using imagDecoded
-  constructor
-  · exact_mod_cast realRaw
-  · exact_mod_cast imagRaw
-
 theorem vectorBound_of_decodedComponentMagnitude (config : Config depth)
     (boundary : Exact.LayerBoundary depth) (values : Vector depth)
     (bound : Int)
@@ -267,5 +225,218 @@ theorem noOverflow_initial_of_bound
       safe stage.castSucc)
     (twiddleBounded stage) safe.2.2.1 (safe.2.2.2 stage).1
     (safe.2.2.2 stage).2).1
+
+/-! ## Numerical range safety
+
+The raw recurrence above remains useful for small concrete arithmetic tests.
+The public FFT proof uses the following tighter criterion instead.  It shares
+the same `Bounds` recurrence as the accuracy proof, so range grows with the
+actual radix-two magnitude/error analysis rather than an unrelated `3^s`
+estimate. -/
+
+/-- Static capacity conditions sufficient for the approved FFT arithmetic
+policy.  At stage `s`, `magnitude + error` bounds the decoded hardware data,
+and `1 + twiddleError s` bounds the decoded stored twiddle. -/
+structure RangeSafe (config : Config depth)
+    (twiddleError : Fin depth → ℝ) (initial : Bounds) : Prop where
+  initialPolicy : ∀ stage : Fin depth,
+    config.butterfly stage =
+      Butterfly.Fixed.Config.initial
+        (config.boundaryFormat stage.castSucc).width
+        (config.boundaryFormat stage.castSucc).fractionalBits
+        (config.twiddleFormat stage).width
+        (config.twiddleFormat stage).fractionalBits
+  dataFits : ∀ stage : Fin depth,
+    let bounds := boundsAt config twiddleError initial stage.castSucc
+    bounds.magnitude + bounds.error ≤
+      decodedCapacity (config.boundaryFormat stage.castSucc)
+  productFits : ∀ stage : Fin depth,
+    let bounds := boundsAt config twiddleError initial stage.castSucc
+    let dataMagnitude := bounds.magnitude + bounds.error
+    dataMagnitude * (1 + twiddleError stage) +
+        quantum (config.boundaryFormat stage.castSucc) ≤
+      decodedCapacity (config.boundaryFormat stage.castSucc)
+  outputFits : ∀ stage : Fin depth,
+    let bounds := boundsAt config twiddleError initial stage.castSucc
+    let dataMagnitude := bounds.magnitude + bounds.error
+    dataMagnitude +
+          (dataMagnitude * (1 + twiddleError stage) +
+            quantum (config.boundaryFormat stage.castSucc)) ≤
+      decodedCapacity (config.boundaryFormat stage.succ)
+
+/-- Largest incoming decoded envelope admitted by one stage, given an
+admissible envelope at the following boundary.  The four terms respectively
+reserve room for the stage input, rounded product, butterfly output, and the
+complete propagated accuracy envelope. -/
+noncomputable def stageInputBudget (config : Config depth)
+    (twiddleError : Fin depth → ℝ) (stage : Fin depth)
+    (nextBudget : ℝ) : ℝ :=
+  let dataCapacity := decodedCapacity
+    (config.boundaryFormat stage.castSucc)
+  let outputCapacity := decodedCapacity
+    (config.boundaryFormat stage.succ)
+  let productQuantum := quantum
+    (config.boundaryFormat stage.castSucc)
+  let coefficient := 1 + twiddleError stage
+  let outputCoefficient := 2 + twiddleError stage
+  min dataCapacity
+    (min ((dataCapacity - productQuantum) / coefficient)
+      (min ((outputCapacity - productQuantum) / outputCoefficient)
+        ((nextBudget - arithmeticError (config.butterfly stage)) /
+          outputCoefficient)))
+
+/-- Safe decoded envelope at a layer boundary, computed backwards from the
+final output format. -/
+noncomputable def rangeBudgetAt (config : Config depth)
+    (twiddleError : Fin depth → ℝ)
+    (boundary : Exact.LayerBoundary depth) : ℝ :=
+  (Exact.butterflyStageSuffix depth boundary).foldr
+    (fun stage next => stageInputBudget config twiddleError stage next)
+    (decodedCapacity (config.boundaryFormat (Fin.last depth)))
+
+/-- The natural input envelope admitted by all derived intermediate formats. -/
+noncomputable def inputBudget (config : Config depth)
+    (twiddleError : Fin depth → ℝ) : ℝ :=
+  rangeBudgetAt config twiddleError 0
+
+@[simp] theorem rangeBudgetAt_castSucc (config : Config depth)
+    (twiddleError : Fin depth → ℝ) (stage : Fin depth) :
+    rangeBudgetAt config twiddleError stage.castSucc =
+      stageInputBudget config twiddleError stage
+        (rangeBudgetAt config twiddleError stage.succ) := by
+  simp [rangeBudgetAt, Exact.butterflyStageSuffix_castSucc]
+
+theorem stageInputBudget_le_dataCapacity (config : Config depth)
+    (twiddleError : Fin depth → ℝ) (stage : Fin depth) (nextBudget : ℝ) :
+    stageInputBudget config twiddleError stage nextBudget ≤
+      decodedCapacity (config.boundaryFormat stage.castSucc) := by
+  exact min_le_left _ _
+
+theorem stageInputBudget_le_productLimit (config : Config depth)
+    (twiddleError : Fin depth → ℝ) (stage : Fin depth) (nextBudget : ℝ) :
+    stageInputBudget config twiddleError stage nextBudget ≤
+      (decodedCapacity (config.boundaryFormat stage.castSucc) -
+          quantum (config.boundaryFormat stage.castSucc)) /
+        (1 + twiddleError stage) := by
+  exact (min_le_right _ _).trans (min_le_left _ _)
+
+theorem stageInputBudget_le_outputLimit (config : Config depth)
+    (twiddleError : Fin depth → ℝ) (stage : Fin depth) (nextBudget : ℝ) :
+    stageInputBudget config twiddleError stage nextBudget ≤
+      (decodedCapacity (config.boundaryFormat stage.succ) -
+          quantum (config.boundaryFormat stage.castSucc)) /
+        (2 + twiddleError stage) := by
+  exact (min_le_right _ _).trans
+    ((min_le_right _ _).trans (min_le_left _ _))
+
+theorem stageInputBudget_le_nextLimit (config : Config depth)
+    (twiddleError : Fin depth → ℝ) (stage : Fin depth) (nextBudget : ℝ) :
+    stageInputBudget config twiddleError stage nextBudget ≤
+      (nextBudget - arithmeticError (config.butterfly stage)) /
+        (2 + twiddleError stage) := by
+  exact (min_le_right _ _).trans
+    ((min_le_right _ _).trans (min_le_right _ _))
+
+/-- A decoded value close to an exact value of bounded magnitude has magnitude
+at most the sum of those two bounds. -/
+theorem norm_decode_le_magnitude_add_error
+    {format : Format} {fixed : HTFFT.Complex Int} {exact : ℂ}
+    {magnitude error : ℝ}
+    (exactMagnitude : ‖exact‖ ≤ magnitude)
+    (close : ‖decodeComplex format fixed - exact‖ ≤ error) :
+    ‖decodeComplex format fixed‖ ≤ magnitude + error := by
+  calc
+    ‖decodeComplex format fixed‖ =
+        ‖(decodeComplex format fixed - exact) + exact‖ := by
+      congr 1
+      ring
+    _ ≤ ‖decodeComplex format fixed - exact‖ + ‖exact‖ :=
+      norm_add_le _ _
+    _ ≤ error + magnitude := add_le_add close exactMagnitude
+    _ = magnitude + error := by ring
+
+/-- One stage's natural exact-magnitude/error invariant and its static
+capacity certificate derive the concrete local no-overflow predicate. -/
+theorem butterflyLayer_noOverflow_of_bounds
+    (config : Config depth) (table : TwiddleTable depth)
+    (twiddleError : Fin depth → ℝ) (initial : Bounds)
+    (safe : RangeSafe config twiddleError initial)
+    (stage : Fin depth) (fixedInput : Vector depth)
+    (exactInput : Exact.Vector depth ℂ)
+    (inputMagnitude : MagnitudeBound
+      (boundsAt config twiddleError initial stage.castSucc).magnitude
+      exactInput)
+    (inputWithin : Within
+      (boundsAt config twiddleError initial stage.castSucc).error
+      (decodeVector config stage.castSucc fixedInput) exactInput)
+    (boundsNonnegative :
+      (boundsAt config twiddleError initial stage.castSucc).Nonnegative)
+    (twiddleAccuracy : TwiddleAccuracy config table twiddleError) :
+    LayerNoOverflow config table stage fixedInput := by
+  intro group offset
+  let firstIndex := Exact.layerIndexEquiv depth stage
+    { group := group, branch := 0, offset := offset }
+  let secondIndex := Exact.layerIndexEquiv depth stage
+    { group := group, branch := 1, offset := offset }
+  let bounds := boundsAt config twiddleError initial stage.castSucc
+  let dataMagnitude := bounds.magnitude + bounds.error
+  let twiddleMagnitude := 1 + twiddleError stage
+  have dataMagnitudeNonnegative : 0 ≤ dataMagnitude := by
+    dsimp [dataMagnitude, bounds]
+    exact add_nonneg boundsNonnegative.1 boundsNonnegative.2
+  have firstBounded :
+      ‖decodeComplex (config.boundaryFormat stage.castSucc)
+          (fixedInput firstIndex)‖ ≤ dataMagnitude := by
+    exact norm_decode_le_magnitude_add_error
+      (inputMagnitude firstIndex)
+      (by simpa [decodeVector] using inputWithin firstIndex)
+  have secondBounded :
+      ‖decodeComplex (config.boundaryFormat stage.castSucc)
+          (fixedInput secondIndex)‖ ≤ dataMagnitude := by
+    exact norm_decode_le_magnitude_add_error
+      (inputMagnitude secondIndex)
+      (by simpa [decodeVector] using inputWithin secondIndex)
+  have twiddleBounded :
+      ‖decodeComplex (config.twiddleFormat stage)
+          (table.value stage offset)‖ ≤ twiddleMagnitude := by
+    calc
+      ‖decodeComplex (config.twiddleFormat stage)
+          (table.value stage offset)‖ =
+          ‖(decodeComplex (config.twiddleFormat stage)
+              (table.value stage offset) - exactTwiddle stage offset) +
+            exactTwiddle stage offset‖ := by
+        congr 1
+        ring
+      _ ≤ ‖decodeComplex (config.twiddleFormat stage)
+              (table.value stage offset) - exactTwiddle stage offset‖ +
+            ‖exactTwiddle stage offset‖ := norm_add_le _ _
+      _ ≤ twiddleError stage + 1 := by
+        exact add_le_add (twiddleAccuracy.accurate stage offset)
+          (le_of_eq (norm_exactTwiddle stage offset))
+      _ = twiddleMagnitude := by simp [twiddleMagnitude, add_comm]
+  have outputFormatEq :
+      config.boundaryFormat stage.succ =
+        ⟨(config.boundaryFormat stage.castSucc).width + 1,
+          (config.boundaryFormat stage.castSucc).fractionalBits⟩ := by
+    have equality := congrArg Butterfly.Fixed.Config.outputFormat
+      (safe.initialPolicy stage)
+    simpa [Config.butterfly, Butterfly.Fixed.Config.initial] using equality
+  have outputCapacity := safe.outputFits stage
+  rw [outputFormatEq] at outputCapacity
+  rw [safe.initialPolicy stage]
+  exact Butterfly.Fixed.noOverflow_initial_of_magnitudes
+    (config.boundaryFormat stage.castSucc).width
+    (config.boundaryFormat stage.castSucc).fractionalBits
+    (config.twiddleFormat stage).width
+    (config.twiddleFormat stage).fractionalBits
+    (fixedInput firstIndex) (fixedInput secondIndex)
+    (table.value stage offset) dataMagnitude twiddleMagnitude
+    dataMagnitudeNonnegative firstBounded secondBounded twiddleBounded
+    (twiddleAccuracy.fits stage offset)
+    (by simpa [dataMagnitude, bounds] using safe.dataFits stage)
+    (by simpa [dataMagnitude, twiddleMagnitude, bounds] using
+      safe.productFits stage)
+    (by simpa [dataMagnitude, twiddleMagnitude, bounds] using
+      outputCapacity)
 
 end HTFFT.Fixed

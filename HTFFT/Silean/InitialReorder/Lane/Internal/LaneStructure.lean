@@ -27,6 +27,7 @@ open _root_.Silean.Authoring
 open _root_.Silean.Modules
 
 module_design InitialReorder.Lane (depth : Nat)
+    (name := "InitialReorderLane")
     (configuration : Configuration depth)
     (lane : Fin (Configuration.laneCount configuration))
     (variant := s!"lane_{lane.val}")

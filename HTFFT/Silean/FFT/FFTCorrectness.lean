@@ -1,4 +1,4 @@
-import HTFFT.Fixed.LayeredCorrectness
+import HTFFT.Fixed.LayeredRangeCorrectness
 import HTFFT.Silean.FFT.FFT
 
 /-! Representation and numerical bridges for the complete streaming FFT
@@ -62,65 +62,57 @@ no information. No-overflow is not needed for this representation fact. -/
 global error bound. -/
 theorem output_within
     (configuration : Configuration depth)
-    (twiddleError : Fin depth → ℝ)
     (input : InputFrame configuration)
     (output : OutputFrame configuration)
     (exactInput : HTFFT.Exact.Vector depth ℂ)
     (initial : HTFFT.Fixed.Bounds)
     (outputCorrect : output = resultFrame configuration input)
     (initialNonnegative : initial.Nonnegative)
-    (twiddleAccuracy : HTFFT.Fixed.TwiddleAccuracy
-      configuration.arithmetic.fixedConfig configuration.twiddleTable twiddleError)
     (inputMagnitude : HTFFT.Fixed.MagnitudeBound
       initial.magnitude exactInput)
     (inputWithin : HTFFT.Fixed.Within initial.error
       (HTFFT.Fixed.decodeVector configuration.arithmetic.fixedConfig 0
         (decodeInput configuration input)) exactInput)
-    (noOverflow : HTFFT.Fixed.NoOverflow
-      configuration.arithmetic.fixedConfig configuration.twiddleTable
-      (decodeInput configuration input)) :
+    (inputFitsRange :
+      initial.total ≤ configuration.safeInputMagnitude) :
     HTFFT.Fixed.Within
-      (HTFFT.Fixed.boundsAt configuration.arithmetic.fixedConfig
-        twiddleError initial (Fin.last depth)).error
+      (configuration.outputError initial)
       (decodeOutput configuration output)
       (HTFFT.Exact.layeredFFT depth exactInput) := by
   subst output
   rw [decodeOutput_resultFrame]
-  exact HTFFT.Fixed.layeredFFT_within
-    configuration.arithmetic.fixedConfig configuration.twiddleTable twiddleError
+  exact HTFFT.Fixed.layeredFFT_within_of_rangeSafe
+    configuration.arithmetic.fixedConfig configuration.twiddleTable
+    configuration.twiddleError
     (decodeInput configuration input) exactInput initial initialNonnegative
-    twiddleAccuracy inputMagnitude inputWithin noOverflow
+    configuration.twiddleAccuracy inputMagnitude inputWithin
+    (configuration.rangeSafe initial inputFitsRange)
 
 /-- Pointwise Mathlib-DFT form of the complete-frame numerical bridge. The DFT
 is the ordinary unnormalized transform and `index` is in natural order. -/
 theorem output_pointwise_dft
     (configuration : Configuration depth)
-    (twiddleError : Fin depth → ℝ)
     (input : InputFrame configuration)
     (output : OutputFrame configuration)
     (exactInput : HTFFT.Exact.Vector depth ℂ)
     (initial : HTFFT.Fixed.Bounds)
     (outputCorrect : output = resultFrame configuration input)
     (initialNonnegative : initial.Nonnegative)
-    (twiddleAccuracy : HTFFT.Fixed.TwiddleAccuracy
-      configuration.arithmetic.fixedConfig configuration.twiddleTable twiddleError)
     (inputMagnitude : HTFFT.Fixed.MagnitudeBound
       initial.magnitude exactInput)
     (inputWithin : HTFFT.Fixed.Within initial.error
       (HTFFT.Fixed.decodeVector configuration.arithmetic.fixedConfig 0
         (decodeInput configuration input)) exactInput)
-    (noOverflow : HTFFT.Fixed.NoOverflow
-      configuration.arithmetic.fixedConfig configuration.twiddleTable
-      (decodeInput configuration input))
+    (inputFitsRange :
+      initial.total ≤ configuration.safeInputMagnitude)
     (index : Fin (2 ^ depth)) :
     ‖decodeOutput configuration output index -
         ZMod.dft (HTFFT.Exact.toZModVector exactInput)
-          (HTFFT.Exact.zmodIndexEquiv depth index)‖ ≤
-      (HTFFT.Fixed.boundsAt configuration.arithmetic.fixedConfig
-        twiddleError initial (Fin.last depth)).error := by
-  have bounded := output_within configuration twiddleError input output
-    exactInput initial outputCorrect initialNonnegative twiddleAccuracy
-    inputMagnitude inputWithin noOverflow index
+      (HTFFT.Exact.zmodIndexEquiv depth index)‖ ≤
+      configuration.outputError initial := by
+  have bounded := output_within configuration input output
+    exactInput initial outputCorrect initialNonnegative
+    inputMagnitude inputWithin inputFitsRange index
   rw [HTFFT.Exact.layeredFFT_agreesWithDFT] at bounded
   exact bounded
 
@@ -129,7 +121,6 @@ produces an aligned output marker and the stated pointwise DFT accuracy bound
 after exactly `totalLatency` cycles. -/
 theorem accuracy_of_contract
     (configuration : Configuration depth)
-    (twiddleError : Fin depth → ℝ)
     (trace : BoundaryTrace (ports configuration))
     (holds : contract configuration trace)
     (start : Nat)
@@ -143,18 +134,14 @@ theorem accuracy_of_contract
     (exactInput : HTFFT.Exact.Vector depth ℂ)
     (initial : HTFFT.Fixed.Bounds)
     (initialNonnegative : initial.Nonnegative)
-    (twiddleAccuracy : HTFFT.Fixed.TwiddleAccuracy
-      configuration.arithmetic.fixedConfig configuration.twiddleTable twiddleError)
     (inputMagnitude : HTFFT.Fixed.MagnitudeBound
       initial.magnitude exactInput)
     (inputWithin : HTFFT.Fixed.Within initial.error
       (HTFFT.Fixed.decodeVector configuration.arithmetic.fixedConfig 0
         (decodeInput configuration
           (inputFrameAt configuration trace start (by omega)))) exactInput)
-    (noOverflow : HTFFT.Fixed.NoOverflow
-      configuration.arithmetic.fixedConfig configuration.twiddleTable
-      (decodeInput configuration
-        (inputFrameAt configuration trace start (by omega)))) :
+    (inputFitsRange :
+      initial.total ≤ configuration.safeInputMagnitude) :
     FramedLatency.Starts configuration.frameLength_pos
         (fun output : (ports configuration).outputs.Values =>
           output .o_first = true)
@@ -170,8 +157,7 @@ theorem accuracy_of_contract
                     tracePresent)) index -
             ZMod.dft (HTFFT.Exact.toZModVector exactInput)
               (HTFFT.Exact.zmodIndexEquiv depth index)‖ ≤
-          (HTFFT.Fixed.boundsAt configuration.arithmetic.fixedConfig
-            twiddleError initial (Fin.last depth)).error := by
+          configuration.outputError initial := by
   unfold contract FramedLatency.Holds at holds
   have inputPresent :
       start + configuration.frameLength ≤ trace.inputs.length := by omega
@@ -192,11 +178,11 @@ theorem accuracy_of_contract
   constructor
   · exact observed.1
   · intro index
-    exact output_pointwise_dft configuration twiddleError
+    exact output_pointwise_dft configuration
       (inputFrameAt configuration trace start inputPresent)
       (outputFrameAt configuration trace
         (start + configuration.totalLatency) (by omega))
-      exactInput initial outputCorrect initialNonnegative twiddleAccuracy
-      inputMagnitude inputWithin noOverflow index
+      exactInput initial outputCorrect initialNonnegative
+      inputMagnitude inputWithin inputFitsRange index
 
 end HTFFT.Silean.FFT

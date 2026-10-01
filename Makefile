@@ -20,8 +20,14 @@ POINTER_FIFO_DIR := $(BUILD_DIR)/pointer-fifo
 POINTER_FIFO_FIRRTL := $(POINTER_FIFO_DIR)/pointer_fifo.fir
 POINTER_FIFO_VERILOG := $(POINTER_FIFO_DIR)/pointer_fifo.sv
 POINTER_FIFO_SIM := $(POINTER_FIFO_DIR)/sim
+HTFFT_16X4_DIR := $(BUILD_DIR)/htfft-16x4
+HTFFT_16X4_FIRRTL := $(HTFFT_16X4_DIR)/htfft_16x4.fir
+HTFFT_16X4_VERILOG := $(HTFFT_16X4_DIR)/htfft_16x4.sv
+HTFFT_16X4_SIM := $(HTFFT_16X4_DIR)/sim
 LEAN_SOURCES := $(shell find Silean tests/silean/lean -type f -name '*.lean') Silean.lean
 LEAN_BUILD_INPUTS := $(LEAN_SOURCES) lakefile.lean lean-toolchain lake-manifest.json
+HTFFT_LEAN_SOURCES := $(shell find HTFFT tests/htfft/lean -type f -name '*.lean') HTFFT.lean
+HTFFT_LEAN_BUILD_INPUTS := $(LEAN_BUILD_INPUTS) $(HTFFT_LEAN_SOURCES)
 CHECK_SOURCES := $(shell find tests/silean/lean -type f -name '*Checks.lean' | sort)
 FOUNDATIONAL_SOURCES := $(shell find Silean/Foundation Silean/Semantics \
 	Silean/Contracts Silean/Primitives Silean/Composition Silean/Authoring \
@@ -34,7 +40,8 @@ FOUNDATIONAL_SOURCES := $(shell find Silean/Foundation Silean/Semantics \
 	firrtl-register-bank verilog-register-bank test-register-bank \
 	firrtl-pointer-fifo verilog-pointer-fifo check-pointer-fifo-wire-names \
 	test-pointer-fifo \
-	firrtl-serial-fifo verilog-serial-fifo test-serial-fifo
+	firrtl-serial-fifo verilog-serial-fifo test-serial-fifo \
+	firrtl-htfft-16x4 verilog-htfft-16x4 test-htfft-16x4
 
 all: test
 
@@ -44,7 +51,7 @@ verilog-bit-register: $(BIT_REGISTER_VERILOG)
 
 test: check-example-imports check-foundation-compatibility-imports \
 	test-bit-register test-structured-fifo test-serial-fifo \
-	test-register-bank test-pointer-fifo
+	test-register-bank test-pointer-fifo test-htfft-16x4
 
 check-example-imports:
 	@status=0; \
@@ -117,6 +124,15 @@ test-pointer-fifo: check-pointer-fifo-wire-names $(POINTER_FIFO_VERILOG)
 		VERILOG_SOURCES=$(abspath $(POINTER_FIFO_VERILOG)) \
 		SIM_BUILD=$(abspath $(POINTER_FIFO_SIM))
 
+firrtl-htfft-16x4: $(HTFFT_16X4_FIRRTL)
+
+verilog-htfft-16x4: $(HTFFT_16X4_VERILOG)
+
+test-htfft-16x4: $(HTFFT_16X4_VERILOG)
+	$(MAKE) --no-print-directory -C tests/htfft/fft16x4 \
+		VERILOG_SOURCES=$(abspath $(HTFFT_16X4_VERILOG)) \
+		SIM_BUILD=$(abspath $(HTFFT_16X4_SIM))
+
 $(BIT_REGISTER_FIRRTL): $(LEAN_BUILD_INPUTS)
 	mkdir -p $(@D)
 	lake exe emit-bit-register --output $@
@@ -152,6 +168,14 @@ $(POINTER_FIFO_FIRRTL): $(LEAN_BUILD_INPUTS)
 $(POINTER_FIFO_VERILOG): $(POINTER_FIFO_FIRRTL)
 	firtool $(FIRTOOL_FLAGS) --format=fir $< -o $@
 
+$(HTFFT_16X4_FIRRTL): $(HTFFT_LEAN_BUILD_INPUTS)
+	mkdir -p $(@D)
+	lake exe emit-htfft-16x4 --output $@
+
+$(HTFFT_16X4_VERILOG): $(HTFFT_16X4_FIRRTL)
+	firtool $(FIRTOOL_FLAGS) --lowering-options=disallowLocalVariables \
+		--format=fir $< -o $@
+
 clean:
 	rm -rf $(BIT_REGISTER_DIR) $(STRUCTURED_FIFO_DIR) $(REGISTER_BANK_DIR) \
-		$(POINTER_FIFO_DIR) $(SERIAL_FIFO_DIR)
+		$(POINTER_FIFO_DIR) $(SERIAL_FIFO_DIR) $(HTFFT_16X4_DIR)

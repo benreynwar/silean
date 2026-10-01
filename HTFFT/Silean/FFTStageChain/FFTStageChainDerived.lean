@@ -54,9 +54,6 @@ theorem contract_of_body_trace
 contract for the rolled FFT suffix. -/
 theorem contract_of_execution
     (configuration : Configuration depth)
-    (twiddleFits : configuration.arithmetic.TwiddlesFit
-      configuration.twiddleTable)
-    (carrier : configuration.arithmetic.ProductCarriersCover)
     {initialState finalState :
       (moduleStructure depth configuration).State}
     {inputs : List (ports configuration).inputs.Values}
@@ -66,6 +63,6 @@ theorem contract_of_execution
         initialState inputs outputs finalState) :
     contract configuration execution.toBoundaryTrace :=
   Internal.contract_of_execution depth configuration
-    twiddleFits carrier execution
+    execution
 
 end HTFFT.Silean.FFTStageChain

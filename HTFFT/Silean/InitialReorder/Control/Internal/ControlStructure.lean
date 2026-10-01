@@ -24,7 +24,8 @@ open _root_.Silean
 open _root_.Silean.Authoring
 open _root_.Silean.Modules
 
-module_design InitialReorder.Control (addressWidth : Nat) where
+module_design InitialReorder.Control (addressWidth : Nat)
+    (name := "InitialReorderControl") where
   boundary (InitialReorder.Control.ports addressWidth)
     (naming := InitialReorder.Control.Naming.ports addressWidth)
   instances {

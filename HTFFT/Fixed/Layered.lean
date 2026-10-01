@@ -359,6 +359,11 @@ structure Bounds where
 def Bounds.Nonnegative (bounds : Bounds) : Prop :=
   0 ≤ bounds.magnitude ∧ 0 ≤ bounds.error
 
+/-- Combined magnitude and numerical-error envelope.  This is the decoded
+component magnitude that the range proof must accommodate. -/
+def Bounds.total (bounds : Bounds) : ℝ :=
+  bounds.magnitude + bounds.error
+
 /-- The value of one least-significant bit after decoding a format. -/
 noncomputable def quantum (format : Format) : ℝ :=
   1 / (2 : ℝ) ^ format.fractionalBits
@@ -395,6 +400,13 @@ noncomputable def boundsAt (config : Config depth)
     (boundary : Exact.LayerBoundary depth) : Bounds :=
   (Exact.butterflyStagePrefix depth boundary).foldl
     (fun bounds stage => advanceBounds config twiddleError stage bounds) initial
+
+@[simp]
+theorem boundsAt_zero (config : Config depth)
+    (twiddleError : Fin depth → ℝ) (initial : Bounds) :
+    boundsAt config twiddleError initial 0 = initial := by
+  simp [boundsAt, Exact.butterflyStagePrefix,
+    Exact.butterflyStages]
 
 /-- Advancing a boundary advances the scalar bounds through that stage. -/
 theorem boundsAt_boundarySucc (config : Config depth)

@@ -13,9 +13,6 @@ open _root_.Silean.Modules
 fixed-point FFT contract. -/
 theorem contract_of_execution
     (depth : Nat) (configuration : Configuration depth)
-    (twiddleFits : configuration.arithmetic.TwiddlesFit
-      configuration.twiddleTable)
-    (carrier : configuration.arithmetic.ProductCarriersCover)
     {initialState finalState :
       (FFT.moduleStructure depth configuration).State}
     {inputs : List (FFT.ports configuration).inputs.Values}
@@ -39,8 +36,9 @@ theorem contract_of_execution
         ⟨childExecution, childTrace⟩
       have childContract := UnrolledFFTNetwork.contract_of_execution
         configuration.unrolled configuration.prefixTable
-        (configuration.unrolledTwiddlesFit twiddleFits)
-        (configuration.unrolledProductCarriersCover carrier) childExecution
+        (configuration.unrolledTwiddlesFit configuration.storedTwiddlesFit)
+        (configuration.unrolledProductCarriersCover
+          configuration.productCarriersCover) childExecution
       exact childTrace ▸ childContract)
     (by
       rcases childExecutions (.unrolledFirstDelay) with
@@ -52,7 +50,7 @@ theorem contract_of_execution
       rcases childExecutions (.stageChain) with
         ⟨childExecution, childTrace⟩
       have childContract := FFTStageChain.contract_of_execution configuration
-        twiddleFits carrier childExecution
+        childExecution
       exact childTrace ▸ childContract)
     (by
       rcases childExecutions (.finalReorder) with

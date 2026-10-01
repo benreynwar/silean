@@ -13,9 +13,6 @@ open _root_.Silean
 framed contract for the complete rolled FFT suffix. -/
 theorem contract_of_execution
     (depth : Nat) (configuration : Configuration depth)
-    (twiddleFits : configuration.arithmetic.TwiddlesFit
-      configuration.twiddleTable)
-    (carrier : configuration.arithmetic.ProductCarriersCover)
     {initialState finalState :
       (FFTStageChain.moduleStructure depth configuration).State}
     {inputs : List (FFTStageChain.ports configuration).inputs.Values}
@@ -36,7 +33,8 @@ theorem contract_of_execution
         (FFTStageChain.stageGeometry configuration index)
         (configuration.rolledButterflyPipeline index)
         (configuration.rolledTwiddleDefinitionName index)
-        twiddleFits carrier childExecution
+        configuration.storedTwiddlesFit configuration.productCarriersCover
+          childExecution
       rw [childTrace] at childContract
       simpa [Configuration.rolledStageLatency,
         FFTStageChain.stageGeometry] using childContract)

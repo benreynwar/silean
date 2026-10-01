@@ -59,9 +59,6 @@ theorem contract_of_body_trace
 fixed-point FFT contract. -/
 theorem contract_of_execution
     (configuration : Configuration depth)
-    (twiddleFits : configuration.arithmetic.TwiddlesFit
-      configuration.twiddleTable)
-    (carrier : configuration.arithmetic.ProductCarriersCover)
     {initialState finalState :
       (moduleStructure depth configuration).State}
     {inputs : List (ports configuration).inputs.Values}
@@ -71,7 +68,7 @@ theorem contract_of_execution
         initialState inputs outputs finalState) :
     contract configuration execution.toBoundaryTrace :=
   Internal.contract_of_execution depth configuration
-    twiddleFits carrier execution
+    execution
 
 /-- End-to-end accuracy of every execution of the closed hardware hierarchy.
 
@@ -82,8 +79,6 @@ error bound of Mathlib's ordinary unnormalized DFT at the same natural index.
 -/
 theorem accuracy_of_execution
     (configuration : Configuration depth)
-    (twiddleError : Fin depth → ℝ)
-    (carrier : configuration.arithmetic.ProductCarriersCover)
     {initialState finalState :
       (moduleStructure depth configuration).State}
     {inputs : List (ports configuration).inputs.Values}
@@ -103,8 +98,6 @@ theorem accuracy_of_execution
     (exactInput : HTFFT.Exact.Vector depth ℂ)
     (initial : HTFFT.Fixed.Bounds)
     (initialNonnegative : initial.Nonnegative)
-    (twiddleAccuracy : HTFFT.Fixed.TwiddleAccuracy
-      configuration.arithmetic.fixedConfig configuration.twiddleTable twiddleError)
     (inputMagnitude : HTFFT.Fixed.MagnitudeBound
       initial.magnitude exactInput)
     (inputWithin : HTFFT.Fixed.Within initial.error
@@ -112,11 +105,8 @@ theorem accuracy_of_execution
         (decodeInput configuration
           (inputFrameAt configuration execution.toBoundaryTrace start
             (by omega)))) exactInput)
-    (noOverflow : HTFFT.Fixed.NoOverflow
-      configuration.arithmetic.fixedConfig configuration.twiddleTable
-      (decodeInput configuration
-        (inputFrameAt configuration execution.toBoundaryTrace start
-          (by omega)))) :
+    (inputFitsRange :
+      initial.total ≤ configuration.safeInputMagnitude) :
     FramedLatency.Starts configuration.frameLength_pos
         (fun output : (ports configuration).outputs.Values =>
           output .o_first = true)
@@ -132,15 +122,12 @@ theorem accuracy_of_execution
                     tracePresent)) index -
             ZMod.dft (HTFFT.Exact.toZModVector exactInput)
               (HTFFT.Exact.zmodIndexEquiv depth index)‖ ≤
-          (HTFFT.Fixed.boundsAt configuration.arithmetic.fixedConfig
-            twiddleError initial (Fin.last depth)).error := by
-  have twiddleFits := FFTConfiguration.TwiddlesFit.ofAccuracy
-    configuration.arithmetic configuration.twiddleTable twiddleError twiddleAccuracy
+          configuration.outputError initial := by
   have hardwareContract := contract_of_execution configuration
-    twiddleFits carrier execution
-  exact accuracy_of_contract configuration twiddleError
+    execution
+  exact accuracy_of_contract configuration
     execution.toBoundaryTrace hardwareContract start tracePresent inputStarts
-    exactInput initial initialNonnegative twiddleAccuracy inputMagnitude
-    inputWithin noOverflow
+    exactInput initial initialNonnegative inputMagnitude
+    inputWithin inputFitsRange
 
 end HTFFT.Silean.FFT

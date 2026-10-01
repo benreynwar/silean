@@ -75,6 +75,97 @@ theorem abs_roundRatio_le (mode : RoundingMode) (numerator : Int)
   rw [abs_le] at numeratorBound residual ⊢
   constructor <;> nlinarith
 
+/-- A rational value within one guarded bit of the unit interval is safely
+representable after nearest-even quantization in signed Q2 fixed point. -/
+theorem encode_nearest_fits_q2
+    (fractionalBits : Nat) (fractionalBits_min : 2 ≤ fractionalBits)
+    (value : Rat)
+    (bounded : |(value : ℝ)| ≤
+      1 + 1 / (2 : ℝ) ^ (fractionalBits + 1)) :
+    Fits ⟨fractionalBits + 2, fractionalBits⟩
+      (encode .nearestTiesToEven
+        ⟨fractionalBits + 2, fractionalBits⟩ value) := by
+  let rawBoundNat : Nat := 2 * 2 ^ fractionalBits - 2
+  let rawBound : Int := rawBoundNat
+  unfold Fits
+  apply FitsWidth.of_abs_le_signedMax
+  · unfold encode
+    apply abs_roundRatio_le .nearestTiesToEven _ _ rawBound value.den_pos
+    · dsimp [rawBound]
+      positivity
+    · have scaleAtLeast : (4 : ℝ) ≤ (2 ^ fractionalBits : Nat) := by
+        have natural : 2 ^ 2 ≤ 2 ^ fractionalBits :=
+          Nat.pow_le_pow_right (by omega) fractionalBits_min
+        norm_num at natural
+        exact_mod_cast natural
+      push_cast at scaleAtLeast
+      have valueIdentity : (value : ℝ) = value.num / value.den := by
+        rw [Rat.cast_def]
+      have denominatorPositive : (0 : ℝ) < value.den := by
+        exact_mod_cast value.den_pos
+      have desiredReal :
+          |(value.num : ℝ) * (2 ^ fractionalBits : Nat)| ≤
+            ((rawBound : Int) : ℝ) * value.den := by
+        rw [abs_mul, abs_of_nonneg (by positivity :
+          (0 : ℝ) ≤ (2 ^ fractionalBits : Nat))]
+        rw [valueIdentity, abs_div, abs_of_pos denominatorPositive] at bounded
+        dsimp [rawBound, rawBoundNat]
+        push_cast
+        have scalePositive : (0 : ℝ) < (2 : ℝ) ^ fractionalBits := by
+          positivity
+        have denominatorNonnegative : (0 : ℝ) ≤ value.den :=
+          denominatorPositive.le
+        have powerSucc : (2 : ℝ) ^ (fractionalBits + 1) =
+            2 * (2 : ℝ) ^ fractionalBits := by rw [pow_succ]; ring
+        rw [powerSucc] at bounded
+        have scaledBound :
+            |(value.num : ℝ)| ≤
+              (1 + 1 / (2 * (2 : ℝ) ^ fractionalBits)) * value.den :=
+          (div_le_iff₀ denominatorPositive).mp bounded
+        have coefficient :
+            1 + 1 / (2 * (2 : ℝ) ^ fractionalBits) ≤
+              2 - 2 / (2 : ℝ) ^ fractionalBits := by
+          have denominator : (0 : ℝ) < 2 * (2 : ℝ) ^ fractionalBits := by
+            positivity
+          have combined :
+              1 / (2 * (2 : ℝ) ^ fractionalBits) +
+                  2 / (2 : ℝ) ^ fractionalBits =
+                5 / (2 * (2 : ℝ) ^ fractionalBits) := by
+            field_simp
+            ring
+          have fractionLeOne :
+              5 / (2 * (2 : ℝ) ^ fractionalBits) ≤ 1 := by
+            apply (div_le_one denominator).2
+            nlinarith [scaleAtLeast]
+          linarith
+        calc
+          |(value.num : ℝ)| * (2 : ℝ) ^ fractionalBits ≤
+              ((1 + 1 / (2 * (2 : ℝ) ^ fractionalBits)) * value.den) *
+                (2 : ℝ) ^ fractionalBits :=
+            mul_le_mul_of_nonneg_right scaledBound scalePositive.le
+          _ ≤ ((2 - 2 / (2 : ℝ) ^ fractionalBits) * value.den) *
+                (2 : ℝ) ^ fractionalBits := by
+            gcongr
+          _ = (2 * (2 : ℝ) ^ fractionalBits - 2) * value.den := by
+            field_simp
+          _ = ((rawBoundNat : Nat) : ℝ) * value.den := by
+            have powerPositive : 0 < 2 ^ fractionalBits := pow_pos (by omega) _
+            have enough : 2 ≤ 2 * 2 ^ fractionalBits := by omega
+            dsimp [rawBoundNat]
+            rw [Nat.cast_sub enough]
+            push_cast
+            rfl
+      simpa [Format.scale] using (show
+        |value.num * (2 ^ fractionalBits : Nat)| ≤
+          rawBound * value.den from by exact_mod_cast desiredReal)
+  · dsimp [rawBound, signedMax]
+    have powerPositive : 0 < 2 ^ fractionalBits := pow_pos (by omega) _
+    have enough : 2 ≤ 2 * 2 ^ fractionalBits := by omega
+    dsimp [rawBoundNat]
+    rw [Nat.cast_sub enough, pow_succ]
+    push_cast
+    omega
+
 @[simp]
 theorem rescale_eq_self_of_eq (mode : RoundingMode) (fractionalBits : Nat)
     (raw : Int) :

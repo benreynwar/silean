@@ -40,7 +40,8 @@ open _root_.Silean
 open _root_.Silean.Authoring
 open _root_.Silean.Modules
 
-module_design FinalReorder.Control (addressWidth : Nat) where
+module_design FinalReorder.Control (addressWidth : Nat)
+    (name := "FinalReorderControl") where
   boundary (FinalReorder.Control.ports addressWidth)
     (naming := FinalReorder.Control.Naming.ports addressWidth)
   instances {

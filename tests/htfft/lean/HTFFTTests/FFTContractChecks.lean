@@ -12,8 +12,12 @@ open HTFFT.Silean
 #check FFT.Configuration
 #check FFT.Configuration.twiddleTable
 #check FFT.Configuration.prefixTable
-#check FFT.Configuration.twiddleAccuracy_of_enclosure
-#print axioms FFT.Configuration.twiddleAccuracy_of_enclosure
+#check FFT.Configuration.twiddleAccuracy
+#print axioms FFT.Configuration.twiddleAccuracy
+#check FFT.Configuration.safeInputMagnitude
+#check FFT.Configuration.outputBounds
+#check FFT.Configuration.outputError
+#check FFT.Configuration.rangeSafe
 #check FFT.naturalLayout
 #check FFT.unpackInput
 #check FFT.decodeInput

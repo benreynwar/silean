@@ -37,3 +37,6 @@ lean_exe «emit-serial-fifo» where
 
 lean_exe «emit-bit-register-bank» where
   root := `Silean.Emitters.BitRegisterBank
+
+lean_exe «emit-htfft-16x4» where
+  root := `HTFFT.Emitters.FFT16x4

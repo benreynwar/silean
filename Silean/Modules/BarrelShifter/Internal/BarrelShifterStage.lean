@@ -15,7 +15,7 @@ open Silean
 module_ports ports (element : SignalType) (exponent : Nat) where
   input shift : .vector exponent .bit,
   input data : .vector (size exponent) element,
-  output shift : .vector exponent .bit,
+  output shift (name := "shift_out") : .vector exponent .bit,
   output result : .vector (size exponent) element
 
 /-- Natural fixed-latency behavior of one aligned pipeline stage. -/

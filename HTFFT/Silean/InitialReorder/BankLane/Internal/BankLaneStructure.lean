@@ -13,6 +13,7 @@ open _root_.Silean.Authoring
 open _root_.Silean.Modules
 
 module_design InitialReorder.BankLane (depth : Nat)
+    (name := "InitialReorderBankLane")
     (configuration : Configuration depth)
     (specialization := [.natural depth, .natural configuration.laneDepth,
       .signalType (InitialReorder.BankLane.sampleType configuration)]) where
