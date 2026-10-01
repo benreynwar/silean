@@ -1,18 +1,28 @@
 # Silean
 
-WARNING:  On a scale of 0 to 10, where 0 is a project I wrote myself, and 10 is
-a project entirely written by an LLM, this project is an 8.
+WARNING: LLM Usage Scale
+ 0 - A project I wrote myself
+ 2
+ 4
+ 6
+ 8 <--------- THIS PROJECT
+10 - A project entirely written by an LLM
 
-My main role has been setting goals and keeping it going in vaguely the right
-direction.  It's an experiment to see if a proof-assistant-embedded approach to
-hardware design is practical yet. The "documentation" files are all LLM
-generated at the moment and I wouldn't trust them too much.
+This project is an experiment to see if a proof-assistant-centric approach to
+hardware RTL design is practical yet.  The conclusion is that it is practical.
+I've ported a high throughput FFT design that I wrote in VHDL 5 years ago
+[github.com/benreynwar/htfft](github.com/benreynwar/htfft) to a version embedded
+in lean and proved it's equivalence within a specified error bound to the 
+Mathlib complex DFT.
 
-About two years ago I had a go at writing an HDL embedded in dafny
-([Silemma](https://github.com/benreynwar/silemma)).  I made some
-progress, but it ended up being too difficult for me.  Now that LLMs have
-gotten pretty good at writing proofs I decided it was time to have another go,
-but this time using Lean4 and an LLM.
+This repository is a proof-of-concept work and is almost entirely LLM generated.
+It is not a suitable base to build upon, but it is a reasonable demonstration
+of the approach.  My main role has been setting goals and keeping the agent
+going in vaguely the right direction.
+
+At this point the project has served it's purpose and I'm not longer working on
+it.  What I am working on is getting competent enough at writing Lean myself
+that I can create a project similar to this, but that isn't a big pile of slop.
 
 The rest of this README is LLM generated.
 
