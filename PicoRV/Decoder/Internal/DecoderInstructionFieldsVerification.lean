@@ -1,10 +1,11 @@
 import PicoRV.Decoder.DecoderInstructionFields
+import PicoRV.Decoder.Internal.DecoderInstructionFieldsStructure
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Primitives.Constant
 
 /-! Internal schedule and structural certification for instruction fields. -/
@@ -151,31 +152,31 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
 
   have funct3BitsValue : hierStep.childOutputs .funct3Bits .output =
       Silean.Modules.VectorLayout.apply funct3Layout (hierStep.inputs .word) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 3 funct3Layout (childMatch .funct3Bits).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have funct7BitsValue : hierStep.childOutputs .funct7Bits .output =
       Silean.Modules.VectorLayout.apply funct7Layout (hierStep.inputs .word) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 7 funct7Layout (childMatch .funct7Bits).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have opcodeBitsValue : hierStep.childOutputs .opcodeBits .output =
       Silean.Modules.VectorLayout.apply opcodeLayout (hierStep.inputs .word) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 7 opcodeLayout (childMatch .opcodeBits).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have systemMiddleBitsValue : hierStep.childOutputs .systemMiddleBits .output =
       Silean.Modules.VectorLayout.apply systemMiddleLayout (hierStep.inputs .word) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 11 systemMiddleLayout (childMatch .systemMiddleBits).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have systemOuterBitsValue : hierStep.childOutputs .systemOuterBits .output =
       Silean.Modules.VectorLayout.apply systemOuterLayout (hierStep.inputs .word) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 13 systemOuterLayout (childMatch .systemOuterBits).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
@@ -183,7 +184,7 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
   have funct3Value (code : Fin 8) :
       hierStep.childOutputs (.funct3Equals code) .result =
         decide (funct3 (hierStep.inputs .word) = code.val) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 3 .bit) (Silean.BitVector.ofNat 3 code.val)
       (childMatch (.funct3Equals code)).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -196,7 +197,7 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
     · exact code.isLt
   have funct7ZeroValue : hierStep.childOutputs .funct7Zero .result =
       decide (funct7 (hierStep.inputs .word) = 0) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 7 .bit) (Silean.BitVector.ofNat 7 0)
       (childMatch .funct7Zero).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -209,7 +210,7 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
     · decide
   have funct7AlternateValue : hierStep.childOutputs .funct7Alternate .result =
       decide (funct7 (hierStep.inputs .word) = 0x20) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 7 .bit) (Silean.BitVector.ofNat 7 0x20)
       (childMatch .funct7Alternate).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -222,7 +223,7 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
     · decide
   have opcodeSystemValue : hierStep.childOutputs .opcodeSystem .result =
       decide (opcode (hierStep.inputs .word) = 0x73) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 7 .bit) (Silean.BitVector.ofNat 7 0x73)
       (childMatch .opcodeSystem).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -235,7 +236,7 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
     · decide
   have opcodeFenceValue : hierStep.childOutputs .opcodeFence .result =
       decide (opcode (hierStep.inputs .word) = 0x0f) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 7 .bit) (Silean.BitVector.ofNat 7 0x0f)
       (childMatch .opcodeFence).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -248,7 +249,7 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
     · decide
   have systemMiddleZeroValue : hierStep.childOutputs .systemMiddleZero .result =
       decide (field (hierStep.inputs .word) 21 11 = 0) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 11 .bit) (Silean.BitVector.ofNat 11 0)
       (childMatch .systemMiddleZero).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -261,7 +262,7 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
     · decide
   have systemOuterZeroValue : hierStep.childOutputs .systemOuterZero .result =
       decide (field (hierStep.inputs .word) 7 13 = 0) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 13 .bit) (Silean.BitVector.ofNat 13 0)
       (childMatch .systemOuterZero).allowed
     normalize_child_hyp equation unfolding wiring, context

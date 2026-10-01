@@ -4,8 +4,8 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 
 namespace PicoRV.Memory.ResponseCapture
@@ -92,7 +92,7 @@ private theorem implements :
   have responseValue : hierStep.childOutputs .response .result =
       bif (current .mem_valid && memoryInputs.mem_ready)
         then memoryInputs.mem_rdata else current .mem_rdata_q := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .response).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [transferValue, currentFieldsValue, rdataValue] at equation

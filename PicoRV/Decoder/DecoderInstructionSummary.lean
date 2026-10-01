@@ -343,4 +343,32 @@ module_cycle_contract cycleContract for ports where
     | is_lbu_lhu_lw => exact holds _ (by intro impossible; contradiction)
     | is_compare => exact holds _ (by intro impossible; contradiction)
 
+/-- Every allowed step produces exactly the named instruction summaries. -/
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs = outputValues (valuesOf step.inputs) := by
+  funext output
+  cases output with
+  | instr_trap =>
+      exact (trapOutputRule_holds_iff _ _ _).mp
+        (allowed.1 .trap)
+  | is_lui_auipc_jal =>
+      exact (summariesOutputRule_holds_iff _ _ _).mp
+        (allowed.1 .summaries) .is_lui_auipc_jal (by simp)
+  | is_lui_auipc_jal_jalr_addi_add_sub =>
+      exact (summariesOutputRule_holds_iff _ _ _).mp
+        (allowed.1 .summaries) .is_lui_auipc_jal_jalr_addi_add_sub (by simp)
+  | is_slti_blt_slt =>
+      exact (summariesOutputRule_holds_iff _ _ _).mp
+        (allowed.1 .summaries) .is_slti_blt_slt (by simp)
+  | is_sltiu_bltu_sltu =>
+      exact (summariesOutputRule_holds_iff _ _ _).mp
+        (allowed.1 .summaries) .is_sltiu_bltu_sltu (by simp)
+  | is_lbu_lhu_lw =>
+      exact (summariesOutputRule_holds_iff _ _ _).mp
+        (allowed.1 .summaries) .is_lbu_lhu_lw (by simp)
+  | is_compare =>
+      exact (summariesOutputRule_holds_iff _ _ _).mp
+        (allowed.1 .summaries) .is_compare (by simp)
+
 end PicoRV.Decoder.InstructionSummary

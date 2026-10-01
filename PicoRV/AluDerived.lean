@@ -1,52 +1,35 @@
 import PicoRV.Internal.AluVerification
-import PicoRV.Internal.AluCorrespondence
 
 namespace PicoRV.Alu
 
 open Silean
+open Silean.Authoring.CircuitDescription
 
-/-- The concise authored definition expands to the production hierarchy. -/
-theorem authored_definition_corresponds :
-    Silean.Authoring.CircuitDescription.Corresponds
-      Description.description naming :=
-  Description.Internal.corresponds
+/-! Public ALU declarations backed by generated internals. -/
 
-/-! # PicoRV ALU theorems
+abbrev InputNets :=
+  (input : ports.inputs.Label) → Net (ports.inputs.signalType input)
 
-This is the supported proof interface for the ALU. These statements mention
-only boundary steps and source-level results; the child hierarchy, schedules,
-and certification witnesses remain under `Internal/`.
--/
+/-- Place an ALU using the next conventional indexed name. -/
+noncomputable def place (inputs : InputNets) : Builder ports.OutputNets := do
+  let child ← Silean.Authoring.CircuitDescription.placeIndexed
+    "alu" design inputs
+  pure (ports.OutputNets.ofFn child)
 
-/-- Every contract-allowed ALU step returns the pure ALU result. -/
-theorem outputs_of_allowed {step : cycleContract.Step}
-    (allowed : cycleContract.Allows step) :
-    step.outputs .alu_out = aluOut (valuesOf step.inputs) ∧
-      step.outputs .alu_out_0 = aluOut0 (valuesOf step.inputs) :=
-  (outputRule_holds_iff step.inputs step.currentState step.outputs).mp
-    (allowed.1 .apply)
+/-- Place an ALU under an explicitly chosen structural name. -/
+noncomputable def placeNamed (name : Naming.SourceName) (inputs : InputNets) :
+    Builder ports.OutputNets := do
+  let child ← Silean.Authoring.CircuitDescription.placeNamed
+    name design inputs
+  pure (ports.OutputNets.ofFn child)
 
-/-- Every realized step of the concrete hierarchy has the public ALU behavior. -/
-theorem outputs_of_realizes {step : moduleStructure.Step}
-    (realizes : moduleStructure.Realizes step) :
-    step.outputs .alu_out = aluOut (valuesOf step.inputs) ∧
-      step.outputs .alu_out_0 = aluOut0 (valuesOf step.inputs) := by
-  rcases certified.hasCorrespondingState step.currentState with
-    ⟨contractState, corresponds⟩
-  rcases certified.implements contractState step corresponds realizes with
-    ⟨_, allowed, _⟩
-  exact outputs_of_allowed allowed
+attribute [circuit_description] place placeNamed
 
-/-- The authored ALU hierarchy implements its exact cycle contract. -/
-theorem implements_contract :
-    Silean.Contracts.Cycle.Implements moduleStructure cycleContract
-      certification.stateCorresponds :=
-  certification.implements
-
-/-- Structural equations for the complete ALU hierarchy have one solution for
-each boundary input and physical state. -/
-theorem hasExactlyOneSolution : moduleStructure.HasExactlyOneSolution :=
-  ⟨certified.hasStructuralResult, certified.structuralResultUnique⟩
+/-- Every typed implementation corresponding to the authored ALU construction
+implements its exact cycle contract. -/
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports :=
+  Internal.construction_correct
 
 @[simp] theorem aluOut0_eq (inputs : Values) :
     aluOut0 inputs = comparisonOutput inputs := rfl
@@ -56,7 +39,7 @@ theorem sharedUnsignedLess_whenComparing (inputs : Values)
     sharedUnsignedLess inputs = unsignedLessThan inputs.reg_op1 inputs.reg_op2 := by
   unfold sharedUnsignedLess unsignedLessThan
   rw [show (inputs.instr_sub || inputs.is_compare) = true by simp [comparing]]
-  rw [Silean.Modules.AddSub.addSubBits_carry_subtract]
+  rw [Silean.Modules.AddSubWithCarry.addSubBits_carry_subtract]
   by_cases less : Silean.BitVector.toNat 32 inputs.reg_op1 < Silean.BitVector.toNat 32 inputs.reg_op2 <;>
     simp [less] <;> omega
 

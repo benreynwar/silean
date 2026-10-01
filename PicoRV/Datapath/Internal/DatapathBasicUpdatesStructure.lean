@@ -1,11 +1,11 @@
 import PicoRV.Datapath.DatapathNextContracts
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Add.AddDerived
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 namespace PicoRV.Datapath
 
@@ -105,7 +105,7 @@ module_design ExecuteUpdate (name := "picorv32_datapath_execute_update") where
     updatedFields (name := .indexed "named_tuple_splitter" 2) := Silean.Modules.NamedTupleSplitter.designWith
       stateMap DatapathState.schema,
     falseBit (name := .indexed "constant" 0) := Silean.Modules.Constant.design .bit false,
-    target (name := .indexed "add" 0) := Silean.Modules.Add.design 32,
+    target (name := .indexed "add" 0) := Silean.Modules.AddWithCarry.design 32,
     result (name := .indexed "named_tuple_combiner" 0) := Silean.Modules.NamedTupleCombiner.designWith
       stateMap DatapathState.schema }
   wiring {

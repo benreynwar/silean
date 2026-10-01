@@ -1,7 +1,7 @@
-import PicoRV.Control.ControlNext
+import PicoRV.Control.ControlNextDerived
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Modules.Register.RegisterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Or

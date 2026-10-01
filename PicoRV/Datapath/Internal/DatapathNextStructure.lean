@@ -4,8 +4,8 @@ import PicoRV.Datapath.DatapathLoadRs1Update
 import PicoRV.Datapath.DatapathMemoryUpdate
 import PicoRV.Datapath.DatapathShiftUpdate
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Datapath
 

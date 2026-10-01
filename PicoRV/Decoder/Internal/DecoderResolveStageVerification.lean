@@ -1,7 +1,7 @@
 import PicoRV.Decoder.Internal.DecoderResolveStageStructure
-import PicoRV.Decoder.DecoderImmediateTheorems
-import PicoRV.Decoder.DecoderInstructionMatchTheorems
-import PicoRV.Decoder.DecoderInstructionSummaryTheorems
+import PicoRV.Decoder.DecoderImmediateDerived
+import PicoRV.Decoder.DecoderInstructionMatchDerived
+import PicoRV.Decoder.DecoderInstructionSummaryDerived
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
@@ -11,7 +11,7 @@ import Silean.Modules.EnabledRegister.EnabledRegisterDerived
 import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
 import Silean.Modules.Register.RegisterDerived
 import Silean.Modules.ResetRegister.ResetRegisterDerived
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.Constant.Constant
 import Silean.Primitives.Not
 
@@ -440,11 +440,12 @@ private theorem implements :
   have summaryMatch := coveredMatch .instructionSummary
 
   have resetCurrent : hierStep.childOutputs .resetMatchStorage .value = resetMatches :=
-    Silean.Modules.EnabledResetRegister.value_of_allowed resetMatch.allowed
+    Silean.Modules.EnabledResetRegister.cycleContract.value resetMatchType
+      falseResetMatches resetMatch.allowed
   have retainedCurrent : hierStep.childOutputs .retainedMatchStorage .q = retainedMatches :=
-    Silean.Modules.EnabledRegister.q_of_allowed retainedMatch.allowed
+    Silean.Modules.EnabledRegister.cycleContract.q retainedMatchType retainedMatch.allowed
   have immediateCurrent : hierStep.childOutputs .immediateStorage .q = immediate :=
-    Silean.Modules.EnabledRegister.q_of_allowed immediateMatch.allowed
+    Silean.Modules.EnabledRegister.cycleContract.q immediateType immediateMatch.allowed
   have ordinaryCurrent : hierStep.childOutputs .ordinarySummaryStorage .output =
       ordinarySummaries :=
     Silean.Modules.Register.output_of_allowed ordinaryMatch.allowed
@@ -452,7 +453,7 @@ private theorem implements :
       addSubSummary :=
     Silean.Modules.Register.output_of_allowed addSubMatch.allowed
   have compareCurrent : hierStep.childOutputs .compareStorage .value = compare :=
-    Silean.Modules.ResetRegister.value_of_allowed compareMatch.allowed
+    Silean.Modules.ResetRegister.cycleContract.value .bit false compareMatch.allowed
 
   have resetOutputsEquation :=
     (Silean.Composition.SignalSplitter.outputRule_holds_iff resetMatchSplitter _ _ _).mp
@@ -625,7 +626,7 @@ private theorem implements :
         (summaryOutput (ordinarySummaryRegister index)))) value)
       (summaryOutputValue _ (ordinaryNotTrap index))
 
-  have immediateSelectionEquation := Silean.Modules.Mux.result_of_allowed
+  have immediateSelectionEquation := Silean.Modules.Mux.cycleContract.result
     immediateType (coveredMatch .immediateSelection).allowed
   normalize_child_hyp immediateSelectionEquation unfolding wiring, context
   have immediateSelectionValue := immediateSelectionEquation.trans
@@ -636,7 +637,7 @@ private theorem implements :
     summaryOutputValue .is_lui_auipc_jal_jalr_addi_add_sub
       (by intro equal; cases equal)
   rw [summaryValues] at addSubSummaryValue
-  have addSubSelectionEquation := Silean.Modules.Mux.result_of_allowed
+  have addSubSelectionEquation := Silean.Modules.Mux.cycleContract.result
     .bit (coveredMatch .addSubSummarySelection).allowed
   normalize_child_hyp addSubSelectionEquation unfolding wiring, context
   have addSubSelectionValue := addSubSelectionEquation.trans
@@ -645,7 +646,7 @@ private theorem implements :
   have compareSummaryValue := summaryOutputValue .is_compare
     (by intro equal; cases equal)
   rw [summaryValues] at compareSummaryValue
-  have compareSelectionEquation := Silean.Modules.Mux.result_of_allowed
+  have compareSelectionEquation := Silean.Modules.Mux.cycleContract.result
     .bit (coveredMatch .compareSelection).allowed
   normalize_child_hyp compareSelectionEquation unfolding wiring, context
   have compareSelectionValue := compareSelectionEquation.trans

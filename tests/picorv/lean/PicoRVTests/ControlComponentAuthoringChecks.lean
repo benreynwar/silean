@@ -1,0 +1,56 @@
+import PicoRV.Control.ControlAlignment
+import PicoRV.Control.ControlBaseline
+import PicoRV.Control.ControlCommandFinish
+import PicoRV.Control.ControlExecuteTransition
+import PicoRV.Control.ControlFetchTransition
+import PicoRV.Control.ControlLoadRs1Transition
+import PicoRV.Control.ControlLoadRs2Transition
+import PicoRV.Control.ControlLoadTransition
+import PicoRV.Control.ControlPhaseDecode
+import PicoRV.Control.ControlShiftTransition
+import PicoRV.Control.ControlStoreTransition
+import PicoRV.Control.ControlTrapTransition
+
+assert_not_imported PicoRV.Control.Internal.ControlAlignmentStructure
+assert_not_imported PicoRV.Control.Internal.ControlBaselineStructure
+assert_not_imported PicoRV.Control.Internal.ControlCommandFinishStructure
+assert_not_imported PicoRV.Control.Internal.ControlExecuteTransitionStructure
+assert_not_imported PicoRV.Control.Internal.ControlFetchTransitionStructure
+assert_not_imported PicoRV.Control.Internal.ControlLoadRs1TransitionStructure
+assert_not_imported PicoRV.Control.Internal.ControlLoadRs2TransitionStructure
+assert_not_imported PicoRV.Control.Internal.ControlLoadTransitionStructure
+assert_not_imported PicoRV.Control.Internal.ControlPhaseDecodeStructure
+assert_not_imported PicoRV.Control.Internal.ControlShiftTransitionStructure
+assert_not_imported PicoRV.Control.Internal.ControlStoreTransitionStructure
+assert_not_imported PicoRV.Control.Internal.ControlTrapTransitionStructure
+
+assert_not_imported PicoRV.Control.Internal.ControlAlignmentVerification
+assert_not_imported PicoRV.Control.Internal.ControlBaselineVerification
+assert_not_imported PicoRV.Control.Internal.ControlCommandFinishVerification
+assert_not_imported PicoRV.Control.Internal.ControlExecuteTransitionVerification
+assert_not_imported PicoRV.Control.Internal.ControlFetchTransitionVerification
+assert_not_imported PicoRV.Control.Internal.ControlLoadRs1TransitionVerification
+assert_not_imported PicoRV.Control.Internal.ControlLoadRs2TransitionVerification
+assert_not_imported PicoRV.Control.Internal.ControlLoadTransitionVerification
+assert_not_imported PicoRV.Control.Internal.ControlPhaseDecodeVerification
+assert_not_imported PicoRV.Control.Internal.ControlShiftTransitionVerification
+assert_not_imported PicoRV.Control.Internal.ControlStoreTransitionVerification
+assert_not_imported PicoRV.Control.Internal.ControlTrapTransitionVerification
+
+namespace PicoRVTests.ControlComponentAuthoring
+
+#check PicoRV.Control.Alignment.cycleContract
+#check PicoRV.Control.Baseline.cycleContract
+#check PicoRV.Control.CommandFinish.cycleContract
+#check PicoRV.Control.PhaseDecode.cycleContract
+#check PicoRV.Control.FetchTransition.cycleContract
+
+#check PicoRV.Control.Alignment.description.ImplementsCycleContract
+  PicoRV.Control.Alignment.cycleContract
+  PicoRV.Control.Alignment.Naming.ports
+
+#check PicoRV.Control.FetchTransition.description.ImplementsCycleContract
+  PicoRV.Control.FetchTransition.cycleContract
+  PicoRV.Control.PhaseTransition.Naming.ports
+
+end PicoRVTests.ControlComponentAuthoring

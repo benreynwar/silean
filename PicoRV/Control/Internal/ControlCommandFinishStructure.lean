@@ -1,6 +1,6 @@
-import PicoRV.ControlContract
+import PicoRV.Control.ControlCommandFinish
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Naming.PrimitiveNaming
 
 namespace PicoRV.Control
@@ -12,10 +12,7 @@ open Silean.Authoring
 definition in `ControlCommandFinish.lean`. -/
 
 module_design CommandFinish (name := "picorv32_control_command_finish") where
-  ports {
-    input clear : .bit,
-    input transition (schema := TransitionValue.schema) : transitionType,
-    output state (schema := ControlState.schema) : stateType }
+  boundary (CommandFinish.ports) (naming := CommandFinish.Naming.ports)
   instances {
     transitionFields (name := .indexed "named_tuple_splitter" 0) :=
       Silean.Modules.NamedTupleSplitter.designWith

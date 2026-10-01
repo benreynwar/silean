@@ -1,12 +1,14 @@
 import PicoRV.Control.ControlExecuteTransition
+import PicoRV.Control.Internal.ControlExecuteTransitionStructure
+import PicoRV.Control.Internal.ControlExecuteTransitionCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Control.ExecuteTransition
 
@@ -178,7 +180,7 @@ private theorem implements :
   have branchPhaseValue : hierStep.childOutputs .branchPhase .result =
       bif controlInputs.mem_done then stateBits cpuStateFetch
         else updated .cpu_state := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .branchPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (inputField .mem_done)
@@ -186,7 +188,7 @@ private theorem implements :
 
   have branchDecoderValue : hierStep.childOutputs .branchDecoder .result =
       bif controlInputs.alu_out_0 then false else updated .decoder_trigger := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .branchDecoder).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (inputField .alu_out_0) falseValue
@@ -299,7 +301,7 @@ private theorem implements :
 
   have resultValue : hierStep.childOutputs .result .result =
       (structuralTransition controlInputs updated).pack := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .result).allowed
     normalize_child_hyp equation unfolding wiring, context
     have equation := equation.trans (bif_congr
@@ -340,3 +342,23 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.ExecuteTransition
+
+namespace PicoRV.Control.ExecuteTransition.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract
+      PhaseTransition.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold ExecuteTransition.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := ExecuteTransition.instancePorts,
+      wiring := ExecuteTransition.wiring })
+    (children := ExecuteTransition.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.ExecuteTransition.Internal

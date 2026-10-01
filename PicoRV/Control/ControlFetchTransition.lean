@@ -1,4 +1,4 @@
-import PicoRV.Control.Internal.ControlFetchTransitionStructure
+import PicoRV.Control.ControlPhaseTransition
 import PicoRV.Authoring.CircuitLogic
 
 namespace PicoRV.Control
@@ -9,6 +9,19 @@ open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
 open scoped Silean.Authoring
 
+namespace FetchTransition
+
+abbrev cycleContract := PhaseTransition.cycleContract fetchTransition
+
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .transition =
+      (fetchTransition (Inputs.unpack (step.inputs .inputs))
+        (stateMap.unpack (step.inputs .current))
+        (stateMap.unpack (step.inputs .updated))).pack :=
+  (PhaseTransition.outputRule_holds_iff fetchTransition
+    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
+
 /-! # Fetch transition
 
 Fetch deliberately reads the pre-edge `decoder_trigger`. The common state
@@ -18,12 +31,12 @@ JAL (reissue instruction read and mark a branch) or the ordinary/JALR path
 (enter load-RS1 and enable prefetch except for JALR). The expanded typed
 hierarchy and verification remain under `Internal/`. -/
 
-namespace FetchTransition.Description
+open PhaseTransition.ports
 
-noncomputable def construction : Builder Unit := do
-  let inputs ← input "inputs" inputsType
-  let current ← input "current" stateType
-  let updated ← input "updated" stateType
+noncomputable def construction : ModuleBuilder PhaseTransition.ports Unit := do
+  let inputs ← input .inputs
+  let current ← input .current
+  let updated ← input .updated
   let inputsFields ← split ControlInputs.layout inputs
   let currentFields ← split ControlState.layout current
   let updatedFields ← split ControlState.layout updated
@@ -59,35 +72,10 @@ noncomputable def construction : Builder Unit := do
     TransitionValue.schema fun
       | .state => finalState
       | .setRinst | .setRdata | .setWdata => falseBit
-  output "transition" result
+  output .transition result
 
-noncomputable def description : Description := build construction
-
-end FetchTransition.Description
-
-namespace FetchTransition
-
-structure PlacedOutputs where
-  transition : Net transitionType
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (inputs : Net inputsType) (current updated : Net stateType) :
-    Builder PlacedOutputs := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .inputs => inputs
-    | .current => current
-    | .updated => updated
-  pure ⟨child .transition⟩
-
-noncomputable def place (inputs : Net inputsType)
-    (current updated : Net stateType) : Builder PlacedOutputs := do
-  let child ← placeIndexed "fetch_transition" design fun
-    | .inputs => inputs
-    | .current => current
-    | .updated => updated
-  pure ⟨child .transition⟩
-
-attribute [circuit_description] placeNamed place
+noncomputable def description : Description :=
+  ModuleBuilder.build PhaseTransition.Naming.ports construction
 
 end FetchTransition
 

@@ -1,0 +1,10 @@
+import PicoRV.Control.ControlResetAndAlignmentOverride
+
+assert_not_imported PicoRV.Control.Internal.ControlResetAndAlignmentOverrideStructure
+assert_not_imported PicoRV.Control.Internal.ControlResetAndAlignmentOverrideVerification
+
+namespace PicoRVTests.ControlCompositeAuthoring
+
+#check PicoRV.Control.ResetAndAlignmentOverride.cycleContract
+
+end PicoRVTests.ControlCompositeAuthoring

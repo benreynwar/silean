@@ -5,8 +5,8 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Memory.PrefetchedUpdate
 
@@ -83,7 +83,7 @@ private theorem implements :
     ((childMatch .idleState).ruleHolds Silean.Primitives.ConstantRule.apply)
   have phaseValue : hierStep.childOutputs .phase .result =
       bif memoryInputs.mem_do_rinst then stateOfNat 0 else updated .mem_state := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .phase).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [instructionValue, updatedFieldsValue, idleValue] at equation

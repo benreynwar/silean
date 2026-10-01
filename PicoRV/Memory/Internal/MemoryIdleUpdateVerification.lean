@@ -4,10 +4,10 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.Or
 
 namespace PicoRV.Memory.IdleUpdate
@@ -145,7 +145,7 @@ private theorem implements :
   have readValidValue : hierStep.childOutputs .readValid .result =
       bif memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst ||
           memoryInputs.mem_do_rdata then true else updated .mem_valid := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .readValid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [readValue, updatedFieldsValue, trueValue] at equation
@@ -155,7 +155,7 @@ private theorem implements :
           memoryInputs.mem_do_rdata
         then memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst
         else updated .mem_instr := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .readInstr).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [readValue, updatedFieldsValue, instructionValue] at equation
@@ -163,7 +163,7 @@ private theorem implements :
   have readMaskValue : hierStep.childOutputs .readMask .result =
       bif memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst ||
           memoryInputs.mem_do_rdata then maskOfNat 0 else updated .mem_wstrb := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 4 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 4 .bit)
       (childMatch .readMask).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [readValue, updatedFieldsValue, zeroMaskValue] at equation
@@ -171,7 +171,7 @@ private theorem implements :
   have readPhaseValue : hierStep.childOutputs .readPhase .result =
       bif memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst ||
           memoryInputs.mem_do_rdata then stateOfNat 1 else updated .mem_state := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .readPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [readValue, updatedFieldsValue, readStateValue] at equation
@@ -180,7 +180,7 @@ private theorem implements :
       bif memoryInputs.mem_do_wdata then true else
         bif memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst ||
             memoryInputs.mem_do_rdata then true else updated .mem_valid := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .finalValid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [fieldValue .mem_do_wdata, readValidValue, trueValue] at equation
@@ -191,7 +191,7 @@ private theorem implements :
             memoryInputs.mem_do_rdata
           then memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst
           else updated .mem_instr := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .finalInstr).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [fieldValue .mem_do_wdata, readInstrValue, falseValue] at equation
@@ -200,7 +200,7 @@ private theorem implements :
       bif memoryInputs.mem_do_wdata then stateOfNat 2 else
         bif memoryInputs.mem_do_prefetch || memoryInputs.mem_do_rinst ||
             memoryInputs.mem_do_rdata then stateOfNat 1 else updated .mem_state := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .finalPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [fieldValue .mem_do_wdata, readPhaseValue, writeStateValue] at equation

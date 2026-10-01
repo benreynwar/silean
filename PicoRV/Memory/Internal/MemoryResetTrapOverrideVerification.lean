@@ -4,10 +4,10 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.Not
 import Silean.Primitives.Or
 
@@ -132,7 +132,7 @@ private theorem implements :
     ((childMatch .idleState).ruleHolds Silean.Primitives.ConstantRule.apply)
   have phaseValue : hierStep.childOutputs .overridePhase .result =
       bif memoryInputs.resetn then captured .mem_state else stateOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .overridePhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [fieldValue .resetn, capturedFieldsValue, idleValue] at equation
@@ -140,7 +140,7 @@ private theorem implements :
   have validValue : hierStep.childOutputs .overrideValid .result =
       bif !memoryInputs.resetn || memoryInputs.mem_ready
         then false else captured .mem_valid := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .overrideValid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [clearValidValue, capturedFieldsValue, falseValue] at equation
@@ -171,7 +171,7 @@ private theorem implements :
     rw [equation, Silean.Modules.NamedTupleCombiner.combinedValue_eq_pack]
   have selectedValue : hierStep.childOutputs .selected .result =
       stateMap.pack (structuralResult memoryInputs captured normal) := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selected).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [resetOrTrapValue, overrideValue] at equation

@@ -1,8 +1,8 @@
 import PicoRV.Memory.Internal.MemoryReadFormattingStructure
 import PicoRV.Authoring.CircuitLogic
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.VectorLayout.VectorLayout
-import Silean.Modules.VectorSlice.VectorSlice
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.VectorSlice.VectorSliceDerived
 
 namespace PicoRV.Memory
 

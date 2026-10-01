@@ -1,52 +1,77 @@
 import Silean.Foundation.BitVector
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.CircuitDescription
+import Silean.Authoring.ModulePorts
 import Silean.Contracts.Cycle.CycleContract
 import Silean.Contracts.Cycle.CycleEvaluation
 import PicoRV.Authoring.CircuitLogic
-import PicoRV.Internal.AluStructure
 
 namespace PicoRV.Alu
 
 open Silean
 open Silean.Authoring
+open Authoring.CircuitDescription
+open scoped Authoring
 
-/-! Natural behavior, cycle contract, and concrete structure for the
-combinational PicoRV32 ALU. The boundary names and operation-selection
-behavior follow the selected source configuration. -/
+/-! Natural behavior, authored hardware, and exact cycle contract for the
+combinational PicoRV32 ALU. -/
+
+abbrev Word := Fin 32 → Bool
+
+module_ports ports where
+  input reg_op1 : .vector 32 .bit,
+  input reg_op2 : .vector 32 .bit,
+  input instr_sub : .bit,
+  input instr_beq : .bit,
+  input instr_bne : .bit,
+  input instr_bge : .bit,
+  input instr_bgeu : .bit,
+  input is_slti_blt_slt : .bit,
+  input is_sltiu_bltu_sltu : .bit,
+  input is_lui_auipc_jal_jalr_addi_add_sub : .bit,
+  input is_compare : .bit,
+  input instr_xori : .bit,
+  input instr_xor : .bit,
+  input instr_ori : .bit,
+  input instr_or : .bit,
+  input instr_andi : .bit,
+  input instr_and : .bit,
+  output alu_out : .vector 32 .bit,
+  output alu_out_0 : .bit
+
+abbrev wordType : SignalType := .vector 32 .bit
+abbrev wordSplitter : Silean.Composition.SignalSplitter := .vector 32 .bit
+abbrev wordCombiner : Silean.Composition.SignalCombiner := .vector 32 .bit
+def zeroBitValue : Bool := false
+def zeroWordValue : Word := Silean.BitVector.ofNat 32 0
 
 
-/-! ## Authored hardware -/
-
-namespace Description
-
-open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
-open scoped Silean.Authoring
+open ports
 
-noncomputable def construction : Builder Unit := do
-  let regOp1 ← input "reg_op1" wordType
-  let regOp2 ← input "reg_op2" wordType
-  let instrSub ← input "instr_sub" .bit
-  let instrBeq ← input "instr_beq" .bit
-  let instrBne ← input "instr_bne" .bit
-  let instrBge ← input "instr_bge" .bit
-  let instrBgeu ← input "instr_bgeu" .bit
-  let isSltiBltSlt ← input "is_slti_blt_slt" .bit
-  let isSltiuBltuSltu ← input "is_sltiu_bltu_sltu" .bit
-  let arithmeticSelected ← input "is_lui_auipc_jal_jalr_addi_add_sub" .bit
-  let isCompare ← input "is_compare" .bit
-  let instrXori ← input "instr_xori" .bit
-  let instrXor ← input "instr_xor" .bit
-  let instrOri ← input "instr_ori" .bit
-  let instrOr ← input "instr_or" .bit
-  let instrAndi ← input "instr_andi" .bit
-  let instrAnd ← input "instr_and" .bit
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let regOp1 ← input .reg_op1
+  let regOp2 ← input .reg_op2
+  let instrSub ← input .instr_sub
+  let instrBeq ← input .instr_beq
+  let instrBne ← input .instr_bne
+  let instrBge ← input .instr_bge
+  let instrBgeu ← input .instr_bgeu
+  let isSltiBltSlt ← input .is_slti_blt_slt
+  let isSltiuBltuSltu ← input .is_sltiu_bltu_sltu
+  let arithmeticSelected ← input .is_lui_auipc_jal_jalr_addi_add_sub
+  let isCompare ← input .is_compare
+  let instrXori ← input .instr_xori
+  let instrXor ← input .instr_xor
+  let instrOri ← input .instr_ori
+  let instrOr ← input .instr_or
+  let instrAndi ← input .instr_andi
+  let instrAnd ← input .instr_and
 
   let leftBits ← splitVector 32 .bit regOp1
   let rightBits ← splitVector 32 .bit regOp2
   let subtractMode ← instrSub ||| isCompare
-  let arithmetic ← Silean.Modules.AddSub.place regOp1 regOp2 subtractMode
+  let arithmetic ← Silean.Modules.AddSubWithCarry.place regOp1 regOp2 subtractMode
   let equal ← regOp1 === regOp2
   let xorValue ← regOp1 ^^^ regOp2
   let orValue ← regOp1 ||| regOp2
@@ -86,36 +111,11 @@ noncomputable def construction : Builder Unit := do
       comparisonWord)
     arithmetic.result
 
-  output "alu_out" selected
-  output "alu_out_0" comparison
+  output .alu_out selected
+  output .alu_out_0 comparison
 
-noncomputable def description : Description := build construction
-
-end Description
-
-/-! ## Placement -/
-
-abbrev InputNets :=
-  (input : ports.inputs.Label) →
-    Authoring.CircuitDescription.Net (ports.inputs.signalType input)
-
-structure PlacedOutputs where
-  aluOut : Authoring.CircuitDescription.Net wordType
-  aluOut0 : Authoring.CircuitDescription.Net .bit
-
-/-- Place an ALU using the next conventional indexed name. -/
-noncomputable def place (inputs : InputNets) :
-    Authoring.CircuitDescription.Builder PlacedOutputs := do
-  let child ← Authoring.CircuitDescription.placeIndexed "alu" design inputs
-  pure { aluOut := child .alu_out, aluOut0 := child .alu_out_0 }
-
-/-- Place an ALU under an explicitly chosen structural name. -/
-noncomputable def placeNamed (name : Naming.SourceName) (inputs : InputNets) :
-    Authoring.CircuitDescription.Builder PlacedOutputs := do
-  let child ← Authoring.CircuitDescription.placeNamed name design inputs
-  pure { aluOut := child .alu_out, aluOut0 := child .alu_out_0 }
-
-attribute [circuit_description] place placeNamed
+noncomputable def description : Description :=
+  ModuleBuilder.build Naming.ports construction
 
 def wordOfNat (value : Nat) : Word := Silean.BitVector.ofNat 32 value
 
@@ -223,7 +223,7 @@ def evaluateComparison (comparison : Comparison)
 /-- Unsigned ordering on the actual shared arithmetic path. On legal compare
 controls the mode is subtraction and this is ordinary unsigned less-than. -/
 def sharedUnsignedLess (inputs : Values) : Bool :=
-  !(Silean.Modules.AddSub.addSubBits 32 inputs.reg_op1 inputs.reg_op2
+  !(Silean.Modules.AddSubWithCarry.addSubBits 32 inputs.reg_op1 inputs.reg_op2
       (inputs.instr_sub || inputs.is_compare)).2
 
 /-- Signed ordering derived from operand signs and the shared unsigned order. -/
@@ -321,5 +321,13 @@ module_cycle_contract cycleContract for ports where
     cases output
     · exact aluOutEqual
     · exact aluOut0Equal
+
+/-- Every contract-allowed ALU step returns the pure ALU result. -/
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .alu_out = aluOut (valuesOf step.inputs) ∧
+      step.outputs .alu_out_0 = aluOut0 (valuesOf step.inputs) :=
+  (outputRule_holds_iff step.inputs step.currentState step.outputs).mp
+    (allowed.1 .apply)
 
 end PicoRV.Alu

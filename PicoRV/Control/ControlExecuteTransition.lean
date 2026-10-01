@@ -1,4 +1,4 @@
-import PicoRV.Control.Internal.ControlExecuteTransitionStructure
+import PicoRV.Control.ControlPhaseTransition
 import PicoRV.Authoring.CircuitLogic
 
 namespace PicoRV.Control
@@ -9,6 +9,22 @@ open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
 open scoped Silean.Authoring
 
+namespace ExecuteTransition
+
+abbrev cycleContract := PhaseTransition.cycleContract
+  (fun inputs _ updated => executeTransition inputs updated)
+
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .transition =
+      ((fun inputs _ updated => executeTransition inputs updated)
+        (Inputs.unpack (step.inputs .inputs))
+        (stateMap.unpack (step.inputs .current))
+        (stateMap.unpack (step.inputs .updated))).pack :=
+  (PhaseTransition.outputRule_holds_iff
+    (fun inputs _ updated => executeTransition inputs updated)
+    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
+
 /-! # Execute transition
 
 Execute has two complete transition candidates. The branch candidate keeps the
@@ -17,12 +33,12 @@ a taken branch independently suppresses `decoder_trigger` and raises
 `setRinst`. The final mux selects the branch candidate by instruction class.
 The expanded typed hierarchy and verification remain under `Internal/`. -/
 
-namespace ExecuteTransition.Description
+open PhaseTransition.ports
 
-noncomputable def construction : Builder Unit := do
-  let inputs ← input "inputs" inputsType
-  discard (input "current" stateType)
-  let updated ← input "updated" stateType
+noncomputable def construction : ModuleBuilder PhaseTransition.ports Unit := do
+  let inputs ← input .inputs
+  discard (input .current)
+  let updated ← input .updated
   let inputsFields ← split ControlInputs.layout inputs
   let updatedFields ← split ControlState.layout updated
   let falseBit ← constant .bit false
@@ -58,37 +74,12 @@ noncomputable def construction : Builder Unit := do
       | .state => ordinaryState
       | .setRinst | .setRdata | .setWdata => falseBit
 
-  output "transition" (← mux
+  output .transition (← mux
     (inputsFields .is_beq_bne_blt_bge_bltu_bgeu)
     ordinaryTransition branchTransition)
 
-noncomputable def description : Description := build construction
-
-end ExecuteTransition.Description
-
-namespace ExecuteTransition
-
-structure PlacedOutputs where
-  transition : Net transitionType
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (inputs : Net inputsType) (current updated : Net stateType) :
-    Builder PlacedOutputs := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .inputs => inputs
-    | .current => current
-    | .updated => updated
-  pure ⟨child .transition⟩
-
-noncomputable def place (inputs : Net inputsType)
-    (current updated : Net stateType) : Builder PlacedOutputs := do
-  let child ← placeIndexed "execute_transition" design fun
-    | .inputs => inputs
-    | .current => current
-    | .updated => updated
-  pure ⟨child .transition⟩
-
-attribute [circuit_description] placeNamed place
+noncomputable def description : Description :=
+  ModuleBuilder.build PhaseTransition.Naming.ports construction
 
 end ExecuteTransition
 

@@ -1,17 +1,17 @@
-import PicoRV.Regs
+import PicoRV.Internal.RegsCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.RegisterBank.RegisterBankTheorems
-import Silean.Modules.Equality.EqualityTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.RegisterBank.RegisterBankDerived
+import Silean.Modules.Equality.EqualityDerived
 
 /-! # PicoRV register-file verification
 
 Child certifications, schedules, structural state correspondence, and the
-native `HierStep` implementation proof live here. Downstream proofs should
-import `RegsTheorems`.
+native `HierStep` implementation proof live here. Downstream code should use
+the public `RegsDerived` facade.
 -/
 
 namespace PicoRV.Regs
@@ -112,7 +112,7 @@ private theorem implements :
   have zeroWordsEqual : zeroWordValue = zeroWord := rfl
   have rs1ZeroValue : (hierStep.children .rs1Zero).outputs .result =
       addressType.equal (hierStep.inputs .decoded_rs1) zeroAddressValue := by
-    have held := Silean.Modules.Equality.result_of_allowed addressType
+    have held := Silean.Modules.Equality.cycleContract.result addressType
       rs1ZeroMatch.allowed
     have wired : (hierStep.children .rs1Zero).outputs .result =
         addressType.equal (hierStep.inputs .decoded_rs1) ((hierStep.children .zeroAddress).outputs .output) := by
@@ -122,7 +122,7 @@ private theorem implements :
     exact wired
   have rs2ZeroValue : (hierStep.children .rs2Zero).outputs .result =
       addressType.equal (hierStep.inputs .decoded_rs2) zeroAddressValue := by
-    have held := Silean.Modules.Equality.result_of_allowed addressType
+    have held := Silean.Modules.Equality.cycleContract.result addressType
       rs2ZeroMatch.allowed
     have wired : (hierStep.children .rs2Zero).outputs .result =
         addressType.equal (hierStep.inputs .decoded_rs2) ((hierStep.children .zeroAddress).outputs .output) := by
@@ -132,7 +132,7 @@ private theorem implements :
     exact wired
   have rdZeroValue : (hierStep.children .rdZero).outputs .result =
       addressType.equal (hierStep.inputs .latched_rd) zeroAddressValue := by
-    have held := Silean.Modules.Equality.result_of_allowed addressType
+    have held := Silean.Modules.Equality.cycleContract.result addressType
       rdZeroMatch.allowed
     have wired : (hierStep.children .rdZero).outputs .result =
         addressType.equal (hierStep.inputs .latched_rd) ((hierStep.children .zeroAddress).outputs .output) := by
@@ -185,14 +185,14 @@ private theorem implements :
       bif (hierStep.children .rs1Zero).outputs .result then
         (hierStep.children .zeroWord).outputs .output else
         (hierStep.children .bank).outputs (.readValue 0) := by
-    have held := Silean.Modules.Mux.result_of_allowed wordType rs1MuxMatch.allowed
+    have held := Silean.Modules.Mux.cycleContract.result wordType rs1MuxMatch.allowed
     simpa [Silean.HierStep.childOutputs, Silean.Wiring.childInputValues, body, wiring, context, instancePorts,
       Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using held
   have rs2MuxValue : (hierStep.children .rs2Mux).outputs .result =
       bif (hierStep.children .rs2Zero).outputs .result then
         (hierStep.children .zeroWord).outputs .output else
         (hierStep.children .bank).outputs (.readValue 1) := by
-    have held := Silean.Modules.Mux.result_of_allowed wordType rs2MuxMatch.allowed
+    have held := Silean.Modules.Mux.cycleContract.result wordType rs2MuxMatch.allowed
     simpa [Silean.HierStep.childOutputs, Silean.Wiring.childInputValues, body, wiring, context, instancePorts,
       Silean.EndpointContext.instanceOutput, Silean.SignalSource.value] using held
 
@@ -223,7 +223,8 @@ private theorem implements :
         readRegister_nonzero address (contractState .cpuregs) indexNonzero]
       rfl
 
-  let nextContractState := stateRule.apply hierStep.inputs contractState
+  let nextContractState := cycleContract.stateRule.apply
+    hierStep.inputs contractState
   have boundaryRs1 : hierStep.outputs .cpuregs_rs1 =
       (hierStep.children .rs1Mux).outputs .result := by
     simpa [Silean.HierStep.childOutputs, body,
@@ -240,11 +241,11 @@ private theorem implements :
       dsimp only
       cases rule with
       | cpuregs_rs1 =>
-          rw [cpuregsRs1Rule_holds_iff]
+          rw [cpuregs_rs1Rule_holds_iff]
           rw [boundaryRs1, rs1MuxValue, zeroWordValueEq, zeroWordsEqual]
           exact readPath (hierStep.inputs .decoded_rs1) _ _ rs1ZeroValue bankRead1Value
       | cpuregs_rs2 =>
-          rw [cpuregsRs2Rule_holds_iff]
+          rw [cpuregs_rs2Rule_holds_iff]
           rw [boundaryRs2, rs2MuxValue, zeroWordValueEq, zeroWordsEqual]
           exact readPath (hierStep.inputs .decoded_rs2) _ _ rs2ZeroValue bankRead2Value
     · rfl
@@ -306,3 +307,20 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Regs
+
+namespace PicoRV.Regs.Internal
+
+open Silean Silean.Authoring.CircuitDescription
+
+/-- The authored register-file construction implements its cycle contract. -/
+theorem construction_correct :
+    Regs.description.ImplementsCycleContract Regs.cycleContract Regs.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold Regs.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact Description.ImplementsCycleContract.of_certification
+    (referenceBody := { instancePorts := Regs.instancePorts, wiring := Regs.wiring })
+    (children := Regs.structuralChildren)
+    corresponds Regs.certification
+
+end PicoRV.Regs.Internal

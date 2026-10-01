@@ -48,11 +48,9 @@ example : nextState idle addiState = addiState := by
 
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports := certified
 
-example : moduleStructure.HasNoBlackboxes := by
-  native_decide
 
 noncomputable example : RenderResult String :=
-  renderClosedCircuit naming
+  renderCircuit naming
 
 #guard renderModuleKey naming.key = "picorv32_decoder_capture"
 #guard Naming.ports.inputs.name .mem_rdata_latched = "mem_rdata_latched"

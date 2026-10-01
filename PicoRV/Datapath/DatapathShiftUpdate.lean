@@ -1,8 +1,8 @@
 import PicoRV.Authoring.CircuitLogic
 import PicoRV.Datapath.Internal.DatapathShiftUpdateStructure
-import Silean.Modules.AddSub.AddSubDerived
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.AddSubWithCarry.AddSubWithCarryDerived
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 namespace PicoRV.Datapath
 
@@ -59,7 +59,7 @@ noncomputable def construction : Builder Unit := do
   let one ← constant (.vector 5 .bit) (fiveBitsOfNat 1)
   let four ← constant (.vector 5 .bit) (fiveBitsOfNat 4)
   let selectedStep ← mux amountGeFour one four
-  let remaining ← Silean.Modules.AddSub.place
+  let remaining ← Silean.Modules.AddSubWithCarry.place
     (currentFields .reg_sh) selectedStep trueBit
   let selectedOp1 ← mux amountZero shifted (updatedFields .reg_op1)
   let selectedShift ← mux amountZero remaining.result (updatedFields .reg_sh)

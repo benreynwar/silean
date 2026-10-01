@@ -1,7 +1,7 @@
-import PicoRV.Control.ControlNextContracts
+import PicoRV.Control.ControlTrapTransition
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Control
 

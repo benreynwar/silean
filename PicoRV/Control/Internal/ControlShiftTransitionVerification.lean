@@ -1,13 +1,15 @@
 import PicoRV.Control.ControlShiftTransition
+import PicoRV.Control.Internal.ControlShiftTransitionStructure
+import PicoRV.Control.Internal.ControlShiftTransitionCorrespondence
 import PicoRV.Control.ControlBitLaws
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.BitMux.BitMuxDerived
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Control.ShiftTransition
 
@@ -144,7 +146,7 @@ private theorem implements :
     (childMatch .fetchState).allowed
   have shiftZeroValue : hierStep.childOutputs .shiftIsZero .result =
       decide (shiftAmount controlInputs = 0) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 5 .bit) (fiveBitsOfNat 0)
       (childMatch .shiftIsZero).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -153,7 +155,7 @@ private theorem implements :
       regShiftValue).trans (by rw [equalFiveZero]; rfl)
   have phaseValue : hierStep.childOutputs .selectedPhase .result =
       selectedPhaseValue controlInputs updated := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .selectedPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     have result := equation.trans (bif_congr shiftZeroValue fetchValue
@@ -162,7 +164,7 @@ private theorem implements :
       simp [selectedPhaseValue, zero] at result ⊢ <;> exact result
   have rinstValue : hierStep.childOutputs .selectedRinst .result =
       selectedRinstValue controlInputs updated := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .selectedRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     have result := equation.trans (bif_congr shiftZeroValue
@@ -242,3 +244,23 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.ShiftTransition
+
+namespace PicoRV.Control.ShiftTransition.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract
+      PhaseTransition.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold ShiftTransition.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := ShiftTransition.instancePorts,
+      wiring := ShiftTransition.wiring })
+    (children := ShiftTransition.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.ShiftTransition.Internal

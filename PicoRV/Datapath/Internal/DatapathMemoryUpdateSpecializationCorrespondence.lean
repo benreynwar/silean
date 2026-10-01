@@ -20,18 +20,8 @@ private theorem same : some description = ofNaming StoreUpdate.naming := by
     EndpointContext.moduleInput, EndpointContext.instanceOutput]
   simp [circuit_description, enumeration]
 
-private theorem unique : description.UniqueNames := by
-  simp only [circuit_description, description, construction]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal <;>
-    subst child <;> constructor <;> exact of_decide_eq_true rfl
-
 theorem corresponds : Corresponds description StoreUpdate.naming :=
-  ⟨same, unique⟩
+  ⟨same⟩
 
 end StoreUpdate.Description.Internal
 
@@ -50,18 +40,8 @@ private theorem same : some description = ofNaming LoadUpdate.naming := by
     EndpointContext.moduleInput, EndpointContext.instanceOutput]
   simp [circuit_description, enumeration]
 
-private theorem unique : description.UniqueNames := by
-  simp only [circuit_description, description, construction]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal <;>
-    subst child <;> constructor <;> exact of_decide_eq_true rfl
-
 theorem corresponds : Corresponds description LoadUpdate.naming :=
-  ⟨same, unique⟩
+  ⟨same⟩
 
 end LoadUpdate.Description.Internal
 

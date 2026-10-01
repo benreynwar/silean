@@ -4,9 +4,9 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Not
 import Silean.Primitives.Or
@@ -96,7 +96,7 @@ private theorem implements :
     exact equation
   have idleValue : hierStep.childOutputs .idle .result =
       decide (stateNumber current = 0) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (stateOfNat 0)
       (childMatch .idle).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -144,7 +144,7 @@ private theorem implements :
     exact equation
   have prefetchedValue : hierStep.childOutputs .prefetched .result =
       decide (stateNumber current = 3) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (stateOfNat 3)
       (childMatch .prefetched).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -179,7 +179,7 @@ private theorem implements :
     simpa [memDoneFrom, stateNumber] using equation
   have responseValue : hierStep.childOutputs .responseData .result =
       memRdataLatchedFrom (inputs .mem_ready) (inputs .mem_rdata) current := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .responseData).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [transferValue, responseQValue] at equation

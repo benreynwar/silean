@@ -1,11 +1,11 @@
 import PicoRV.Datapath.DatapathNextContracts
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.AddSub.AddSubDerived
+import Silean.Modules.AddSubWithCarry.AddSubWithCarryDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 
@@ -73,7 +73,7 @@ module_design ShiftUpdate (name := "picorv32_datapath_shift_update") where
     one (name := .indexed "constant" 1) := Silean.Modules.Constant.design (.vector 5 .bit) (fiveBitsOfNat 1),
     four (name := .indexed "constant" 2) := Silean.Modules.Constant.design (.vector 5 .bit) (fiveBitsOfNat 4),
     selectedStep (name := .indexed "mux" 6) := Silean.Modules.Mux.design (.vector 5 .bit),
-    subtractStep (name := .indexed "add_sub" 0) := Silean.Modules.AddSub.design 5,
+    subtractStep (name := .indexed "add_sub" 0) := Silean.Modules.AddSubWithCarry.design 5,
     selectedOp1 (name := .indexed "mux" 7) := Silean.Modules.Mux.design (.vector 32 .bit),
     selectedShift (name := .indexed "mux" 8) := Silean.Modules.Mux.design (.vector 5 .bit),
     selectedResult (name := .indexed "mux" 9) := Silean.Modules.Mux.design (.vector 32 .bit),

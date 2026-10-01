@@ -1,37 +1,51 @@
 import Silean.Foundation.BitVector
 import Silean.Authoring.ModuleCycleContract
 import Silean.Authoring.CircuitDescription
+import Silean.Authoring.ModulePorts
 import Silean.Contracts.Cycle.CycleEvaluation
 import PicoRV.Authoring.CircuitLogic
-import PicoRV.Internal.RegsStructure
-import Silean.Modules.RegisterBank.RegisterBank
+import Silean.Modules.RegisterBank.RegisterBankDerived
 
 namespace PicoRV.Regs
 
 open Silean
 open Silean.Authoring
+open Authoring.CircuitDescription
+open scoped Authoring
 
 /-! PicoRV32's 32-entry integer register file. Register zero always reads as
-zero and ignores writes. The exact cycle contract is followed by a structural
-implementation around the generic two-read `RegisterBank`. -/
+zero and ignores writes. -/
+
+abbrev Word := Fin 32 → Bool
+abbrev RegisterAddress := Fin 5 → Bool
+
+module_ports ports where
+  input resetn : .bit,
+  input decoded_rs1 : .vector 5 .bit,
+  input decoded_rs2 : .vector 5 .bit,
+  input cpuregs_write : .bit,
+  input latched_rd : .vector 5 .bit,
+  input cpuregs_wrdata : .vector 32 .bit,
+  output cpuregs_rs1 : .vector 32 .bit,
+  output cpuregs_rs2 : .vector 32 .bit
+
+abbrev wordType : SignalType := .vector 32 .bit
+abbrev addressType : SignalType := .vector 5 .bit
+def zeroAddressValue : addressType.Denote := fun _ => false
+def zeroWordValue : wordType.Denote := fun _ => false
 
 abbrev RegisterValues := Fin 32 → Word
 
-/-! ## Authored hardware -/
-
-namespace Description
-
-open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
-open scoped Silean.Authoring
+open ports
 
-noncomputable def construction : Builder Unit := do
-  let resetn ← input "resetn" .bit
-  let decodedRs1 ← input "decoded_rs1" addressType
-  let decodedRs2 ← input "decoded_rs2" addressType
-  let cpuregsWrite ← input "cpuregs_write" .bit
-  let latchedRd ← input "latched_rd" addressType
-  let cpuregsWrdata ← input "cpuregs_wrdata" wordType
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let resetn ← input .resetn
+  let decodedRs1 ← input .decoded_rs1
+  let decodedRs2 ← input .decoded_rs2
+  let cpuregsWrite ← input .cpuregs_write
+  let latchedRd ← input .latched_rd
+  let cpuregsWrdata ← input .cpuregs_wrdata
 
   let zeroAddress ← constant addressType zeroAddressValue
   let zeroWord ← constant wordType zeroWordValue
@@ -43,55 +57,13 @@ noncomputable def construction : Builder Unit := do
       | 0 => decodedRs1
       | 1 => decodedRs2
 
-  output "cpuregs_rs1"
+  output .cpuregs_rs1
     (← mux (← decodedRs1 === zeroAddress) (bank.readValue 0) zeroWord)
-  output "cpuregs_rs2"
+  output .cpuregs_rs2
     (← mux (← decodedRs2 === zeroAddress) (bank.readValue 1) zeroWord)
 
 noncomputable def description : Description :=
-  build construction
-
-end Description
-
-/-! ## Placement -/
-
-structure PlacedOutputs where
-  cpuregsRs1 : Authoring.CircuitDescription.Net wordType
-  cpuregsRs2 : Authoring.CircuitDescription.Net wordType
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (resetn : Authoring.CircuitDescription.Net .bit)
-    (decodedRs1 decodedRs2 : Authoring.CircuitDescription.Net addressType)
-    (cpuregsWrite : Authoring.CircuitDescription.Net .bit)
-    (latchedRd : Authoring.CircuitDescription.Net addressType)
-    (cpuregsWrdata : Authoring.CircuitDescription.Net wordType) :
-    Authoring.CircuitDescription.Builder PlacedOutputs := do
-  let child ← Authoring.CircuitDescription.placeNamed name design fun
-    | .resetn => resetn
-    | .decoded_rs1 => decodedRs1
-    | .decoded_rs2 => decodedRs2
-    | .cpuregs_write => cpuregsWrite
-    | .latched_rd => latchedRd
-    | .cpuregs_wrdata => cpuregsWrdata
-  pure { cpuregsRs1 := child .cpuregs_rs1, cpuregsRs2 := child .cpuregs_rs2 }
-
-noncomputable def place
-    (resetn : Authoring.CircuitDescription.Net .bit)
-    (decodedRs1 decodedRs2 : Authoring.CircuitDescription.Net addressType)
-    (cpuregsWrite : Authoring.CircuitDescription.Net .bit)
-    (latchedRd : Authoring.CircuitDescription.Net addressType)
-    (cpuregsWrdata : Authoring.CircuitDescription.Net wordType) :
-    Authoring.CircuitDescription.Builder PlacedOutputs := do
-  let child ← Authoring.CircuitDescription.placeIndexed "regs" design fun
-    | .resetn => resetn
-    | .decoded_rs1 => decodedRs1
-    | .decoded_rs2 => decodedRs2
-    | .cpuregs_write => cpuregsWrite
-    | .latched_rd => latchedRd
-    | .cpuregs_wrdata => cpuregsWrdata
-  pure { cpuregsRs1 := child .cpuregs_rs1, cpuregsRs2 := child .cpuregs_rs2 }
-
-attribute [circuit_description] placeNamed place
+  ModuleBuilder.build Naming.ports construction
 
 inductive State
   /-- The 32 architectural integer registers. -/
@@ -130,69 +102,21 @@ def nextRegisters (resetn cpuregs_write : Bool)
     then cpuregs_wrdata
     else registers index
 
-namespace Rs1Rule
-inductive Input | decoded_rs1 deriving Enumeration
-inductive Output | cpuregs_rs1 deriving Enumeration
-end Rs1Rule
-
-namespace Rs2Rule
-inductive Input | decoded_rs2 deriving Enumeration
-inductive Output | cpuregs_rs2 deriving Enumeration
-end Rs2Rule
-
-namespace UpdateRule
-inductive Input | resetn | cpuregs_write | latched_rd | cpuregs_wrdata
-deriving Enumeration
-end UpdateRule
-
-@[reducible] private def rs1Inputs : SignalGroup inputMap :=
-  Silean.SignalGroup.fromLabels inputMap Rs1Rule.Input fun
-    | .decoded_rs1 => .decoded_rs1
-
-@[reducible] private def rs1Outputs : SignalGroup outputMap :=
-  Silean.SignalGroup.fromLabels outputMap Rs1Rule.Output fun
-    | .cpuregs_rs1 => .cpuregs_rs1
-
-@[reducible] private def rs2Inputs : SignalGroup inputMap :=
-  Silean.SignalGroup.fromLabels inputMap Rs2Rule.Input fun
-    | .decoded_rs2 => .decoded_rs2
-
-@[reducible] private def rs2Outputs : SignalGroup outputMap :=
-  Silean.SignalGroup.fromLabels outputMap Rs2Rule.Output fun
-    | .cpuregs_rs2 => .cpuregs_rs2
-
-@[reducible] private def updateInputs : SignalGroup inputMap :=
-  Silean.SignalGroup.fromLabels inputMap UpdateRule.Input fun
-    | .resetn => .resetn
-    | .cpuregs_write => .cpuregs_write
-    | .latched_rd => .latched_rd
-    | .cpuregs_wrdata => .cpuregs_wrdata
-
-def cpuregsRs1Rule :
-    Silean.Contracts.Cycle.CycleOutputRule ports stateMap where
-  readsInputs := rs1Inputs
-  writesOutputs := rs1Outputs
-  target inputs state := fun
-    | .cpuregs_rs1 => readRegister (inputs .decoded_rs1) (state .cpuregs)
-
-def cpuregsRs2Rule :
-    Silean.Contracts.Cycle.CycleOutputRule ports stateMap where
-  readsInputs := rs2Inputs
-  writesOutputs := rs2Outputs
-  target inputs state := fun
-    | .cpuregs_rs2 => readRegister (inputs .decoded_rs2) (state .cpuregs)
-
-def stateRule : Silean.Contracts.Cycle.CycleStateRule ports stateMap where
-  readsInputs := updateInputs
-  target inputs state := fun
-    | .cpuregs => nextRegisters (inputs .resetn) (inputs .cpuregs_write)
-        (inputs .latched_rd) (inputs .cpuregs_wrdata) (state .cpuregs)
-
 module_cycle_contract cycleContract for ports where
   state := stateMap
-  output_rule cpuregs_rs1 := cpuregsRs1Rule
-  output_rule cpuregs_rs2 := cpuregsRs2Rule
-  state_rule := stateRule
+  output_rule cpuregs_rs1 where
+    reads := [decoded_rs1]
+    writes := {
+      cpuregs_rs1 := readRegister decoded_rs1 (state .cpuregs) }
+  output_rule cpuregs_rs2 where
+    reads := [decoded_rs2]
+    writes := {
+      cpuregs_rs2 := readRegister decoded_rs2 (state .cpuregs) }
+  state_rule where
+    reads := [resetn, cpuregs_write, latched_rd, cpuregs_wrdata]
+    next := {
+      cpuregs := nextRegisters resetn cpuregs_write latched_rd cpuregs_wrdata
+        (state .cpuregs) }
 
 @[simp] theorem readRegister_zero (registers : RegisterValues) :
     readRegister (fun _ => false) registers = zeroWord := by
@@ -242,34 +166,34 @@ theorem nextRegisters_other (resetn cpuregs_write : Bool)
       registers index := by
   simp [nextRegisters, different]
 
-@[simp] theorem cpuregsRs1Rule_holds_iff
-    (inputs : ports.inputs.Values) (state : stateMap.Values)
-    (outputs : ports.outputs.Values) :
-    cpuregsRs1Rule.Holds inputs state outputs ↔
-      outputs .cpuregs_rs1 = readRegister (inputs .decoded_rs1) (state .cpuregs) := by
-  unfold cpuregsRs1Rule Silean.Contracts.Cycle.CycleOutputRule.Holds
-    Silean.SignalGroup.Matches
-  constructor
-  · intro equal
-    exact congrFun equal .cpuregs_rs1
-  · intro equal
-    funext output
-    cases output
-    exact equal
+section AllowedStep
 
-@[simp] theorem cpuregsRs2Rule_holds_iff
-    (inputs : ports.inputs.Values) (state : stateMap.Values)
-    (outputs : ports.outputs.Values) :
-    cpuregsRs2Rule.Holds inputs state outputs ↔
-      outputs .cpuregs_rs2 = readRegister (inputs .decoded_rs2) (state .cpuregs) := by
-  unfold cpuregsRs2Rule Silean.Contracts.Cycle.CycleOutputRule.Holds
-    Silean.SignalGroup.Matches
-  constructor
-  · intro equal
-    exact congrFun equal .cpuregs_rs2
-  · intro equal
-    funext output
-    cases output
-    exact equal
+variable {step : cycleContract.Step} (allowed : cycleContract.Allows step)
+
+include allowed
+
+/-- The first read port returns register zero as zero and otherwise reads the
+selected architectural register. -/
+theorem cpuregs_rs1_of_allowed :
+    step.outputs .cpuregs_rs1 =
+      readRegister (step.inputs .decoded_rs1) (step.currentState .cpuregs) :=
+  cycleContract.cpuregs_rs1 allowed
+
+/-- The second read port follows the same architectural register-zero rule. -/
+theorem cpuregs_rs2_of_allowed :
+    step.outputs .cpuregs_rs2 =
+      readRegister (step.inputs .decoded_rs2) (step.currentState .cpuregs) :=
+  cycleContract.cpuregs_rs2 allowed
+
+/-- The complete register array advances according to the write/reset rule. -/
+theorem next_cpuregs_of_allowed :
+    step.nextState .cpuregs =
+      nextRegisters (step.inputs .resetn) (step.inputs .cpuregs_write)
+        (step.inputs .latched_rd) (step.inputs .cpuregs_wrdata)
+        (step.currentState .cpuregs) := by
+  rw [allowed.2]
+  rfl
+
+end AllowedStep
 
 end PicoRV.Regs

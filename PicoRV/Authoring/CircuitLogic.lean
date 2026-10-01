@@ -1,7 +1,7 @@
 import Silean.Authoring.CircuitSelection
 import Silean.Authoring.CircuitArithmetic
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Modules.Register.RegisterDerived
 import Silean.Naming.SignalAdapterNaming
 

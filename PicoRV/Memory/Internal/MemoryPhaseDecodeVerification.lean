@@ -3,7 +3,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
 
 namespace PicoRV.Memory.PhaseDecode
 
@@ -67,19 +67,19 @@ private theorem implements :
     (childSolutionMatchesCoveredContract layerChildren hierStep
       satisfies child).choose_spec
 
-  have idleValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have idleValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 2 .bit) (stateOfNat 0)
     (childMatch .idleMatch).allowed
   normalize_child_hyp idleValue unfolding wiring, context
-  have readValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have readValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 2 .bit) (stateOfNat 1)
     (childMatch .readMatch).allowed
   normalize_child_hyp readValue unfolding wiring, context
-  have writeValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have writeValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 2 .bit) (stateOfNat 2)
     (childMatch .writeMatch).allowed
   normalize_child_hyp writeValue unfolding wiring, context
-  have prefetchedValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have prefetchedValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 2 .bit) (stateOfNat 3)
     (childMatch .prefetchedMatch).allowed
   normalize_child_hyp prefetchedValue unfolding wiring, context

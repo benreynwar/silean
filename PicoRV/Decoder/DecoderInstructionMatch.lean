@@ -178,4 +178,11 @@ module_cycle_contract cycleContract for ports where
       outputs = outputValues (valuesOf inputs) := by
   simp [Silean.Contracts.Cycle.CycleOutputRule.Holds, outputRule]
 
+/-- Every allowed step produces exactly the instruction-match outputs. -/
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs = outputValues (valuesOf step.inputs) :=
+  (outputRule_holds_iff step.inputs step.currentState step.outputs).mp
+    (allowed.1 .apply)
+
 end PicoRV.Decoder.InstructionMatch

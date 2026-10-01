@@ -5,54 +5,6 @@ namespace PicoRV.Memory
 open Silean
 open Silean.Authoring
 
-namespace Lookahead
-
-module_ports ports where
-  input resetn : .bit,
-  input mem_do_prefetch : .bit,
-  input mem_do_rinst : .bit,
-  input mem_do_rdata : .bit,
-  input mem_do_wdata : .bit,
-  input next_pc : .vector 32 .bit,
-  input reg_op1 : .vector 32 .bit,
-  input reg_op2 : .vector 32 .bit,
-  input mem_wordsize : .vector 2 .bit,
-  input current (schema := MemoryState.schema) : stateType,
-  output mem_la_read : .bit,
-  output mem_la_write : .bit,
-  output mem_la_addr : .vector 32 .bit,
-  output mem_la_wdata : .vector 32 .bit,
-  output mem_la_wstrb : .vector 4 .bit
-
-def readValue (resetn prefetch rinst rdata : Bool) (current : stateType.Denote) : Bool :=
-  memLaReadFrom resetn prefetch rinst rdata (stateMap.unpack current)
-
-def writeValue (resetn wdata : Bool) (current : stateType.Denote) : Bool :=
-  memLaWriteFrom resetn wdata (stateMap.unpack current)
-
-module_cycle_contract cycleContract for ports where
-  state := emptySignalMap
-  output_rule memLaRead where
-    reads := [resetn, mem_do_prefetch, mem_do_rinst, mem_do_rdata, current]
-    writes := { mem_la_read := readValue resetn mem_do_prefetch
-      mem_do_rinst mem_do_rdata current }
-  output_rule memLaWrite where
-    reads := [resetn, mem_do_wdata, current]
-    writes := { mem_la_write := writeValue resetn mem_do_wdata current }
-  output_rule memLaAddr where
-    reads := [mem_do_prefetch, mem_do_rinst, next_pc, reg_op1]
-    writes := { mem_la_addr := memLaAddrFrom mem_do_prefetch mem_do_rinst
-      next_pc reg_op1 }
-  output_rule memLaWdata where
-    reads := [mem_wordsize, reg_op2]
-    writes := { mem_la_wdata := formattedWriteDataFrom mem_wordsize reg_op2 }
-  output_rule memLaWstrb where
-    reads := [mem_wordsize, reg_op1]
-    writes := { mem_la_wstrb := formattedWriteMaskFrom mem_wordsize reg_op1 }
-  state_rule := Silean.Contracts.Cycle.CycleStateRule.empty _
-
-end Lookahead
-
 namespace ReadFormatting
 
 module_ports ports where

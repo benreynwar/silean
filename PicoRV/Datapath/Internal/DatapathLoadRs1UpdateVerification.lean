@@ -5,9 +5,9 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 namespace PicoRV.Datapath.LoadRs1Update
 
@@ -148,7 +148,7 @@ private theorem implements :
     ((childMatch .zeroWord).ruleHolds Silean.Primitives.ConstantRule.apply)
   have lowFiveValue : hierStep.childOutputs .lowFiveRs2 .output =
       lowFiveBits datapathInputs.cpuregs_rs2 := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 5 lowFiveLayout
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 5 lowFiveLayout
       (childMatch .lowFiveRs2).allowed
     change hierStep.childOutputs .lowFiveRs2 .output =
       Silean.Modules.VectorLayout.apply lowFiveLayout
@@ -161,7 +161,7 @@ private theorem implements :
 
   have luiOperandValue : hierStep.childOutputs .luiOperand .result =
       bif datapathInputs.instr_lui then wordOfNat 0 else current .reg_pc := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .luiOperand).allowed
     change hierStep.childOutputs .luiOperand .result = bif
       hierStep.childOutputs .inputsFields .instr_lui
@@ -174,7 +174,7 @@ private theorem implements :
       bif datapathInputs.is_lui_auipc_jal then
         (bif datapathInputs.instr_lui then wordOfNat 0 else current .reg_pc)
       else datapathInputs.cpuregs_rs1 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectedOp1).allowed
     change hierStep.childOutputs .selectedOp1 .result = bif
       hierStep.childOutputs .inputsFields .is_lui_auipc_jal
@@ -186,7 +186,7 @@ private theorem implements :
       simp [Inputs.toValues, lui] at equation ⊢ <;> exact equation
   have op1Value : hierStep.childOutputs .trapOp1 .result =
       structuralOp1 datapathInputs current updated := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .trapOp1).allowed
     change hierStep.childOutputs .trapOp1 .result = bif
       hierStep.childOutputs .inputsFields .instr_trap
@@ -200,7 +200,7 @@ private theorem implements :
   have op2ImmediateValue : hierStep.childOutputs .op2Immediate .result =
       bif datapathInputs.is_jalr_addi_slti_sltiu_xori_ori_andi then
         datapathInputs.decoded_imm else datapathInputs.cpuregs_rs2 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .op2Immediate).allowed
     change hierStep.childOutputs .op2Immediate .result = bif
       hierStep.childOutputs .inputsFields .is_jalr_addi_slti_sltiu_xori_ori_andi
@@ -214,7 +214,7 @@ private theorem implements :
       bif datapathInputs.is_slli_srli_srai then updated .reg_op2
       else (bif datapathInputs.is_jalr_addi_slti_sltiu_xori_ori_andi then
         datapathInputs.decoded_imm else datapathInputs.cpuregs_rs2) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .op2Shift).allowed
     change hierStep.childOutputs .op2Shift .result = bif
       hierStep.childOutputs .inputsFields .is_slli_srli_srai
@@ -229,7 +229,7 @@ private theorem implements :
       else (bif datapathInputs.is_slli_srli_srai then updated .reg_op2
       else (bif datapathInputs.is_jalr_addi_slti_sltiu_xori_ori_andi then
         datapathInputs.decoded_imm else datapathInputs.cpuregs_rs2)) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .op2Load).allowed
     change hierStep.childOutputs .op2Load .result = bif
       hierStep.childOutputs .inputsFields .is_lb_lh_lw_lbu_lhu
@@ -245,7 +245,7 @@ private theorem implements :
       else (bif datapathInputs.is_slli_srli_srai then updated .reg_op2
       else (bif datapathInputs.is_jalr_addi_slti_sltiu_xori_ori_andi then
         datapathInputs.decoded_imm else datapathInputs.cpuregs_rs2))) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .op2Lui).allowed
     change hierStep.childOutputs .op2Lui .result = bif
       hierStep.childOutputs .inputsFields .is_lui_auipc_jal
@@ -257,7 +257,7 @@ private theorem implements :
       simp [Inputs.toValues, lui] at equation ⊢ <;> exact equation
   have op2Value : hierStep.childOutputs .trapOp2 .result =
       structuralOp2 datapathInputs updated := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .trapOp2).allowed
     change hierStep.childOutputs .trapOp2 .result = bif
       hierStep.childOutputs .inputsFields .instr_trap
@@ -271,7 +271,7 @@ private theorem implements :
   have shiftImmediateValue : hierStep.childOutputs .shiftImmediate .result =
       bif datapathInputs.is_jalr_addi_slti_sltiu_xori_ori_andi then
         updated .reg_sh else lowFiveBits datapathInputs.cpuregs_rs2 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 5 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 5 .bit)
       (childMatch .shiftImmediate).allowed
     change hierStep.childOutputs .shiftImmediate .result = bif
       hierStep.childOutputs .inputsFields .is_jalr_addi_slti_sltiu_xori_ori_andi
@@ -285,7 +285,7 @@ private theorem implements :
       bif datapathInputs.is_slli_srli_srai then datapathInputs.decoded_rs2
       else (bif datapathInputs.is_jalr_addi_slti_sltiu_xori_ori_andi then
         updated .reg_sh else lowFiveBits datapathInputs.cpuregs_rs2) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 5 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 5 .bit)
       (childMatch .shiftLoad).allowed
     change hierStep.childOutputs .shiftLoad .result = bif
       hierStep.childOutputs .inputsFields .is_slli_srli_srai
@@ -300,7 +300,7 @@ private theorem implements :
       else (bif datapathInputs.is_slli_srli_srai then datapathInputs.decoded_rs2
       else (bif datapathInputs.is_jalr_addi_slti_sltiu_xori_ori_andi then
         updated .reg_sh else lowFiveBits datapathInputs.cpuregs_rs2)) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 5 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 5 .bit)
       (childMatch .shiftLui).allowed
     change hierStep.childOutputs .shiftLui .result = bif
       hierStep.childOutputs .inputsFields .is_lb_lh_lw_lbu_lhu
@@ -316,7 +316,7 @@ private theorem implements :
       else (bif datapathInputs.is_slli_srli_srai then datapathInputs.decoded_rs2
       else (bif datapathInputs.is_jalr_addi_slti_sltiu_xori_ori_andi then
         updated .reg_sh else lowFiveBits datapathInputs.cpuregs_rs2))) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 5 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 5 .bit)
       (childMatch .trapShift).allowed
     change hierStep.childOutputs .trapShift .result = bif
       hierStep.childOutputs .inputsFields .is_lui_auipc_jal
@@ -328,7 +328,7 @@ private theorem implements :
       simp [Inputs.toValues, lui] at equation ⊢ <;> exact equation
   have shiftValue : hierStep.childOutputs .finalShift .result =
       structuralShift datapathInputs updated := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 5 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 5 .bit)
       (childMatch .finalShift).allowed
     change hierStep.childOutputs .finalShift .result = bif
       hierStep.childOutputs .inputsFields .instr_trap

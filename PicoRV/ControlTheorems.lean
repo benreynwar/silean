@@ -1,6 +1,6 @@
 import PicoRV.Control
 import PicoRV.Internal.ControlVerification
-import PicoRV.Control.ControlNextTheorems
+import PicoRV.Control.ControlNextDerived
 
 /-! # PicoRV control theorems
 
@@ -35,10 +35,7 @@ theorem implements_contract :
 /-- Structural equations for the complete control hierarchy have one solution
 for every boundary input and physical state. -/
 theorem hasExactlyOneSolution : moduleStructure.HasExactlyOneSolution :=
-  ⟨certified.hasStructuralResult, certified.structuralResultUnique⟩
+  ⟨certified.certification.structural.hasSolution, certified.certification.structural.hasAtMostOneSolution⟩
 
-/-- The control hierarchy and all descendants are concrete. -/
-theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
-  native_decide
 
 end PicoRV.Control

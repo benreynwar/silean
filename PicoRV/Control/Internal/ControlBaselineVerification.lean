@@ -1,9 +1,11 @@
 import PicoRV.Control.ControlBaseline
+import PicoRV.Control.Internal.ControlBaselineStructure
+import PicoRV.Control.Internal.ControlBaselineCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 
 namespace PicoRV.Control.Baseline
@@ -144,3 +146,22 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.Baseline
+
+namespace PicoRV.Control.Baseline.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold Baseline.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := Baseline.instancePorts,
+      wiring := Baseline.wiring })
+    (children := Baseline.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.Baseline.Internal

@@ -1,7 +1,7 @@
 import PicoRV.Authoring.CircuitLogic
 import PicoRV.Datapath.Internal.DatapathFetchUpdateStructure
-import Silean.Modules.Add.AddDerived
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 namespace PicoRV.Datapath
 
@@ -34,8 +34,8 @@ noncomputable def construction : Builder Unit := do
   let alignedBranch ← Silean.Modules.VectorLayout.place
     FetchUpdate.clearLowLayout branchSource
   let currentPc ← mux branchStored (currentFields .reg_next_pc) alignedBranch
-  let sequentialPc ← Silean.Modules.Add.place currentPc four falseBit
-  let jalPc ← Silean.Modules.Add.place
+  let sequentialPc ← Silean.Modules.AddWithCarry.place currentPc four falseBit
+  let jalPc ← Silean.Modules.AddWithCarry.place
     currentPc (inputsFields .decoded_imm_j) falseBit
   let decodedPc ← mux (inputsFields .instr_jal)
     sequentialPc.result jalPc.result

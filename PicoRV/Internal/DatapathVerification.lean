@@ -1,16 +1,16 @@
 import PicoRV.Internal.DatapathStructure
-import PicoRV.AluTheorems
+import PicoRV.AluDerived
 import PicoRV.Datapath.Internal.DatapathNextVerification
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Add.AddDerived
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Modules.Register.RegisterDerived
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Primitives.And
 
 namespace PicoRV.Datapath
@@ -36,7 +36,7 @@ module_child_certifications childContracts for body where
   falseBit := Silean.Modules.Constant.certification .bit false,
   zeroWord := Silean.Modules.Constant.certification (.vector 32 .bit) (wordOfNat 0),
   four := Silean.Modules.Constant.certification (.vector 32 .bit) (wordOfNat 4),
-  linkValue := Silean.Modules.Add.certification 32,
+  linkValue := Silean.Modules.AddWithCarry.certification 32,
   storeSource := Silean.Modules.Mux.certification (.vector 32 .bit),
   storedValue := Silean.Modules.Mux.certification (.vector 32 .bit),
   fetchValue := Silean.Modules.Mux.certification (.vector 32 .bit),
@@ -63,7 +63,7 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
         .stateFields => Silean.Modules.NamedTupleSplitter.Rule.apply,
         .fetchPhase => Silean.Modules.EqualsConstant.Rule.apply,
         {.falseBit, .zeroWord, .four} => Silean.Primitives.ConstantRule.apply,
-        .linkValue => Silean.Modules.Add.Rule.apply,
+        .linkValue => Silean.Modules.AddWithCarry.Rule.apply,
         .storeSource => Silean.Modules.Mux.Rule.select,
         .storedValue => Silean.Modules.Mux.Rule.select,
         .fetchValue => Silean.Modules.Mux.Rule.select,
@@ -240,14 +240,14 @@ private theorem implements :
     simpa [datapathInputs, inputsOfValues] using equation
   have alignedValue : hierStep.childOutputs .alignedRegOut .output =
       clearLowBit (contractState .reg_out) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       FetchUpdate.clearLowLayout alignedMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [stateFieldsValue, FetchUpdate.clearLow_layout] at equation
     exact equation
   have nextPcValue : hierStep.childOutputs .nextPc .result =
       nextPcOutput datapathInputs contractState := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       nextPcMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [branchValue, stateFieldsValue, alignedValue] at equation
@@ -258,7 +258,7 @@ private theorem implements :
 
   have fetchPhaseValue : hierStep.childOutputs .fetchPhase .result =
       decide (stateNumber datapathInputs = cpuStateFetch) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 8 .bit) (stateBits cpuStateFetch)
       fetchPhaseMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -274,15 +274,15 @@ private theorem implements :
     (fourMatch.ruleHolds Silean.Primitives.ConstantRule.apply)
   have linkValue : hierStep.childOutputs .linkValue .result =
       addWords (contractState .reg_pc) (wordOfNat 4) := by
-    have equation := Silean.Modules.Add.cycleContract.result 32 linkMatch.1
+    have equation := Silean.Modules.AddWithCarry.cycleContract.result 32 linkMatch.1
     normalize_child_hyp equation unfolding wiring, context
     rw [stateFieldsValue, fourValue, falseValue,
-      ProofSupport.addBits_eq_addWords] at equation
+      ProofSupport.addResult_eq_addWords] at equation
     exact equation
   have storeSourceValue : hierStep.childOutputs .storeSource .result =
       (if datapathInputs.latched_stalu then contractState .alu_out_q
       else contractState .reg_out) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       storeSourceMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [stateFieldsValue] at equation
@@ -295,7 +295,7 @@ private theorem implements :
         (if datapathInputs.latched_stalu then contractState .alu_out_q
         else contractState .reg_out)
       else wordOfNat 0) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       storedValueMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [storeSourceValue, zeroValue] at equation
@@ -310,7 +310,7 @@ private theorem implements :
         (if datapathInputs.latched_stalu then contractState .alu_out_q
         else contractState .reg_out)
       else wordOfNat 0) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       fetchValueMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [linkValue, storedValue] at equation
@@ -320,7 +320,7 @@ private theorem implements :
       simp [branch] at equation ⊢ <;> exact equation
   have writebackValue : hierStep.childOutputs .writeback .result =
       writebackData datapathInputs contractState := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       writebackMatch.allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [fetchPhaseValue, zeroValue, fetchValue] at equation

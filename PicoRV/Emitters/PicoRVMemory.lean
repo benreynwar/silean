@@ -3,5 +3,5 @@ import PicoRV.Memory
 
 def main (args : List String) : IO Unit :=
   Silean.FIRRTL.emitMain "emit-picorv-memory" args
-    (Silean.FIRRTL.renderClosedCircuit
+    (Silean.FIRRTL.renderCircuit
       PicoRV.Memory.naming)

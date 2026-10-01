@@ -4,11 +4,11 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Add.AddDerived
-import Silean.Modules.BitMux.BitMuxTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
+import Silean.Modules.BitMux.BitMuxDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Primitives.And
 import Silean.Primitives.Not
 import Silean.Primitives.Or
@@ -31,7 +31,7 @@ module_child_certifications childContracts for body where
   progress := Silean.Primitives.orCertified.certification,
   active := Silean.Modules.BitMux.certification,
   notActive := Silean.Primitives.notCertified.certification,
-  effectiveAddress := Silean.Modules.Add.certification 32,
+  effectiveAddress := Silean.Modules.AddWithCarry.certification 32,
   effectiveOp1 := Silean.Modules.Mux.certification (.vector 32 .bit),
   selectedOp1 := Silean.Modules.Mux.certification (.vector 32 .bit),
   signedHalf := Silean.Modules.VectorLayout.certification 32 32 (signExtendLayout 16),
@@ -54,7 +54,7 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     .progress => Silean.Primitives.OrRule.apply,
     .active => Silean.Modules.BitMux.Rule.select,
     .notActive => Silean.Primitives.NotRule.apply,
-    .effectiveAddress => Silean.Modules.Add.Rule.apply,
+    .effectiveAddress => Silean.Modules.AddWithCarry.Rule.apply,
     {.effectiveOp1, .selectedOp1} => Silean.Modules.Mux.Rule.select,
     {.signedHalf, .signedByte} => Silean.Modules.VectorLayout.Rule.apply,
     {.selectByte, .selectHalf, .selectUnsigned} => Silean.Modules.Mux.Rule.select,
@@ -172,7 +172,7 @@ private theorem implements :
   have activeValue : hierStep.childOutputs .active .result =
       (bif inputs .isLoad then datapathInputs.mem_do_rdata
       else datapathInputs.mem_do_wdata) := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .active).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [inputField .mem_do_rdata, inputField .mem_do_wdata] at equation
@@ -190,18 +190,18 @@ private theorem implements :
     exact equation
   have addressValue : hierStep.childOutputs .effectiveAddress .result =
       addWords (current .reg_op1) datapathInputs.decoded_imm := by
-    have equation := Silean.Modules.Add.cycleContract.result 32
+    have equation := Silean.Modules.AddWithCarry.cycleContract.result 32
       (childMatch .effectiveAddress).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, inputField .decoded_imm, falseValue,
-      ProofSupport.addBits_eq_addWords] at equation
+      ProofSupport.addResult_eq_addWords] at equation
     exact equation
   have effectiveOp1Value : hierStep.childOutputs .effectiveOp1 .result =
       (if !(bif inputs .isLoad then datapathInputs.mem_do_rdata
         else datapathInputs.mem_do_wdata) then
         addWords (current .reg_op1) datapathInputs.decoded_imm
       else updated .reg_op1) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .effectiveOp1).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [notActiveValue, addressValue, updatedFieldsValue] at equation
@@ -210,7 +210,7 @@ private theorem implements :
       simp [isLoad, rdata, wdata] at equation ⊢ <;> exact equation
   have selectedOp1Value : hierStep.childOutputs .selectedOp1 .result =
       structuralOp1 (inputs .isLoad) datapathInputs current updated := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectedOp1).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [progressValue, effectiveOp1Value, updatedFieldsValue] at equation
@@ -223,14 +223,14 @@ private theorem implements :
 
   have signedHalfValue : hierStep.childOutputs .signedHalf .output =
       signExtended16 datapathInputs.mem_rdata_word := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       (signExtendLayout 16) (childMatch .signedHalf).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [inputField .mem_rdata_word, sign_extend_16_layout] at equation
     exact equation
   have signedByteValue : hierStep.childOutputs .signedByte .output =
       signExtended8 datapathInputs.mem_rdata_word := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       (signExtendLayout 8) (childMatch .signedByte).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [inputField .mem_rdata_word, sign_extend_8_layout] at equation
@@ -238,7 +238,7 @@ private theorem implements :
   have byteValue : hierStep.childOutputs .selectByte .result =
       (if datapathInputs.latched_is_lb then signExtended8 datapathInputs.mem_rdata_word
       else wordOfNat 0) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectByte).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [inputField .latched_is_lb, zeroValue, signedByteValue] at equation
@@ -249,7 +249,7 @@ private theorem implements :
       (if datapathInputs.latched_is_lh then signExtended16 datapathInputs.mem_rdata_word
       else if datapathInputs.latched_is_lb then signExtended8 datapathInputs.mem_rdata_word
       else wordOfNat 0) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectHalf).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [inputField .latched_is_lh, byteValue, signedHalfValue] at equation
@@ -258,7 +258,7 @@ private theorem implements :
       simp [half] at equation ⊢ <;> exact equation
   have loadResultValue : hierStep.childOutputs .selectUnsigned .result =
       loadResult datapathInputs := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectUnsigned).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [inputField .latched_is_lu, inputField .mem_rdata_word,
@@ -286,7 +286,7 @@ private theorem implements :
     exact equation
   have selectedResultValue : hierStep.childOutputs .selectedResult .result =
       structuralResult (inputs .isLoad) datapathInputs updated := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectedResult).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [loadDoneValue, updatedFieldsValue, loadResultValue] at equation

@@ -1,10 +1,12 @@
-import PicoRV.Decoder.DecoderImmediate
+import PicoRV.Decoder.Internal.DecoderImmediateStructure
+import PicoRV.Decoder.Internal.DecoderImmediateSemantics
+import PicoRV.Decoder.Internal.DecoderImmediateCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.Mux.MuxDerived
 import Silean.Modules.Constant.Constant
 import Silean.Primitives.Or
 
@@ -71,16 +73,16 @@ private theorem implements :
   derive_empty_state_child_matches childMatch for body from
     layerChildren, hierStep, satisfies
 
-  have immediateIValue := Silean.Modules.VectorLayout.output_of_allowed 32 32
+  have immediateIValue := Silean.Modules.VectorLayout.cycleContract.output 32 32
     immediateILayout (childMatch .immediateI).allowed
   normalize_child_hyp immediateIValue unfolding wiring, context
-  have immediateUValue := Silean.Modules.VectorLayout.output_of_allowed 32 32
+  have immediateUValue := Silean.Modules.VectorLayout.cycleContract.output 32 32
     immediateULayout (childMatch .immediateU).allowed
   normalize_child_hyp immediateUValue unfolding wiring, context
-  have immediateSValue := Silean.Modules.VectorLayout.output_of_allowed 32 32
+  have immediateSValue := Silean.Modules.VectorLayout.cycleContract.output 32 32
     immediateSLayout (childMatch .immediateS).allowed
   normalize_child_hyp immediateSValue unfolding wiring, context
-  have immediateBValue := Silean.Modules.VectorLayout.output_of_allowed 32 32
+  have immediateBValue := Silean.Modules.VectorLayout.cycleContract.output 32 32
     immediateBLayout (childMatch .immediateB).allowed
   normalize_child_hyp immediateBValue unfolding wiring, context
 
@@ -147,7 +149,7 @@ private theorem implements :
       bif hierStep.inputs .is_sb_sh_sw then
         Silean.Modules.VectorLayout.apply immediateSLayout (hierStep.inputs .word)
       else wordOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit) (childMatch .selectS).allowed
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit) (childMatch .selectS).allowed
     simp only [Silean.Wiring.childInputValues, body, wiring, context,
       Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
       Silean.SignalSource.value] at equation
@@ -159,7 +161,7 @@ private theorem implements :
       else bif hierStep.inputs .is_sb_sh_sw then
         Silean.Modules.VectorLayout.apply immediateSLayout (hierStep.inputs .word)
       else wordOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit) (childMatch .selectB).allowed
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit) (childMatch .selectB).allowed
     simp only [Silean.Wiring.childInputValues, body, wiring, context,
       Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
       Silean.SignalSource.value] at equation
@@ -173,7 +175,7 @@ private theorem implements :
       else bif hierStep.inputs .is_sb_sh_sw then
         Silean.Modules.VectorLayout.apply immediateSLayout (hierStep.inputs .word)
       else wordOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit) (childMatch .selectI).allowed
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit) (childMatch .selectI).allowed
     simp only [Silean.Wiring.childInputValues, body, wiring, context,
       Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
       Silean.SignalSource.value] at equation
@@ -189,7 +191,7 @@ private theorem implements :
       else bif hierStep.inputs .is_sb_sh_sw then
         Silean.Modules.VectorLayout.apply immediateSLayout (hierStep.inputs .word)
       else wordOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit) (childMatch .selectU).allowed
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit) (childMatch .selectU).allowed
     simp only [Silean.Wiring.childInputValues, body, wiring, context,
       Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
       Silean.SignalSource.value] at equation
@@ -197,7 +199,7 @@ private theorem implements :
       (bif_congr uSelectedValue immediateUValue selectIValue)
   have selectJValue : hierStep.childOutputs .selectJ .result =
       structuralValue (valuesOf hierStep.inputs) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit) (childMatch .selectJ).allowed
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit) (childMatch .selectJ).allowed
     simp only [Silean.Wiring.childInputValues, body, wiring, context,
       Silean.EndpointContext.moduleInput, Silean.EndpointContext.instanceOutput,
       Silean.SignalSource.value] at equation
@@ -232,3 +234,22 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Decoder.Immediate
+
+namespace PicoRV.Decoder.Immediate.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold Immediate.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := Immediate.instancePorts,
+      wiring := Immediate.wiring })
+    (children := Immediate.structuralChildren)
+    corresponds certification
+
+end PicoRV.Decoder.Immediate.Internal

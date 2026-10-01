@@ -1,12 +1,12 @@
-import PicoRV.Alu
+import PicoRV.Internal.AluCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.AddSub.AddSubDerived
-import Silean.Modules.BitMux.BitMuxTheorems
-import Silean.Modules.Equality.EqualityTheorems
-import Silean.Modules.Mux.MuxTheorems
+import Silean.Modules.AddSubWithCarry.AddSubWithCarryDerived
+import Silean.Modules.BitMux.BitMuxDerived
+import Silean.Modules.Equality.EqualityDerived
+import Silean.Modules.Mux.MuxDerived
 
 /-! Internal schedules and structural certification for the PicoRV ALU. -/
 
@@ -80,7 +80,7 @@ module_child_certifications childContracts for body where
   leftSplit := wordSplitter.certified.certification,
   rightSplit := wordSplitter.certified.certification,
   subtractMode := Silean.Primitives.orCertified.certification,
-  addSub := Silean.Modules.AddSub.certification 32,
+  addSub := Silean.Modules.AddSubWithCarry.certification 32,
   equality := Silean.Modules.Equality.certification wordType,
   bitwiseXor := Silean.Modules.BitwiseXor.certification wordType,
   bitwiseOr := Silean.Modules.BitwiseOr.certification wordType,
@@ -117,7 +117,7 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     | .apply => [.leftSplit => Silean.Composition.SignalComponentRule.apply,
         .rightSplit => Silean.Composition.SignalComponentRule.apply,
         .subtractMode => Silean.Primitives.OrRule.apply,
-        .addSub => Silean.Modules.AddSub.Rule.apply,
+        .addSub => Silean.Modules.AddSubWithCarry.Rule.apply,
         .equality => Silean.Modules.Equality.Rule.apply,
         .bitwiseXor => Silean.Modules.BitwiseXor.Rule.apply,
         .bitwiseOr => Silean.Modules.BitwiseOr.Rule.apply,
@@ -183,31 +183,31 @@ private theorem implements :
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have addSubResult : hierStep.childOutputs .addSub .result =
-      (Silean.Modules.AddSub.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2)
+      (Silean.Modules.AddSubWithCarry.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2)
         (hierStep.inputs .instr_sub || hierStep.inputs .is_compare)).1 := by
     have equation :=
-      Silean.Modules.AddSub.cycleContract.result 32
+      Silean.Modules.AddSubWithCarry.cycleContract.result 32
         (childMatch .addSub).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg
-      (fun subtract => (Silean.Modules.AddSub.addSubBits 32
+      (fun subtract => (Silean.Modules.AddSubWithCarry.addSubBits 32
         (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) subtract).1)
       subtractModeValue)
   have addSubCarry : hierStep.childOutputs .addSub .carryOut =
-      (Silean.Modules.AddSub.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2)
+      (Silean.Modules.AddSubWithCarry.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2)
         (hierStep.inputs .instr_sub || hierStep.inputs .is_compare)).2 := by
     have equation :=
-      Silean.Modules.AddSub.cycleContract.carryOut 32
+      Silean.Modules.AddSubWithCarry.cycleContract.carryOut 32
         (childMatch .addSub).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (congrArg
-      (fun subtract => (Silean.Modules.AddSub.addSubBits 32
+      (fun subtract => (Silean.Modules.AddSubWithCarry.addSubBits 32
         (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) subtract).2)
       subtractModeValue)
   child_contract_fact equalityValue : hierStep.childOutputs .equality .result =
       wordType.equal (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) from
       (childMatch .equality).allowed using
-      Silean.Modules.Equality.result_of_allowed wordType unfolding body, wiring, context
+      Silean.Modules.Equality.cycleContract.result wordType unfolding body, wiring, context
   child_contract_fact bitwiseXorValue : hierStep.childOutputs .bitwiseXor .result =
       wordType.bitwiseXor (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) from
       (childMatch .bitwiseXor).allowed using
@@ -244,7 +244,7 @@ private theorem implements :
       (primitiveXor_eq_boolXor _ _)
   have signedLessValue : hierStep.childOutputs .signedLess .result =
       sharedSignedLess (valuesOf hierStep.inputs) := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .signedLess).allowed
     normalize_child_hyp equation unfolding wiring, context
     have selected := mux_congr equation signDifferenceValue leftSign unsignedLessValue
@@ -273,14 +273,14 @@ private theorem implements :
     exact equation.trans (congrArg Bool.not unsignedLessValue)
   have selectUnsignedLessValue : hierStep.childOutputs .selectUnsignedLess .result =
       bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs) else false := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .selectUnsignedLess).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl unsignedLessValue zeroBitValueEquation
   have selectSignedLessValue : hierStep.childOutputs .selectSignedLess .result =
       bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
       else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs) else false := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .selectSignedLess).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl signedLessValue selectUnsignedLessValue
@@ -290,7 +290,7 @@ private theorem implements :
         else bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
         else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs)
         else false := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .selectUnsignedGreaterEqual).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notUnsignedLessValue selectSignedLessValue
@@ -301,7 +301,7 @@ private theorem implements :
         else bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
         else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs)
         else false := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .selectSignedGreaterEqual).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notSignedLessValue
@@ -313,13 +313,13 @@ private theorem implements :
       else bif hierStep.inputs .is_slti_blt_slt then sharedSignedLess (valuesOf hierStep.inputs)
       else bif hierStep.inputs .is_sltiu_bltu_sltu then sharedUnsignedLess (valuesOf hierStep.inputs)
       else false := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .selectNotEqual).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact mux_congr equation rfl notEqualValue selectSignedGreaterEqualValue
   have selectEqualValue : hierStep.childOutputs .selectEqual .result =
       comparisonOutput (valuesOf hierStep.inputs) := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .selectEqual).allowed
     normalize_child_hyp equation unfolding wiring, context
     have equalityAsBool :
@@ -371,17 +371,17 @@ private theorem implements :
     exact equation
   -- Follow the result-selection mux chain.  Intermediate expressions are
   -- inferred instead of restating the progressively larger nested `bif`.
-  have selectAndValue := Silean.Modules.Mux.result_of_allowed wordType
+  have selectAndValue := Silean.Modules.Mux.cycleContract.result wordType
     (childMatch .selectAnd).allowed
   normalize_child_hyp selectAndValue unfolding wiring, context
   have selectAndResolved := mux_congr selectAndValue andSelectedValue
     bitwiseAndValue zeroWordValueEquation
-  have selectOrValue := Silean.Modules.Mux.result_of_allowed wordType
+  have selectOrValue := Silean.Modules.Mux.cycleContract.result wordType
     (childMatch .selectOr).allowed
   normalize_child_hyp selectOrValue unfolding wiring, context
   have selectOrResolved := mux_congr selectOrValue orSelectedValue
     bitwiseOrValue selectAndResolved
-  have selectXorValue := Silean.Modules.Mux.result_of_allowed wordType
+  have selectXorValue := Silean.Modules.Mux.cycleContract.result wordType
     (childMatch .selectXor).allowed
   normalize_child_hyp selectXorValue unfolding wiring, context
   have bitwiseXorWord :
@@ -390,12 +390,12 @@ private theorem implements :
     bitwiseXorValue.trans (wordType_bitwiseXor _ _)
   have selectXorResolved := mux_congr selectXorValue xorSelectedValue
     bitwiseXorWord selectOrResolved
-  have selectComparisonValue := Silean.Modules.Mux.result_of_allowed wordType
+  have selectComparisonValue := Silean.Modules.Mux.cycleContract.result wordType
     (childMatch .selectComparison).allowed
   normalize_child_hyp selectComparisonValue unfolding wiring, context
   have selectComparisonResolved := mux_congr selectComparisonValue rfl
     comparisonWordValue selectXorResolved
-  have selectArithmeticValue := Silean.Modules.Mux.result_of_allowed wordType
+  have selectArithmeticValue := Silean.Modules.Mux.cycleContract.result wordType
     (childMatch .selectArithmetic).allowed
   normalize_child_hyp selectArithmeticValue unfolding wiring, context
   have selectArithmeticResolved := mux_congr selectArithmeticValue rfl
@@ -414,9 +414,9 @@ private theorem implements :
     exact boundary
   have addSubBehavior (subtract : Bool) :
       addSub subtract (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) =
-        (Silean.Modules.AddSub.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) subtract).1 := by
+        (Silean.Modules.AddSubWithCarry.addSubBits 32 (hierStep.inputs .reg_op1) (hierStep.inputs .reg_op2) subtract).1 := by
     apply Silean.BitVector.toNat_injective 32
-    rw [Silean.Modules.AddSub.addSubBits_result_toNat]
+    rw [Silean.Modules.AddSubWithCarry.addSubBits_result_toNat]
     cases subtract <;>
       simp [addSub, wordOfNat, Silean.BitVector.toNat_ofNat]
   refine ⟨Silean.SignalMap.emptyValues, ?_, trivial⟩
@@ -453,3 +453,21 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Alu
+
+namespace PicoRV.Alu.Internal
+
+open Silean Silean.Authoring.CircuitDescription
+
+/-- The authored ALU construction implements its cycle contract. -/
+theorem construction_correct :
+    Alu.description.ImplementsCycleContract
+      Alu.cycleContract Alu.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold Alu.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact Description.ImplementsCycleContract.of_certification
+    (referenceBody := { instancePorts := Alu.instancePorts, wiring := Alu.wiring })
+    (children := Alu.structuralChildren)
+    corresponds Alu.certification
+
+end PicoRV.Alu.Internal

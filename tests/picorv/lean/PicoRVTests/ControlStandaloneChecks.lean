@@ -71,11 +71,7 @@ noncomputable example :
     Silean.Contracts.Cycle.ModuleCycleCertified PhaseTransition.ports :=
   LoadRs2Transition.certified
 
-example : TrapTransition.moduleStructure.HasNoBlackboxes :=
-  TrapTransition.moduleStructure_hasNoBlackboxes
 
-example : LoadRs2Transition.moduleStructure.HasNoBlackboxes :=
-  LoadRs2Transition.moduleStructure_hasNoBlackboxes
 
 /-! ## Current outputs and writeback
 
@@ -144,14 +140,11 @@ to the concrete registered hierarchy for arbitrary inputs and states. -/
 
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports := certified
 
-example : moduleStructure.HasNoBlackboxes := moduleStructure_hasNoBlackboxes
 
-example : ControlNext.moduleStructure.HasNoBlackboxes :=
-  ControlNext.moduleStructure_hasNoBlackboxes
 
-noncomputable example : RenderResult String := renderClosedCircuit naming
+noncomputable example : RenderResult String := renderCircuit naming
 
-#guard match renderClosedCircuit naming with
+#guard match renderCircuit naming with
   | .ok _ => true
   | .error _ => false
 

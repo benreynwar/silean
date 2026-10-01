@@ -1,6 +1,6 @@
 import PicoRV.Decoder.Internal.DecoderInstructionMatchStructure
-import PicoRV.Decoder.DecoderInstructionFieldsTheorems
-import PicoRV.Decoder.DecoderInstructionMatchGateTheorems
+import PicoRV.Decoder.DecoderInstructionFieldsDerived
+import PicoRV.Decoder.DecoderInstructionMatchGateDerived
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
@@ -122,7 +122,7 @@ private theorem implements :
   have exactValueResult (exact : Exact) :
       hierStep.childOutputs (.exactMatch exact) .result =
         exactValue semanticInputs exact := by
-    have equation := (MatchGate.outputRule_holds_iff _ _ _).mp
+    have equation := (MatchGate.applyRule_holds_iff _ _ _).mp
       ((childMatch (.exactMatch exact)).ruleHolds MatchGate.Rule.apply)
     normalize_child_hyp equation
     simp only [wiring, context] at equation

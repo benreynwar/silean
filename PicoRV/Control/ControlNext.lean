@@ -1,17 +1,17 @@
-import PicoRV.Control.ControlBaseline
-import PicoRV.Control.ControlCommandFinish
-import PicoRV.Control.ControlExecuteTransition
-import PicoRV.Control.ControlFetchTransition
-import PicoRV.Control.ControlLoadTransition
-import PicoRV.Control.ControlLoadRs1Transition
-import PicoRV.Control.ControlLoadRs2Transition
-import PicoRV.Control.ControlPhaseDecode
-import PicoRV.Control.ControlResetAndAlignmentOverride
-import PicoRV.Control.ControlStoreTransition
-import PicoRV.Control.ControlShiftTransition
-import PicoRV.Control.ControlTrapTransition
-import PicoRV.Control.Internal.ControlNextStructure
+import PicoRV.Control.ControlBaselineDerived
+import PicoRV.Control.ControlCommandFinishDerived
+import PicoRV.Control.ControlExecuteTransitionDerived
+import PicoRV.Control.ControlFetchTransitionDerived
+import PicoRV.Control.ControlLoadTransitionDerived
+import PicoRV.Control.ControlLoadRs1TransitionDerived
+import PicoRV.Control.ControlLoadRs2TransitionDerived
+import PicoRV.Control.ControlPhaseDecodeDerived
+import PicoRV.Control.ControlResetAndAlignmentOverrideDerived
+import PicoRV.Control.ControlStoreTransitionDerived
+import PicoRV.Control.ControlShiftTransitionDerived
+import PicoRV.Control.ControlTrapTransitionDerived
 import PicoRV.Authoring.CircuitLogic
+import Silean.Authoring.ModuleCycleContract
 
 namespace PicoRV.Control
 
@@ -20,6 +20,43 @@ open Silean.Authoring
 open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
 open scoped Silean.Authoring
+
+namespace ControlNext
+
+module_ports ports where
+  input inputs (schema := ControlInputs.schema) : inputsType,
+  input current (schema := ControlState.schema) : stateType,
+  output state (schema := ControlState.schema) : stateType
+
+def outputState (inputs : inputMap.Values) : stateMap.Values :=
+  nextState (Inputs.unpack (inputs .inputs))
+    (stateMap.unpack (inputs .current))
+
+def outputRule : Silean.Contracts.Cycle.CycleOutputRule ports emptySignalMap where
+  readsInputs := .all inputMap
+  writesOutputs := .all outputMap
+  target inputs _ := fun | .state => stateMap.pack (outputState inputs)
+
+module_cycle_contract cycleContract for ports where
+  state := emptySignalMap
+  output_rule apply := outputRule
+  state_rule := Silean.Contracts.Cycle.CycleStateRule.empty _
+
+@[simp] theorem outputRule_holds_iff (inputs : inputMap.Values)
+    (state : emptySignalMap.Values) (outputs : outputMap.Values) :
+    outputRule.Holds inputs state outputs ↔
+      outputs .state = stateMap.pack (outputState inputs) := by
+  simp only [Silean.Contracts.Cycle.CycleOutputRule.Holds, outputRule,
+    Silean.SignalGroup.all_matches]
+  constructor
+  · intro equal; exact congrFun equal .state
+  · intro equal; funext output; cases output; exact equal
+
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .state = stateMap.pack (outputState step.inputs) :=
+  (outputRule_holds_iff step.inputs step.currentState step.outputs).mp
+    (allowed.1 .apply)
 
 /-! # Complete control-state update
 
@@ -30,11 +67,11 @@ finishes or starts memory commands. Its children use conventional indexed
 names; the Lean bindings below carry the explanatory names. The expanded typed
 hierarchy and verification remain under `Internal/`. -/
 
-namespace ControlNext.Description
+open ports
 
-noncomputable def construction : Builder Unit := do
-  let inputs ← input "inputs" inputsType
-  let current ← input "current" stateType
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let inputs ← input .inputs
+  let current ← input .current
   let inputsFields ← split ControlInputs.layout inputs
   let currentFields ← split ControlState.layout current
   let falseBit ← constant .bit false
@@ -68,30 +105,10 @@ noncomputable def construction : Builder Unit := do
   let clearCommands ← (← !! (inputsFields .resetn)) |||
     (inputsFields .mem_done)
   let state ← CommandFinish.place clearCommands overridden.transition
-  output "state" state
+  output .state state
 
-noncomputable def description : Description := build construction
-
-end ControlNext.Description
-
-namespace ControlNext
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (inputs : Net inputsType) (current : Net stateType) :
-    Builder (Net stateType) := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .inputs => inputs
-    | .current => current
-  pure (child .state)
-
-noncomputable def place (inputs : Net inputsType) (current : Net stateType) :
-    Builder (Net stateType) := do
-  let child ← placeIndexed "control_next" design fun
-    | .inputs => inputs
-    | .current => current
-  pure (child .state)
-
-attribute [circuit_description] placeNamed place
+noncomputable def description : Description :=
+  ModuleBuilder.build Naming.ports construction
 
 end ControlNext
 

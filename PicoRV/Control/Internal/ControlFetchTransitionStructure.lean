@@ -1,8 +1,8 @@
-import PicoRV.Control.ControlNextContracts
+import PicoRV.Control.ControlFetchTransition
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Naming.PrimitiveNaming
 
 namespace PicoRV.Control

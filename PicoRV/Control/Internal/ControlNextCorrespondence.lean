@@ -1,10 +1,11 @@
 import PicoRV.Control.ControlNext
+import PicoRV.Control.Internal.ControlNextStructure
 import Silean.Authoring.CircuitDescriptionSoundness
 
 /-! Checked correspondence between the reader-facing complete control update
 and its expanded typed production structure. -/
 
-namespace PicoRV.Control.ControlNext.Description.Internal
+namespace PicoRV.Control.ControlNext.Internal
 
 open Silean Silean.Naming Silean.Authoring.CircuitDescription
 
@@ -19,23 +20,11 @@ private theorem same : some description = ofNaming ControlNext.naming := by
   dsimp [ControlNext.body, ControlNext.context, ControlNext.instancePorts,
     ControlNext.structuralChildren, ControlNext.wiring, sourceDescription,
     EndpointContext.moduleInput, EndpointContext.instanceOutput]
-  simp [circuit_description, enumeration]
+  simp [circuit_description, enumeration, childId, Enumeration.ordinal]
+  repeat' apply And.intro
+  all_goals rfl
 
-private theorem unique : description.UniqueNames := by
-  simp only [circuit_description, description, construction]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal | equal | equal | equal | equal |
-      equal | equal | equal | equal | equal | equal | equal | equal | equal |
-      equal | equal | equal | equal | equal | equal | equal | equal | equal |
-      equal <;>
-    subst child <;> constructor <;> exact of_decide_eq_true rfl
+theorem description_corresponds : Corresponds description ControlNext.naming :=
+  ⟨same⟩
 
-theorem corresponds : Corresponds description ControlNext.naming :=
-  ⟨same, unique⟩
-
-end PicoRV.Control.ControlNext.Description.Internal
+end PicoRV.Control.ControlNext.Internal

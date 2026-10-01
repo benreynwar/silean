@@ -1,9 +1,9 @@
-import PicoRV.Memory.MemoryLookahead
+import PicoRV.Memory.MemoryLookaheadDerived
 import PicoRV.Memory.MemoryNext
 import PicoRV.Memory.MemoryReadFormatting
 import PicoRV.Memory.MemoryResponse
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Modules.Register.RegisterDerived
 
 namespace PicoRV

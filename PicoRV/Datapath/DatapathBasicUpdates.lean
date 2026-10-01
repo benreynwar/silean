@@ -1,7 +1,7 @@
 import PicoRV.Authoring.CircuitLogic
 import PicoRV.Datapath.Internal.DatapathBasicUpdatesStructure
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 /-! # Basic datapath update stages
 

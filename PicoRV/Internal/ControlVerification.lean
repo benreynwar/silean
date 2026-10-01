@@ -5,8 +5,8 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Modules.Register.RegisterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Or
@@ -156,7 +156,7 @@ private theorem implements :
 
   have fetchPhaseValue : hierStep.childOutputs .fetchPhase .result =
       decide (phase contractState = cpuStateFetch) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 8 .bit) (stateBits cpuStateFetch)
       fetchPhaseMatch.allowed
     normalize_child_hyp equation unfolding wiring, context

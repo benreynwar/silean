@@ -1,11 +1,11 @@
 import PicoRV.Datapath.DatapathNextContracts
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Add.AddDerived
-import Silean.Modules.BitMux.BitMux
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Naming.PrimitiveNaming
 
 namespace PicoRV.Datapath
@@ -36,7 +36,7 @@ module_design MemoryUpdateCore (name := "picorv32_datapath_memory_update") where
     progress (name := .indexed "or" 0) := Silean.Primitives.orDesign,
     active (name := .indexed "bit_mux" 0) := Silean.Modules.BitMux.design,
     notActive (name := .indexed "not" 1) := Silean.Primitives.notDesign,
-    effectiveAddress (name := .indexed "add" 0) := Silean.Modules.Add.design 32,
+    effectiveAddress (name := .indexed "add" 0) := Silean.Modules.AddWithCarry.design 32,
     effectiveOp1 (name := .indexed "mux" 0) := Silean.Modules.Mux.design (.vector 32 .bit),
     selectedOp1 (name := .indexed "mux" 1) := Silean.Modules.Mux.design (.vector 32 .bit),
     signedHalf (name := .indexed "vector_layout" 0) := Silean.Modules.VectorLayout.design 32 32

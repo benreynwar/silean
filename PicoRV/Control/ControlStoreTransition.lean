@@ -1,4 +1,4 @@
-import PicoRV.Control.Internal.ControlStoreTransitionStructure
+import PicoRV.Control.ControlPhaseTransition
 import PicoRV.Authoring.CircuitLogic
 
 namespace PicoRV.Control
@@ -9,6 +9,19 @@ open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
 open scoped Silean.Authoring
 
+namespace StoreTransition
+
+abbrev cycleContract := PhaseTransition.cycleContract storeTransition
+
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .transition =
+      (storeTransition (Inputs.unpack (step.inputs .inputs))
+        (stateMap.unpack (step.inputs .current))
+        (stateMap.unpack (step.inputs .updated))).pack :=
+  (PhaseTransition.outputRule_holds_iff storeTransition
+    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
+
 /-! # Store transition
 
 The source priority remains explicit: waiting for prefetch selects an unchanged
@@ -17,12 +30,12 @@ return to fetch, and `setWdata` records whether a new write request must be
 asserted after command clearing. The expanded typed hierarchy and verification
 remain under `Internal/`. -/
 
-namespace StoreTransition.Description
+open PhaseTransition.ports
 
-noncomputable def construction : Builder Unit := do
-  let inputs ← input "inputs" inputsType
-  let current ← input "current" stateType
-  let updated ← input "updated" stateType
+noncomputable def construction : ModuleBuilder PhaseTransition.ports Unit := do
+  let inputs ← input .inputs
+  let current ← input .current
+  let updated ← input .updated
   let inputsFields ← split ControlInputs.layout inputs
   let currentFields ← split ControlState.layout current
   let updatedFields ← split ControlState.layout updated
@@ -64,36 +77,11 @@ noncomputable def construction : Builder Unit := do
     TransitionValue.signalMap TransitionValue.schema fun
       | .state => updated
       | .setRinst | .setRdata | .setWdata => falseBit
-  output "transition" (← mux
+  output .transition (← mux
     waitForPrefetch activeTransition waitTransition)
 
-noncomputable def description : Description := build construction
-
-end StoreTransition.Description
-
-namespace StoreTransition
-
-structure PlacedOutputs where
-  transition : Net transitionType
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (inputs : Net inputsType) (current updated : Net stateType) :
-    Builder PlacedOutputs := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .inputs => inputs
-    | .current => current
-    | .updated => updated
-  pure ⟨child .transition⟩
-
-noncomputable def place (inputs : Net inputsType)
-    (current updated : Net stateType) : Builder PlacedOutputs := do
-  let child ← placeIndexed "store_transition" design fun
-    | .inputs => inputs
-    | .current => current
-    | .updated => updated
-  pure ⟨child .transition⟩
-
-attribute [circuit_description] placeNamed place
+noncomputable def description : Description :=
+  ModuleBuilder.build PhaseTransition.Naming.ports construction
 
 end StoreTransition
 

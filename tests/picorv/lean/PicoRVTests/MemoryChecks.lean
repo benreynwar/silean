@@ -211,14 +211,13 @@ can be solved uniquely and emitted without any hidden behavioral leaf. -/
 
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports := certified
 
-example : moduleStructure.HasNoBlackboxes := moduleStructure_hasNoBlackboxes
 
 example : moduleStructure.HasAtMostOneSolution :=
-  certified.certification.structuralResultUnique
+  certified.certification.structural.hasAtMostOneSolution
 
-noncomputable example : RenderResult String := renderClosedCircuit naming
+noncomputable example : RenderResult String := renderCircuit naming
 
-#guard match renderClosedCircuit naming with
+#guard match renderCircuit naming with
   | .ok _ => true
   | .error _ => false
 

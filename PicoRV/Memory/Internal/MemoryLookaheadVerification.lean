@@ -1,16 +1,16 @@
-import PicoRV.Memory.MemoryLookahead
+import PicoRV.Memory.Internal.MemoryLookaheadCorrespondence
 import PicoRV.Memory.MemoryProofSupport
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BinaryToOneHot.BinaryToOneHotTheorems
+import Silean.Modules.BinaryToOneHot.BinaryToOneHotDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
-import Silean.Modules.VectorSlice.VectorSliceTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.VectorSlice.VectorSliceDerived
 import Silean.Primitives.And
 import Silean.Primitives.Or
 
@@ -202,7 +202,7 @@ private theorem implements :
     simpa [Memory.ProofSupport.splitValue_eq_unpack, current] using equation
   have idleValue : hierStep.childOutputs .idle .result =
       decide (stateNumber current = 0) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (stateOfNat 0)
       (childMatch .idle).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -255,14 +255,14 @@ private theorem implements :
 
   have alignedNextValue : hierStep.childOutputs .alignedNextPc .output =
       aligned (inputs .next_pc) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 alignedLayout (childMatch .alignedNextPc).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [alignedLayout_apply] at equation
     exact equation
   have alignedOp1Value : hierStep.childOutputs .alignedRegOp1 .output =
       aligned (inputs .reg_op1) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 alignedLayout (childMatch .alignedRegOp1).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [alignedLayout_apply] at equation
@@ -270,7 +270,7 @@ private theorem implements :
   have addressValue : hierStep.childOutputs .address .result =
       memLaAddrFrom (inputs .mem_do_prefetch) (inputs .mem_do_rinst)
         (inputs .next_pc) (inputs .reg_op1) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .address).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [instructionValue, alignedNextValue, alignedOp1Value] at equation
@@ -281,19 +281,19 @@ private theorem implements :
 
   have halfDataValue : hierStep.childOutputs .halfData .output =
       Silean.Modules.VectorLayout.apply halfDataLayout (inputs .reg_op2) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 halfDataLayout (childMatch .halfData).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have byteDataValue : hierStep.childOutputs .byteData .output =
       Silean.Modules.VectorLayout.apply byteDataLayout (inputs .reg_op2) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 byteDataLayout (childMatch .byteData).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have halfWordsizeValue : hierStep.childOutputs .halfWordsize .result =
       decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 1) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (stateOfNat 1)
       (childMatch .halfWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -301,7 +301,7 @@ private theorem implements :
     exact equation
   have byteWordsizeValue : hierStep.childOutputs .byteWordsize .result =
       decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 2) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (stateOfNat 2)
       (childMatch .byteWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -311,14 +311,14 @@ private theorem implements :
       bif Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 1 then
         Silean.Modules.VectorLayout.apply halfDataLayout (inputs .reg_op2)
         else inputs .reg_op2 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectHalfData).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [halfWordsizeValue, halfDataValue] at equation
     exact equation
   have selectByteDataValue : hierStep.childOutputs .selectByteData .result =
       formattedWriteDataFrom (inputs .mem_wordsize) (inputs .reg_op2) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectByteData).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [byteWordsizeValue, byteDataValue, selectHalfDataValue] at equation
@@ -335,19 +335,19 @@ private theorem implements :
 
   have lowAddressValue : hierStep.childOutputs .lowAddress .result =
       lowAddressBits (inputs .reg_op1) := by
-    have equation := Silean.Modules.VectorSlice.result_of_allowed
+    have equation := Silean.Modules.VectorSlice.cycleContract.result
       .bit 0 2 30 (childMatch .lowAddress).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (lowAddress_slice (inputs .reg_op1))
   have highHalfBitValue : hierStep.childOutputs .highHalfBit .result =
       (fun _ => inputs .reg_op1 1) := by
-    have equation := Silean.Modules.VectorSlice.result_of_allowed
+    have equation := Silean.Modules.VectorSlice.cycleContract.result
       .bit 1 1 30 (childMatch .highHalfBit).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (highHalf_slice (inputs .reg_op1))
   have highHalfValue : hierStep.childOutputs .highHalf .result =
       inputs .reg_op1 1 := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 1 .bit) (fun _ => true)
       (childMatch .highHalf).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -364,15 +364,15 @@ private theorem implements :
     ((childMatch .wordMask).ruleHolds Silean.Primitives.ConstantRule.apply)
   have halfMaskValue : hierStep.childOutputs .halfMask .result =
       bif inputs .reg_op1 1 then maskOfNat 0xc else maskOfNat 0x3 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 4 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 4 .bit)
       (childMatch .halfMask).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [highHalfValue, lowHalfMaskValue, highHalfMaskValue] at equation
     exact equation
   have byteMaskValue : hierStep.childOutputs .byteMask .result =
       Silean.Modules.BinaryToOneHot.oneHot 2 (lowAddressBits (inputs .reg_op1)) := by
-    have equation := (Silean.Modules.BinaryToOneHot.outputRule_holds_iff 2 _ _ _).mp
-      ((childMatch .byteMask).ruleHolds Silean.Modules.BinaryToOneHot.Rule.apply)
+    have equation := Silean.Modules.BinaryToOneHot.cycleContract.result 2
+      (childMatch .byteMask).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [lowAddressValue] at equation
     exact equation
@@ -380,14 +380,14 @@ private theorem implements :
       bif Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 1 then
         (bif inputs .reg_op1 1 then maskOfNat 0xc else maskOfNat 0x3)
         else maskOfNat 0xf := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 4 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 4 .bit)
       (childMatch .selectHalfMask).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [halfWordsizeValue, halfMaskValue, wordMaskValue] at equation
     exact equation
   have selectByteMaskValue : hierStep.childOutputs .selectByteMask .result =
       formattedWriteMaskFrom (inputs .mem_wordsize) (inputs .reg_op1) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 4 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 4 .bit)
       (childMatch .selectByteMask).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [byteWordsizeValue, byteMaskValue, selectHalfMaskValue] at equation
@@ -444,3 +444,23 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Memory.Lookahead
+
+namespace PicoRV.Memory.Lookahead.Internal
+
+open Silean Silean.Authoring.CircuitDescription
+
+/-- The authored memory look-ahead construction implements its cycle contract. -/
+theorem construction_correct :
+    Lookahead.description.ImplementsCycleContract
+      Lookahead.cycleContract Lookahead.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold Lookahead.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact Description.ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := Lookahead.instancePorts,
+      wiring := Lookahead.wiring })
+    (children := Lookahead.structuralChildren)
+    corresponds Lookahead.certification
+
+end PicoRV.Memory.Lookahead.Internal

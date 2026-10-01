@@ -1,4 +1,6 @@
 import PicoRV.Decoder.DecoderInstructionMatchGate
+import PicoRV.Decoder.Internal.DecoderInstructionMatchGateStructure
+import PicoRV.Decoder.Internal.DecoderInstructionMatchGateCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
@@ -48,7 +50,7 @@ private theorem implements : Silean.Contracts.Cycle.ImplementsSolutions
   constructor
   · intro rule
     cases rule
-    rw [outputRule_holds_iff]
+    rw [applyRule_holds_iff]
     dsimp only
     exact (satisfies.1 .result).trans resolved
   · exact Subsingleton.elim _ _
@@ -66,3 +68,22 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Decoder.InstructionMatch.MatchGate.Structure
+
+namespace PicoRV.Decoder.InstructionMatch.MatchGate.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold Structure.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := Structure.instancePorts,
+      wiring := Structure.wiring })
+    (children := Structure.structuralChildren)
+    corresponds Structure.certification
+
+end PicoRV.Decoder.InstructionMatch.MatchGate.Internal

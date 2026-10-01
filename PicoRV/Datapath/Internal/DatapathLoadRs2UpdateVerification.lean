@@ -4,8 +4,8 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 namespace PicoRV.Datapath.LoadRs2Update
 
@@ -73,7 +73,7 @@ private theorem implements :
     rfl
   have lowFiveValue : hierStep.childOutputs .lowFive .output =
       lowFiveBits datapathInputs.cpuregs_rs2 := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 5 lowFiveLayout
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 5 lowFiveLayout
       (childMatch .lowFive).allowed
     change hierStep.childOutputs .lowFive .output =
       Silean.Modules.VectorLayout.apply lowFiveLayout

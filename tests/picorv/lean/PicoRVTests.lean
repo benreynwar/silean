@@ -7,6 +7,8 @@ import PicoRVTests.DecoderResolveChildrenChecks
 import PicoRVTests.TopChecks
 import PicoRVTests.MemoryChecks
 import PicoRVTests.BoundaryChecks
+import PicoRVTests.ClientAuthoringChecks
+import PicoRVTests.DecoderComponentAuthoringChecks
 import PicoRVTests.DatapathFlowChecks
 import PicoRVTests.DatapathMemoryChecks
 import PicoRVTests.DatapathShiftChecks
@@ -17,6 +19,9 @@ import PicoRVTests.ControlFetchChecks
 import PicoRVTests.ControlExecuteChecks
 import PicoRVTests.ControlMemoryChecks
 import PicoRVTests.ControlContractChecks
+import PicoRVTests.ControlComponentAuthoringChecks
+import PicoRVTests.ControlCompositeAuthoringChecks
+import PicoRVTests.ControlNextAuthoringChecks
 import PicoRVTests.ControlCommandFinishChecks
 import PicoRVTests.ControlPhaseTransitionChecks
 import PicoRVTests.ControlNextChecks

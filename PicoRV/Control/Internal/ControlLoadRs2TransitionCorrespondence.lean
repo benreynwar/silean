@@ -1,10 +1,11 @@
 import PicoRV.Control.ControlLoadRs2Transition
+import PicoRV.Control.Internal.ControlLoadRs2TransitionStructure
 import Silean.Authoring.CircuitDescriptionSoundness
 
 /-! Checked correspondence between the reader-facing load-RS2 transition
 description and its expanded typed production structure. -/
 
-namespace PicoRV.Control.LoadRs2Transition.Description.Internal
+namespace PicoRV.Control.LoadRs2Transition.Internal
 
 open Silean Silean.Naming Silean.Authoring.CircuitDescription
 
@@ -25,18 +26,7 @@ private theorem same :
   simp [circuit_description, enumeration]
   rfl
 
-private theorem unique : description.UniqueNames := by
-  simp only [circuit_description, description, construction]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _, _, _, _, _, _, _, _, _, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal | equal | equal | equal | equal |
-      equal | equal | equal | equal | equal | equal <;>
-    subst child <;> constructor <;> exact of_decide_eq_true rfl
+theorem description_corresponds : Corresponds description LoadRs2Transition.naming :=
+  ⟨same⟩
 
-theorem corresponds : Corresponds description LoadRs2Transition.naming :=
-  ⟨same, unique⟩
-
-end PicoRV.Control.LoadRs2Transition.Description.Internal
+end PicoRV.Control.LoadRs2Transition.Internal

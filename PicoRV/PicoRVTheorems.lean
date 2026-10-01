@@ -24,8 +24,5 @@ theorem hasSolution : moduleStructure.HasSolution :=
 theorem hasExactlyOneSolution : moduleStructure.HasExactlyOneSolution :=
   ⟨hasSolution, hasAtMostOneSolution⟩
 
-/-- The complete processor hierarchy and all descendants are concrete. -/
-theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
-  native_decide
 
 end PicoRV.PicoRV

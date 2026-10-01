@@ -1,12 +1,14 @@
 import PicoRV.Control.ControlStoreTransition
+import PicoRV.Control.Internal.ControlStoreTransitionStructure
+import PicoRV.Control.Internal.ControlStoreTransitionCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Not
 
@@ -226,14 +228,14 @@ private theorem implements :
 
   have halfOrWordValue : hierStep.childOutputs .halfOrWord .result =
       bif controlInputs.instr_sh then twoBitsOfNat 1 else twoBitsOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .halfOrWord).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr instrShValue
       sizeHalfValue sizeWordValue)
   have storeSizeValue : hierStep.childOutputs .storeSize .result =
       selectedSize controlInputs := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .storeSize).allowed
     normalize_child_hyp equation unfolding wiring, context
     have result := equation.trans (bif_congr instrSbValue
@@ -245,7 +247,7 @@ private theorem implements :
   have startedWordsizeValue : hierStep.childOutputs .startedWordsize .result =
       bif !(current .mem_do_wdata : Bool) then selectedSize controlInputs
         else updated .mem_wordsize := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .startedWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr notWdataValue storeSizeValue
@@ -268,7 +270,7 @@ private theorem implements :
   have finishedPhaseValue : hierStep.childOutputs .finishedPhase .result =
       bif (!(current .mem_do_prefetch : Bool) && controlInputs.mem_done)
         then stateBits cpuStateFetch else updated .cpu_state := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .finishedPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr finishValue fetchStateValue
@@ -276,7 +278,7 @@ private theorem implements :
   have finishedDecoderValue : hierStep.childOutputs .finishedDecoder .result =
       bif (!(current .mem_do_prefetch : Bool) && controlInputs.mem_done)
         then true else updated .decoder_trigger := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .finishedDecoder).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr finishValue trueValue
@@ -284,7 +286,7 @@ private theorem implements :
   have finishedPseudoValue : hierStep.childOutputs .finishedPseudo .result =
       bif (!(current .mem_do_prefetch : Bool) && controlInputs.mem_done)
         then true else updated .decoder_pseudo_trigger := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .finishedPseudo).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr finishValue trueValue
@@ -364,7 +366,7 @@ private theorem implements :
 
   have resultValue : hierStep.childOutputs .result .result =
       (structuralTransition controlInputs current updated).pack := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .result).allowed
     normalize_child_hyp equation unfolding wiring, context
     have equation := equation.trans (bif_congr waitValue
@@ -403,3 +405,23 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.StoreTransition
+
+namespace PicoRV.Control.StoreTransition.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract
+      PhaseTransition.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold StoreTransition.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := StoreTransition.instancePorts,
+      wiring := StoreTransition.wiring })
+    (children := StoreTransition.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.StoreTransition.Internal

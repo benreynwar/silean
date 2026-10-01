@@ -1,12 +1,12 @@
-import PicoRV.Memory.MemoryCombinationalContracts
+import PicoRV.Memory.MemoryLookahead
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.BinaryToOneHot.BinaryToOneHot
+import Silean.Modules.BinaryToOneHot.BinaryToOneHotDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.VectorLayout.VectorLayout
-import Silean.Modules.VectorSlice.VectorSlice
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.VectorSlice.VectorSliceDerived
 import Silean.Primitives.And
 import Silean.Primitives.Or
 
@@ -14,18 +14,6 @@ namespace PicoRV.Memory
 
 open Silean
 open Silean.Authoring
-
-def Lookahead.alignedLayout (index : Fin 32) :
-    Silean.Modules.VectorLayout.BitSource 32 :=
-  if index.val < 2 then .constant false else .input index
-
-def Lookahead.halfDataLayout (index : Fin 32) :
-    Silean.Modules.VectorLayout.BitSource 32 :=
-  .input ⟨index.val % 16, by omega⟩
-
-def Lookahead.byteDataLayout (index : Fin 32) :
-    Silean.Modules.VectorLayout.BitSource 32 :=
-  .input ⟨index.val % 8, by omega⟩
 
 /-! Expanded typed production structure for the reader-facing look-ahead
 definition in `MemoryLookahead.lean`. -/

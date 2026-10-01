@@ -1,13 +1,15 @@
 import PicoRV.Control.ControlNext
-import PicoRV.Control.Internal.ControlBaselineVerification
+import PicoRV.Control.Internal.ControlNextStructure
+import PicoRV.Control.Internal.ControlNextCorrespondence
+import PicoRV.Control.ControlBaselineDerived
 import PicoRV.Control.Internal.ControlCommandFinishVerification
 import PicoRV.Control.Internal.ControlExecuteTransitionVerification
 import PicoRV.Control.Internal.ControlFetchTransitionVerification
 import PicoRV.Control.Internal.ControlLoadTransitionVerification
 import PicoRV.Control.Internal.ControlLoadRs1TransitionVerification
 import PicoRV.Control.Internal.ControlLoadRs2TransitionVerification
-import PicoRV.Control.Internal.ControlPhaseDecodeVerification
-import PicoRV.Control.Internal.ControlResetAndAlignmentOverrideVerification
+import PicoRV.Control.ControlPhaseDecodeDerived
+import PicoRV.Control.ControlResetAndAlignmentOverrideDerived
 import PicoRV.Control.Internal.ControlStoreTransitionVerification
 import PicoRV.Control.Internal.ControlShiftTransitionVerification
 import PicoRV.Control.Internal.ControlTrapTransitionVerification
@@ -15,8 +17,8 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.Not
 import Silean.Primitives.Or
 
@@ -316,7 +318,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .load
         then (loadTransition controlInputs current baselineState').pack
         else (simpleTransition baselineState').pack := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .selectLoad).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (Eq.refl _)
@@ -325,7 +327,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .store
         then (storeTransition controlInputs current baselineState').pack
         else hierStep.childOutputs .selectLoad .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .selectStore).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (Eq.refl _)
@@ -334,7 +336,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .shift
         then (shiftTransition controlInputs baselineState').pack
         else hierStep.childOutputs .selectStore .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .selectShift).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (Eq.refl _)
@@ -343,7 +345,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .execute
         then (executeTransition controlInputs baselineState').pack
         else hierStep.childOutputs .selectShift .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .selectExecute).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (Eq.refl _)
@@ -352,7 +354,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .loadRs2
         then (loadRs2Transition controlInputs baselineState').pack
         else hierStep.childOutputs .selectExecute .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .selectLoadRs2).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (Eq.refl _)
@@ -361,7 +363,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .loadRs1
         then (loadRs1Transition controlInputs baselineState').pack
         else hierStep.childOutputs .selectLoadRs2 .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .selectLoadRs1).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (Eq.refl _)
@@ -370,7 +372,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .fetch
         then (fetchTransition controlInputs current baselineState').pack
         else hierStep.childOutputs .selectLoadRs1 .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .selectFetch).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (Eq.refl _)
@@ -379,7 +381,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .trap
         then (trapTransitionChild controlInputs current baselineState').pack
         else hierStep.childOutputs .selectFetch .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .selectTrap).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr (Eq.refl _)
@@ -517,3 +519,22 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.ControlNext
+
+namespace PicoRV.Control.ControlNext.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold ControlNext.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := ControlNext.instancePorts,
+      wiring := ControlNext.wiring })
+    (children := ControlNext.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.ControlNext.Internal

@@ -1,9 +1,9 @@
 import PicoRV.Datapath.DatapathNextContracts
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 namespace PicoRV.Datapath
 

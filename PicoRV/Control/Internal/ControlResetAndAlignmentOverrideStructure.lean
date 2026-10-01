@@ -1,9 +1,10 @@
-import PicoRV.Control.ControlAlignment
+import PicoRV.Control.ControlAlignmentDerived
+import PicoRV.Control.ControlResetAndAlignmentOverride
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.BitMux.BitMux
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Naming.PrimitiveNaming
 
 namespace PicoRV.Control

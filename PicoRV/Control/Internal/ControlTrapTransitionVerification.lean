@@ -1,9 +1,11 @@
 import PicoRV.Control.ControlTrapTransition
+import PicoRV.Control.Internal.ControlTrapTransitionStructure
+import PicoRV.Control.Internal.ControlTrapTransitionCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Control.TrapTransition
 
@@ -155,3 +157,23 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.TrapTransition
+
+namespace PicoRV.Control.TrapTransition.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract
+      PhaseTransition.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold TrapTransition.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := TrapTransition.instancePorts,
+      wiring := TrapTransition.wiring })
+    (children := TrapTransition.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.TrapTransition.Internal

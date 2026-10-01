@@ -1,5 +1,7 @@
-import PicoRV.Control.Internal.ControlResetAndAlignmentOverrideStructure
+import PicoRV.Control.ControlAlignmentDerived
+import PicoRV.ControlContract
 import PicoRV.Authoring.CircuitLogic
+import Silean.Authoring.ModuleCycleContract
 
 namespace PicoRV.Control
 
@@ -8,6 +10,47 @@ open Silean.Authoring
 open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
 open scoped Silean.Authoring
+
+namespace ResetAndAlignmentOverride
+
+module_ports ports where
+  input inputs (schema := ControlInputs.schema) : inputsType,
+  input current (schema := ControlState.schema) : stateType,
+  input baseline (schema := ControlState.schema) : stateType,
+  input selected (schema := TransitionValue.schema) : transitionType,
+  output transition (schema := TransitionValue.schema) : transitionType
+
+def outputTransition (inputs : inputMap.Values) : Transition :=
+  resetAndAlignmentTransition (Inputs.unpack (inputs .inputs))
+    (stateMap.unpack (inputs .current))
+    (stateMap.unpack (inputs .baseline))
+    (Transition.unpack (inputs .selected))
+
+def outputRule : Silean.Contracts.Cycle.CycleOutputRule ports emptySignalMap where
+  readsInputs := .all inputMap
+  writesOutputs := .all outputMap
+  target inputs _ := fun | .transition => (outputTransition inputs).pack
+
+module_cycle_contract cycleContract for ports where
+  state := emptySignalMap
+  output_rule apply := outputRule
+  state_rule := Silean.Contracts.Cycle.CycleStateRule.empty _
+
+@[simp] theorem outputRule_holds_iff (inputs : inputMap.Values)
+    (state : emptySignalMap.Values) (outputs : outputMap.Values) :
+    outputRule.Holds inputs state outputs ↔
+      outputs .transition = (outputTransition inputs).pack := by
+  simp only [Silean.Contracts.Cycle.CycleOutputRule.Holds, outputRule,
+    Silean.SignalGroup.all_matches]
+  constructor
+  · intro equal; exact congrFun equal .transition
+  · intro equal; funext output; cases output; exact equal
+
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .transition = (outputTransition step.inputs).pack :=
+  (outputRule_holds_iff step.inputs step.currentState step.outputs).mp
+    (allowed.1 .apply)
 
 /-! # Reset and alignment override
 
@@ -19,13 +62,13 @@ proposed fields survive. Alignment is deliberately checked from the original
 state. The expanded typed hierarchy and verification remain under `Internal/`.
 -/
 
-namespace ResetAndAlignmentOverride.Description
+open ports
 
-noncomputable def construction : Builder Unit := do
-  let inputs ← input "inputs" inputsType
-  let current ← input "current" stateType
-  let baseline ← input "baseline" stateType
-  let selected ← input "selected" transitionType
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let inputs ← input .inputs
+  let current ← input .current
+  let baseline ← input .baseline
+  let selected ← input .selected
   let inputsFields ← split ControlInputs.layout inputs
   let baselineFields ← split ControlState.layout baseline
   let falseBit ← constant .bit false
@@ -61,39 +104,11 @@ noncomputable def construction : Builder Unit := do
       | .setRinst => selectedTransitionFields .setRinst
       | .setRdata => selectedTransitionFields .setRdata
       | .setWdata => selectedTransitionFields .setWdata
-  output "transition" (← mux alignmentEnabled
+  output .transition (← mux alignmentEnabled
     resetSelection alignmentTransition)
 
-noncomputable def description : Description := build construction
-
-end ResetAndAlignmentOverride.Description
-
-namespace ResetAndAlignmentOverride
-
-structure PlacedOutputs where
-  transition : Net transitionType
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (inputs : Net inputsType) (current baseline : Net stateType)
-    (selected : Net transitionType) : Builder PlacedOutputs := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .inputs => inputs
-    | .current => current
-    | .baseline => baseline
-    | .selected => selected
-  pure ⟨child .transition⟩
-
-noncomputable def place (inputs : Net inputsType)
-    (current baseline : Net stateType) (selected : Net transitionType) :
-    Builder PlacedOutputs := do
-  let child ← placeIndexed "reset_alignment_override" design fun
-    | .inputs => inputs
-    | .current => current
-    | .baseline => baseline
-    | .selected => selected
-  pure ⟨child .transition⟩
-
-attribute [circuit_description] placeNamed place
+noncomputable def description : Description :=
+  ModuleBuilder.build Naming.ports construction
 
 end ResetAndAlignmentOverride
 

@@ -1,5 +1,5 @@
 import PicoRV.Memory.MemoryBasicUpdates
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Memory.ProofSupport
 

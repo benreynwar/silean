@@ -3,7 +3,7 @@ import PicoRV.Control
 import PicoRV.Datapath
 import PicoRV.Decoder
 import PicoRV.Memory
-import PicoRV.Regs
+import PicoRV.RegsDerived
 
 namespace PicoRV.PicoRV
 

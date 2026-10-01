@@ -1,10 +1,10 @@
 import PicoRV.Memory.MemoryNextContracts
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.BitMux.BitMux
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Not
 import Silean.Primitives.Or

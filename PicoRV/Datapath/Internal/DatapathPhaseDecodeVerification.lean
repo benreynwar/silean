@@ -3,7 +3,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
 
 namespace PicoRV.Datapath.PhaseDecode
 
@@ -91,43 +91,43 @@ private theorem implements :
     (childSolutionMatchesCoveredContract layerChildren hierStep
       satisfies child).choose_spec
 
-  have fetchValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have fetchValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateFetch)
     (childMatch .fetchMatch).allowed
   change hierStep.childOutputs .fetchMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateFetch) at fetchValue
-  have loadRs1Value := Silean.Modules.EqualsConstant.result_of_allowed
+  have loadRs1Value := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateLdRs1)
     (childMatch .loadRs1Match).allowed
   change hierStep.childOutputs .loadRs1Match .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateLdRs1) at loadRs1Value
-  have loadRs2Value := Silean.Modules.EqualsConstant.result_of_allowed
+  have loadRs2Value := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateLdRs2)
     (childMatch .loadRs2Match).allowed
   change hierStep.childOutputs .loadRs2Match .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateLdRs2) at loadRs2Value
-  have executeValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have executeValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateExec)
     (childMatch .executeMatch).allowed
   change hierStep.childOutputs .executeMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateExec) at executeValue
-  have shiftValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have shiftValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateShift)
     (childMatch .shiftMatch).allowed
   change hierStep.childOutputs .shiftMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateShift) at shiftValue
-  have storeValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have storeValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateStmem)
     (childMatch .storeMatch).allowed
   change hierStep.childOutputs .storeMatch .result =
     (Silean.SignalType.vector 8 .bit).equal (hierStep.inputs .cpu_state)
       (stateBits cpuStateStmem) at storeValue
-  have loadValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have loadValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateLdmem)
     (childMatch .loadMatch).allowed
   change hierStep.childOutputs .loadMatch .result =

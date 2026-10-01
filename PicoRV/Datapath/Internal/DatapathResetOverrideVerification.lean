@@ -5,8 +5,8 @@ import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Datapath.ResetOverride
 
@@ -72,7 +72,7 @@ private theorem implements :
     ((childMatch .zeroWord).ruleHolds Silean.Primitives.ConstantRule.apply)
   have pcValue : hierStep.childOutputs .pc .result =
       bif hierStep.inputs .resetn then selected .reg_pc else wordOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .pc).allowed
     change hierStep.childOutputs .pc .result = bif hierStep.inputs .resetn
       then hierStep.childOutputs .selectedFields .reg_pc
@@ -81,7 +81,7 @@ private theorem implements :
     exact equation
   have nextPcValue : hierStep.childOutputs .nextPc .result =
       bif hierStep.inputs .resetn then selected .reg_next_pc else wordOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .nextPc).allowed
     change hierStep.childOutputs .nextPc .result = bif hierStep.inputs .resetn
       then hierStep.childOutputs .selectedFields .reg_next_pc

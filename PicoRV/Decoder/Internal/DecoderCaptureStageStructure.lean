@@ -1,13 +1,13 @@
-import PicoRV.Decoder.DecoderTypes
+import PicoRV.Decoder.DecoderCaptureStage
 import Silean.Authoring.ModuleDesign
 import Silean.Authoring.SignalSchemaDeclaration
 import Silean.Modules.Constant.Constant
 import Silean.Modules.EnabledRegister.EnabledRegisterDerived
 import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.VectorLayout.VectorLayout
-import Silean.Modules.VectorSlice.VectorSlice
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.VectorSlice.VectorSliceDerived
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.And
 import Silean.Primitives.Not
@@ -19,57 +19,6 @@ namespace PicoRV.Decoder.CaptureStage
 open Silean
 open Silean.Authoring
 open PicoRV.Decoder
-
-module_ports ports where
-  input resetn : .bit,
-  input mem_do_rinst : .bit,
-  input mem_done : .bit,
-  input mem_rdata_latched : .vector 32 .bit,
-  output instr_lui : .bit,
-  output instr_auipc : .bit,
-  output instr_jal : .bit,
-  output instr_jalr : .bit,
-  output decoded_rd : .vector 5 .bit,
-  output decoded_rs1 : .vector 5 .bit,
-  output decoded_rs2 : .vector 5 .bit,
-  output decoded_imm_j : .vector 32 .bit,
-  output compressed_instr : .bit,
-  output is_beq_bne_blt_bge_bltu_bgeu : .bit,
-  output is_lb_lh_lw_lbu_lhu : .bit,
-  output is_sb_sh_sw : .bit,
-  output is_alu_reg_imm : .bit,
-  output is_alu_reg_reg : .bit
-
-@[reducible] def stateMap : SignalMap := outputMap
-
-def bits (width value : Nat) : Fin width → Bool :=
-  fun index => value.testBit index.val
-
-def immediateJLayout (index : Fin 32) : Silean.Modules.VectorLayout.BitSource 32 :=
-  if _zero : index.val = 0 then .constant false
-  else if _low : index.val ≤ 10 then .input ⟨index.val + 20, by omega⟩
-  else if _eleven : index.val = 11 then .input ⟨20, by omega⟩
-  else if _middle : index.val ≤ 19 then .input index
-  else .input ⟨31, by omega⟩
-
-signal_schema Stored where
-  instr_lui : Silean.Authoring.SignalSchema.bit,
-  instr_auipc : Silean.Authoring.SignalSchema.bit,
-  instr_jal : Silean.Authoring.SignalSchema.bit,
-  instr_jalr : Silean.Authoring.SignalSchema.bit,
-  decoded_rd : Silean.Authoring.SignalSchema.vector 5 Silean.Authoring.SignalSchema.bit,
-  decoded_rs1 : Silean.Authoring.SignalSchema.vector 5 Silean.Authoring.SignalSchema.bit,
-  decoded_rs2 : Silean.Authoring.SignalSchema.vector 5 Silean.Authoring.SignalSchema.bit,
-  decoded_imm_j : Silean.Authoring.SignalSchema.vector 32 Silean.Authoring.SignalSchema.bit,
-  compressed_instr : Silean.Authoring.SignalSchema.bit,
-  is_lb_lh_lw_lbu_lhu : Silean.Authoring.SignalSchema.bit,
-  is_sb_sh_sw : Silean.Authoring.SignalSchema.bit,
-  is_alu_reg_imm : Silean.Authoring.SignalSchema.bit,
-  is_alu_reg_reg : Silean.Authoring.SignalSchema.bit
-
-abbrev StoredField := Stored.Field
-@[reducible] def storedMap : SignalMap := Stored.signalMap
-abbrev storedType : SignalType := Stored.signalType
 
 end PicoRV.Decoder.CaptureStage
 

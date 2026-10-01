@@ -35,11 +35,10 @@ standalone hardware boundary used by generated-hardware tests. -/
 
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports := certified
 
-example : moduleStructure.HasNoBlackboxes := moduleStructure_hasNoBlackboxes
 
-noncomputable example : RenderResult String := renderClosedCircuit naming
+noncomputable example : RenderResult String := renderCircuit naming
 
-#guard match renderClosedCircuit naming with
+#guard match renderCircuit naming with
   | .ok _ => true
   | .error _ => false
 

@@ -4,10 +4,10 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 
 namespace PicoRV.Memory.WriteUpdate
@@ -113,14 +113,14 @@ private theorem implements :
     ((childMatch .idleState).ruleHolds Silean.Primitives.ConstantRule.apply)
   have validValue : hierStep.childOutputs .valid .result =
       bif memXfer memoryInputs current then false else updated .mem_valid := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .valid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [transferValue, updatedFieldsValue, falseValue] at equation
     exact equation
   have phaseValue : hierStep.childOutputs .phase .result =
       bif memXfer memoryInputs current then stateOfNat 0 else updated .mem_state := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .phase).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [transferValue, updatedFieldsValue, idleValue] at equation

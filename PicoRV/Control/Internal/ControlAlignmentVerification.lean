@@ -1,12 +1,14 @@
 import PicoRV.Control.ControlAlignment
+import PicoRV.Control.Internal.ControlAlignmentStructure
+import PicoRV.Control.Internal.ControlAlignmentCorrespondence
 import PicoRV.Control.ControlBitLaws
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Composition.SignalAdapterImplementation
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Or
 
@@ -159,7 +161,7 @@ private theorem implements :
 
   have sizeIsWordValue : hierStep.childOutputs .sizeIsWord .result =
       decide (wordSize current = 0) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (twoBitsOfNat 0)
       (childMatch .sizeIsWord).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -171,7 +173,7 @@ private theorem implements :
 
   have sizeIsHalfValue : hierStep.childOutputs .sizeIsHalf .result =
       decide (wordSize current = 1) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (twoBitsOfNat 1)
       (childMatch .sizeIsHalf).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -280,3 +282,22 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.Alignment
+
+namespace PicoRV.Control.Alignment.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold Alignment.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := Alignment.instancePorts,
+      wiring := Alignment.wiring })
+    (children := Alignment.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.Alignment.Internal

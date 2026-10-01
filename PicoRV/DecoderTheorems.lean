@@ -41,9 +41,7 @@ theorem implements_contract :
 /-- Structural equations for the complete decoder hierarchy have one solution
 for each boundary input and physical state. -/
 theorem hasExactlyOneSolution : moduleStructure.HasExactlyOneSolution :=
-  ⟨certified.hasStructuralResult, certified.structuralResultUnique⟩
+  ⟨certified.certification.structural.hasSolution, certified.certification.structural.hasAtMostOneSolution⟩
 
-theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
-  native_decide
 
 end PicoRV.Decoder

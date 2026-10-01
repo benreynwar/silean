@@ -1,4 +1,4 @@
-import PicoRV.Control.Internal.ControlLoadRs1TransitionStructure
+import PicoRV.Control.ControlPhaseTransition
 import PicoRV.Authoring.CircuitLogic
 
 namespace PicoRV.Control
@@ -9,6 +9,22 @@ open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
 open scoped Silean.Authoring
 
+namespace LoadRs1Transition
+
+abbrev cycleContract := PhaseTransition.cycleContract
+  (fun inputs _ updated => loadRs1Transition inputs updated)
+
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .transition =
+      ((fun inputs _ updated => loadRs1Transition inputs updated)
+        (Inputs.unpack (step.inputs .inputs))
+        (stateMap.unpack (step.inputs .current))
+        (stateMap.unpack (step.inputs .updated))).pack :=
+  (PhaseTransition.outputRule_holds_iff
+    (fun inputs _ updated => loadRs1Transition inputs updated)
+    step.inputs step.currentState step.outputs).mp (allowed.1 .apply)
+
 /-! # Load-RS1 transition
 
 Load-RS1 is an ordered decoder, not a one-hot selection. The paired mux chains
@@ -17,12 +33,12 @@ make that priority visible for both fields they may change: `cpu_state` and
 the universal contract does not rule out. The expanded typed hierarchy and
 verification remain under `Internal/`. -/
 
-namespace LoadRs1Transition.Description
+open PhaseTransition.ports
 
-noncomputable def construction : Builder Unit := do
-  let inputs ← input "inputs" inputsType
-  discard (input "current" stateType)
-  let updated ← input "updated" stateType
+noncomputable def construction : ModuleBuilder PhaseTransition.ports Unit := do
+  let inputs ← input .inputs
+  discard (input .current)
+  let updated ← input .updated
   let inputsFields ← split ControlInputs.layout inputs
   let updatedFields ← split ControlState.layout updated
   let falseBit ← constant .bit false
@@ -73,35 +89,10 @@ noncomputable def construction : Builder Unit := do
     TransitionValue.schema fun
       | .state => resultState
       | .setRinst | .setRdata | .setWdata => falseBit
-  output "transition" result
+  output .transition result
 
-noncomputable def description : Description := build construction
-
-end LoadRs1Transition.Description
-
-namespace LoadRs1Transition
-
-structure PlacedOutputs where
-  transition : Net transitionType
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (inputs : Net inputsType) (current updated : Net stateType) :
-    Builder PlacedOutputs := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .inputs => inputs
-    | .current => current
-    | .updated => updated
-  pure ⟨child .transition⟩
-
-noncomputable def place (inputs : Net inputsType)
-    (current updated : Net stateType) : Builder PlacedOutputs := do
-  let child ← placeIndexed "load_rs1_transition" design fun
-    | .inputs => inputs
-    | .current => current
-    | .updated => updated
-  pure ⟨child .transition⟩
-
-attribute [circuit_description] placeNamed place
+noncomputable def description : Description :=
+  ModuleBuilder.build PhaseTransition.Naming.ports construction
 
 end LoadRs1Transition
 

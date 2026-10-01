@@ -25,8 +25,6 @@ example : PicoRV.PicoRV.moduleStructure.HasSolution :=
 example : PicoRV.PicoRV.moduleStructure.HasExactlyOneSolution :=
   PicoRV.PicoRV.hasExactlyOneSolution
 
-example : PicoRV.PicoRV.moduleStructure.HasNoBlackboxes :=
-  PicoRV.PicoRV.moduleStructure_hasNoBlackboxes
 
 example : PicoRV.PicoRV.structuralChildren .control =
     PicoRV.Control.moduleStructure := rfl
@@ -43,33 +41,6 @@ example : PicoRV.PicoRV.structuralChildren .decoder =
 example : PicoRV.PicoRV.structuralChildren .cpuregs =
     PicoRV.Regs.moduleStructure := rfl
 
-/-! ## Recursive closure inventory -/
-
-def expectedTopChildClosed : PicoRV.PicoRV.Instance → Bool
-  | _ => true
-
-example (child : PicoRV.PicoRV.Instance) :
-    (PicoRV.PicoRV.structuralChildren child).hasNoBlackboxes =
-      expectedTopChildClosed child := by
-  cases child <;> native_decide
-
-example :
-    (PicoRV.Decoder.structuralChildren .capture).hasNoBlackboxes = true := by
-  native_decide
-
-example :
-    (PicoRV.Decoder.structuralChildren .resolve).hasNoBlackboxes = true := by
-  native_decide
-
-def expectedResolveChildClosed :
-    PicoRV.Decoder.ResolveStage.Instance → Bool
-  | _ => true
-
-example (child : PicoRV.Decoder.ResolveStage.Instance) :
-    (PicoRV.Decoder.ResolveStage.structuralChildren child).hasNoBlackboxes =
-      expectedResolveChildClosed child := by
-  cases child <;> native_decide
-
 example :
     PicoRV.Decoder.ResolveStage.structuralChildren .instructionMatch =
       PicoRV.Decoder.InstructionMatch.Structure.moduleStructure := rfl
@@ -78,7 +49,7 @@ example :
     PicoRV.Decoder.ResolveStage.structuralChildren .instructionSummary =
       PicoRV.Decoder.InstructionSummary.Structure.moduleStructure := rfl
 
-#guard match Silean.FIRRTL.renderClosedCircuit PicoRV.PicoRV.naming with
+#guard match Silean.FIRRTL.renderCircuit PicoRV.PicoRV.naming with
   | .ok _ => true
   | .error _ => false
 

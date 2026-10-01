@@ -1,4 +1,5 @@
 import Silean.Authoring.ModuleDesign
+import PicoRV.Decoder.DecoderInstructionMatchGate
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.And
 
@@ -8,12 +9,6 @@ namespace PicoRV.Decoder.InstructionMatch.MatchGate
 
 open Silean
 open Silean.Authoring
-
-module_ports ports where
-  input broad : .bit,
-  input field : .bit,
-  input qualifier : .bit,
-  output result : .bit
 
 module_design Structure (name := "PicoRVDecoderInstructionPredicate") where
   boundary (ports) (naming := Naming.ports)

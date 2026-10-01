@@ -1,6 +1,6 @@
 import PicoRV.Memory.Internal.MemoryResponseStructure
 import PicoRV.Authoring.CircuitLogic
-import Silean.Modules.EqualsConstant.EqualsConstant
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
 
 namespace PicoRV.Memory
 

@@ -1,9 +1,11 @@
-import PicoRV.Memory.Internal.MemoryLookaheadStructure
+import PicoRV.MemoryContract
 import PicoRV.Authoring.CircuitLogic
-import Silean.Modules.BinaryToOneHot.BinaryToOneHot
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.VectorLayout.VectorLayout
-import Silean.Modules.VectorSlice.VectorSlice
+import Silean.Authoring.ModuleCycleContract
+import Silean.Authoring.ModulePorts
+import Silean.Modules.BinaryToOneHot.BinaryToOneHotDerived
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.VectorSlice.VectorSliceDerived
 
 namespace PicoRV.Memory
 
@@ -22,19 +24,78 @@ formatted from the requested word size, with encoding 3 falling through to
 the word forms. The expanded typed hierarchy and verification remain under
 `Internal/`. -/
 
-namespace Lookahead.Description
+namespace Lookahead
 
-noncomputable def construction : Builder Unit := do
-  let resetn ← input "resetn" .bit
-  let memDoPrefetch ← input "mem_do_prefetch" .bit
-  let memDoRinst ← input "mem_do_rinst" .bit
-  let memDoRdata ← input "mem_do_rdata" .bit
-  let memDoWdata ← input "mem_do_wdata" .bit
-  let nextPc ← input "next_pc" (.vector 32 .bit)
-  let regOp1 ← input "reg_op1" (.vector 32 .bit)
-  let regOp2 ← input "reg_op2" (.vector 32 .bit)
-  let memWordsize ← input "mem_wordsize" (.vector 2 .bit)
-  let current ← input "current" stateType
+module_ports ports where
+  input resetn : .bit,
+  input mem_do_prefetch : .bit,
+  input mem_do_rinst : .bit,
+  input mem_do_rdata : .bit,
+  input mem_do_wdata : .bit,
+  input next_pc : .vector 32 .bit,
+  input reg_op1 : .vector 32 .bit,
+  input reg_op2 : .vector 32 .bit,
+  input mem_wordsize : .vector 2 .bit,
+  input current (schema := MemoryState.schema) : stateType,
+  output mem_la_read : .bit,
+  output mem_la_write : .bit,
+  output mem_la_addr : .vector 32 .bit,
+  output mem_la_wdata : .vector 32 .bit,
+  output mem_la_wstrb : .vector 4 .bit
+
+def readValue (resetn prefetch rinst rdata : Bool)
+    (current : stateType.Denote) : Bool :=
+  memLaReadFrom resetn prefetch rinst rdata (stateMap.unpack current)
+
+def writeValue (resetn wdata : Bool) (current : stateType.Denote) : Bool :=
+  memLaWriteFrom resetn wdata (stateMap.unpack current)
+
+module_cycle_contract cycleContract for ports where
+  state := emptySignalMap
+  output_rule memLaRead where
+    reads := [resetn, mem_do_prefetch, mem_do_rinst, mem_do_rdata, current]
+    writes := { mem_la_read := readValue resetn mem_do_prefetch
+      mem_do_rinst mem_do_rdata current }
+  output_rule memLaWrite where
+    reads := [resetn, mem_do_wdata, current]
+    writes := { mem_la_write := writeValue resetn mem_do_wdata current }
+  output_rule memLaAddr where
+    reads := [mem_do_prefetch, mem_do_rinst, next_pc, reg_op1]
+    writes := { mem_la_addr := memLaAddrFrom mem_do_prefetch mem_do_rinst
+      next_pc reg_op1 }
+  output_rule memLaWdata where
+    reads := [mem_wordsize, reg_op2]
+    writes := { mem_la_wdata := formattedWriteDataFrom mem_wordsize reg_op2 }
+  output_rule memLaWstrb where
+    reads := [mem_wordsize, reg_op1]
+    writes := { mem_la_wstrb := formattedWriteMaskFrom mem_wordsize reg_op1 }
+  state_rule := Silean.Contracts.Cycle.CycleStateRule.empty _
+
+def alignedLayout (index : Fin 32) :
+    Silean.Modules.VectorLayout.BitSource 32 :=
+  if index.val < 2 then .constant false else .input index
+
+def halfDataLayout (index : Fin 32) :
+    Silean.Modules.VectorLayout.BitSource 32 :=
+  .input ⟨index.val % 16, by omega⟩
+
+def byteDataLayout (index : Fin 32) :
+    Silean.Modules.VectorLayout.BitSource 32 :=
+  .input ⟨index.val % 8, by omega⟩
+
+open ports
+
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let resetn ← input .resetn
+  let memDoPrefetch ← input .mem_do_prefetch
+  let memDoRinst ← input .mem_do_rinst
+  let memDoRdata ← input .mem_do_rdata
+  let memDoWdata ← input .mem_do_wdata
+  let nextPc ← input .next_pc
+  let regOp1 ← input .reg_op1
+  let regOp2 ← input .reg_op2
+  let memWordsize ← input .mem_wordsize
+  let current ← input .current
   let currentFields ← split MemoryState.layout current
 
   let idle ← Silean.Modules.EqualsConstant.place
@@ -74,64 +135,35 @@ noncomputable def construction : Builder Unit := do
   let selectedHalfMask ← mux halfWordsize wordMask halfMask
   let writeMask ← mux byteWordsize selectedHalfMask byteMask
 
-  output "mem_la_read" read
-  output "mem_la_write" write
-  output "mem_la_addr" address
-  output "mem_la_wdata" writeData
-  output "mem_la_wstrb" writeMask
+  output .mem_la_read read
+  output .mem_la_write write
+  output .mem_la_addr address
+  output .mem_la_wdata writeData
+  output .mem_la_wstrb writeMask
 
-noncomputable def description : Description := build construction
+noncomputable def description : Description :=
+  ModuleBuilder.build Naming.ports construction
 
-end Lookahead.Description
-
-namespace Lookahead
-
-structure PlacedOutputs where
-  memLaRead : Net .bit
-  memLaWrite : Net .bit
-  memLaAddr : Net (.vector 32 .bit)
-  memLaWdata : Net (.vector 32 .bit)
-  memLaWstrb : Net (.vector 4 .bit)
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (resetn memDoPrefetch memDoRinst memDoRdata memDoWdata : Net .bit)
-    (nextPc regOp1 regOp2 : Net (.vector 32 .bit))
-    (memWordsize : Net (.vector 2 .bit)) (current : Net stateType) :
-    Builder PlacedOutputs := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .resetn => resetn
-    | .mem_do_prefetch => memDoPrefetch
-    | .mem_do_rinst => memDoRinst
-    | .mem_do_rdata => memDoRdata
-    | .mem_do_wdata => memDoWdata
-    | .next_pc => nextPc
-    | .reg_op1 => regOp1
-    | .reg_op2 => regOp2
-    | .mem_wordsize => memWordsize
-    | .current => current
-  pure ⟨child .mem_la_read, child .mem_la_write, child .mem_la_addr,
-    child .mem_la_wdata, child .mem_la_wstrb⟩
-
-noncomputable def place
-    (resetn memDoPrefetch memDoRinst memDoRdata memDoWdata : Net .bit)
-    (nextPc regOp1 regOp2 : Net (.vector 32 .bit))
-    (memWordsize : Net (.vector 2 .bit)) (current : Net stateType) :
-    Builder PlacedOutputs := do
-  let child ← placeIndexed "memory_lookahead" design fun
-    | .resetn => resetn
-    | .mem_do_prefetch => memDoPrefetch
-    | .mem_do_rinst => memDoRinst
-    | .mem_do_rdata => memDoRdata
-    | .mem_do_wdata => memDoWdata
-    | .next_pc => nextPc
-    | .reg_op1 => regOp1
-    | .reg_op2 => regOp2
-    | .mem_wordsize => memWordsize
-    | .current => current
-  pure ⟨child .mem_la_read, child .mem_la_write, child .mem_la_addr,
-    child .mem_la_wdata, child .mem_la_wstrb⟩
-
-attribute [circuit_description] placeNamed place
+/-- All five look-ahead outputs exposed by an allowed boundary step. -/
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .mem_la_read = readValue
+        (step.inputs .resetn) (step.inputs .mem_do_prefetch)
+        (step.inputs .mem_do_rinst) (step.inputs .mem_do_rdata)
+        (step.inputs .current) ∧
+      step.outputs .mem_la_write = writeValue
+        (step.inputs .resetn) (step.inputs .mem_do_wdata)
+        (step.inputs .current) ∧
+      step.outputs .mem_la_addr = memLaAddrFrom
+        (step.inputs .mem_do_prefetch) (step.inputs .mem_do_rinst)
+        (step.inputs .next_pc) (step.inputs .reg_op1) ∧
+      step.outputs .mem_la_wdata = formattedWriteDataFrom
+        (step.inputs .mem_wordsize) (step.inputs .reg_op2) ∧
+      step.outputs .mem_la_wstrb = formattedWriteMaskFrom
+        (step.inputs .mem_wordsize) (step.inputs .reg_op1) :=
+  ⟨cycleContract.mem_la_read allowed, cycleContract.mem_la_write allowed,
+    cycleContract.mem_la_addr allowed, cycleContract.mem_la_wdata allowed,
+    cycleContract.mem_la_wstrb allowed⟩
 
 end Lookahead
 

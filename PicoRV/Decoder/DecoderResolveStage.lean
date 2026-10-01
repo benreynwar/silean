@@ -393,4 +393,26 @@ module_cycle_contract cycleContract for ports where
         (valuesOf inputs).instr_jal (valuesOf inputs).instr_jalr) state ↔ _
   rw [outputValues_depends_only_on_instruction_flags (valuesOf inputs) state]
 
+section AllowedStep
+
+variable {step : cycleContract.Step}
+  (allowed : cycleContract.Allows step)
+
+include allowed
+
+/-- The visible outputs are determined by the current inputs and pre-edge
+registered values. -/
+theorem outputs_of_allowed :
+    step.outputs = outputValues (valuesOf step.inputs) step.currentState :=
+  (outputRule_holds_iff step.inputs step.currentState step.outputs).mp
+    (allowed.1 .outputs)
+
+/-- The next registered state follows the resolve-stage transition. -/
+theorem nextState_of_allowed :
+    step.nextState = nextState (valuesOf step.inputs) step.currentState := by
+  rw [allowed.2]
+  rfl
+
+end AllowedStep
+
 end PicoRV.Decoder.ResolveStage

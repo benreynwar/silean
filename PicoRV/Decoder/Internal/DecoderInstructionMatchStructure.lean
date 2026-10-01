@@ -1,6 +1,6 @@
 import PicoRV.Decoder.DecoderInstructionMatch
-import PicoRV.Decoder.DecoderInstructionFields
-import PicoRV.Decoder.DecoderInstructionMatchGate
+import PicoRV.Decoder.DecoderInstructionFieldsDerived
+import PicoRV.Decoder.DecoderInstructionMatchGateDerived
 import Silean.Authoring.ModuleDesign
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.Or

@@ -1,5 +1,5 @@
 import PicoRV.Memory.Internal.MemoryLookaheadCaptureStructure
-import PicoRV.Memory.MemoryLookahead
+import PicoRV.Memory.MemoryLookaheadDerived
 import PicoRV.Authoring.CircuitLogic
 
 namespace PicoRV.Memory
@@ -33,13 +33,13 @@ noncomputable def construction : Builder Unit := do
     (inputsFields .mem_do_wdata) (inputsFields .next_pc)
     (inputsFields .reg_op1) (inputsFields .reg_op2)
     (inputsFields .mem_wordsize) current
-  let active ← lookahead.memLaRead ||| lookahead.memLaWrite
+  let active ← lookahead.mem_la_read ||| lookahead.mem_la_write
   let zeroMask ← constant (.vector 4 .bit) (maskOfNat 0)
-  let writeMask ← mux lookahead.memLaWrite zeroMask lookahead.memLaWstrb
-  let address ← mux active (updatedFields .mem_addr) lookahead.memLaAddr
+  let writeMask ← mux lookahead.mem_la_write zeroMask lookahead.mem_la_wstrb
+  let address ← mux active (updatedFields .mem_addr) lookahead.mem_la_addr
   let mask ← mux active (updatedFields .mem_wstrb) writeMask
-  let writeData ← mux lookahead.memLaWrite
-    (updatedFields .mem_wdata) lookahead.memLaWdata
+  let writeData ← mux lookahead.mem_la_write
+    (updatedFields .mem_wdata) lookahead.mem_la_wdata
   let result ← update stateMap MemoryState.schema updatedFields fun
     | .mem_addr => some address
     | .mem_wdata => some writeData

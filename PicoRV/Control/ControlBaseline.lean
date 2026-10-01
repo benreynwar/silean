@@ -1,6 +1,6 @@
-import PicoRV.Control.ControlNextContracts
-import PicoRV.Control.Internal.ControlBaselineStructure
+import PicoRV.ControlContract
 import PicoRV.Authoring.CircuitLogic
+import Silean.Authoring.ModuleCycleContract
 import Silean.Modules.Constant.Constant
 
 namespace PicoRV.Control
@@ -11,6 +11,43 @@ open Silean.Authoring.CircuitDescription
 open PicoRV.Authoring
 open scoped Silean.Authoring
 
+namespace Baseline
+
+module_ports ports where
+  input inputs (schema := ControlInputs.schema) : inputsType,
+  input current (schema := ControlState.schema) : stateType,
+  output state (schema := ControlState.schema) : stateType
+
+def outputState (inputs : inputMap.Values) : stateMap.Values :=
+  baselineState (Inputs.unpack (inputs .inputs))
+    (stateMap.unpack (inputs .current))
+
+def outputRule : Silean.Contracts.Cycle.CycleOutputRule ports emptySignalMap where
+  readsInputs := .all inputMap
+  writesOutputs := .all outputMap
+  target inputs _ := fun | .state => stateMap.pack (outputState inputs)
+
+module_cycle_contract cycleContract for ports where
+  state := emptySignalMap
+  output_rule apply := outputRule
+  state_rule := Silean.Contracts.Cycle.CycleStateRule.empty _
+
+@[simp] theorem outputRule_holds_iff (inputs : inputMap.Values)
+    (state : emptySignalMap.Values) (outputs : outputMap.Values) :
+    outputRule.Holds inputs state outputs ↔
+      outputs .state = stateMap.pack (outputState inputs) := by
+  simp only [Silean.Contracts.Cycle.CycleOutputRule.Holds, outputRule,
+    Silean.SignalGroup.all_matches]
+  constructor
+  · intro equal; exact congrFun equal .state
+  · intro equal; funext output; cases output; exact equal
+
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .state = stateMap.pack (outputState step.inputs) :=
+  (outputRule_holds_iff step.inputs step.currentState step.outputs).mp
+    (allowed.1 .apply)
+
 /-! The baseline layer represents the unconditional assignments at the start
 of the source control block. Every state field passes through except `trap`
 and `decoder_pseudo_trigger`, which clear, and `decoder_trigger`, which records
@@ -18,11 +55,11 @@ completion of the current instruction fetch. Later phase children deliberately
 receive this result rather than the raw state. The expanded typed hierarchy
 and verification remain under `Internal/`. -/
 
-namespace Baseline.Description
+open ports
 
-noncomputable def construction : Builder Unit := do
-  let inputs ← input "inputs" inputsType
-  let current ← input "current" stateType
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let inputs ← input .inputs
+  let current ← input .current
   let inputsFields ← split ControlInputs.layout inputs
   let currentFields ← split ControlState.layout current
   let falseBit ← constant .bit false
@@ -32,30 +69,10 @@ noncomputable def construction : Builder Unit := do
     | .decoder_trigger => some fetchCompleted
     | .decoder_pseudo_trigger | .trap => some falseBit
     | _ => none
-  output "state" result
+  output .state result
 
-noncomputable def description : Description := build construction
-
-end Baseline.Description
-
-namespace Baseline
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (inputs : Net inputsType) (current : Net stateType) :
-    Builder (Net stateType) := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .inputs => inputs
-    | .current => current
-  pure (child .state)
-
-noncomputable def place (inputs : Net inputsType) (current : Net stateType) :
-    Builder (Net stateType) := do
-  let child ← placeIndexed "control_baseline" design fun
-    | .inputs => inputs
-    | .current => current
-  pure (child .state)
-
-attribute [circuit_description] placeNamed place
+noncomputable def description : Description :=
+  ModuleBuilder.build Naming.ports construction
 
 end Baseline
 

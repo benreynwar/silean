@@ -4,11 +4,11 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Add.AddDerived
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Primitives.And
 
 namespace PicoRV.Datapath.FetchUpdate
@@ -29,8 +29,8 @@ module_child_certifications childContracts for body where
   branchSource := Silean.Modules.Mux.certification (.vector 32 .bit),
   alignedBranch := Silean.Modules.VectorLayout.certification 32 32 clearLowLayout,
   currentPc := Silean.Modules.Mux.certification (.vector 32 .bit),
-  sequentialPc := Silean.Modules.Add.certification 32,
-  jalPc := Silean.Modules.Add.certification 32,
+  sequentialPc := Silean.Modules.AddWithCarry.certification 32,
+  jalPc := Silean.Modules.AddWithCarry.certification 32,
   decodedPc := Silean.Modules.Mux.certification (.vector 32 .bit),
   nextPc := Silean.Modules.Mux.certification (.vector 32 .bit),
   result := Silean.Modules.NamedTupleCombiner.certification stateMap
@@ -45,7 +45,7 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     .branchSource => Silean.Modules.Mux.Rule.select,
     .alignedBranch => Silean.Modules.VectorLayout.Rule.apply,
     .currentPc => Silean.Modules.Mux.Rule.select,
-    {.sequentialPc, .jalPc} => Silean.Modules.Add.Rule.apply,
+    {.sequentialPc, .jalPc} => Silean.Modules.AddWithCarry.Rule.apply,
     .decodedPc => Silean.Modules.Mux.Rule.select,
     .nextPc => Silean.Modules.Mux.Rule.select,
     .result => Silean.Modules.NamedTupleCombiner.Rule.apply]
@@ -148,7 +148,7 @@ private theorem implements :
     exact equation
   have branchSourceValue : hierStep.childOutputs .branchSource .result =
       (if datapathInputs.latched_stalu then current .alu_out_q else current .reg_out) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .branchSource).allowed
     change hierStep.childOutputs .branchSource .result =
       bif hierStep.childOutputs .inputsFields .latched_stalu
@@ -160,7 +160,7 @@ private theorem implements :
   have alignedValue : hierStep.childOutputs .alignedBranch .output =
       clearLowBit (if datapathInputs.latched_stalu then
         current .alu_out_q else current .reg_out) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32 clearLowLayout
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32 clearLowLayout
       (childMatch .alignedBranch).allowed
     change hierStep.childOutputs .alignedBranch .output =
       Silean.Modules.VectorLayout.apply clearLowLayout
@@ -169,7 +169,7 @@ private theorem implements :
     exact equation
   have currentPcValue : hierStep.childOutputs .currentPc .result =
       selectedCurrentPc datapathInputs current := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .currentPc).allowed
     change hierStep.childOutputs .currentPc .result =
       bif hierStep.childOutputs .branchStored .output
@@ -181,32 +181,32 @@ private theorem implements :
       simp [selectedCurrentPc, branch, store] at equation ⊢ <;> exact equation
   have sequentialValue : hierStep.childOutputs .sequentialPc .result =
       addWords (selectedCurrentPc datapathInputs current) (wordOfNat 4) := by
-    have equation := Silean.Modules.Add.cycleContract.result 32
+    have equation := Silean.Modules.AddWithCarry.cycleContract.result 32
       (childMatch .sequentialPc).allowed
     change hierStep.childOutputs .sequentialPc .result =
-      (Silean.Modules.Add.addBits 32 (hierStep.childOutputs .currentPc .result)
+      Silean.Modules.AddWithCarry.resultValue 32 (hierStep.childOutputs .currentPc .result)
         (hierStep.childOutputs .four .output)
-        (hierStep.childOutputs .falseBit .output)).1 at equation
+        (hierStep.childOutputs .falseBit .output) at equation
     rw [currentPcValue, fourValue, falseValue,
-      ProofSupport.addBits_eq_addWords] at equation
+      ProofSupport.addResult_eq_addWords] at equation
     exact equation
   have jalValue : hierStep.childOutputs .jalPc .result =
       addWords (selectedCurrentPc datapathInputs current)
         datapathInputs.decoded_imm_j := by
-    have equation := Silean.Modules.Add.cycleContract.result 32
+    have equation := Silean.Modules.AddWithCarry.cycleContract.result 32
       (childMatch .jalPc).allowed
     change hierStep.childOutputs .jalPc .result =
-      (Silean.Modules.Add.addBits 32 (hierStep.childOutputs .currentPc .result)
+      Silean.Modules.AddWithCarry.resultValue 32 (hierStep.childOutputs .currentPc .result)
         (hierStep.childOutputs .inputsFields .decoded_imm_j)
-        (hierStep.childOutputs .falseBit .output)).1 at equation
+        (hierStep.childOutputs .falseBit .output) at equation
     rw [currentPcValue, inputField .decoded_imm_j, falseValue,
-      ProofSupport.addBits_eq_addWords] at equation
+      ProofSupport.addResult_eq_addWords] at equation
     exact equation
   have decodedValue : hierStep.childOutputs .decodedPc .result =
       addWords (selectedCurrentPc datapathInputs current)
         (if datapathInputs.instr_jal then
           datapathInputs.decoded_imm_j else wordOfNat 4) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .decodedPc).allowed
     change hierStep.childOutputs .decodedPc .result =
       bif hierStep.childOutputs .inputsFields .instr_jal
@@ -217,7 +217,7 @@ private theorem implements :
       simp [Inputs.toValues, jal] at equation ⊢ <;> exact equation
   have nextPcValue : hierStep.childOutputs .nextPc .result =
       selectedNextPc datapathInputs current := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .nextPc).allowed
     change hierStep.childOutputs .nextPc .result =
       bif hierStep.childOutputs .inputsFields .decoder_trigger

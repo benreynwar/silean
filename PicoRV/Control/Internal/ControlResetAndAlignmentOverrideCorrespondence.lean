@@ -1,10 +1,11 @@
 import PicoRV.Control.ControlResetAndAlignmentOverride
+import PicoRV.Control.Internal.ControlResetAndAlignmentOverrideStructure
 import Silean.Authoring.CircuitDescriptionSoundness
 
 /-! Checked correspondence between the reader-facing reset/alignment override
 and its expanded typed production structure. -/
 
-namespace PicoRV.Control.ResetAndAlignmentOverride.Description.Internal
+namespace PicoRV.Control.ResetAndAlignmentOverride.Internal
 
 open Silean Silean.Naming Silean.Authoring.CircuitDescription
 
@@ -23,22 +24,12 @@ private theorem same :
     ResetAndAlignmentOverride.structuralChildren,
     ResetAndAlignmentOverride.wiring, sourceDescription,
     EndpointContext.moduleInput, EndpointContext.instanceOutput]
-  simp [circuit_description, enumeration]
+  simp [circuit_description, enumeration, childId, Enumeration.ordinal]
+  repeat' apply And.intro
+  all_goals rfl
 
-private theorem unique : description.UniqueNames := by
-  simp only [circuit_description, description, construction]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal | equal | equal | equal | equal |
-      equal | equal | equal | equal | equal | equal | equal | equal | equal |
-      equal <;>
-    subst child <;> constructor <;> exact of_decide_eq_true rfl
-
-theorem corresponds :
+theorem description_corresponds :
     Corresponds description ResetAndAlignmentOverride.naming :=
-  ⟨same, unique⟩
+  ⟨same⟩
 
-end PicoRV.Control.ResetAndAlignmentOverride.Description.Internal
+end PicoRV.Control.ResetAndAlignmentOverride.Internal

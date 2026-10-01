@@ -1,4 +1,4 @@
-import PicoRV.Control.Internal.ControlCommandFinishStructure
+import PicoRV.ControlContract
 import PicoRV.Authoring.CircuitLogic
 import Silean.Authoring.ModuleCycleContract
 
@@ -20,53 +20,10 @@ other state field passes through unchanged.
 The concise definition below makes that priority visible. The expanded typed
 hierarchy and its certification remain under `Internal/`. -/
 
-namespace Description
-
-noncomputable def construction : Builder Unit := do
-  let clear ← input "clear" .bit
-  let transition ← input "transition" transitionType
-  let transitionFields ← split TransitionValue.layout transition
-  let stateFields ← split ControlState.layout (transitionFields .state)
-  let notClear ← !! clear
-  let keepPrefetch ← stateFields .mem_do_prefetch &&& notClear
-  let finishRinst ←
-    (← stateFields .mem_do_rinst &&& notClear) ||| transitionFields .setRinst
-  let finishRdata ←
-    (← stateFields .mem_do_rdata &&& notClear) ||| transitionFields .setRdata
-  let finishWdata ←
-    (← stateFields .mem_do_wdata &&& notClear) ||| transitionFields .setWdata
-  let result ← update stateMap ControlState.schema stateFields fun
-    | .mem_do_prefetch => some keepPrefetch
-    | .mem_do_rinst => some finishRinst
-    | .mem_do_rdata => some finishRdata
-    | .mem_do_wdata => some finishWdata
-    | _ => none
-  output "state" result
-
-noncomputable def description : Description := build construction
-
-end Description
-
-/-! ## Placement -/
-
-noncomputable def placeNamed (name : Naming.SourceName)
-    (clear : Net .bit) (transition : Net transitionType) :
-    Builder (Net stateType) := do
-  let child ← Silean.Authoring.CircuitDescription.placeNamed name design fun
-    | .clear => clear
-    | .transition => transition
-  pure (child .state)
-
-noncomputable def place (clear : Net .bit) (transition : Net transitionType) :
-    Builder (Net stateType) := do
-  let child ← placeIndexed "command_finish" design fun
-    | .clear => clear
-    | .transition => transition
-  pure (child .state)
-
-attribute [circuit_description] placeNamed place
-
-/-! ## Exact cycle behavior -/
+module_ports ports where
+  input clear : .bit,
+  input transition (schema := TransitionValue.schema) : transitionType,
+  output state (schema := ControlState.schema) : stateType
 
 def outputState (inputs : inputMap.Values) : stateMap.Values :=
   finishCommands (inputs .clear) (Transition.unpack (inputs .transition))
@@ -98,5 +55,37 @@ module_cycle_contract cycleContract for ports where
     funext output
     cases output
     exact equal
+
+theorem outputs_of_allowed {step : cycleContract.Step}
+    (allowed : cycleContract.Allows step) :
+    step.outputs .state = stateMap.pack (outputState step.inputs) :=
+  (outputRule_holds_iff step.inputs step.currentState step.outputs).mp
+    (allowed.1 .apply)
+
+open ports
+
+noncomputable def construction : ModuleBuilder ports Unit := do
+  let clear ← input .clear
+  let transition ← input .transition
+  let transitionFields ← split TransitionValue.layout transition
+  let stateFields ← split ControlState.layout (transitionFields .state)
+  let notClear ← !! clear
+  let keepPrefetch ← stateFields .mem_do_prefetch &&& notClear
+  let finishRinst ←
+    (← stateFields .mem_do_rinst &&& notClear) ||| transitionFields .setRinst
+  let finishRdata ←
+    (← stateFields .mem_do_rdata &&& notClear) ||| transitionFields .setRdata
+  let finishWdata ←
+    (← stateFields .mem_do_wdata &&& notClear) ||| transitionFields .setWdata
+  let result ← update stateMap ControlState.schema stateFields fun
+    | .mem_do_prefetch => some keepPrefetch
+    | .mem_do_rinst => some finishRinst
+    | .mem_do_rdata => some finishRdata
+    | .mem_do_wdata => some finishWdata
+    | _ => none
+  output .state result
+
+noncomputable def description : Description :=
+  ModuleBuilder.build Naming.ports construction
 
 end PicoRV.Control.CommandFinish

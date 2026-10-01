@@ -1,6 +1,6 @@
-import PicoRV.Control.ControlNextContracts
+import PicoRV.Control.ControlPhaseDecode
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.EqualsConstant.EqualsConstant
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
 
 /-! Expanded typed structure for the reader-facing control phase decoder. -/
 

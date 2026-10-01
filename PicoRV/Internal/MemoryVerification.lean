@@ -1,5 +1,5 @@
 import PicoRV.Internal.MemoryStructure
-import PicoRV.Memory.Internal.MemoryLookaheadVerification
+import PicoRV.Memory.MemoryLookaheadDerived
 import PicoRV.Memory.Internal.MemoryNextVerification
 import PicoRV.Memory.Internal.MemoryReadFormattingVerification
 import PicoRV.Memory.Internal.MemoryResponseVerification
@@ -7,7 +7,7 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Modules.Register.RegisterDerived
 
 namespace PicoRV.Memory

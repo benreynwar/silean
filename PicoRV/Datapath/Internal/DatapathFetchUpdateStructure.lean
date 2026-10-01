@@ -1,10 +1,10 @@
 import PicoRV.Datapath.DatapathNextContracts
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Add.AddDerived
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Naming.PrimitiveNaming
 
 namespace PicoRV.Datapath
@@ -34,8 +34,8 @@ module_design FetchUpdate (name := "picorv32_datapath_fetch_update") where
     branchSource (name := .indexed "mux" 0) := Silean.Modules.Mux.design (.vector 32 .bit),
     alignedBranch (name := .indexed "vector_layout" 0) := Silean.Modules.VectorLayout.design 32 32 FetchUpdate.clearLowLayout,
     currentPc (name := .indexed "mux" 1) := Silean.Modules.Mux.design (.vector 32 .bit),
-    sequentialPc (name := .indexed "add" 0) := Silean.Modules.Add.design 32,
-    jalPc (name := .indexed "add" 1) := Silean.Modules.Add.design 32,
+    sequentialPc (name := .indexed "add" 0) := Silean.Modules.AddWithCarry.design 32,
+    jalPc (name := .indexed "add" 1) := Silean.Modules.AddWithCarry.design 32,
     decodedPc (name := .indexed "mux" 2) := Silean.Modules.Mux.design (.vector 32 .bit),
     nextPc (name := .indexed "mux" 3) := Silean.Modules.Mux.design (.vector 32 .bit),
     result (name := .indexed "named_tuple_combiner" 0) := Silean.Modules.NamedTupleCombiner.designWith

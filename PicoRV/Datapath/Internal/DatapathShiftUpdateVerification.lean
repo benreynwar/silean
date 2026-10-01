@@ -4,11 +4,11 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.AddSub.AddSubDerived
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
+import Silean.Modules.AddSubWithCarry.AddSubWithCarryDerived
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Primitives.Or
 
 namespace PicoRV.Datapath.ShiftUpdate
@@ -49,7 +49,7 @@ module_child_certifications childContracts for body where
   one := Silean.Modules.Constant.certification (.vector 5 .bit) (fiveBitsOfNat 1),
   four := Silean.Modules.Constant.certification (.vector 5 .bit) (fiveBitsOfNat 4),
   selectedStep := Silean.Modules.Mux.certification (.vector 5 .bit),
-  subtractStep := Silean.Modules.AddSub.certification 5,
+  subtractStep := Silean.Modules.AddSubWithCarry.certification 5,
   selectedOp1 := Silean.Modules.Mux.certification (.vector 32 .bit),
   selectedShift := Silean.Modules.Mux.certification (.vector 5 .bit),
   selectedResult := Silean.Modules.Mux.certification (.vector 32 .bit),
@@ -69,7 +69,7 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
       .arithmeticOne, .arithmeticFour} => Silean.Modules.VectorLayout.Rule.apply,
     {.selectedLeft, .selectedLogical, .selectedArithmetic, .selectArithmetic,
       .selectLogical, .selectLeft, .selectedStep} => Silean.Modules.Mux.Rule.select,
-    .subtractStep => Silean.Modules.AddSub.Rule.apply,
+    .subtractStep => Silean.Modules.AddSubWithCarry.Rule.apply,
     {.selectedOp1, .selectedShift, .selectedResult} => Silean.Modules.Mux.Rule.select,
     .result => Silean.Modules.NamedTupleCombiner.Rule.apply]
   state := []
@@ -121,14 +121,14 @@ private theorem signal_equal_zero : ∀ bits : FiveBits,
 
 private theorem subtract_selected_step : ∀ bits : FiveBits,
     Silean.BitVector.toNat 5 bits ≠ 0 →
-      (Silean.Modules.AddSub.addSubBits 5 bits
+      (Silean.Modules.AddSubWithCarry.addSubBits 5 bits
         (bif bits 2 || bits 3 || bits 4 then fiveBitsOfNat 4
           else fiveBitsOfNat 1) true).1 =
         fiveBitsOfNat (Silean.BitVector.toNat 5 bits -
           if Silean.BitVector.toNat 5 bits ≥ 4 then 4 else 1) := by
   intro bits nonzero
   apply Silean.BitVector.toNat_injective 5
-  rw [Silean.Modules.AddSub.addSubBits_result_toNat]
+  rw [Silean.Modules.AddSubWithCarry.addSubBits_result_toNat]
   simp only [if_true]
   have amountBound := Silean.BitVector.toNat_lt_cardinality 5 bits
   have highMeaning := high_bits_mean_ge_four bits
@@ -265,7 +265,7 @@ private theorem implements :
     exact high_bits_mean_ge_four (current .reg_sh)
   have zeroValue : hierStep.childOutputs .amountZero .result =
       decide (shiftAmount current = 0) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 5 .bit) (fiveBitsOfNat 0)
       (childMatch .amountZero).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -297,42 +297,42 @@ private theorem implements :
 
   have leftOneValue : hierStep.childOutputs .leftOne .output =
       shiftLeft (current .reg_op1) 1 := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       (leftLayout 1) (childMatch .leftOne).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, left_layout] at equation
     exact equation
   have leftFourValue : hierStep.childOutputs .leftFour .output =
       shiftLeft (current .reg_op1) 4 := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       (leftLayout 4) (childMatch .leftFour).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, left_layout] at equation
     exact equation
   have logicalOneValue : hierStep.childOutputs .logicalOne .output =
       shiftRightLogical (current .reg_op1) 1 := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       (rightLogicalLayout 1) (childMatch .logicalOne).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, logical_layout] at equation
     exact equation
   have logicalFourValue : hierStep.childOutputs .logicalFour .output =
       shiftRightLogical (current .reg_op1) 4 := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       (rightLogicalLayout 4) (childMatch .logicalFour).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, logical_layout] at equation
     exact equation
   have arithmeticOneValue : hierStep.childOutputs .arithmeticOne .output =
       shiftRightArithmetic (current .reg_op1) 1 := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       (rightArithmeticLayout 1) (childMatch .arithmeticOne).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, arithmetic_layout] at equation
     exact equation
   have arithmeticFourValue : hierStep.childOutputs .arithmeticFour .output =
       shiftRightArithmetic (current .reg_op1) 4 := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed 32 32
+    have equation := Silean.Modules.VectorLayout.cycleContract.output 32 32
       (rightArithmeticLayout 4) (childMatch .arithmeticFour).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, arithmetic_layout] at equation
@@ -340,7 +340,7 @@ private theorem implements :
 
   have selectedLeftValue : hierStep.childOutputs .selectedLeft .result =
       shiftLeft (current .reg_op1) (selectedStepAmount current) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectedLeft).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [geFourValue, leftOneValue, leftFourValue] at equation
@@ -351,7 +351,7 @@ private theorem implements :
       exact equation
   have selectedLogicalValue : hierStep.childOutputs .selectedLogical .result =
       shiftRightLogical (current .reg_op1) (selectedStepAmount current) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectedLogical).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [geFourValue, logicalOneValue, logicalFourValue] at equation
@@ -362,7 +362,7 @@ private theorem implements :
       exact equation
   have selectedArithmeticValue : hierStep.childOutputs .selectedArithmetic .result =
       shiftRightArithmetic (current .reg_op1) (selectedStepAmount current) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectedArithmetic).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [geFourValue, arithmeticOneValue, arithmeticFourValue] at equation
@@ -375,7 +375,7 @@ private theorem implements :
       (if datapathInputs.instr_srai || datapathInputs.instr_sra then
         shiftRightArithmetic (current .reg_op1) (selectedStepAmount current)
       else current .reg_op1) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectArithmetic).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [arithmeticSelectValue, currentFieldsValue,
@@ -388,7 +388,7 @@ private theorem implements :
       else if datapathInputs.instr_srai || datapathInputs.instr_sra then
         shiftRightArithmetic (current .reg_op1) (selectedStepAmount current)
       else current .reg_op1) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectLogical).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [logicalSelectValue, selectedLogicalValue,
@@ -397,7 +397,7 @@ private theorem implements :
       simp [logical] at equation ⊢ <;> exact equation
   have shiftedValueEquation : hierStep.childOutputs .selectLeft .result =
       shiftedStep datapathInputs current := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectLeft).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [leftSelectValue, selectedLeftValue, selectLogicalValue] at equation
@@ -417,7 +417,7 @@ private theorem implements :
     ((childMatch .four).ruleHolds Silean.Primitives.ConstantRule.apply)
   have stepValue : hierStep.childOutputs .selectedStep .result =
       (if shiftAmount current ≥ 4 then fiveBitsOfNat 4 else fiveBitsOfNat 1) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 5 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 5 .bit)
       (childMatch .selectedStep).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [geFourValue, oneValue, fourValue] at equation
@@ -427,11 +427,11 @@ private theorem implements :
     · simp [large] at equation ⊢
       exact equation
   have subtractValue : hierStep.childOutputs .subtractStep .result =
-      (Silean.Modules.AddSub.addSubBits 5 (current .reg_sh)
+      (Silean.Modules.AddSubWithCarry.addSubBits 5 (current .reg_sh)
         (bif current .reg_sh 2 || current .reg_sh 3 || current .reg_sh 4 then
           fiveBitsOfNat 4 else fiveBitsOfNat 1) true).1 := by
     have equation :=
-      Silean.Modules.AddSub.cycleContract.result 5
+      Silean.Modules.AddSubWithCarry.cycleContract.result 5
         (childMatch .subtractStep).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [currentFieldsValue, stepValue, trueValue] at equation
@@ -447,7 +447,7 @@ private theorem implements :
   have selectedOp1Value : hierStep.childOutputs .selectedOp1 .result =
       (if shiftAmount current = 0 then updated .reg_op1
       else shiftedStep datapathInputs current) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectedOp1).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [zeroValue, shiftedValueEquation, updatedFieldsValue] at equation
@@ -460,7 +460,7 @@ private theorem implements :
       (if shiftAmount current = 0 then updated .reg_sh
       else fiveBitsOfNat
         (shiftAmount current - selectedStepAmount current)) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 5 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 5 .bit)
       (childMatch .selectedShift).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [zeroValue, subtractValue, updatedFieldsValue] at equation
@@ -477,7 +477,7 @@ private theorem implements :
   have selectedResultValue : hierStep.childOutputs .selectedResult .result =
       (if shiftAmount current = 0 then current .reg_op1
       else updated .reg_out) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectedResult).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [zeroValue, updatedFieldsValue, currentFieldsValue] at equation

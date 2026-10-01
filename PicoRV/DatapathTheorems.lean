@@ -28,10 +28,7 @@ theorem implements_contract :
 /-- Structural equations for the complete datapath hierarchy have one
 solution for every boundary input and physical state. -/
 theorem hasExactlyOneSolution : moduleStructure.HasExactlyOneSolution :=
-  ⟨certified.hasStructuralResult, certified.structuralResultUnique⟩
+  ⟨certified.certification.structural.hasSolution, certified.certification.structural.hasAtMostOneSolution⟩
 
-/-- The datapath hierarchy and all descendants are concrete. -/
-theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
-  native_decide
 
 end PicoRV.Datapath

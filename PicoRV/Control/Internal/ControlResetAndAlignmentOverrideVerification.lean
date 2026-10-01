@@ -1,11 +1,13 @@
 import PicoRV.Control.ControlResetAndAlignmentOverride
-import PicoRV.Control.Internal.ControlAlignmentVerification
+import PicoRV.Control.ControlAlignmentDerived
+import PicoRV.Control.Internal.ControlResetAndAlignmentOverrideStructure
+import PicoRV.Control.Internal.ControlResetAndAlignmentOverrideCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Not
 import Silean.Primitives.Or
@@ -199,7 +201,7 @@ private theorem implements :
     exact equation.trans (congrArg Bool.not resetnValue)
   have resetSelectionValue : hierStep.childOutputs .resetSelection .result =
       (resetSelected controlInputs baseline selected).pack := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .resetSelection).allowed
     normalize_child_hyp equation unfolding wiring, context
     have selectedPacked : hierStep.inputs .selected = selected.pack := by
@@ -312,7 +314,7 @@ private theorem implements :
 
   have resultValue : hierStep.childOutputs .result .result =
       (alignmentOverride controlInputs current resetChosen).pack := by
-    have equation := Silean.Modules.Mux.result_of_allowed transitionType
+    have equation := Silean.Modules.Mux.cycleContract.result transitionType
       (childMatch .result).allowed
     normalize_child_hyp equation unfolding wiring, context
     have result := equation.trans (bif_congr alignmentEnabledValue
@@ -348,3 +350,22 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.ResetAndAlignmentOverride
+
+namespace PicoRV.Control.ResetAndAlignmentOverride.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold ResetAndAlignmentOverride.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := ResetAndAlignmentOverride.instancePorts,
+      wiring := ResetAndAlignmentOverride.wiring })
+    (children := ResetAndAlignmentOverride.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.ResetAndAlignmentOverride.Internal

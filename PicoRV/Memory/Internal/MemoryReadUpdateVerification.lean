@@ -4,10 +4,10 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.And
 import Silean.Primitives.Or
 
@@ -138,14 +138,14 @@ private theorem implements :
   have completedValue : hierStep.childOutputs .completedPhase .result =
       bif memoryInputs.mem_do_rinst || memoryInputs.mem_do_rdata
         then stateOfNat 0 else stateOfNat 3 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .completedPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [activeValue, idleValue, prefetchedValue] at equation
     exact equation
   have validValue : hierStep.childOutputs .valid .result =
       bif memXfer memoryInputs current then false else updated .mem_valid := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .valid).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [transferValue, updatedFieldsValue, falseValue] at equation
@@ -155,7 +155,7 @@ private theorem implements :
         bif memoryInputs.mem_do_rinst || memoryInputs.mem_do_rdata
           then stateOfNat 0 else stateOfNat 3
         else updated .mem_state := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 2 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 2 .bit)
       (childMatch .phase).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [transferValue, updatedFieldsValue, completedValue] at equation

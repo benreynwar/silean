@@ -1,7 +1,7 @@
-import PicoRV.Control.ControlNextContracts
+import PicoRV.Control.ControlAlignment
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 

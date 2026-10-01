@@ -30,9 +30,7 @@ theorem implements_contract :
   certification.implements
 
 theorem hasExactlyOneSolution : moduleStructure.HasExactlyOneSolution :=
-  ⟨certified.hasStructuralResult, certified.structuralResultUnique⟩
+  ⟨certified.certification.structural.hasSolution, certified.certification.structural.hasAtMostOneSolution⟩
 
-theorem moduleStructure_hasNoBlackboxes : moduleStructure.HasNoBlackboxes := by
-  native_decide
 
 end PicoRV.Datapath.Next

@@ -1,10 +1,10 @@
 import PicoRV.Memory.MemoryCombinationalContracts
-import PicoRV.Memory.MemoryLookahead
+import PicoRV.Memory.MemoryLookaheadDerived
 import PicoRV.Memory.MemoryNextContracts
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.Or
 
 namespace PicoRV.Memory

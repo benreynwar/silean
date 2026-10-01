@@ -1,11 +1,13 @@
 import PicoRV.Control.ControlLoadRs2Transition
+import PicoRV.Control.Internal.ControlLoadRs2TransitionStructure
+import PicoRV.Control.Internal.ControlLoadRs2TransitionCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.BitMux.BitMuxDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Control.LoadRs2Transition
 
@@ -163,7 +165,7 @@ private theorem implements :
   have shiftPhaseValue : hierStep.childOutputs .shiftPhase .result =
       bif controlInputs.is_sll_srl_sra then stateBits cpuStateShift
         else stateBits cpuStateExec := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .shiftPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr shiftSelectorValue
@@ -171,7 +173,7 @@ private theorem implements :
   have shiftRinstValue : hierStep.childOutputs .shiftRinst .result =
       bif controlInputs.is_sll_srl_sra then updated .mem_do_rinst
         else updated .mem_do_prefetch := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .shiftRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr shiftSelectorValue
@@ -180,7 +182,7 @@ private theorem implements :
   have storePhaseValue : hierStep.childOutputs .storePhase .result =
       bif controlInputs.is_sb_sh_sw then stateBits cpuStateStmem
         else hierStep.childOutputs .shiftPhase .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .storePhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr storeSelectorValue
@@ -188,7 +190,7 @@ private theorem implements :
   have storeRinstValue : hierStep.childOutputs .storeRinst .result =
       bif controlInputs.is_sb_sh_sw then true
         else hierStep.childOutputs .shiftRinst .result := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .storeRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr storeSelectorValue trueValue (Eq.refl _))
@@ -277,3 +279,23 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.LoadRs2Transition
+
+namespace PicoRV.Control.LoadRs2Transition.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract
+      PhaseTransition.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold LoadRs2Transition.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := LoadRs2Transition.instancePorts,
+      wiring := LoadRs2Transition.wiring })
+    (children := LoadRs2Transition.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.LoadRs2Transition.Internal

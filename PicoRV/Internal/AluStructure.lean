@@ -1,13 +1,13 @@
 import Silean.Authoring.ModuleDesign
-import Silean.Foundation.BitVector
-import Silean.Modules.AddSub.AddSubDerived
-import Silean.Modules.BitMux.BitMux
+import PicoRV.Alu
+import Silean.Modules.AddSubWithCarry.AddSubWithCarryDerived
+import Silean.Modules.BitMux.BitMuxDerived
 import Silean.Modules.BitwiseAnd.BitwiseAnd
 import Silean.Modules.BitwiseOr.BitwiseOr
 import Silean.Modules.BitwiseXor.BitwiseXor
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Equality.Equality
-import Silean.Modules.Mux.Mux
+import Silean.Modules.Equality.EqualityDerived
+import Silean.Modules.Mux.MuxDerived
 import Silean.Naming.PrimitiveNaming
 import Silean.Naming.SignalAdapterNaming
 import Silean.Primitives.Not
@@ -25,35 +25,6 @@ namespace PicoRV.Alu
 open Silean
 open Silean.Authoring
 
-abbrev Word := Fin 32 → Bool
-
-module_ports ports where
-  input reg_op1 : .vector 32 .bit,
-  input reg_op2 : .vector 32 .bit,
-  input instr_sub : .bit,
-  input instr_beq : .bit,
-  input instr_bne : .bit,
-  input instr_bge : .bit,
-  input instr_bgeu : .bit,
-  input is_slti_blt_slt : .bit,
-  input is_sltiu_bltu_sltu : .bit,
-  input is_lui_auipc_jal_jalr_addi_add_sub : .bit,
-  input is_compare : .bit,
-  input instr_xori : .bit,
-  input instr_xor : .bit,
-  input instr_ori : .bit,
-  input instr_or : .bit,
-  input instr_andi : .bit,
-  input instr_and : .bit,
-  output alu_out : .vector 32 .bit,
-  output alu_out_0 : .bit
-
-abbrev wordType : SignalType := .vector 32 .bit
-abbrev wordSplitter : Silean.Composition.SignalSplitter := .vector 32 .bit
-abbrev wordCombiner : Silean.Composition.SignalCombiner := .vector 32 .bit
-def zeroBitValue : Bool := false
-def zeroWordValue : Word := Silean.BitVector.ofNat 32 0
-
 end PicoRV.Alu
 
 namespace PicoRV
@@ -69,7 +40,7 @@ module_design Alu (name := "picorv32_alu") where
     rightSplit (name := .indexed "vector_splitter" 1) :=
       Naming.SignalAdapter.splitterDesign Alu.wordSplitter,
     subtractMode (name := .indexed "or" 0) := Silean.Primitives.orDesign,
-    addSub (name := .indexed "add_sub" 0) := Silean.Modules.AddSub.design 32,
+    addSub (name := .indexed "add_sub" 0) := Silean.Modules.AddSubWithCarry.design 32,
     equality (name := .indexed "equality" 0) :=
       Silean.Modules.Equality.design Alu.wordType,
     bitwiseXor (name := .indexed "bitwise_xor" 0) :=

@@ -1,7 +1,7 @@
-import PicoRV.Control.ControlNextContracts
+import PicoRV.Control.ControlBaseline
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.Constant.Constant
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Naming.PrimitiveNaming
 
 /-! Expanded typed structure for the reader-facing control baseline. -/

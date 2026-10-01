@@ -1,6 +1,6 @@
 import PicoRV.Internal.DecoderStructure
-import PicoRV.Decoder.DecoderCaptureStageTheorems
-import PicoRV.Decoder.DecoderResolveStageTheorems
+import PicoRV.Decoder.DecoderCaptureStageDerived
+import PicoRV.Decoder.DecoderResolveStageDerived
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules

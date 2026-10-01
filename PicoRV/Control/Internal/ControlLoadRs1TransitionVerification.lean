@@ -1,11 +1,13 @@
 import PicoRV.Control.ControlLoadRs1Transition
+import PicoRV.Control.Internal.ControlLoadRs1TransitionStructure
+import PicoRV.Control.Internal.ControlLoadRs1TransitionCorrespondence
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.BitMux.BitMuxTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.BitMux.BitMuxDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Control.LoadRs1Transition
 
@@ -272,7 +274,7 @@ private theorem implements :
   have regShiftPhaseValue : hierStep.childOutputs .regShiftPhase .result =
       bif controlInputs.is_sll_srl_sra then stateBits cpuStateShift
         else stateBits cpuStateExec := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .regShiftPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr regShiftSelectorValue
@@ -280,7 +282,7 @@ private theorem implements :
   have regShiftRinstValue : hierStep.childOutputs .regShiftRinst .result =
       bif controlInputs.is_sll_srl_sra then updated .mem_do_rinst
         else updated .mem_do_prefetch := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .regShiftRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr regShiftSelectorValue
@@ -289,7 +291,7 @@ private theorem implements :
   have storePhaseValue : hierStep.childOutputs .storePhase .result =
       bif controlInputs.is_sb_sh_sw then stateBits cpuStateStmem
         else hierStep.childOutputs .regShiftPhase .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .storePhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr storeSelectorValue
@@ -297,14 +299,14 @@ private theorem implements :
   have storeRinstValue : hierStep.childOutputs .storeRinst .result =
       bif controlInputs.is_sb_sh_sw then true
         else hierStep.childOutputs .regShiftRinst .result := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .storeRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr storeSelectorValue trueValue (Eq.refl _))
   have immediateAluPhaseValue : hierStep.childOutputs .immediateAluPhase .result =
       bif controlInputs.is_jalr_addi_slti_sltiu_xori_ori_andi
         then stateBits cpuStateExec else hierStep.childOutputs .storePhase .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .immediateAluPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr immediateAluSelectorValue
@@ -312,7 +314,7 @@ private theorem implements :
   have immediateAluRinstValue : hierStep.childOutputs .immediateAluRinst .result =
       bif controlInputs.is_jalr_addi_slti_sltiu_xori_ori_andi
         then updated .mem_do_prefetch else hierStep.childOutputs .storeRinst .result := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .immediateAluRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr immediateAluSelectorValue
@@ -321,7 +323,7 @@ private theorem implements :
       hierStep.childOutputs .immediateShiftPhase .result =
         bif controlInputs.is_slli_srli_srai then stateBits cpuStateShift
           else hierStep.childOutputs .immediateAluPhase .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .immediateShiftPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr immediateShiftSelectorValue
@@ -330,7 +332,7 @@ private theorem implements :
       hierStep.childOutputs .immediateShiftRinst .result =
         bif controlInputs.is_slli_srli_srai then updated .mem_do_rinst
           else hierStep.childOutputs .immediateAluRinst .result := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .immediateShiftRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr immediateShiftSelectorValue
@@ -338,7 +340,7 @@ private theorem implements :
   have loadPhaseValue : hierStep.childOutputs .loadPhase .result =
       bif controlInputs.is_lb_lh_lw_lbu_lhu then stateBits cpuStateLdmem
         else hierStep.childOutputs .immediateShiftPhase .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .loadPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr loadSelectorValue
@@ -346,14 +348,14 @@ private theorem implements :
   have loadRinstValue : hierStep.childOutputs .loadRinst .result =
       bif controlInputs.is_lb_lh_lw_lbu_lhu then true
         else hierStep.childOutputs .immediateShiftRinst .result := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .loadRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr loadSelectorValue trueValue (Eq.refl _))
   have directPhaseValue : hierStep.childOutputs .directPhase .result =
       bif controlInputs.is_lui_auipc_jal then stateBits cpuStateExec
         else hierStep.childOutputs .loadPhase .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .directPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr directSelectorValue
@@ -361,7 +363,7 @@ private theorem implements :
   have directRinstValue : hierStep.childOutputs .directRinst .result =
       bif controlInputs.is_lui_auipc_jal then updated .mem_do_prefetch
         else hierStep.childOutputs .loadRinst .result := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .directRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr directSelectorValue
@@ -369,7 +371,7 @@ private theorem implements :
   have trapPhaseValue : hierStep.childOutputs .trapPhase .result =
       bif controlInputs.instr_trap then stateBits cpuStateTrap
         else hierStep.childOutputs .directPhase .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 8 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 8 .bit)
       (childMatch .trapPhase).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr instrTrapValue
@@ -377,7 +379,7 @@ private theorem implements :
   have trapRinstValue : hierStep.childOutputs .trapRinst .result =
       bif controlInputs.instr_trap then updated .mem_do_rinst
         else hierStep.childOutputs .directRinst .result := by
-    have equation := Silean.Modules.BitMux.result_of_allowed
+    have equation := Silean.Modules.BitMux.cycleContract.result
       (childMatch .trapRinst).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (bif_congr instrTrapValue
@@ -468,3 +470,23 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.LoadRs1Transition
+
+namespace PicoRV.Control.LoadRs1Transition.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract
+      PhaseTransition.Naming.ports := by
+  have corresponds := description_corresponds
+  unfold LoadRs1Transition.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := LoadRs1Transition.instancePorts,
+      wiring := LoadRs1Transition.wiring })
+    (children := LoadRs1Transition.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.LoadRs1Transition.Internal

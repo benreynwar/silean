@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import PicoRV.AluTheorems
+import PicoRV.AluDerived
 
 namespace PicoRVTests.Alu
 
@@ -61,7 +61,7 @@ private def signedLessInputs : Alu.Values :=
 
 -- The closed renderer checks and accepts the concrete hierarchy.
 noncomputable example : RenderResult String :=
-  renderClosedCircuit Alu.naming
+  renderCircuit Alu.naming
 
 #guard renderModuleKey Alu.naming.key = "picorv32_alu"
 #guard Alu.Naming.ports.inputs.name .reg_op1 = "reg_op1"

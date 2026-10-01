@@ -1,14 +1,14 @@
-import PicoRV.Alu
+import PicoRV.AluDerived
 import PicoRV.Datapath.DatapathFetchUpdate
 import PicoRV.Datapath.DatapathNext
 import Silean.Authoring.ModuleDesign
-import Silean.Modules.Add.AddDerived
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.EqualsConstant.EqualsConstant
-import Silean.Modules.Mux.Mux
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapter
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Modules.Register.RegisterDerived
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 import Silean.Primitives.And
 
 namespace PicoRV
@@ -41,7 +41,7 @@ module_design Datapath (name := "picorv32_datapath") where
     falseBit := Silean.Modules.Constant.design .bit false,
     zeroWord := Silean.Modules.Constant.design (.vector 32 .bit) (Datapath.wordOfNat 0),
     four := Silean.Modules.Constant.design (.vector 32 .bit) (Datapath.wordOfNat 4),
-    linkValue := Silean.Modules.Add.design 32,
+    linkValue := Silean.Modules.AddWithCarry.design 32,
     storeSource := Silean.Modules.Mux.design (.vector 32 .bit),
     storedValue := Silean.Modules.Mux.design (.vector 32 .bit),
     fetchValue := Silean.Modules.Mux.design (.vector 32 .bit),

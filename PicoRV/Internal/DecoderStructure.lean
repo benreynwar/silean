@@ -1,6 +1,6 @@
 import PicoRV.DecoderContract
-import PicoRV.Decoder.DecoderCaptureStage
-import PicoRV.Decoder.Internal.DecoderResolveStageStructure
+import PicoRV.Decoder.DecoderCaptureStageDerived
+import PicoRV.Decoder.DecoderResolveStageDerived
 import Silean.Authoring.ModuleDesign
 
 namespace PicoRV

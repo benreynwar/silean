@@ -11,8 +11,8 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Memory.Next
 
@@ -201,7 +201,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .write
         then stateMap.pack (writeNextState memoryInputs current lookahead)
         else stateMap.pack (prefetchedNextState memoryInputs lookahead) := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectWrite).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [writeValue, prefetchedValue] at equation
@@ -210,7 +210,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .read
         then stateMap.pack (readNextState memoryInputs current lookahead)
         else hierStep.childOutputs .selectWrite .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectRead).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [readValue] at equation
@@ -219,7 +219,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .idle
         then stateMap.pack (idleNextState memoryInputs lookahead)
         else hierStep.childOutputs .selectRead .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectIdle).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [idleValue] at equation

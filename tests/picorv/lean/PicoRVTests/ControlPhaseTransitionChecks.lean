@@ -1,7 +1,7 @@
 import PicoRVTests.Fixtures.PicoRVControl
-import PicoRV.Control.ControlFetchTransitionTheorems
-import PicoRV.Control.ControlLoadRs1TransitionTheorems
-import PicoRV.Control.ControlShiftTransitionTheorems
+import PicoRV.Control.ControlFetchTransitionDerived
+import PicoRV.Control.ControlLoadRs1TransitionDerived
+import PicoRV.Control.ControlShiftTransitionDerived
 
 namespace PicoRVTests.ControlPhaseTransitionChecks
 
@@ -209,13 +209,7 @@ noncomputable example :
     Silean.Contracts.Cycle.ModuleCycleCertified PhaseTransition.ports :=
   ShiftTransition.certified
 
-example : FetchTransition.moduleStructure.HasNoBlackboxes :=
-  FetchTransition.moduleStructure_hasNoBlackboxes
 
-example : LoadRs1Transition.moduleStructure.HasNoBlackboxes :=
-  LoadRs1Transition.moduleStructure_hasNoBlackboxes
 
-example : ShiftTransition.moduleStructure.HasNoBlackboxes :=
-  ShiftTransition.moduleStructure_hasNoBlackboxes
 
 end PicoRVTests.ControlPhaseTransitionChecks

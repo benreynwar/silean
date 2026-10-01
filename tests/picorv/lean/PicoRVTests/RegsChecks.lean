@@ -1,5 +1,5 @@
 import Silean.FIRRTL
-import PicoRV.RegsTheorems
+import PicoRV.RegsDerived
 
 namespace PicoRVTests.Regs
 
@@ -47,7 +47,7 @@ private def resetWrite := PicoRV.Regs.cycleContract.evaluate
 
 -- The closed renderer checks and accepts the public concrete hierarchy.
 noncomputable example : RenderResult String :=
-  renderClosedCircuit PicoRV.Regs.naming
+  renderCircuit PicoRV.Regs.naming
 
 #guard renderModuleKey PicoRV.Regs.naming.key =
   "picorv32_regs"

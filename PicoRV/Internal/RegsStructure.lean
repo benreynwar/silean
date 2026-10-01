@@ -1,8 +1,9 @@
 import Silean.Authoring.ModuleDesign
+import PicoRV.Regs
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Equality.Equality
-import Silean.Modules.Mux.Mux
-import Silean.Modules.RegisterBank.RegisterBank
+import Silean.Modules.Equality.EqualityDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.RegisterBank.RegisterBankDerived
 import Silean.Naming.PrimitiveNaming
 import Silean.Primitives.And
 import Silean.Primitives.Not
@@ -17,24 +18,6 @@ namespace PicoRV.Regs
 
 open Silean
 open Silean.Authoring
-
-abbrev Word := Fin 32 → Bool
-abbrev RegisterAddress := Fin 5 → Bool
-
-module_ports ports where
-  input resetn : .bit,
-  input decoded_rs1 : .vector 5 .bit,
-  input decoded_rs2 : .vector 5 .bit,
-  input cpuregs_write : .bit,
-  input latched_rd : .vector 5 .bit,
-  input cpuregs_wrdata : .vector 32 .bit,
-  output cpuregs_rs1 : .vector 32 .bit,
-  output cpuregs_rs2 : .vector 32 .bit
-
-abbrev wordType : SignalType := .vector 32 .bit
-abbrev addressType : SignalType := .vector 5 .bit
-def zeroAddressValue : addressType.Denote := fun _ => false
-def zeroWordValue : wordType.Denote := fun _ => false
 
 end PicoRV.Regs
 

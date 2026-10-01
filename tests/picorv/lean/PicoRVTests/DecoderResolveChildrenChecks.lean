@@ -1,6 +1,6 @@
-import PicoRV.Decoder.DecoderImmediateTheorems
-import PicoRV.Decoder.DecoderInstructionMatchTheorems
-import PicoRV.Decoder.DecoderInstructionSummaryTheorems
+import PicoRV.Decoder.DecoderImmediateDerived
+import PicoRV.Decoder.DecoderInstructionMatchDerived
+import PicoRV.Decoder.DecoderInstructionSummaryDerived
 import PicoRV.Decoder.DecoderResolveStage
 import PicoRV.Decoder.Internal.DecoderResolveStageStructure
 import Silean.FIRRTL
@@ -62,8 +62,6 @@ example : cycleContract.state = emptySignalMap := rfl
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports :=
   InstructionMatch.Structure.certified
 
-example : InstructionMatch.Structure.moduleStructure.HasNoBlackboxes :=
-  InstructionMatch.Structure.moduleStructure_hasNoBlackboxes
 
 end Match
 
@@ -131,16 +129,15 @@ example : cycleContract.state = emptySignalMap := rfl
 
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports := certified
 
-example : moduleStructure.HasNoBlackboxes := moduleStructure_hasNoBlackboxes
 
 -- The resolve stage owns this concrete implementation rather than an opaque
 -- copy of the same cycle contract.
 example : ResolveStage.structuralChildren .immediate = moduleStructure := rfl
 
 noncomputable example : Silean.FIRRTL.RenderResult String :=
-  Silean.FIRRTL.renderClosedCircuit naming
+  Silean.FIRRTL.renderCircuit naming
 
-#guard match Silean.FIRRTL.renderClosedCircuit naming with
+#guard match Silean.FIRRTL.renderCircuit naming with
   | .ok _ => true
   | .error _ => false
 
@@ -197,8 +194,6 @@ example : cycleContract.state = emptySignalMap := rfl
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports :=
   InstructionSummary.Structure.certified
 
-example : InstructionSummary.Structure.moduleStructure.HasNoBlackboxes :=
-  InstructionSummary.Structure.moduleStructure_hasNoBlackboxes
 
 end SummaryChecks
 

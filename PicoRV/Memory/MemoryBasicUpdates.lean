@@ -1,6 +1,6 @@
 import PicoRV.Authoring.CircuitLogic
 import PicoRV.Memory.Internal.MemoryBasicUpdatesStructure
-import Silean.Modules.EqualsConstant.EqualsConstant
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
 
 /-! # Memory state-update stages
 

@@ -3,7 +3,7 @@ import PicoRV.ControlTheorems
 import PicoRV.DatapathTheorems
 import PicoRV.DecoderTheorems
 import PicoRV.MemoryTheorems
-import PicoRV.RegsTheorems
+import PicoRV.RegsDerived
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleRuleSchedules
 
@@ -23,9 +23,18 @@ module_child_certifications childContracts for body where
   decoder := Decoder.certification,
   cpuregs := Regs.certification
 
+private abbrev childRules :=
+  Silean.Contracts.Cycle.Certification.Layer.childStructuralRules
+    body childContracts
+
+private noncomputable def structuralCertifiedChildren
+    (child : body.instancePorts.Name) :
+    Silean.ModuleStructuralCertifiedStructure (childRules child) :=
+  (certifiedChildren child).structuralCertifiedStructure
+
 /-! Invoke every child rule in dependency order. The generic declaration
 checks both state readiness and complete child-rule coverage. -/
-module_complete_schedule derivedCompleteSchedule for body with childContracts :=
+module_complete_schedule derivedCompleteSchedule for body with childRules :=
   [.control => Control.Rule.outputs,
     .decoder => Decoder.Rule.outputs,
     .datapath => Datapath.Rule.registered,
@@ -53,10 +62,6 @@ noncomputable def allRulesSchedule :
   derivedCompleteSchedule.schedule.replaceFinish
     derivedCompleteSchedule.coversAllRules
 
-noncomputable def stateSchedule :
-    Silean.Contracts.Cycle.Certification.Layer.StateSchedule body childContracts :=
-  derivedCompleteSchedule.schedule
-
 private abbrev ParentOutputSchedule (output : Output) :=
   Silean.Contracts.Cycle.Certification.Layer.Schedule body childContracts
     (fun _ => True)
@@ -77,7 +82,7 @@ theorem hasAtMostOneSolution : moduleStructure.HasAtMostOneSolution := by
     funext child
     exact certifiedChildren_moduleStructure child
   rw [← childrenEqual]
-  exact allRulesSchedule.hasAtMostOneSolution certifiedChildren
+  exact allRulesSchedule.hasAtMostOneSolution structuralCertifiedChildren
     (fun _ => trivial) allRulesSchedule.finished
 
 theorem hasSolution : moduleStructure.HasSolution := by
@@ -88,6 +93,7 @@ theorem hasSolution : moduleStructure.HasSolution := by
     funext child
     exact certifiedChildren_moduleStructure child
   rw [← childrenEqual]
-  exact allRulesSchedule.hasSolution certifiedChildren allRulesSchedule.finished
+  exact allRulesSchedule.hasSolution structuralCertifiedChildren
+    allRulesSchedule.finished
 
 end PicoRV.PicoRV.Internal

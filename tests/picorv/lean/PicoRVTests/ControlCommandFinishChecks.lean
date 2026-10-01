@@ -1,6 +1,6 @@
 import Silean.FIRRTL
 import PicoRVTests.Fixtures.PicoRVControl
-import PicoRV.Control.ControlCommandFinishTheorems
+import PicoRV.Control.ControlCommandFinishDerived
 
 namespace PicoRVTests.ControlCommandFinishChecks
 
@@ -87,14 +87,12 @@ example : (allReasserted .mem_do_wdata : Bool) = true := by rfl
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified CommandFinish.ports :=
   CommandFinish.certified
 
-example : CommandFinish.moduleStructure.HasNoBlackboxes :=
-  CommandFinish.moduleStructure_hasNoBlackboxes
 
 noncomputable example : RenderResult String :=
-  renderClosedCircuit CommandFinish.naming
+  renderCircuit CommandFinish.naming
 
 private def renders : Bool :=
-  match renderClosedCircuit CommandFinish.naming with
+  match renderCircuit CommandFinish.naming with
   | .ok _ => true
   | .error _ => false
 

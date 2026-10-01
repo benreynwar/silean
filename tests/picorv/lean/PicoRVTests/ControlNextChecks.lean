@@ -1,5 +1,5 @@
 import PicoRVTests.Fixtures.PicoRVControl
-import PicoRV.Control.ControlNextTheorems
+import PicoRV.Control.ControlNextDerived
 
 namespace PicoRVTests.ControlNextChecks
 
@@ -176,25 +176,9 @@ inputs and arbitrary packed current state, the hierarchy's output is exactly
 noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ControlNext.ports :=
   ControlNext.certified
 
-example : Baseline.moduleStructure.HasNoBlackboxes :=
-  Baseline.moduleStructure_hasNoBlackboxes
-example : PhaseDecode.moduleStructure.HasNoBlackboxes :=
-  PhaseDecode.moduleStructure_hasNoBlackboxes
-example : ExecuteTransition.moduleStructure.HasNoBlackboxes :=
-  ExecuteTransition.moduleStructure_hasNoBlackboxes
-example : StoreTransition.moduleStructure.HasNoBlackboxes :=
-  StoreTransition.moduleStructure_hasNoBlackboxes
-example : LoadTransition.moduleStructure.HasNoBlackboxes :=
-  LoadTransition.moduleStructure_hasNoBlackboxes
-example : Alignment.moduleStructure.HasNoBlackboxes :=
-  Alignment.moduleStructure_hasNoBlackboxes
-example : ResetAndAlignmentOverride.moduleStructure.HasNoBlackboxes :=
-  ResetAndAlignmentOverride.moduleStructure_hasNoBlackboxes
 
 /-! Every phase child is now concrete, so the complete combinational parent is
 closed as well as universally certified. -/
 
-example : ControlNext.moduleStructure.HasNoBlackboxes :=
-  ControlNext.moduleStructure_hasNoBlackboxes
 
 end PicoRVTests.ControlNextChecks

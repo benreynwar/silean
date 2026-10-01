@@ -12,8 +12,8 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Datapath.Next
 
@@ -259,7 +259,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .load
         then stateMap.pack (memoryNextState true datapathInputs current baselineState')
         else stateMap.pack baselineState' := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectLoad).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [loadValue, baselineValue] at equation
@@ -268,7 +268,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .store
         then stateMap.pack (memoryNextState false datapathInputs current baselineState')
         else hierStep.childOutputs .selectLoad .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectStore).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [storeValue] at equation
@@ -277,7 +277,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .shift
         then stateMap.pack (shiftNextState datapathInputs current baselineState')
         else hierStep.childOutputs .selectStore .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectShift).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [shiftValue] at equation
@@ -286,7 +286,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .execute
         then stateMap.pack (executeNextState datapathInputs current baselineState')
         else hierStep.childOutputs .selectShift .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectExecute).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [executeValue] at equation
@@ -295,7 +295,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .loadRs2
         then stateMap.pack (loadRs2NextState datapathInputs baselineState')
         else hierStep.childOutputs .selectExecute .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectLoadRs2).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [loadRs2Value] at equation
@@ -304,7 +304,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .loadRs1
         then stateMap.pack (loadRs1NextState datapathInputs current baselineState')
         else hierStep.childOutputs .selectLoadRs2 .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectLoadRs1).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [loadRs1Value] at equation
@@ -313,7 +313,7 @@ private theorem implements :
       bif hierStep.childOutputs .phaseDecode .fetch
         then stateMap.pack (fetchNextState datapathInputs current baselineState')
         else hierStep.childOutputs .selectLoadRs1 .result := by
-    have equation := Silean.Modules.Mux.result_of_allowed stateType
+    have equation := Silean.Modules.Mux.cycleContract.result stateType
       (childMatch .selectFetch).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [fetchValue] at equation

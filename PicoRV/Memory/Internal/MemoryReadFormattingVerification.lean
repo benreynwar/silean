@@ -4,10 +4,10 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.VectorLayout.VectorLayoutTheorems
-import Silean.Modules.VectorSlice.VectorSliceTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.VectorLayout.VectorLayoutDerived
+import Silean.Modules.VectorSlice.VectorSliceDerived
 
 namespace PicoRV.Memory.ReadFormatting
 
@@ -189,19 +189,19 @@ private theorem implements :
 
   have lowBitValue : hierStep.childOutputs .lowBit .result =
       fun _ => inputs .reg_op1 0 := by
-    have equation := Silean.Modules.VectorSlice.result_of_allowed
+    have equation := Silean.Modules.VectorSlice.cycleContract.result
       .bit 0 1 31 (childMatch .lowBit).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (lowBit_slice (inputs .reg_op1))
   have highBitValue : hierStep.childOutputs .highBit .result =
       fun _ => inputs .reg_op1 1 := by
-    have equation := Silean.Modules.VectorSlice.result_of_allowed
+    have equation := Silean.Modules.VectorSlice.cycleContract.result
       .bit 1 1 30 (childMatch .highBit).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation.trans (highBit_slice (inputs .reg_op1))
   have lowLaneValue : hierStep.childOutputs .lowLane .result =
       inputs .reg_op1 0 := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 1 .bit) (fun _ => true)
       (childMatch .lowLane).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -209,7 +209,7 @@ private theorem implements :
     exact equation
   have highLaneValue : hierStep.childOutputs .highLane .result =
       inputs .reg_op1 1 := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 1 .bit) (fun _ => true)
       (childMatch .highLane).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -218,44 +218,44 @@ private theorem implements :
 
   have halfLowValue : hierStep.childOutputs .halfLow .output =
       Silean.Modules.VectorLayout.apply (halfLayout false) (inputs .mem_rdata) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 (halfLayout false) (childMatch .halfLow).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have halfHighValue : hierStep.childOutputs .halfHigh .output =
       Silean.Modules.VectorLayout.apply (halfLayout true) (inputs .mem_rdata) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 (halfLayout true) (childMatch .halfHigh).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have byte0Value : hierStep.childOutputs .byte0 .output =
       Silean.Modules.VectorLayout.apply byte0Layout (inputs .mem_rdata) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 byte0Layout (childMatch .byte0).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have byte1Value : hierStep.childOutputs .byte1 .output =
       Silean.Modules.VectorLayout.apply byte1Layout (inputs .mem_rdata) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 byte1Layout (childMatch .byte1).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have byte2Value : hierStep.childOutputs .byte2 .output =
       Silean.Modules.VectorLayout.apply byte2Layout (inputs .mem_rdata) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 byte2Layout (childMatch .byte2).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
   have byte3Value : hierStep.childOutputs .byte3 .output =
       Silean.Modules.VectorLayout.apply byte3Layout (inputs .mem_rdata) := by
-    have equation := Silean.Modules.VectorLayout.output_of_allowed
+    have equation := Silean.Modules.VectorLayout.cycleContract.output
       32 32 byte3Layout (childMatch .byte3).allowed
     normalize_child_hyp equation unfolding wiring, context
     exact equation
 
   have halfValue : hierStep.childOutputs .halfValue .result =
       selectedHalf (inputs .reg_op1) (inputs .mem_rdata) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .halfValue).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [highLaneValue, halfLowValue, halfHighValue] at equation
@@ -264,7 +264,7 @@ private theorem implements :
       bif inputs .reg_op1 0 then
         Silean.Modules.VectorLayout.apply byte1Layout (inputs .mem_rdata)
       else Silean.Modules.VectorLayout.apply byte0Layout (inputs .mem_rdata) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .lowByteValue).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [lowLaneValue, byte0Value, byte1Value] at equation
@@ -273,14 +273,14 @@ private theorem implements :
       bif inputs .reg_op1 0 then
         Silean.Modules.VectorLayout.apply byte3Layout (inputs .mem_rdata)
       else Silean.Modules.VectorLayout.apply byte2Layout (inputs .mem_rdata) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .highByteValue).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [lowLaneValue, byte2Value, byte3Value] at equation
     exact equation
   have byteValue : hierStep.childOutputs .byteValue .result =
       selectedByte (inputs .reg_op1) (inputs .mem_rdata) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .byteValue).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [highLaneValue, lowByteValue, highByteValue] at equation
@@ -288,7 +288,7 @@ private theorem implements :
 
   have halfWordsizeValue : hierStep.childOutputs .halfWordsize .result =
       decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 1) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (stateOfNat 1)
       (childMatch .halfWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -296,7 +296,7 @@ private theorem implements :
     exact equation
   have byteWordsizeValue : hierStep.childOutputs .byteWordsize .result =
       decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 2) := by
-    have equation := Silean.Modules.EqualsConstant.result_of_allowed
+    have equation := Silean.Modules.EqualsConstant.cycleContract.result
       (.vector 2 .bit) (stateOfNat 2)
       (childMatch .byteWordsize).allowed
     normalize_child_hyp equation unfolding wiring, context
@@ -306,7 +306,7 @@ private theorem implements :
       bif decide (Silean.BitVector.toNat 2 (inputs .mem_wordsize) = 1) then
         selectedHalf (inputs .reg_op1) (inputs .mem_rdata)
       else inputs .mem_rdata := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectHalf).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [halfWordsizeValue, halfValue] at equation
@@ -314,7 +314,7 @@ private theorem implements :
   have selectByteValue : hierStep.childOutputs .selectByte .result =
       formattedReadDataFrom (inputs .mem_wordsize) (inputs .reg_op1)
         (inputs .mem_rdata) := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .selectByte).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [byteWordsizeValue, byteValue, selectHalfValue] at equation

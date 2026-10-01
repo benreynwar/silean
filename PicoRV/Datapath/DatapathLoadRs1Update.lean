@@ -1,6 +1,6 @@
 import PicoRV.Authoring.CircuitLogic
 import PicoRV.Datapath.Internal.DatapathLoadRs1UpdateStructure
-import Silean.Modules.VectorLayout.VectorLayout
+import Silean.Modules.VectorLayout.VectorLayoutDerived
 
 namespace PicoRV.Datapath
 

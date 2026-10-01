@@ -79,14 +79,11 @@ noncomputable example : Silean.Contracts.Cycle.ModuleCycleCertified ports := cer
 example : ResolveStage.structuralChildren .instructionMatch =
     InstructionMatch.Structure.moduleStructure := rfl
 example : ResolveStage.structuralChildren .immediate = Immediate.moduleStructure := rfl
-example : Immediate.moduleStructure.HasNoBlackboxes :=
-  Immediate.moduleStructure_hasNoBlackboxes
 example : ResolveStage.structuralChildren .instructionSummary =
     InstructionSummary.Structure.moduleStructure := rfl
 
-example : moduleStructure.HasNoBlackboxes := moduleStructure_hasNoBlackboxes
 
-#guard match Silean.FIRRTL.renderClosedCircuit naming with
+#guard match Silean.FIRRTL.renderCircuit naming with
   | .ok _ => true
   | .error _ => false
 

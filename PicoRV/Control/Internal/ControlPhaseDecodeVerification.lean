@@ -1,10 +1,12 @@
 import PicoRV.Control.ControlPhaseDecode
+import PicoRV.Control.Internal.ControlPhaseDecodeStructure
+import PicoRV.Control.Internal.ControlPhaseDecodeCorrespondence
 import PicoRV.Control.ControlBitLaws
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.EqualsConstant.EqualsConstantTheorems
+import Silean.Modules.EqualsConstant.EqualsConstantDerived
 
 namespace PicoRV.Control.PhaseDecode
 
@@ -70,35 +72,35 @@ private theorem implements :
   derive_empty_state_child_matches childMatch for body from
     layerChildren, hierStep, satisfies
 
-  have trapValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have trapValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateTrap)
     (childMatch .trap).allowed
   normalize_child_hyp trapValue unfolding wiring, context
-  have fetchValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have fetchValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateFetch)
     (childMatch .fetch).allowed
   normalize_child_hyp fetchValue unfolding wiring, context
-  have loadRs1Value := Silean.Modules.EqualsConstant.result_of_allowed
+  have loadRs1Value := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateLdRs1)
     (childMatch .loadRs1).allowed
   normalize_child_hyp loadRs1Value unfolding wiring, context
-  have loadRs2Value := Silean.Modules.EqualsConstant.result_of_allowed
+  have loadRs2Value := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateLdRs2)
     (childMatch .loadRs2).allowed
   normalize_child_hyp loadRs2Value unfolding wiring, context
-  have executeValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have executeValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateExec)
     (childMatch .execute).allowed
   normalize_child_hyp executeValue unfolding wiring, context
-  have shiftValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have shiftValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateShift)
     (childMatch .shift).allowed
   normalize_child_hyp shiftValue unfolding wiring, context
-  have storeValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have storeValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateStmem)
     (childMatch .store).allowed
   normalize_child_hyp storeValue unfolding wiring, context
-  have loadValue := Silean.Modules.EqualsConstant.result_of_allowed
+  have loadValue := Silean.Modules.EqualsConstant.cycleContract.result
     (.vector 8 .bit) (stateBits cpuStateLdmem)
     (childMatch .load).allowed
   normalize_child_hyp loadValue unfolding wiring, context
@@ -166,3 +168,22 @@ module_cycle_certification certification for moduleStructure via body
   implements := implements
 
 end PicoRV.Control.PhaseDecode
+
+namespace PicoRV.Control.PhaseDecode.Internal
+
+open Silean Silean.Naming Silean.Authoring.CircuitDescription
+open Silean.Authoring.CircuitDescription.Description
+
+theorem construction_correct :
+    description.ImplementsCycleContract cycleContract Naming.ports := by
+  have corresponds := description_corresponds
+  unfold PhaseDecode.naming at corresponds
+  simp only [id_eq] at corresponds
+  exact ImplementsCycleContract.of_certification
+    (referenceBody := {
+      instancePorts := PhaseDecode.instancePorts,
+      wiring := PhaseDecode.wiring })
+    (children := PhaseDecode.structuralChildren)
+    corresponds certification
+
+end PicoRV.Control.PhaseDecode.Internal

@@ -23,6 +23,9 @@ POINTER_FIFO_SIM := $(POINTER_FIFO_DIR)/sim
 PICORV_CONTROL_DIR := $(BUILD_DIR)/picorv-control
 PICORV_CONTROL_FIRRTL := $(PICORV_CONTROL_DIR)/picorv32_control.fir
 PICORV_CONTROL_VERILOG := $(PICORV_CONTROL_DIR)/picorv32_control.sv
+PICORV_CONTROL_PHASE_DECODE_DIR := $(BUILD_DIR)/picorv-control-phase-decode
+PICORV_CONTROL_PHASE_DECODE_FIRRTL := $(PICORV_CONTROL_PHASE_DECODE_DIR)/picorv32_control_phase_decode.fir
+PICORV_CONTROL_PHASE_DECODE_VERILOG := $(PICORV_CONTROL_PHASE_DECODE_DIR)/picorv32_control_phase_decode.sv
 PICORV_DATAPATH_DIR := $(BUILD_DIR)/picorv-datapath
 PICORV_DATAPATH_FIRRTL := $(PICORV_DATAPATH_DIR)/picorv32_datapath.fir
 PICORV_DATAPATH_VERILOG := $(PICORV_DATAPATH_DIR)/picorv32_datapath.sv
@@ -54,6 +57,7 @@ FOUNDATIONAL_SOURCES := $(shell find Silean/Foundation Silean/Semantics \
 	test-pointer-fifo \
 	firrtl-serial-fifo verilog-serial-fifo test-serial-fifo \
 	firrtl-picorv-control verilog-picorv-control \
+	firrtl-picorv-control-phase-decode verilog-picorv-control-phase-decode \
 	firrtl-picorv-datapath verilog-picorv-datapath lint-picorv-datapath \
 	test-picorv-datapath firrtl-picorv-memory verilog-picorv-memory \
 	lint-picorv-memory test-picorv-memory firrtl-picorv verilog-picorv \
@@ -137,6 +141,10 @@ verilog-pointer-fifo: $(POINTER_FIFO_VERILOG)
 firrtl-picorv-control: $(PICORV_CONTROL_FIRRTL)
 
 verilog-picorv-control: $(PICORV_CONTROL_VERILOG)
+
+firrtl-picorv-control-phase-decode: $(PICORV_CONTROL_PHASE_DECODE_FIRRTL)
+
+verilog-picorv-control-phase-decode: $(PICORV_CONTROL_PHASE_DECODE_VERILOG)
 
 firrtl-picorv-datapath: $(PICORV_DATAPATH_FIRRTL)
 
@@ -225,6 +233,13 @@ $(PICORV_CONTROL_FIRRTL): $(LEAN_BUILD_INPUTS)
 $(PICORV_CONTROL_VERILOG): $(PICORV_CONTROL_FIRRTL)
 	firtool $(FIRTOOL_FLAGS) --format=fir $< -o $@
 
+$(PICORV_CONTROL_PHASE_DECODE_FIRRTL): $(LEAN_BUILD_INPUTS)
+	mkdir -p $(@D)
+	lake exe emit-picorv-control-phase-decode --output $@
+
+$(PICORV_CONTROL_PHASE_DECODE_VERILOG): $(PICORV_CONTROL_PHASE_DECODE_FIRRTL)
+	firtool $(FIRTOOL_FLAGS) --format=fir $< -o $@
+
 $(PICORV_DATAPATH_FIRRTL): $(LEAN_BUILD_INPUTS)
 	mkdir -p $(@D)
 	lake exe emit-picorv-datapath --output $@
@@ -249,4 +264,5 @@ $(PICORV_VERILOG): $(PICORV_FIRRTL)
 clean:
 	rm -rf $(BIT_REGISTER_DIR) $(STRUCTURED_FIFO_DIR) $(REGISTER_BANK_DIR) \
 		$(POINTER_FIFO_DIR) $(SERIAL_FIFO_DIR) $(PICORV_CONTROL_DIR) \
+		$(PICORV_CONTROL_PHASE_DECODE_DIR) \
 		$(PICORV_DATAPATH_DIR) $(PICORV_MEMORY_DIR) $(PICORV_DIR)

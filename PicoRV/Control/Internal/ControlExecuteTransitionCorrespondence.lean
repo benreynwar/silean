@@ -1,10 +1,11 @@
 import PicoRV.Control.ControlExecuteTransition
+import PicoRV.Control.Internal.ControlExecuteTransitionStructure
 import Silean.Authoring.CircuitDescriptionSoundness
 
 /-! Checked correspondence between the reader-facing execute-transition
 description and its expanded typed production structure. -/
 
-namespace PicoRV.Control.ExecuteTransition.Description.Internal
+namespace PicoRV.Control.ExecuteTransition.Internal
 
 open Silean Silean.Naming Silean.Authoring.CircuitDescription
 
@@ -25,18 +26,7 @@ private theorem same :
   simp [circuit_description, enumeration]
   rfl
 
-private theorem unique : description.UniqueNames := by
-  simp only [circuit_description, description, construction]
-  simp [circuit_description, enumeration]
-  refine ⟨of_decide_eq_true rfl, of_decide_eq_true rfl, ?_⟩
-  intro child member
-  change child ∈ [_, _, _, _, _, _, _, _, _, _, _, _, _] at member
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at member
-  rcases member with equal | equal | equal | equal | equal | equal | equal |
-      equal | equal | equal | equal | equal | equal <;>
-    subst child <;> constructor <;> exact of_decide_eq_true rfl
+theorem description_corresponds : Corresponds description ExecuteTransition.naming :=
+  ⟨same⟩
 
-theorem corresponds : Corresponds description ExecuteTransition.naming :=
-  ⟨same, unique⟩
-
-end PicoRV.Control.ExecuteTransition.Description.Internal
+end PicoRV.Control.ExecuteTransition.Internal

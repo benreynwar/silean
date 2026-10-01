@@ -4,9 +4,9 @@ import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
-import Silean.Modules.Add.AddDerived
+import Silean.Modules.AddWithCarry.AddWithCarryDerived
 import Silean.Modules.Constant.Constant
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 
 namespace PicoRV.Datapath.ExecuteUpdate
 
@@ -21,7 +21,7 @@ module_child_certifications childContracts for body where
   currentFields := Silean.Modules.NamedTupleSplitter.certification stateMap,
   updatedFields := Silean.Modules.NamedTupleSplitter.certification stateMap,
   falseBit := Silean.Modules.Constant.certification .bit false,
-  target := Silean.Modules.Add.certification 32,
+  target := Silean.Modules.AddWithCarry.certification 32,
   result := Silean.Modules.NamedTupleCombiner.certification stateMap
 
 module_rule_schedules derivedRuleSchedules for body with childContracts
@@ -30,7 +30,7 @@ module_rule_schedules derivedRuleSchedules for body with childContracts
     {.inputsFields, .currentFields, .updatedFields} =>
       Silean.Modules.NamedTupleSplitter.Rule.apply,
     .falseBit => Silean.Primitives.ConstantRule.apply,
-    .target => Silean.Modules.Add.Rule.apply,
+    .target => Silean.Modules.AddWithCarry.Rule.apply,
     .result => Silean.Modules.NamedTupleCombiner.Rule.apply]
   state := []
 
@@ -85,14 +85,14 @@ private theorem implements :
     ((childMatch .falseBit).ruleHolds Silean.Primitives.ConstantRule.apply)
   have targetValue : hierStep.childOutputs .target .result =
       addWords (current .reg_pc) datapathInputs.decoded_imm := by
-    have equation := Silean.Modules.Add.cycleContract.result 32
+    have equation := Silean.Modules.AddWithCarry.cycleContract.result 32
       (childMatch .target).allowed
-    change hierStep.childOutputs .target .result = (Silean.Modules.Add.addBits 32
+    change hierStep.childOutputs .target .result = Silean.Modules.AddWithCarry.resultValue 32
       (hierStep.childOutputs .currentFields .reg_pc)
       (hierStep.childOutputs .inputsFields .decoded_imm)
-      (hierStep.childOutputs .falseBit .output)).1 at equation
+      (hierStep.childOutputs .falseBit .output) at equation
     rw [currentFieldsValue, decodedImmValue, falseValue,
-      ProofSupport.addBits_eq_addWords] at equation
+      ProofSupport.addResult_eq_addWords] at equation
     exact equation
 
   have resultInputs : body.wiring.childInputValues hierStep.inputs

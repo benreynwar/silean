@@ -1,13 +1,13 @@
 import PicoRV.Memory.MemoryLookaheadCapture
-import PicoRV.Memory.Internal.MemoryLookaheadVerification
+import PicoRV.Memory.MemoryLookaheadDerived
 import PicoRV.Memory.MemoryProofSupport
 import Silean.Authoring.ModuleChildCertifications
 import Silean.Authoring.ModuleCycleCertification
 import Silean.Authoring.ModuleRuleSchedules
 import Silean.Contracts.Cycle.CycleLayerConstruction
 import Silean.Modules.Constant.Constant
-import Silean.Modules.Mux.MuxTheorems
-import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterTheorems
+import Silean.Modules.Mux.MuxDerived
+import Silean.Modules.NamedTupleAdapter.NamedTupleAdapterDerived
 import Silean.Primitives.Or
 
 namespace PicoRV.Memory.LookaheadCapture
@@ -156,7 +156,7 @@ private theorem implements :
   have writeMaskValue : hierStep.childOutputs .writeMask .result =
       bif memLaWrite memoryInputs current
         then formattedWriteMask memoryInputs else maskOfNat 0 := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 4 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 4 .bit)
       (childMatch .writeMask).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [laWriteValue, laWstrbValue, zeroMaskValue] at equation
@@ -164,7 +164,7 @@ private theorem implements :
   have addressValue : hierStep.childOutputs .address .result =
       bif memLaRead memoryInputs current || memLaWrite memoryInputs current
         then memLaAddr memoryInputs else updated .mem_addr := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .address).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [activeValue, updatedFieldsValue, laAddrValue] at equation
@@ -174,7 +174,7 @@ private theorem implements :
         bif memLaWrite memoryInputs current
           then formattedWriteMask memoryInputs else maskOfNat 0
         else updated .mem_wstrb := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 4 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 4 .bit)
       (childMatch .mask).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [activeValue, updatedFieldsValue, writeMaskValue] at equation
@@ -182,7 +182,7 @@ private theorem implements :
   have writeDataValue : hierStep.childOutputs .writeData .result =
       bif memLaWrite memoryInputs current
         then formattedWriteData memoryInputs else updated .mem_wdata := by
-    have equation := Silean.Modules.Mux.result_of_allowed (.vector 32 .bit)
+    have equation := Silean.Modules.Mux.cycleContract.result (.vector 32 .bit)
       (childMatch .writeData).allowed
     normalize_child_hyp equation unfolding wiring, context
     rw [laWriteValue, updatedFieldsValue, laWdataValue] at equation
