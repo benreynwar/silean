@@ -8,7 +8,8 @@ layout.  The final reorder converts that frame to ordinary natural-frequency
 cycle-major order without changing any packed sample.
 -/
 
-namespace HTFFT.Silean.FFT.FinalReorder
+namespace HTFFT.Silean.FinalReorder
+open FFT
 
 open _root_.Silean
 
@@ -80,4 +81,4 @@ theorem relates_of_contract (configuration : Configuration depth)
   FramedLatency.relates_of_holds_projection
     (inputObservation configuration) (outputObservation configuration) holds
 
-end HTFFT.Silean.FFT.FinalReorder
+end HTFFT.Silean.FinalReorder

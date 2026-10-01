@@ -56,7 +56,7 @@ def toIndex : (width : Nat) → (Fin width → Bool) → Fin (cardinality width)
   | 0, _ => rfl
   | width + 1, bits => by
       cases high : bits (Fin.last width) <;>
-        simp [toIndex, toNat, high,
+      simp [toIndex, toNat, high,
           toIndex_val width (fun index => bits index.castSucc), Fin.natAdd]
 
 theorem toNat_lt_cardinality (width : Nat) (bits : Fin width → Bool) :
@@ -124,6 +124,14 @@ theorem toNat_eq_zero_iff (width : Nat) (bits : Fin width → Bool) :
             rw [← Nat.toNat_testBit]
             simp [bit]
           simp [toNat, ofNat, induction, bit, quotient, Nat.add_comm]
+
+/-- Re-encoding the finite index denoted by a bit vector recovers that vector.
+This is the finite-index counterpart of `ofBitVec_toBitVec`. -/
+@[simp] theorem ofNat_toIndex (width : Nat) (bits : Fin width → Bool) :
+    ofNat width (toIndex width bits).val = bits := by
+  apply toNat_injective width
+  rw [toNat_ofNat, toIndex_val, Nat.mod_eq_of_lt]
+  exact toNat_lt_cardinality width bits
 
 /-- Reading a bit after interpreting a fixed-width vector as a natural number
 recovers the original bit. -/

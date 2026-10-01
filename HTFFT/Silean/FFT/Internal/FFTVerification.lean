@@ -19,8 +19,7 @@ private def withMarkers {length : Nat} {α β : Type}
 
 private theorem initialInputs_eq_parentInputs
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFT.body depth configuration table).Trace)
+    (trace : (FFT.body depth configuration).Trace)
     (wiring : trace.WiringHolds) :
     (trace.child .initialReorder).inputs.map
         (InitialReorder.inputObservation configuration) =
@@ -33,8 +32,7 @@ private theorem initialInputs_eq_parentInputs
 
 private theorem unrolledInputs_eq_initialData
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFT.body depth configuration table).Trace)
+    (trace : (FFT.body depth configuration).Trace)
     (wiring : trace.WiringHolds) :
     (trace.child .unrolled).inputs.map (fun input => input .input) =
       (trace.child .initialReorder).outputs.map
@@ -48,8 +46,7 @@ private theorem unrolledInputs_eq_initialData
 
 private theorem markerDelayInputs_eq_initialMarkers
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFT.body depth configuration table).Trace)
+    (trace : (FFT.body depth configuration).Trace)
     (wiring : trace.WiringHolds) :
     (trace.child .unrolledFirstDelay).inputs.map
         (fun input => input .input) =
@@ -64,8 +61,7 @@ private theorem markerDelayInputs_eq_initialMarkers
 
 private theorem markerDelayOutputs_eq_stageMarkers
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFT.body depth configuration table).Trace)
+    (trace : (FFT.body depth configuration).Trace)
     (wiring : trace.WiringHolds) :
     (trace.child .unrolledFirstDelay).outputs.map
         (fun output => output .output) =
@@ -80,8 +76,7 @@ private theorem markerDelayOutputs_eq_stageMarkers
 
 private theorem unrolledOutputs_eq_stageData
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFT.body depth configuration table).Trace)
+    (trace : (FFT.body depth configuration).Trace)
     (wiring : trace.WiringHolds) :
     (trace.child .unrolled).outputs.map (fun output => output .output) =
       (trace.child .stageChain).inputs.map
@@ -95,8 +90,7 @@ private theorem unrolledOutputs_eq_stageData
 
 private theorem finalInputs_eq_stageOutputs
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFT.body depth configuration table).Trace)
+    (trace : (FFT.body depth configuration).Trace)
     (wiring : trace.WiringHolds) :
     (trace.child .finalReorder).inputs.map
         (FinalReorder.inputObservation configuration) =
@@ -109,8 +103,7 @@ private theorem finalInputs_eq_stageOutputs
 
 private theorem parentOutputs_eq_finalOutputs
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFT.body depth configuration table).Trace)
+    (trace : (FFT.body depth configuration).Trace)
     (wiring : trace.WiringHolds) :
     trace.parent.outputs.map (FFT.outputObservation configuration) =
       (trace.child .finalReorder).outputs.map
@@ -121,25 +114,24 @@ private theorem parentOutputs_eq_finalOutputs
     ModuleBody.Trace.child, BoundaryTrace.outputs]
 
 /-- The permanent body satisfies the complete FFT contract whenever each
-unresolved functional child, the existing unrolled network, and the separate
-marker shift register satisfy their own public trace contracts. -/
+functional child and the separate marker shift register satisfy their own
+public trace contracts. -/
 theorem contract_of_body_trace
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFT.body depth configuration table).Trace)
+    (trace : (FFT.body depth configuration).Trace)
     (wiring : trace.WiringHolds)
     (initialCorrect : InitialReorder.contract configuration
       (trace.child .initialReorder))
     (unrolledCorrect : UnrolledFFTNetwork.contract configuration.unrolled
-      (configuration.prefixTable table) (trace.child .unrolled))
+      configuration.prefixTable (trace.child .unrolled))
     (markerDelayCorrect : OptionalShiftRegister.contract .bit
       configuration.unrolled.networkLatency
       (trace.child .unrolledFirstDelay))
-    (stageChainCorrect : FFTStageChain.contract configuration table
+    (stageChainCorrect : FFTStageChain.contract configuration
       (trace.child .stageChain))
     (finalCorrect : FinalReorder.contract configuration
       (trace.child .finalReorder)) :
-    FFT.contract configuration table trace.parent := by
+    FFT.contract configuration trace.parent := by
   have initialRelation :=
     InitialReorder.relates_of_contract configuration initialCorrect
   unfold InitialReorder.carriedRelation at initialRelation
@@ -156,7 +148,7 @@ theorem contract_of_body_trace
           (InitialReorder.outputObservation configuration)) := by
     have deterministic :=
       FramedLatency.computes_of_payload_relation initialRelation
-    rw [initialInputs_eq_parentInputs configuration table trace wiring]
+    rw [initialInputs_eq_parentInputs configuration trace wiring]
       at deterministic
     exact deterministic
 
@@ -168,7 +160,7 @@ theorem contract_of_body_trace
             (configuration.unrolled.boundaryFormat
               (Fin.last configuration.laneDepth))
             (UnrolledFFTNetwork.resultValue configuration.unrolled
-              (configuration.prefixTable table) input))
+              configuration.prefixTable input))
         ((trace.child .unrolled).inputs.map
           (fun input => input UnrolledFFTNetwork.Input.input))
         ((trace.child .unrolled).outputs.map
@@ -181,10 +173,10 @@ theorem contract_of_body_trace
         (UnrolledFFTNetwork.ports configuration.unrolled).outputs.Values =>
         output UnrolledFFTNetwork.Output.output) unrolledCorrect
   have payloadComputation := FixedLatency.computes_congr_inputs
-    (unrolledInputs_eq_initialData configuration table trace wiring)
+    (unrolledInputs_eq_initialData configuration trace wiring)
     payloadComputation
   have payloadComputation := FixedLatency.computes_congr_outputs
-    (unrolledOutputs_eq_stageData configuration table trace wiring)
+    (unrolledOutputs_eq_stageData configuration trace wiring)
     payloadComputation
   change FixedLatency.Computes configuration.unrolled.networkLatency
     (fun input : InputData configuration =>
@@ -192,7 +184,7 @@ theorem contract_of_body_trace
         (configuration.unrolled.boundaryFormat
           (Fin.last configuration.laneDepth))
         (UnrolledFFTNetwork.resultValue configuration.unrolled
-          (configuration.prefixTable table) input) : PrefixData configuration))
+          configuration.prefixTable input) : PrefixData configuration))
     ((trace.child .initialReorder).outputs.map
       (fun output =>
         (InitialReorder.outputObservation configuration output).2))
@@ -212,10 +204,10 @@ theorem contract_of_body_trace
       (fun output : (ShiftRegister.ports .bit).outputs.Values =>
         output ShiftRegister.Output.output) markerDelayCorrect
   have markerComputation := FixedLatency.computes_congr_inputs
-    (markerDelayInputs_eq_initialMarkers configuration table trace wiring)
+    (markerDelayInputs_eq_initialMarkers configuration trace wiring)
     markerComputation
   have markerComputation := FixedLatency.computes_congr_outputs
-    (markerDelayOutputs_eq_stageMarkers configuration table trace wiring)
+    (markerDelayOutputs_eq_stageMarkers configuration trace wiring)
     markerComputation
   change FixedLatency.Computes configuration.unrolled.networkLatency
     (id : Bool → Bool)
@@ -232,7 +224,7 @@ theorem contract_of_body_trace
           input.1 = true)
         (fun output : FFTStageChain.InputObservation configuration =>
           output.1 = true)
-        (withMarkers (unrolledResultFrame configuration table))
+        (withMarkers (unrolledResultFrame configuration))
         ((trace.child .initialReorder).outputs.map
           (InitialReorder.outputObservation configuration))
         ((trace.child .stageChain).inputs.map
@@ -254,7 +246,7 @@ theorem contract_of_body_trace
               (configuration.unrolled.boundaryFormat
                 (Fin.last configuration.laneDepth))
               (UnrolledFFTNetwork.resultValue configuration.unrolled
-                (configuration.prefixTable table) input))
+                configuration.prefixTable input))
           (((trace.child .initialReorder).outputs.map
             (InitialReorder.outputObservation configuration)).map
               (fun value => (value.2 : InputData configuration)))
@@ -275,7 +267,7 @@ theorem contract_of_body_trace
             (configuration.unrolled.boundaryFormat
               (Fin.last configuration.laneDepth))
             (UnrolledFFTNetwork.resultValue configuration.unrolled
-              (configuration.prefixTable table) input) :
+              configuration.prefixTable input) :
             PrefixData configuration))
         (inputs := (trace.child .initialReorder).outputs.map
           (InitialReorder.outputObservation configuration))
@@ -288,7 +280,7 @@ theorem contract_of_body_trace
         input.1 = true)
       (fun output : FFTStageChain.InputObservation configuration =>
         output.1 = true)
-      (withMarkers (unrolledResultFrame configuration table))
+      (withMarkers (unrolledResultFrame configuration))
       ((trace.child .initialReorder).outputs.map
         (InitialReorder.outputObservation configuration))
       ((trace.child .stageChain).inputs.map
@@ -296,7 +288,7 @@ theorem contract_of_body_trace
     exact synchronized
 
   have stageRelation :=
-    FFTStageChain.relates_of_contract configuration table stageChainCorrect
+    FFTStageChain.relates_of_contract configuration stageChainCorrect
   unfold FFTStageChain.carriedRelation at stageRelation
   have stageComputation :
       FramedLatency.Computes configuration.frameLength
@@ -305,7 +297,7 @@ theorem contract_of_body_trace
           input.1 = true)
         (fun output : FFTStageChain.OutputObservation configuration =>
           output.1 = true)
-        (withMarkers (FFTStageChain.resultFrame configuration table))
+        (withMarkers (FFTStageChain.resultFrame configuration))
         ((trace.child .stageChain).inputs.map
           (FFTStageChain.inputObservation configuration))
         ((trace.child .stageChain).outputs.map
@@ -328,9 +320,9 @@ theorem contract_of_body_trace
         (trace.parent.outputs.map (FFT.outputObservation configuration)) := by
     have deterministic :=
       FramedLatency.computes_of_payload_relation finalRelation
-    rw [finalInputs_eq_stageOutputs configuration table trace wiring]
+    rw [finalInputs_eq_stageOutputs configuration trace wiring]
       at deterministic
-    rw [← parentOutputs_eq_finalOutputs configuration table trace wiring]
+    rw [← parentOutputs_eq_finalOutputs configuration trace wiring]
       at deterministic
     exact deterministic
 
@@ -344,7 +336,7 @@ theorem contract_of_body_trace
         configuration.totalLatency configuration.frameLength_pos
         (fun input : FFT.InputObservation configuration => input.1 = true)
         (fun output : FFT.OutputObservation configuration => output.1 = true)
-        (FFT.carriedRelation configuration table)
+        (FFT.carriedRelation configuration)
         (trace.parent.inputs.map (FFT.inputObservation configuration))
         (trace.parent.outputs.map (FFT.outputObservation configuration)) := by
     simpa only [Configuration.totalLatency] using
@@ -352,14 +344,14 @@ theorem contract_of_body_trace
         unfold FFT.carriedRelation
         rw [equal]
         funext cycle
-        exact congrFun (resultFrame_composition configuration table
+        exact congrFun (resultFrame_composition configuration
           (fun index => (input index).2)) cycle)
   unfold FFT.contract
   change FramedLatency.Holds configuration.frameLength
     configuration.totalLatency configuration.frameLength_pos
     (fun input => (FFT.inputObservation configuration input).1 = true)
     (fun output => (FFT.outputObservation configuration output).1 = true)
-    (fun input output => FFT.carriedRelation configuration table
+    (fun input output => FFT.carriedRelation configuration
       (fun cycle => FFT.inputObservation configuration (input cycle))
       (fun cycle => FFT.outputObservation configuration (output cycle)))
     trace.parent
@@ -368,7 +360,7 @@ theorem contract_of_body_trace
         input.1 = true)
       (outputFirst := fun output : FFT.OutputObservation configuration =>
         output.1 = true)
-      (relation := FFT.carriedRelation configuration table)
+      (relation := FFT.carriedRelation configuration)
       (FFT.inputObservation configuration) (FFT.outputObservation configuration)
       topRelation
 

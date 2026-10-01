@@ -39,4 +39,21 @@ theorem contract_of_execution (signalType : SignalType) (latency : Nat)
     ShiftRegisterImplementation.Internal.optionalContract_of_execution
       signalType latency execution
 
+/-- Every concrete execution has an abstract delay-line trace, with its
+implementation-specific endpoint states existentially hidden. -/
+theorem delayTrace_of_execution (signalType : SignalType) (latency : Nat)
+    (positive : 0 < latency)
+    {initialState finalState :
+      (moduleStructure signalType latency positive).State}
+    {inputs : List (ports signalType).inputs.Values}
+    {outputs : List (ports signalType).outputs.Values}
+    (execution : (moduleStructure signalType latency positive).Executes
+      initialState inputs outputs finalState) :
+    ∃ initialDelayState finalDelayState,
+      Trace (DelayLine.Step latency) initialDelayState
+        (inputs.map fun input => input .input)
+        (outputs.map fun output => output .output) finalDelayState :=
+  ShiftRegisterImplementation.Internal.existsDelayTrace_of_execution
+    signalType latency execution
+
 end Silean.Modules.ShiftRegister

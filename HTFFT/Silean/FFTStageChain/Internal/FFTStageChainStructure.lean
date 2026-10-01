@@ -1,10 +1,11 @@
-import HTFFT.Silean.FFT.FFTStageChain
-import HTFFT.Silean.FFTStage.FFTStage
+import HTFFT.Silean.FFTStageChain.FFTStageChain
+import HTFFT.Silean.FFTStage.FFTStageDerived
 import Silean.Authoring.ModuleDesign
 
-/-! Permanent rolled-stage chain body with unresolved stage children. -/
+/-! Permanent concrete rolled-stage chain hierarchy. -/
 
-namespace HTFFT.Silean.FFT.FFTStageChain.Internal
+namespace HTFFT.Silean.FFTStageChain.Internal
+open FFT
 
 open _root_.Silean
 
@@ -304,29 +305,52 @@ theorem parentInputObservation_eq_parentOutputObservation_of_empty
   congrArg (fun data => Bool × data)
     (parentInputData_eq_parentOutputData_of_empty configuration empty)
 
-end HTFFT.Silean.FFT.FFTStageChain.Internal
+/-- Stable numeric identity for the concrete chain topology and each selected
+rolled-stage pipeline.  ROM content identity remains owned by the required
+definition names carried by the concrete child modules. -/
+def specialization (configuration : Configuration depth) :
+    List _root_.Silean.Naming.ModuleParameter :=
+  [.natural depth, .natural configuration.laneDepth] ++
+    ((List.finRange (stageCount depth configuration)).flatMap fun index =>
+      FFTStage.Internal.specialization configuration.arithmetic
+        (stageGeometry configuration index)
+        (configuration.rolledButterflyPipeline index))
 
-namespace HTFFT.Silean.FFT
+/-- The definition names of all concrete per-stage twiddle ROMs form the
+non-numeric part of the chain emission identity. -/
+def variant (configuration : Configuration depth) : String :=
+  String.intercalate "__"
+    ((List.finRange (stageCount depth configuration)).map
+      configuration.rolledTwiddleDefinitionName)
+
+end HTFFT.Silean.FFTStageChain.Internal
+
+namespace HTFFT.Silean
+open FFT
 
 open _root_.Silean
 open _root_.Silean.Authoring
 
 module_design FFTStageChain
     (depth : Nat) (configuration : FFT.Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth) where
+    (variant := FFTStageChain.Internal.variant configuration)
+    (specialization := FFTStageChain.Internal.specialization configuration) where
   boundary (FFTStageChain.ports configuration)
     (naming := FFTStageChain.Naming.ports configuration)
   instances {
     stage
         (index : Fin (FFTStageChain.stageCount depth configuration) in
           Enumeration.fin (FFTStageChain.stageCount depth configuration))
-        (name := .indexed "stage" index.val) := unresolved (
-      FFTStage.ports configuration.arithmetic
-        (FFTStageChain.stageGeometry configuration index)) }
+        (name := .indexed "stage" index.val) :=
+      FFTStage.design depth configuration.arithmetic
+        configuration.twiddleTable
+        (FFTStageChain.stageGeometry configuration index)
+        (configuration.rolledButterflyPipeline index)
+        (configuration.rolledTwiddleDefinitionName index) }
   wiring {
     outputs {
       .o_first := from (
-        let context := FFTStageChain.context depth configuration table
+        let context := FFTStageChain.context depth configuration
         if empty : depth - configuration.laneDepth = 0 then
           context.moduleInput .i_first
         else
@@ -334,7 +358,7 @@ module_design FFTStageChain
             (.stage (FFTStageChain.Internal.lastIndex configuration empty))
             .o_first),
       .o_data := from (
-        let context := FFTStageChain.context depth configuration table
+        let context := FFTStageChain.context depth configuration
         if empty : depth - configuration.laneDepth = 0 then
           SignalSource.castType
             (FFTStageChain.Internal.parentInputType_eq_parentOutputType_of_empty
@@ -349,7 +373,7 @@ module_design FFTStageChain
               .o_data)) }
     instance (.stage index) {
       .i_first := from (
-        let context := FFTStageChain.context depth configuration table
+        let context := FFTStageChain.context depth configuration
         if zero : index.val = 0 then
           context.moduleInput .i_first
         else
@@ -358,7 +382,7 @@ module_design FFTStageChain
               (FFTStageChain.Internal.previousIndex configuration index zero))
             .o_first),
       .i_data := from (
-        let context := FFTStageChain.context depth configuration table
+        let context := FFTStageChain.context depth configuration
         if zero : index.val = 0 then
           SignalSource.castType
             (FFTStageChain.Internal.parentInputType_eq_stageInputType
@@ -374,4 +398,4 @@ module_design FFTStageChain
               .o_data)) }
   }
 
-end HTFFT.Silean.FFT
+end HTFFT.Silean

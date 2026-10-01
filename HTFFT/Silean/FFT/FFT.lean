@@ -1,6 +1,6 @@
-import HTFFT.Silean.FFT.InitialReorder
-import HTFFT.Silean.FFT.FFTStageChain
-import HTFFT.Silean.FFT.FinalReorder
+import HTFFT.Silean.InitialReorder.InitialReorder
+import HTFFT.Silean.FFTStageChain.FFTStageChain
+import HTFFT.Silean.FinalReorder.FinalReorder
 
 /-! # Complete streamed fixed-point FFT
 
@@ -16,16 +16,15 @@ open _root_.Silean
 
 /-- Natural mathematical result of one complete input frame. -/
 def resultValue (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : InputFrame configuration) : HTFFT.Fixed.Vector depth :=
-  HTFFT.Fixed.layeredFFT configuration.arithmetic.fixedConfig table
+  HTFFT.Fixed.layeredFFT configuration.arithmetic.fixedConfig
+    configuration.twiddleTable
     (decodeInput configuration input)
 
 /-- Packed natural-frequency output frame. -/
 def resultFrame (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : InputFrame configuration) : OutputFrame configuration :=
-  encodeOutput configuration (resultValue configuration table input)
+  encodeOutput configuration (resultValue configuration input)
 
 module_ports ports (configuration : Configuration depth) where
   input i_first : .bit,
@@ -54,21 +53,19 @@ def outputObservation (configuration : Configuration depth)
   (output Output.o_first, output Output.o_data)
 
 def carriedRelation (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : FramedLatency.Frame configuration.frameLength
       (InputObservation configuration))
     (output : FramedLatency.Frame configuration.frameLength
       (OutputObservation configuration)) : Prop :=
   (fun cycle => (output cycle).2) =
-    resultFrame configuration table (fun cycle => (input cycle).2)
+    resultFrame configuration (fun cycle => (input cycle).2)
 
 def frameRelation (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : FramedLatency.Frame configuration.frameLength
       (ports configuration).inputs.Values)
     (output : FramedLatency.Frame configuration.frameLength
       (ports configuration).outputs.Values) : Prop :=
-  carriedRelation configuration table
+  carriedRelation configuration
     (fun cycle => inputObservation configuration (input cycle))
     (fun cycle => outputObservation configuration (output cycle))
 
@@ -78,12 +75,11 @@ Only a full frame beginning with `i_first` and containing no later `i_first`
 constrains an output.  Its natural-order fixed-point FFT appears after
 `totalLatency`, with `o_first` aligned to the first output cycle. -/
 def contract (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (trace : BoundaryTrace (ports configuration)) : Prop :=
   FramedLatency.Holds configuration.frameLength
     configuration.totalLatency configuration.frameLength_pos
     (fun input => (inputObservation configuration input).1 = true)
     (fun output => (outputObservation configuration output).1 = true)
-    (frameRelation configuration table) trace
+    (frameRelation configuration) trace
 
 end HTFFT.Silean.FFT

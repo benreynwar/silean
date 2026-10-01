@@ -43,6 +43,157 @@ theorem window_congr {α : Type u} {length : Nat} {values : List α}
   subst secondStart
   rfl
 
+/-- Materializing a complete window is the corresponding `take` after
+dropping the preceding prefix. -/
+theorem ofFn_window {α : Type u} {length : Nat}
+    (values : List α) (start : Nat)
+    (within : start + length ≤ values.length) :
+    List.ofFn (window values start within) =
+      (values.drop start).take length := by
+  apply List.ext_getElem
+  · rw [List.length_ofFn, List.length_take_of_le]
+    simp
+    omega
+  · intro index leftIn rightIn
+    simp [window, List.getElem_take, List.getElem_drop]
+
+/-- Decompose a trace around two consecutive complete windows.  This is the
+standard bridge from absolute trace positions to a frame plus its required
+continuation. -/
+theorem window_pair_decomposition {α : Type u}
+    (values : List α) (start firstLength secondLength : Nat)
+    (within : start + firstLength + secondLength ≤ values.length) :
+    values =
+      values.take start ++
+        List.ofFn (window (length := firstLength) values start (by omega)) ++
+        List.ofFn (window (length := secondLength) values
+          (start + firstLength) (by omega)) ++
+        values.drop (start + firstLength + secondLength) := by
+  rw [ofFn_window, ofFn_window]
+  calc
+    values = values.take start ++ values.drop start :=
+      (List.take_append_drop start values).symm
+    _ = values.take start ++
+        ((values.drop start).take firstLength ++
+          (values.drop start).drop firstLength) := by
+      exact congrArg (fun tail => values.take start ++ tail)
+        (List.take_append_drop firstLength (values.drop start)).symm
+    _ = values.take start ++
+        ((values.drop start).take firstLength ++
+          (((values.drop start).drop firstLength).take secondLength ++
+            ((values.drop start).drop firstLength).drop secondLength)) := by
+      exact congrArg (fun tail => values.take start ++
+          ((values.drop start).take firstLength ++ tail))
+        (List.take_append_drop secondLength
+          ((values.drop start).drop firstLength)).symm
+    _ = _ := by
+      simp only [List.drop_drop, Nat.add_assoc, List.append_assoc]
+
+/-- A complete window of a state-threaded trace is itself a trace between two
+intermediate states.  This is the standard bridge from an absolute framed
+contract to a child's local transition semantics. -/
+theorem exists_trace_window
+    {Input State Observation : Type}
+    {Step : Input → State → Observation → State → Prop}
+    {initialState finalState : State}
+    {inputs : List Input} {observations : List Observation}
+    (trace : Trace Step initialState inputs observations finalState)
+    (start length : Nat) (within : start + length ≤ inputs.length) :
+    ∃ windowInitial windowFinal,
+      Trace Step windowInitial
+        (List.ofFn (window inputs start within))
+        (List.ofFn (window observations start (by
+          rw [trace.length_eq]
+          exact within))) windowFinal := by
+  have traceLengths := trace.length_eq
+  have inputDecomposition := window_pair_decomposition inputs start length 0
+    (by simpa using within)
+  have outputWithin : start + length ≤ observations.length := by
+    rw [trace.length_eq]
+    exact within
+  have outputDecomposition := window_pair_decomposition observations start length 0
+    (by simpa using outputWithin)
+  simp only [List.ofFn_zero, List.append_nil, Nat.add_zero] at inputDecomposition
+  simp only [List.ofFn_zero, List.append_nil, Nat.add_zero] at outputDecomposition
+  rw [inputDecomposition, outputDecomposition] at trace
+  have reassociated : Trace Step initialState
+      (inputs.take start ++
+        (List.ofFn (window inputs start within) ++
+          inputs.drop (start + length)))
+      (observations.take start ++
+        (List.ofFn (window observations start outputWithin) ++
+          observations.drop (start + length))) finalState := by
+    simpa only [List.append_assoc] using trace
+  have prefixLengths :
+      (observations.take start).length = (inputs.take start).length := by
+    simp only [List.length_take]
+    rw [traceLengths]
+  obtain ⟨prefixFinal, _, afterPrefix⟩ :=
+    reassociated.split prefixLengths
+  obtain ⟨windowFinal, windowTrace, _⟩ := afterPrefix.split (by simp)
+  exact ⟨prefixFinal, windowFinal, windowTrace⟩
+
+/-- Extract two adjacent windows from one state-threaded trace while retaining
+the shared intermediate state.  This is useful when the second window's
+behavior depends on the state established by the first. -/
+theorem exists_trace_window_pair
+    {Input State Observation : Type}
+    {Step : Input → State → Observation → State → Prop}
+    {initialState finalState : State}
+    {inputs : List Input} {observations : List Observation}
+    (trace : Trace Step initialState inputs observations finalState)
+    (start firstLength secondLength : Nat)
+    (within : start + firstLength + secondLength ≤ inputs.length) :
+    ∃ firstInitial middle secondFinal,
+      Trace Step firstInitial
+        ((inputs.drop start).take firstLength)
+        ((observations.drop start).take firstLength) middle ∧
+      Trace Step middle
+        ((inputs.drop (start + firstLength)).take secondLength)
+        ((observations.drop (start + firstLength)).take secondLength)
+        secondFinal := by
+  have traceLengths := trace.length_eq
+  have inputDecomposition := window_pair_decomposition inputs start
+    firstLength secondLength within
+  have outputWithin :
+      start + firstLength + secondLength ≤ observations.length := by
+    rw [trace.length_eq]
+    exact within
+  have firstInputWithin : start + firstLength ≤ inputs.length := by omega
+  have secondInputWithin :
+      start + firstLength + secondLength ≤ inputs.length := within
+  have firstOutputWithin : start + firstLength ≤ observations.length := by omega
+  have secondOutputWithin :
+      start + firstLength + secondLength ≤ observations.length := outputWithin
+  have outputDecomposition := window_pair_decomposition observations start
+    firstLength secondLength outputWithin
+  rw [inputDecomposition, outputDecomposition] at trace
+  have reassociated : Trace Step initialState
+      (inputs.take start ++
+        (List.ofFn (window inputs start firstInputWithin) ++
+          (List.ofFn (window inputs (start + firstLength) secondInputWithin) ++
+            inputs.drop (start + firstLength + secondLength))))
+      (observations.take start ++
+        (List.ofFn (window observations start firstOutputWithin) ++
+          (List.ofFn (window observations (start + firstLength)
+              secondOutputWithin) ++
+            observations.drop (start + firstLength + secondLength))))
+      finalState := by
+    simpa only [List.append_assoc] using trace
+  have prefixLengths :
+      (observations.take start).length = (inputs.take start).length := by
+    simp only [List.length_take]
+    rw [traceLengths]
+  obtain ⟨firstInitial, _, afterPrefix⟩ :=
+    reassociated.split prefixLengths
+  obtain ⟨middle, firstTrace, afterFirst⟩ :=
+    afterPrefix.split (by simp only [List.length_ofFn])
+  obtain ⟨secondFinal, secondTrace, _⟩ :=
+    afterFirst.split (by simp only [List.length_ofFn])
+  rw [ofFn_window, ofFn_window] at firstTrace
+  rw [ofFn_window, ofFn_window] at secondTrace
+  exact ⟨firstInitial, middle, secondFinal, firstTrace, secondTrace⟩
+
 /-- Mapping a complete sequence and then taking a frame window is the same as
 mapping the extracted frame. -/
 theorem window_map {α : Type u} {β : Type v} {length : Nat}
@@ -72,6 +223,104 @@ theorem Starts.not_first {α : Type u} {length : Nat}
     (offset : Fin length) (nonzero : offset.val ≠ 0) :
     ¬ isFirst (frame offset) :=
   starts.2 offset nonzero
+
+/-- Transport a window's marker discipline across two propositionally equal
+expressions for its length.  This packages the dependent `Fin` cast that
+otherwise appears when one component names a power of two as a bit-vector
+cardinality and another names the same power directly. -/
+theorem starts_window_of_length_eq
+    {α : Type u} {firstLength secondLength : Nat}
+    (equal : firstLength = secondLength)
+    (values : List α) (start : Nat)
+    (firstWithin : start + firstLength ≤ values.length)
+    (secondWithin : start + secondLength ≤ values.length)
+    (firstPositive : 0 < firstLength) (secondPositive : 0 < secondLength)
+    (isFirst : α → Prop)
+    (starts : Starts firstPositive isFirst
+      (window (length := firstLength) values start firstWithin)) :
+    Starts secondPositive isFirst
+      (window (length := secondLength) values start secondWithin) := by
+  subst secondLength
+  exact starts
+
+/-- A deterministic fixed-latency path transports a valid frame-marker
+pattern whenever its value function preserves the marker predicate. -/
+theorem starts_of_fixedLatency_computes
+    {α β : Type}
+    {frameLength latency : Nat} {positive : 0 < frameLength}
+    {function : α → β} {inputFirst : α → Prop} {outputFirst : β → Prop}
+    {inputs : List α} {outputs : List β}
+    (computes : FixedLatency.Computes latency function inputs outputs)
+    (start : Nat)
+    (inputWithin : start + frameLength ≤ inputs.length)
+    (outputWithin : start + latency + frameLength ≤ outputs.length)
+    (inputStarts : Starts positive inputFirst
+      (window inputs start inputWithin))
+    (preserves : ∀ input, outputFirst (function input) ↔ inputFirst input) :
+    Starts positive outputFirst
+      (window outputs (start + latency) (by omega)) := by
+  constructor
+  · have related := FixedLatency.relation_at computes start (by omega)
+    have valueEqual :
+        window outputs (start + latency) (by omega) ⟨0, positive⟩ =
+          function (window inputs start inputWithin ⟨0, positive⟩) := by
+      simpa [window] using related
+    rw [valueEqual]
+    apply (preserves _).2
+    exact inputStarts.first
+  · intro offset nonzero marked
+    have related := FixedLatency.relation_at computes
+      (start + offset.val) (by omega)
+    have valueEqual :
+        window outputs (start + latency) (by omega) offset =
+          function (window inputs start inputWithin offset) := by
+      simp only [window_apply]
+      simpa only [Nat.add_assoc, Nat.add_left_comm, Nat.add_comm] using related
+    apply inputStarts.not_first offset nonzero
+    apply (preserves _).1
+    rw [← valueEqual]
+    exact marked
+
+/-- A deterministic fixed-latency path between projections of two streams
+transports a valid frame-marker pattern on the original stream values. -/
+theorem starts_of_fixedLatency_computes_projection
+    {Input Output MarkerIn MarkerOut : Type}
+    {frameLength latency : Nat} {positive : 0 < frameLength}
+    {function : MarkerIn → MarkerOut}
+    {inputProjection : Input → MarkerIn}
+    {outputProjection : Output → MarkerOut}
+    {inputFirst : MarkerIn → Prop} {outputFirst : MarkerOut → Prop}
+    {inputs : List Input} {outputs : List Output}
+    (computes : FixedLatency.Computes latency function
+      (inputs.map inputProjection) (outputs.map outputProjection))
+    (start : Nat)
+    (inputWithin : start + frameLength ≤ inputs.length)
+    (outputWithin : start + latency + frameLength ≤ outputs.length)
+    (inputStarts : Starts positive (fun input => inputFirst (inputProjection input))
+      (window inputs start inputWithin))
+    (preserves : ∀ marker, outputFirst (function marker) ↔ inputFirst marker) :
+    Starts positive (fun output => outputFirst (outputProjection output))
+      (window outputs (start + latency) (by omega)) := by
+  have mappedInputWithin :
+      start + frameLength ≤ (inputs.map inputProjection).length := by
+    simpa using inputWithin
+  have mappedOutputWithin :
+      start + latency + frameLength ≤
+        (outputs.map outputProjection).length := by
+    simpa using outputWithin
+  have mappedStarts : Starts positive inputFirst
+      (window (inputs.map inputProjection) start mappedInputWithin) := by
+    simpa only [Starts,
+      window_map inputProjection inputs start mappedInputWithin inputWithin]
+      using inputStarts
+  have transported := starts_of_fixedLatency_computes computes start
+    mappedInputWithin mappedOutputWithin mappedStarts preserves
+  simpa only [Starts,
+    window_map outputProjection outputs (start + latency)
+      (by omega : start + latency + frameLength ≤
+        (outputs.map outputProjection).length)
+      (by omega : start + latency + frameLength ≤ outputs.length)]
+    using transported
 
 /-- A marker in the interior of a candidate frame invalidates that candidate.
 This is deliberately local: it says nothing about whether the newer marker

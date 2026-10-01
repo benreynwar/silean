@@ -448,6 +448,11 @@ end CommutatorBank
 def butterflyCount (geometry : Geometry depth) : Nat :=
   geometry.inputBoundary.lanesPerBranch
 
+@[simp] theorem Geometry.output_lanesPerBranch_eq_butterflyCount
+    (geometry : Geometry depth) :
+    geometry.outputBoundary.lanesPerBranch = butterflyCount geometry := by
+  rfl
+
 @[simp] theorem butterflyCount_pos (geometry : Geometry depth) :
     0 < butterflyCount geometry := by
   simp [butterflyCount, BoundaryGeometry.lanesPerBranch]
@@ -728,6 +733,36 @@ def outputFrameOfBankSignals (configuration : FFTConfiguration depth)
         (twiddleAddress geometry visible.outputPhase laneCoordinate.2))
     PipelinedFixedButterfly.encodeComplex outputFormat.width
       (if laneCoordinate.1 = 0 then result.upper else result.lower)
+
+/-- Pointwise form with the output-layout lane transported explicitly to the
+bank's lane index.  Keeping this transport named avoids forcing structural
+proofs to unfold definitionally equal geometry cardinalities. -/
+theorem outputFrameOfBankSignals_apply
+    (configuration : FFTConfiguration depth)
+    (table : HTFFT.Fixed.TwiddleTable depth) (geometry : Geometry depth)
+    (signals : BankSignals configuration geometry)
+    (cycle : Fin geometry.frameLength)
+    (physicalLane : Fin geometry.outputBoundary.laneCount) :
+    outputFrameOfBankSignals configuration table geometry signals cycle
+        physicalLane =
+      let laneCoordinate := geometry.outputBoundary.laneEquiv physicalLane
+      let lane : Fin (butterflyCount geometry) :=
+        Fin.cast (by rfl) laneCoordinate.2
+      let visible := signals cycle lane
+      let dataFormat := configuration.boundaryFormat geometry.stage.castSucc
+      let outputFormat := configuration.boundaryFormat geometry.stage.succ
+      let first := PipelinedFixedButterfly.decodeComplex dataFormat.width
+        visible.operands.a
+      let second := PipelinedFixedButterfly.decodeComplex dataFormat.width
+        visible.operands.b
+      let result := HTFFT.Butterfly.Fixed.butterfly
+        (configuration.fixedConfig.butterfly geometry.stage)
+        first second
+        (table.value geometry.stage
+          (twiddleAddress geometry visible.outputPhase lane))
+      PipelinedFixedButterfly.encodeComplex outputFormat.width
+        (if laneCoordinate.1 = 0 then result.upper else result.lower) := by
+  rfl
 
 /-- The pure physical schedule is exactly the already approved natural layer
 result.  This is the schedule's semantic obligation before any structural

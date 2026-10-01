@@ -1,5 +1,7 @@
-import HTFFT.Silean.FFT.FFTStageChainDerived
+import HTFFT.Silean.InitialReorder
+import HTFFT.Silean.FinalReorder
+import HTFFT.Silean.FFTStageChain
 import HTFFT.Silean.FFT.FFTDerived
 
-/-! Public top-level interface and conditional correctness theorem for the
-complete streamed fixed-point FFT. -/
+/-! Public contracts, concrete hierarchy, placement, and correctness results
+for the complete streamed fixed-point FFT. -/

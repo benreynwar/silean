@@ -1,4 +1,5 @@
 import Silean.Modules.RegisterBank.Internal.RegisterBankVerification
+import Silean.Modules.RegisterBank.RegisterBankTrace
 
 /-! Public register-bank declarations backed by generated internals. -/
 

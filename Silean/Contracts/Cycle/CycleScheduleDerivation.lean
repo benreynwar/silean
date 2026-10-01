@@ -351,8 +351,8 @@ private partial def proveFreshFromAvailability (candidate available : Expr)
   if let some entries := entries? then
     let occurrenceType ← inferType candidate
     let mut tail := mkApp (mkConst ``List.nil [.zero]) occurrenceType
-    let mut proof ← proveBySimp (← mkAppM ``Not
-      #[← mkAppM ``List.Mem #[candidate, tail]]) description
+    let mut proof := mkAppN (mkConst ``List.not_mem_nil [.zero])
+      #[occurrenceType, candidate]
     for entry in entries.reverse do
       let childDifferent? ← try
         pure (some (← proveChildDifferent candidate entry description))

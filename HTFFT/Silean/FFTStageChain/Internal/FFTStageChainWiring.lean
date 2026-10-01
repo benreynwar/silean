@@ -1,9 +1,10 @@
-import HTFFT.Silean.FFT.Internal.FFTStageChainStructure
+import HTFFT.Silean.FFTStageChain.Internal.FFTStageChainStructure
 import Silean.Semantics.ModuleBodyTrace
 
 /-! Observable wiring equations for the unresolved rolled-stage chain body. -/
 
-namespace HTFFT.Silean.FFT.FFTStageChain.Internal
+namespace HTFFT.Silean.FFTStageChain.Internal
+open FFT
 
 open _root_.Silean
 
@@ -35,8 +36,7 @@ private theorem pair_cast_eq_castObservation
 /-- The first rolled stage observes the parent input. -/
 theorem stageInputObservation_of_wiring_zero
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (step : (FFTStageChain.body depth configuration table).Step)
+    (step : (FFTStageChain.body depth configuration).Step)
     (wiring : step.WiringHolds)
     (index : StageIndex configuration) (zero : index.val = 0) :
     FFTStage.inputObservation configuration.arithmetic
@@ -65,8 +65,7 @@ theorem stageInputObservation_of_wiring_zero
 /-- Every later rolled stage observes the preceding stage's output. -/
 theorem stageInputObservation_of_wiring_nonzero
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (step : (FFTStageChain.body depth configuration table).Step)
+    (step : (FFTStageChain.body depth configuration).Step)
     (wiring : step.WiringHolds)
     (index : StageIndex configuration) (nonzero : index.val ≠ 0) :
     FFTStage.inputObservation configuration.arithmetic
@@ -99,8 +98,7 @@ theorem stageInputObservation_of_wiring_nonzero
 /-- A nonempty chain exposes its final stage output at the parent boundary. -/
 theorem parentOutputObservation_of_wiring_nonempty
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (step : (FFTStageChain.body depth configuration table).Step)
+    (step : (FFTStageChain.body depth configuration).Step)
     (wiring : step.WiringHolds)
     (nonempty : depth - configuration.laneDepth ≠ 0) :
     FFTStageChain.outputObservation configuration step.parent.outputs =
@@ -128,8 +126,7 @@ theorem parentOutputObservation_of_wiring_nonempty
 /-- An empty chain exposes its parent input unchanged at the parent output. -/
 theorem parentOutputObservation_of_wiring_empty
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (step : (FFTStageChain.body depth configuration table).Step)
+    (step : (FFTStageChain.body depth configuration).Step)
     (wiring : step.WiringHolds)
     (empty : depth - configuration.laneDepth = 0) :
     FFTStageChain.outputObservation configuration step.parent.outputs =
@@ -155,8 +152,7 @@ theorem parentOutputObservation_of_wiring_empty
 /-- Sequence-level form of the first rolled-stage input wiring. -/
 theorem stageInputs_eq_parentInputs_zero
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFTStageChain.body depth configuration table).Trace)
+    (trace : (FFTStageChain.body depth configuration).Trace)
     (wiring : trace.WiringHolds)
     (index : StageIndex configuration) (zero : index.val = 0) :
     (trace.child (.stage index)).inputs.map
@@ -171,14 +167,13 @@ theorem stageInputs_eq_parentInputs_zero
     BoundaryTrace.inputs, List.map_map]
   apply List.map_congr_left
   intro step member
-  exact stageInputObservation_of_wiring_zero configuration table step
+  exact stageInputObservation_of_wiring_zero configuration step
     (wiring.step member) index zero
 
 /-- Sequence-level form of the wiring between consecutive rolled stages. -/
 theorem stageInputs_eq_previousOutputs
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFTStageChain.body depth configuration table).Trace)
+    (trace : (FFTStageChain.body depth configuration).Trace)
     (wiring : trace.WiringHolds)
     (index : StageIndex configuration) (nonzero : index.val ≠ 0) :
     (trace.child (.stage index)).inputs.map
@@ -197,14 +192,13 @@ theorem stageInputs_eq_previousOutputs
     BoundaryTrace.outputs, List.map_map]
   apply List.map_congr_left
   intro step member
-  exact stageInputObservation_of_wiring_nonzero configuration table step
+  exact stageInputObservation_of_wiring_nonzero configuration step
     (wiring.step member) index nonzero
 
 /-- Sequence-level form of a nonempty chain's parent output wiring. -/
 theorem parentOutputs_eq_lastOutputs
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFTStageChain.body depth configuration table).Trace)
+    (trace : (FFTStageChain.body depth configuration).Trace)
     (wiring : trace.WiringHolds)
     (nonempty : depth - configuration.laneDepth ≠ 0) :
     trace.parent.outputs.map (FFTStageChain.outputObservation configuration) =
@@ -220,14 +214,13 @@ theorem parentOutputs_eq_lastOutputs
     BoundaryTrace.outputs, List.map_map]
   apply List.map_congr_left
   intro step member
-  exact parentOutputObservation_of_wiring_nonempty configuration table step
+  exact parentOutputObservation_of_wiring_nonempty configuration step
     (wiring.step member) nonempty
 
 /-- Sequence-level form of an empty chain's identity wiring. -/
 theorem parentOutputs_eq_parentInputs_of_empty
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
-    (trace : (FFTStageChain.body depth configuration table).Trace)
+    (trace : (FFTStageChain.body depth configuration).Trace)
     (wiring : trace.WiringHolds)
     (empty : depth - configuration.laneDepth = 0) :
     trace.parent.outputs.map (FFTStageChain.outputObservation configuration) =
@@ -240,7 +233,7 @@ theorem parentOutputs_eq_parentInputs_of_empty
     BoundaryTrace.outputs, List.map_map]
   apply List.map_congr_left
   intro step member
-  exact parentOutputObservation_of_wiring_empty configuration table step
+  exact parentOutputObservation_of_wiring_empty configuration step
     (wiring.step member) empty
 
-end HTFFT.Silean.FFT.FFTStageChain.Internal
+end HTFFT.Silean.FFTStageChain.Internal

@@ -1,16 +1,16 @@
-import HTFFT.Silean.FFT.Internal.FFTStageChainWiring
+import HTFFT.Silean.FFTStageChain.Internal.FFTStageChainWiring
 import HTFFT.Silean.FFTStage.FFTStageComposition
 
 /-! Conditional correctness of the permanent rolled-stage chain body. -/
 
-namespace HTFFT.Silean.FFT.FFTStageChain.Internal
+namespace HTFFT.Silean.FFTStageChain.Internal
+open FFT
 
 open _root_.Silean
 
 /-- Deterministic observation-level function specified by one stage's public
 contract. -/
 private def stageFunction (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (index : StageIndex configuration) :
     FramedLatency.Frame configuration.frameLength
         (FFTStage.InputObservation configuration.arithmetic
@@ -22,7 +22,7 @@ private def stageFunction (configuration : Configuration depth)
     ((frame cycle).1,
       FFTStage.encodeOutputFrame configuration.arithmetic
         (stageGeometry configuration index)
-        (FFTStage.resultValue configuration.arithmetic table
+        (FFTStage.resultValue configuration.arithmetic configuration.twiddleTable
           (stageGeometry configuration index)
           (fun inputCycle => (frame inputCycle).2)) cycle)
 
@@ -30,11 +30,10 @@ private def stageFunction (configuration : Configuration depth)
 observation-level framed computation. -/
 private theorem stageComputation
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (stageLatency : StageIndex configuration → Nat)
-    (trace : (FFTStageChain.body depth configuration table).Trace)
+    (trace : (FFTStageChain.body depth configuration).Trace)
     (stageCorrect : ∀ index,
-      FFTStage.contract configuration.arithmetic table
+      FFTStage.contract configuration.arithmetic configuration.twiddleTable
         (stageGeometry configuration index) (stageLatency index)
         (trace.child (.stage index)))
     (index : StageIndex configuration) :
@@ -44,14 +43,14 @@ private theorem stageComputation
         (stageGeometry configuration index) => input.1 = true)
       (fun output : FFTStage.OutputObservation configuration.arithmetic
         (stageGeometry configuration index) => output.1 = true)
-      (stageFunction configuration table index)
+      (stageFunction configuration index)
       ((trace.child (.stage index)).inputs.map
         (FFTStage.inputObservation configuration.arithmetic
           (stageGeometry configuration index)))
       ((trace.child (.stage index)).outputs.map
         (FFTStage.outputObservation configuration.arithmetic
           (stageGeometry configuration index))) := by
-  have related := FFTStage.relates_of_contract configuration.arithmetic table
+  have related := FFTStage.relates_of_contract configuration.arithmetic configuration.twiddleTable
     (stageGeometry configuration index) (stageLatency index)
     (stageCorrect index)
   unfold FFTStage.carriedRelation at related
@@ -62,7 +61,7 @@ private theorem stageComputation
     (function := fun input =>
       FFTStage.encodeOutputFrame configuration.arithmetic
         (stageGeometry configuration index)
-        (FFTStage.resultValue configuration.arithmetic table
+        (FFTStage.resultValue configuration.arithmetic configuration.twiddleTable
           (stageGeometry configuration index) input))
     related
   exact deterministic
@@ -167,46 +166,42 @@ private theorem stagesThrough_eq_previous_and_current
 
 /-- Pure logical value after a selected prefix of rolled stages. -/
 private def resultValueThrough (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (index : StageIndex configuration)
     (input : PrefixFrame configuration) : HTFFT.Fixed.Vector depth :=
   HTFFT.Fixed.applyButterflyLayers configuration.arithmetic.fixedConfig
-    table (stagesThrough configuration index)
+    configuration.twiddleTable (stagesThrough configuration index)
     (decodePrefix configuration input)
 
 /-- Every nonempty rolled prefix ends in the selected butterfly stage, so its
 result is canonical at that stage's output format. -/
 private theorem resultValueThrough_canonical
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (index : StageIndex configuration)
     (input : PrefixFrame configuration) :
     (fun valueIndex => HTFFT.Butterfly.Fixed.wrapComplex
       (configuration.arithmetic.boundaryFormat
         (stageGeometry configuration index).stage.succ)
-      (resultValueThrough configuration table index input valueIndex)) =
-      resultValueThrough configuration table index input := by
+      (resultValueThrough configuration index input valueIndex)) =
+      resultValueThrough configuration index input := by
   rw [resultValueThrough,
     stagesThrough_eq_previous_and_current configuration index,
     HTFFT.Fixed.applyButterflyLayers_append]
   exact HTFFT.Fixed.wrapComplex_butterflyLayer
-    configuration.arithmetic.fixedConfig table
+    configuration.arithmetic.fixedConfig configuration.twiddleTable
     (stageGeometry configuration index).stage _
 
 /-- Pure packed frame produced after a selected prefix of rolled stages. -/
 private def resultFrameThrough (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (index : StageIndex configuration)
     (input : PrefixFrame configuration) :
     FFTStage.OutputFrame configuration.arithmetic
       (stageGeometry configuration index) :=
   FFTStage.encodeOutputFrame configuration.arithmetic
     (stageGeometry configuration index)
-    (resultValueThrough configuration table index input)
+    (resultValueThrough configuration index input)
 
 /-- Observation-level form of `resultFrameThrough`. -/
 private def functionThrough (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (index : StageIndex configuration) :
     FramedLatency.Frame configuration.frameLength
         (FFTStageChain.InputObservation configuration) →
@@ -215,19 +210,18 @@ private def functionThrough (configuration : Configuration depth)
           (stageGeometry configuration index)) :=
   fun frame cycle =>
     ((frame cycle).1,
-      resultFrameThrough configuration table index
+      resultFrameThrough configuration index
         (fun inputCycle => (frame inputCycle).2) cycle)
 
 /-- Deterministic observation-level function in the public chain contract. -/
-private def chainFunction (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth) :
+private def chainFunction (configuration : Configuration depth) :
     FramedLatency.Frame configuration.frameLength
         (FFTStageChain.InputObservation configuration) →
       FramedLatency.Frame configuration.frameLength
         (FFTStageChain.OutputObservation configuration) :=
   fun frame cycle =>
     ((frame cycle).1,
-      FFTStageChain.resultFrame configuration table
+      FFTStageChain.resultFrame configuration
         (fun inputCycle => (frame inputCycle).2) cycle)
 
 private theorem decode_firstStage_cast
@@ -285,14 +279,13 @@ private theorem decode_firstStage_cast
 
 private theorem functionThrough_zero
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (index : StageIndex configuration) (zero : index.val = 0) :
-    stageFunction configuration table index ∘
+    stageFunction configuration index ∘
         (fun frame cycle =>
           castObservation
             (parentInputData_eq_stageInputData configuration index zero)
             (frame cycle)) =
-      functionThrough configuration table index := by
+      functionThrough configuration index := by
   funext frame cycle
   apply Prod.ext
   · rfl
@@ -301,13 +294,13 @@ private theorem functionThrough_zero
     change
       FFTStage.encodeOutputFrame configuration.arithmetic
           (stageGeometry configuration index)
-          (FFTStage.resultValue configuration.arithmetic table
+          (FFTStage.resultValue configuration.arithmetic configuration.twiddleTable
             (stageGeometry configuration index)
             (fun inputCycle =>
               Eq.mp
                 (parentInputData_eq_stageInputData configuration index zero)
                 (inputData inputCycle))) cycle =
-        resultFrameThrough configuration table index
+        resultFrameThrough configuration index
           inputData cycle
     unfold FFTStage.resultValue resultFrameThrough resultValueThrough
     rw [decode_firstStage_cast configuration index zero,
@@ -378,15 +371,14 @@ private theorem decode_previousStage_cast
 
 private theorem functionThrough_nonzero
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (index : StageIndex configuration) (nonzero : index.val ≠ 0) :
-    stageFunction configuration table index ∘
+    stageFunction configuration index ∘
         (fun frame cycle =>
           castObservation
             (previousOutputData_eq_stageInputData configuration index nonzero)
-            (functionThrough configuration table
+            (functionThrough configuration
               (previousIndex configuration index nonzero) frame cycle)) =
-      functionThrough configuration table index := by
+      functionThrough configuration index := by
   funext frame cycle
   apply Prod.ext
   · rfl
@@ -396,34 +388,34 @@ private theorem functionThrough_nonzero
     let previousFrame :
         FFTStage.OutputFrame configuration.arithmetic
           (stageGeometry configuration previous) :=
-      resultFrameThrough configuration table previous inputData
+      resultFrameThrough configuration previous inputData
     change
       FFTStage.encodeOutputFrame configuration.arithmetic
           (stageGeometry configuration index)
-          (FFTStage.resultValue configuration.arithmetic table
+          (FFTStage.resultValue configuration.arithmetic configuration.twiddleTable
             (stageGeometry configuration index)
             (fun inputCycle =>
               Eq.mp
                 (previousOutputData_eq_stageInputData configuration index
                   nonzero)
                 (previousFrame inputCycle))) cycle =
-        resultFrameThrough configuration table index inputData cycle
+        resultFrameThrough configuration index inputData cycle
     unfold FFTStage.resultValue resultFrameThrough
     rw [decode_previousStage_cast configuration index nonzero previousFrame]
     change
       FFTStage.encodeOutputFrame configuration.arithmetic
           (stageGeometry configuration index)
           (HTFFT.Fixed.butterflyLayer
-            configuration.arithmetic.fixedConfig table
+            configuration.arithmetic.fixedConfig configuration.twiddleTable
             (stageGeometry configuration index).stage
             (FFTStage.decodeOutputFrame configuration.arithmetic
               (stageGeometry configuration previous)
               (FFTStage.encodeOutputFrame configuration.arithmetic
                 (stageGeometry configuration previous)
-                (resultValueThrough configuration table previous
+                (resultValueThrough configuration previous
                   inputData)))) cycle = _
     rw [FFTStage.decodeOutputFrame_encodeOutputFrame,
-      resultValueThrough_canonical configuration table previous inputData]
+      resultValueThrough_canonical configuration previous inputData]
     unfold resultValueThrough
     rw [stagesThrough_nonzero configuration index nonzero,
       HTFFT.Fixed.applyButterflyLayers_append]
@@ -434,12 +426,11 @@ selected child output after exactly the prefix sum of child latencies and has
 undergone exactly the corresponding prefix of fixed-point layers. -/
 private theorem computationThrough
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (stageLatency : StageIndex configuration → Nat)
-    (trace : (FFTStageChain.body depth configuration table).Trace)
+    (trace : (FFTStageChain.body depth configuration).Trace)
     (wiring : trace.WiringHolds)
     (stageCorrect : ∀ index,
-      FFTStage.contract configuration.arithmetic table
+      FFTStage.contract configuration.arithmetic configuration.twiddleTable
         (stageGeometry configuration index) (stageLatency index)
         (trace.child (.stage index)))
     (index : StageIndex configuration) :
@@ -450,16 +441,16 @@ private theorem computationThrough
         input.1 = true)
       (fun output : FFTStage.OutputObservation configuration.arithmetic
         (stageGeometry configuration index) => output.1 = true)
-      (functionThrough configuration table index)
+      (functionThrough configuration index)
       (trace.parent.inputs.map
         (FFTStageChain.inputObservation configuration))
       ((trace.child (.stage index)).outputs.map
         (FFTStage.outputObservation configuration.arithmetic
           (stageGeometry configuration index))) := by
   by_cases zero : index.val = 0
-  · have current := stageComputation configuration table stageLatency trace
+  · have current := stageComputation configuration stageLatency trace
       stageCorrect index
-    rw [stageInputs_eq_parentInputs_zero configuration table trace wiring
+    rw [stageInputs_eq_parentInputs_zero configuration trace wiring
       index zero] at current
     have currentMappedInputs : FramedLatency.Computes configuration.frameLength
       (stageLatency index) configuration.frameLength_pos
@@ -467,7 +458,7 @@ private theorem computationThrough
         (stageGeometry configuration index) => input.1 = true)
       (fun output : FFTStage.OutputObservation configuration.arithmetic
         (stageGeometry configuration index) => output.1 = true)
-      (stageFunction configuration table index)
+      (stageFunction configuration index)
       ((trace.parent.inputs.map
         (FFTStageChain.inputObservation configuration)).map
           (castObservation
@@ -487,7 +478,7 @@ private theorem computationThrough
         input.1 = true)
       (fun output : FFTStage.OutputObservation configuration.arithmetic
         (stageGeometry configuration index) => output.1 = true)
-      (stageFunction configuration table index ∘
+      (stageFunction configuration index ∘
         (fun frame cycle =>
           castObservation
             (parentInputData_eq_stageInputData configuration index zero)
@@ -498,14 +489,14 @@ private theorem computationThrough
         (FFTStage.outputObservation configuration.arithmetic
           (stageGeometry configuration index))) := by
       simpa only [castObservation_fst, Function.comp_def] using mapped
-    rw [functionThrough_zero configuration table index zero] at mappedNormalized
+    rw [functionThrough_zero configuration index zero] at mappedNormalized
     exact mappedNormalized
   · let previous := previousIndex configuration index zero
-    have previousComputation := computationThrough configuration table
+    have previousComputation := computationThrough configuration
       stageLatency trace wiring stageCorrect previous
-    have current := stageComputation configuration table stageLatency trace
+    have current := stageComputation configuration stageLatency trace
       stageCorrect index
-    rw [stageInputs_eq_previousOutputs configuration table trace wiring
+    rw [stageInputs_eq_previousOutputs configuration trace wiring
       index zero] at current
     have currentMappedInputs : FramedLatency.Computes configuration.frameLength
       (stageLatency index) configuration.frameLength_pos
@@ -513,7 +504,7 @@ private theorem computationThrough
         (stageGeometry configuration index) => input.1 = true)
       (fun output : FFTStage.OutputObservation configuration.arithmetic
         (stageGeometry configuration index) => output.1 = true)
-      (stageFunction configuration table index)
+      (stageFunction configuration index)
       (((trace.child (.stage previous)).outputs.map
         (FFTStage.outputObservation configuration.arithmetic
           (stageGeometry configuration previous))).map
@@ -537,26 +528,26 @@ private theorem computationThrough
         input.1 = true)
       (fun output : FFTStage.OutputObservation configuration.arithmetic
         (stageGeometry configuration index) => output.1 = true)
-      ((stageFunction configuration table index ∘
+      ((stageFunction configuration index ∘
           (fun frame cycle =>
             castObservation
               (previousOutputData_eq_stageInputData configuration index zero)
               (frame cycle))) ∘
-        functionThrough configuration table previous)
+        functionThrough configuration previous)
       (trace.parent.inputs.map
         (FFTStageChain.inputObservation configuration))
       ((trace.child (.stage index)).outputs.map
         (FFTStage.outputObservation configuration.arithmetic
           (stageGeometry configuration index))) at composed
-    have functionEqual := functionThrough_nonzero configuration table index zero
+    have functionEqual := functionThrough_nonzero configuration index zero
     change
-      (stageFunction configuration table index ∘
+      (stageFunction configuration index ∘
           (fun frame cycle =>
             castObservation
               (previousOutputData_eq_stageInputData configuration index zero)
               (frame cycle))) ∘
-        functionThrough configuration table previous =
-      functionThrough configuration table index at functionEqual
+        functionThrough configuration previous =
+      functionThrough configuration index at functionEqual
     rw [functionEqual] at composed
     exact composed
 termination_by index.val
@@ -626,22 +617,21 @@ private theorem stagesThrough_last
 
 private theorem resultFrameThrough_last_cast
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (nonempty : stageCount depth configuration ≠ 0)
     (input : PrefixFrame configuration) :
     (fun cycle =>
       Eq.mp (lastOutputData_eq_parentOutputData configuration nonempty)
-        (resultFrameThrough configuration table
+        (resultFrameThrough configuration
           (lastIndex configuration nonempty) input cycle)) =
-      FFTStageChain.resultFrame configuration table input := by
+      FFTStageChain.resultFrame configuration input := by
   let last := lastIndex configuration nonempty
   let boundaryEqual := lastStage_outputBoundary configuration nonempty
   have framesEqual :
       (fun cycle =>
         Eq.mp (lastOutputData_eq_parentOutputData configuration nonempty)
-          (resultFrameThrough configuration table last input cycle)) =
+          (resultFrameThrough configuration last input cycle)) =
         FFTStage.castBoundaryFrame configuration.arithmetic boundaryEqual
-          (resultFrameThrough configuration table last input) := by
+          (resultFrameThrough configuration last input) := by
     funext cycle
     rw [FFTStage.castBoundaryFrame_apply]
     have cycleEqual :
@@ -657,52 +647,50 @@ private theorem resultFrameThrough_last_cast
             boundaryEqual := Subsingleton.elim _ _
     rw [dataProof]
     exact (FFTStage.castBoundaryData_eq_mp configuration.arithmetic
-      boundaryEqual (resultFrameThrough configuration table last input cycle)).symm
+      boundaryEqual (resultFrameThrough configuration last input cycle)).symm
   calc
     (fun cycle =>
       Eq.mp (lastOutputData_eq_parentOutputData configuration nonempty)
-        (resultFrameThrough configuration table last input cycle)) =
+        (resultFrameThrough configuration last input cycle)) =
         FFTStage.castBoundaryFrame configuration.arithmetic boundaryEqual
-          (resultFrameThrough configuration table last input) := framesEqual
+          (resultFrameThrough configuration last input) := framesEqual
     _ = FFTStage.encodeBoundaryFrame configuration.arithmetic
         configuration.finalGeometry
-        (resultValueThrough configuration table last input) := by
+        (resultValueThrough configuration last input) := by
       unfold resultFrameThrough FFTStage.encodeOutputFrame
       exact FFTStage.castBoundaryFrame_encodeBoundaryFrame
         configuration.arithmetic boundaryEqual _
     _ = encodeFinalPhysical configuration
-        (HTFFT.Fixed.layeredSuffix configuration.arithmetic.fixedConfig table
+        (HTFFT.Fixed.layeredSuffix configuration.arithmetic.fixedConfig configuration.twiddleTable
           configuration.prefixBoundary (decodePrefix configuration input)) := by
       unfold encodeFinalPhysical HTFFT.Fixed.layeredSuffix resultValueThrough
       rw [stagesThrough_last configuration nonempty]
-    _ = FFTStageChain.resultFrame configuration table input := rfl
+    _ = FFTStageChain.resultFrame configuration input := rfl
 
 private theorem functionThrough_last_cast
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (nonempty : stageCount depth configuration ≠ 0) :
     (fun frame cycle =>
       castObservation
         (lastOutputData_eq_parentOutputData configuration nonempty)
-        (functionThrough configuration table
+        (functionThrough configuration
           (lastIndex configuration nonempty) frame cycle)) =
-      chainFunction configuration table := by
+      chainFunction configuration := by
   funext frame cycle
   apply Prod.ext
   · rfl
   · exact congrFun
-      (resultFrameThrough_last_cast configuration table nonempty
+      (resultFrameThrough_last_cast configuration nonempty
         (fun inputCycle => (frame inputCycle).2)) cycle
 
 private theorem resultFrame_empty_cast
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (empty : stageCount depth configuration = 0)
     (input : PrefixFrame configuration) :
     (fun cycle =>
       Eq.mp (parentInputData_eq_parentOutputData_of_empty configuration empty)
         (input cycle)) =
-      FFTStageChain.resultFrame configuration table input := by
+      FFTStageChain.resultFrame configuration input := by
   let boundaryEqual :=
     prefixGeometry_eq_finalGeometry_of_empty configuration empty
   have framesEqual :
@@ -752,7 +740,7 @@ private theorem resultFrame_empty_cast
         configuration.finalGeometry (decodePrefix configuration input) := by
       exact FFTStage.castBoundaryFrame_encodeBoundaryFrame
         configuration.arithmetic boundaryEqual _
-    _ = FFTStageChain.resultFrame configuration table input := by
+    _ = FFTStageChain.resultFrame configuration input := by
       unfold FFTStageChain.resultFrame FFTStageChain.resultValue
         encodeFinalPhysical HTFFT.Fixed.layeredSuffix
       rw [suffixEmpty]
@@ -760,30 +748,28 @@ private theorem resultFrame_empty_cast
 
 private theorem function_empty_cast
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (empty : stageCount depth configuration = 0) :
     (fun frame cycle =>
       castObservation
         (parentInputData_eq_parentOutputData_of_empty configuration empty)
         (frame cycle)) =
-      chainFunction configuration table := by
+      chainFunction configuration := by
   funext frame cycle
   apply Prod.ext
   · rfl
   · exact congrFun
-      (resultFrame_empty_cast configuration table empty
+      (resultFrame_empty_cast configuration empty
         (fun inputCycle => (frame inputCycle).2)) cycle
 
 /-- The unresolved family body computes the public chain function with the
 sum of the latencies supplied by its child contracts. -/
 private theorem chainComputation
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (stageLatency : StageIndex configuration → Nat)
-    (trace : (FFTStageChain.body depth configuration table).Trace)
+    (trace : (FFTStageChain.body depth configuration).Trace)
     (wiring : trace.WiringHolds)
     (stageCorrect : ∀ index,
-      FFTStage.contract configuration.arithmetic table
+      FFTStage.contract configuration.arithmetic configuration.twiddleTable
         (stageGeometry configuration index) (stageLatency index)
         (trace.child (.stage index))) :
     FramedLatency.Computes configuration.frameLength
@@ -793,7 +779,7 @@ private theorem chainComputation
         input.1 = true)
       (fun output : FFTStageChain.OutputObservation configuration =>
         output.1 = true)
-      (chainFunction configuration table)
+      (chainFunction configuration)
       (trace.parent.inputs.map
         (FFTStageChain.inputObservation configuration))
       (trace.parent.outputs.map
@@ -828,7 +814,7 @@ private theorem chainComputation
           trace.parent.outputs.map
             (FFTStageChain.outputObservation configuration) := by
       simpa only [Function.comp_def] using
-        (parentOutputs_eq_parentInputs_of_empty configuration table trace
+        (parentOutputs_eq_parentInputs_of_empty configuration trace
           wiring empty).symm
     rw [exposedOutputs] at exposed
     have zeroLatency :
@@ -852,10 +838,10 @@ private theorem chainComputation
         (FFTStageChain.inputObservation configuration))
       (trace.parent.outputs.map
         (FFTStageChain.outputObservation configuration)) at exposed
-    rw [function_empty_cast configuration table empty] at exposed
+    rw [function_empty_cast configuration empty] at exposed
     exact exposed
   · let last := lastIndex configuration empty
-    have through := computationThrough configuration table stageLatency trace
+    have through := computationThrough configuration stageLatency trace
       wiring stageCorrect last
     have preservesFirst : ∀ output :
         FFTStage.OutputObservation configuration.arithmetic
@@ -881,7 +867,7 @@ private theorem chainComputation
           trace.parent.outputs.map
             (FFTStageChain.outputObservation configuration) := by
       simpa only [Function.comp_def] using
-        (parentOutputs_eq_lastOutputs configuration table trace wiring empty).symm
+        (parentOutputs_eq_lastOutputs configuration trace wiring empty).symm
     rw [exposedOutputs] at exposed
     rw [latencyThrough_last configuration stageLatency empty] at exposed
     change FramedLatency.Computes configuration.frameLength
@@ -894,12 +880,12 @@ private theorem chainComputation
       (fun frame cycle =>
         castObservation
           (lastOutputData_eq_parentOutputData configuration empty)
-          (functionThrough configuration table last frame cycle))
+          (functionThrough configuration last frame cycle))
       (trace.parent.inputs.map
         (FFTStageChain.inputObservation configuration))
       (trace.parent.outputs.map
         (FFTStageChain.outputObservation configuration)) at exposed
-    rw [functionThrough_last_cast configuration table empty] at exposed
+    rw [functionThrough_last_cast configuration empty] at exposed
     exact exposed
 
 /-- The permanent rolled-stage body satisfies its public chain contract when
@@ -907,19 +893,18 @@ each unresolved stage satisfies its public contract and their proposed
 latencies sum to the latency declared by the chain configuration. -/
 theorem contract_of_body_trace
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (stageLatency : StageIndex configuration → Nat)
-    (trace : (FFTStageChain.body depth configuration table).Trace)
+    (trace : (FFTStageChain.body depth configuration).Trace)
     (wiring : trace.WiringHolds)
     (latencyMatches :
       FFTStageChain.accumulatedLatency configuration stageLatency =
         configuration.stageChainLatency)
     (stageCorrect : ∀ index,
-      FFTStage.contract configuration.arithmetic table
+      FFTStage.contract configuration.arithmetic configuration.twiddleTable
         (stageGeometry configuration index) (stageLatency index)
         (trace.child (.stage index))) :
-    FFTStageChain.contract configuration table trace.parent := by
-  have computation := chainComputation configuration table stageLatency trace
+    FFTStageChain.contract configuration trace.parent := by
+  have computation := chainComputation configuration stageLatency trace
     wiring stageCorrect
   rw [latencyMatches] at computation
   have relation :
@@ -929,7 +914,7 @@ theorem contract_of_body_trace
           input.1 = true)
         (fun output : FFTStageChain.OutputObservation configuration =>
           output.1 = true)
-        (FFTStageChain.carriedRelation configuration table)
+        (FFTStageChain.carriedRelation configuration)
         (trace.parent.inputs.map
           (FFTStageChain.inputObservation configuration))
         (trace.parent.outputs.map
@@ -944,9 +929,9 @@ theorem contract_of_body_trace
       input.1 = true)
     (outputFirst := fun output : FFTStageChain.OutputObservation configuration =>
       output.1 = true)
-    (relation := FFTStageChain.carriedRelation configuration table)
+    (relation := FFTStageChain.carriedRelation configuration)
     (FFTStageChain.inputObservation configuration)
     (FFTStageChain.outputObservation configuration)
     relation
 
-end HTFFT.Silean.FFT.FFTStageChain.Internal
+end HTFFT.Silean.FFTStageChain.Internal

@@ -36,6 +36,14 @@ def Computes (latency : Nat) (function : α → β)
     (inputs : List α) (outputs : List β) : Prop :=
   Relates latency (fun input output => output = function input) inputs outputs
 
+/-- The unchanged sequence computes the identity function with zero latency. -/
+theorem computes_id (values : List α) :
+    Computes 0 id values values := by
+  constructor
+  · rfl
+  · intro t inputInTrace outputInTrace
+    rfl
+
 /-- Project a deterministic port-record contract onto the payload sequences
 selected from its input and output records.  This is the standard bridge from
 a public module contract to the value-level computations used for serial
@@ -77,6 +85,26 @@ theorem relation_at
   holds.2 t (by
     have lengths := holds.1
     omega) outputInTrace
+
+/-- Replace the input sequence of a fixed-latency relation by an equal one. -/
+theorem relates_congr_inputs
+    {α β : Type} {latency : Nat} {relation : α → β → Prop}
+    {firstInputs secondInputs : List α} {outputs : List β}
+    (equal : firstInputs = secondInputs)
+    (holds : Relates latency relation firstInputs outputs) :
+    Relates latency relation secondInputs outputs := by
+  subst secondInputs
+  exact holds
+
+/-- Replace the output sequence of a fixed-latency relation by an equal one. -/
+theorem relates_congr_outputs
+    {α β : Type} {latency : Nat} {relation : α → β → Prop}
+    {inputs : List α} {firstOutputs secondOutputs : List β}
+    (equal : firstOutputs = secondOutputs)
+    (holds : Relates latency relation inputs firstOutputs) :
+    Relates latency relation inputs secondOutputs := by
+  subst secondOutputs
+  exact holds
 
 /-- Read a fixed-latency module relation using the length of its boundary
 trace rather than either projected list. -/

@@ -136,7 +136,7 @@ elab_rules : command
     let binders := params.map (·.binder)
     let orderValue ← orderTerm order
     elabCommand <| ← `(
-      private noncomputable def $derivedName $binders:bracketedBinder* :
+      private noncomputable opaque $derivedName $binders:bracketedBinder* :
           Silean.ModuleStructuralCertification.Layer.ScheduleDerivation.DerivedCompleteSchedule
             ($body) ($childRules) := by
         derive_complete_schedule $orderValue

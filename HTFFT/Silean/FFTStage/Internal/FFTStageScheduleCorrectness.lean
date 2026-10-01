@@ -148,6 +148,77 @@ theorem visibleAt_append_right
   simp [visibleAt, runDetailed_append, runDetailed_length,
     List.get_eq_getElem]
 
+/-- An observation lying in the left side of a concatenated run is unchanged
+by any later suffix. -/
+theorem visibleAt_append_left
+    (delay : Nat) (positive : 0 < delay)
+    (state : State delay α) (left right : List (Input α))
+    (position : Nat) (occurs : position < left.length) :
+    visibleAt delay positive state (left ++ right) position (by simp; omega) =
+      visibleAt delay positive state left position occurs := by
+  simp only [visibleAt, runDetailed_append, List.get_eq_getElem]
+  rw [List.getElem_append_left (by
+    rw [runDetailed_length]
+    exact occurs)]
+
+/-- `visibleAt` is insensitive to the particular presentation and bound proof
+of an equal input list. -/
+theorem visibleAt_congr_inputs
+    (delay : Nat) (positive : 0 < delay)
+    (state : State delay α) {left right : List (Input α)}
+    (equal : left = right) (position : Nat)
+    (leftOccurs : position < left.length)
+    (rightOccurs : position < right.length) :
+    visibleAt delay positive state left position leftOccurs =
+      visibleAt delay positive state right position rightOccurs := by
+  subst right
+  rfl
+
+/-- `visibleAt` is insensitive to rewriting the numerical position and its
+associated bound proof. -/
+theorem visibleAt_congr_position
+    (delay : Nat) (positive : 0 < delay)
+    (state : State delay α) (inputs : List (Input α))
+    {leftPosition rightPosition : Nat}
+    (equal : leftPosition = rightPosition)
+    (leftOccurs : leftPosition < inputs.length)
+    (rightOccurs : rightPosition < inputs.length) :
+    visibleAt delay positive state inputs leftPosition leftOccurs =
+      visibleAt delay positive state inputs rightPosition rightOccurs := by
+  subst rightPosition
+  rfl
+
+/-- A frame embedded after an arbitrary trace prefix has exactly the same
+frame-relative observations as `frameSignal`, from the state reached by that
+prefix.  Later inputs cannot affect observations within the frame execution
+window. -/
+theorem visibleAt_embeddedFrame
+    (groups delay : Nat) (positive : 0 < delay)
+    (state : State delay α) (preceding suffix : List (Input α))
+    (frame : Fin (groups * (2 * delay)) → Input α)
+    (continuation : Fin delay → Input α)
+    (cycle : Fin (groups * (2 * delay))) :
+    visibleAt delay positive state
+        (preceding ++ frameExecutionInputs groups delay frame continuation ++
+          suffix)
+        (preceding.length + delay + cycle.val) (by
+          simp [frameExecutionInputs]
+          omega) =
+      frameSignal groups delay positive
+        (runDetailed delay positive state preceding).2 frame continuation cycle := by
+  let embedded := frameExecutionInputs groups delay frame continuation
+  have shifted := visibleAt_append_right delay positive state preceding
+    (embedded ++ suffix) (delay + cycle.val) (by
+      simp [embedded, frameExecutionInputs]
+      omega)
+  have beforeSuffix := visibleAt_append_left delay positive
+    (runDetailed delay positive state preceding).2 embedded suffix
+    (delay + cycle.val) (by
+      simp [embedded, frameExecutionInputs]
+      omega)
+  simpa only [embedded, frameSignal, Nat.add_assoc, List.append_assoc] using
+    shifted.trans beforeSuffix
+
 /-- Every observation in a detailed run is exactly `signals` applied to the
 corresponding input and the state reached at that cycle. -/
 theorem exists_state_visibleAt_eq_signals
@@ -1408,6 +1479,28 @@ theorem bankFrame_starts
       exact nonzero
     apply starts.not_first physicalCycle physicalNonzero
     exact marked
+
+/-- Materializing a reindexed bank frame preserves the physical cycle order.
+The schedule equivalence changes only the finite index type; its underlying
+natural index is the identity. -/
+theorem ofFn_bankFrame
+    (geometry : Geometry depth)
+    (first : Fin geometry.frameLength → Bool)
+    (data : Fin geometry.frameLength → Fin geometry.laneCount → α) :
+    List.ofFn (bankFrame geometry first data) =
+      List.ofFn (fun cycle => bankInput geometry (first cycle) (data cycle)) := by
+  apply List.ext_getElem
+  · simp only [List.length_ofFn]
+    calc
+      geometry.outputBoundary.groupCount * (2 * geometry.pairDelay) =
+          geometry.outputBoundary.groupCount * geometry.localPeriod := by
+        rw [Geometry.localPeriod_eq_commutatorPeriod]
+      _ = geometry.frameLength :=
+        Geometry.output_groupCount_mul_localPeriod geometry
+  · intro index leftIn rightIn
+    simp only [List.getElem_ofFn]
+    unfold bankFrame
+    congr 2
 
 @[simp] theorem outputBoundary_laneEquiv_outputLane
     (geometry : Geometry depth) (branch : Fin 2)

@@ -81,16 +81,15 @@ private theorem layerIndex_globalPosition
 /-- An early global layer acts independently on each cycle-sized lane block. -/
 private theorem butterflyLayer_block
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (stage : Fin configuration.laneDepth)
     (input : HTFFT.Fixed.Vector depth)
     (cycle : Fin configuration.frameLength)
     (lane : Fin (2 ^ configuration.laneDepth)) :
     HTFFT.Fixed.butterflyLayer configuration.unrolled.fixedConfig
-        (configuration.prefixTable table) stage
+        configuration.prefixTable stage
         (fun laneIndex : Fin (2 ^ configuration.laneDepth) =>
           input (naturalLayout configuration (cycle, laneIndex))) lane =
-      HTFFT.Fixed.butterflyLayer configuration.arithmetic.fixedConfig table
+      HTFFT.Fixed.butterflyLayer configuration.arithmetic.fixedConfig configuration.twiddleTable
         (configuration.globalStage stage) input
         (naturalLayout configuration (cycle, lane)) := by
   unfold Configuration.laneCount at *
@@ -151,7 +150,6 @@ private theorem butterflyLayer_block
 each cycle-sized block. -/
 private theorem applyButterflyStagePrefix_block
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (cycle : Fin configuration.frameLength)
     (localInput : HTFFT.Fixed.Vector configuration.laneDepth)
     (globalInput : HTFFT.Fixed.Vector depth)
@@ -161,11 +159,11 @@ private theorem applyButterflyStagePrefix_block
     (boundary : HTFFT.Exact.LayerBoundary configuration.laneDepth)
     (lane : Fin configuration.laneCount) :
     HTFFT.Fixed.applyButterflyLayers configuration.unrolled.fixedConfig
-        (configuration.prefixTable table)
+        configuration.prefixTable
         (HTFFT.Exact.butterflyStagePrefix configuration.laneDepth boundary)
         localInput lane =
       HTFFT.Fixed.applyButterflyLayers configuration.arithmetic.fixedConfig
-        table
+        configuration.twiddleTable
         (HTFFT.Exact.butterflyStagePrefix depth
           (configuration.globalBoundary boundary))
         globalInput (naturalLayout configuration (cycle, lane)) := by
@@ -188,12 +186,12 @@ private theorem applyButterflyStagePrefix_block
         applyButterflyLayers_singleton]
       let localPrefix :=
         HTFFT.Fixed.applyButterflyLayers configuration.unrolled.fixedConfig
-          (configuration.prefixTable table)
+          configuration.prefixTable
           (HTFFT.Exact.butterflyStagePrefix configuration.laneDepth
             stage.castSucc) localInput
       let globalPrefix :=
         HTFFT.Fixed.applyButterflyLayers configuration.arithmetic.fixedConfig
-          table
+          configuration.twiddleTable
           (HTFFT.Exact.butterflyStagePrefix depth
             (configuration.globalBoundary stage.castSucc)) globalInput
       have prefixesEqual : localPrefix = fun laneIndex =>
@@ -202,11 +200,11 @@ private theorem applyButterflyStagePrefix_block
         exact inductionHypothesis laneIndex
       rw [show
         HTFFT.Fixed.applyButterflyLayers configuration.unrolled.fixedConfig
-            (configuration.prefixTable table)
+            configuration.prefixTable
             (HTFFT.Exact.butterflyStagePrefix configuration.laneDepth
               stage.castSucc) localInput = localPrefix from rfl,
         prefixesEqual]
-      exact butterflyLayer_block configuration table stage globalPrefix cycle lane
+      exact butterflyLayer_block configuration stage globalPrefix cycle lane
 
 private theorem decoded_initialReorder_cycle
     (configuration : Configuration depth)
@@ -229,14 +227,13 @@ private theorem decoded_initialReorder_cycle
 fixed-point FFT when the input frame has first been globally reordered. -/
 private theorem unrolledResultValue_block
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : InputFrame configuration)
     (cycle : Fin configuration.frameLength)
     (lane : Fin (2 ^ configuration.laneDepth)) :
     UnrolledFFTNetwork.resultValue configuration.unrolled
-        (configuration.prefixTable table)
+        configuration.prefixTable
         (InitialReorder.resultFrame configuration input cycle) lane =
-      HTFFT.Fixed.layeredPrefix configuration.arithmetic.fixedConfig table
+      HTFFT.Fixed.layeredPrefix configuration.arithmetic.fixedConfig configuration.twiddleTable
         configuration.prefixBoundary (decodeInput configuration input)
         (naturalLayout configuration (cycle, lane)) := by
   unfold UnrolledFFTNetwork.resultValue
@@ -245,18 +242,18 @@ private theorem unrolledResultValue_block
   unfold HTFFT.Fixed.layeredPrefix
   change
     HTFFT.Fixed.applyButterflyLayers configuration.unrolled.fixedConfig
-        (configuration.prefixTable table)
+        configuration.prefixTable
         (HTFFT.Exact.butterflyStagePrefix configuration.laneDepth
           (Fin.last configuration.laneDepth))
         (UnrolledFFTLayer.decodeVector
           (configuration.arithmetic.boundaryFormat 0)
           (InitialReorder.resultFrame configuration input cycle)) lane =
       HTFFT.Fixed.applyButterflyLayers configuration.arithmetic.fixedConfig
-        table
+        configuration.twiddleTable
         (HTFFT.Exact.butterflyStagePrefix depth configuration.prefixBoundary)
         (HTFFT.Exact.bitReverse (decodeInput configuration input))
         (naturalLayout configuration (cycle, lane))
-  exact applyButterflyStagePrefix_block configuration table cycle
+  exact applyButterflyStagePrefix_block configuration cycle
     (UnrolledFFTLayer.decodeVector
       (configuration.arithmetic.boundaryFormat 0)
       (InitialReorder.resultFrame configuration input cycle))
@@ -267,26 +264,24 @@ private theorem unrolledResultValue_block
 /-- Apply the lane-sized ascending butterfly network independently to every
 cycle of the globally bit-reversed frame. -/
 def unrolledResultFrame (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : InputFrame configuration) : PrefixFrame configuration :=
   fun cycle =>
     UnrolledFFTLayer.encodeVector
       (configuration.unrolled.boundaryFormat
         (Fin.last configuration.laneDepth))
       (UnrolledFFTNetwork.resultValue configuration.unrolled
-        (configuration.prefixTable table) (input cycle))
+        configuration.prefixTable (input cycle))
 
 private theorem unrolledResultValue_canonical
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : InputData configuration) :
     (fun index => HTFFT.Butterfly.Fixed.wrapComplex
       (configuration.unrolled.boundaryFormat
         (Fin.last configuration.laneDepth))
       (UnrolledFFTNetwork.resultValue configuration.unrolled
-        (configuration.prefixTable table) input index)) =
+        configuration.prefixTable input index)) =
       UnrolledFFTNetwork.resultValue configuration.unrolled
-        (configuration.prefixTable table) input := by
+        configuration.prefixTable input := by
   have inputCanonical :
       (fun index => HTFFT.Butterfly.Fixed.wrapComplex
         (configuration.unrolled.boundaryFormat 0)
@@ -301,22 +296,21 @@ private theorem unrolledResultValue_canonical
       FFTConfiguration.fixedConfig_boundaryFormat] using
     HTFFT.Fixed.wrapComplex_applyButterflyStagePrefix_of_canonical
       configuration.unrolled.fixedConfig
-      (configuration.prefixTable table)
+      configuration.prefixTable
       (UnrolledFFTLayer.decodeVector
         (configuration.unrolled.boundaryFormat 0) input)
       inputCanonical (Fin.last configuration.laneDepth)
 
 private theorem decode_unrolledResultFrame_cycle
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : InputFrame configuration)
     (cycle : Fin configuration.frameLength) :
     UnrolledFFTLayer.decodeVector
         (configuration.arithmetic.boundaryFormat configuration.prefixBoundary)
-        (unrolledResultFrame configuration table
+        (unrolledResultFrame configuration
           (InitialReorder.resultFrame configuration input) cycle) =
       fun lane =>
-        HTFFT.Fixed.layeredPrefix configuration.arithmetic.fixedConfig table
+        HTFFT.Fixed.layeredPrefix configuration.arithmetic.fixedConfig configuration.twiddleTable
           configuration.prefixBoundary (decodeInput configuration input)
           (naturalLayout configuration (cycle, lane)) := by
   change UnrolledFFTLayer.decodeVector
@@ -326,30 +320,29 @@ private theorem decode_unrolledResultFrame_cycle
         (configuration.unrolled.boundaryFormat
           (Fin.last configuration.laneDepth))
         (UnrolledFFTNetwork.resultValue configuration.unrolled
-          (configuration.prefixTable table)
+          configuration.prefixTable
           (InitialReorder.resultFrame configuration input cycle))) = _
   rw [UnrolledFFTLayer.decodeVector_encodeVector,
     unrolledResultValue_canonical]
   funext lane
-  exact unrolledResultValue_block configuration table input cycle lane
+  exact unrolledResultValue_block configuration input cycle lane
 
 /-- Decoding the cycle-parallel unrolled outputs gives precisely the global
 fixed-point FFT state at the prefix boundary. -/
 theorem decodePrefix_unrolledResultFrame
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : InputFrame configuration) :
     decodePrefix configuration
-        (unrolledResultFrame configuration table
+        (unrolledResultFrame configuration
           (InitialReorder.resultFrame configuration input)) =
-      HTFFT.Fixed.layeredPrefix configuration.arithmetic.fixedConfig table
+      HTFFT.Fixed.layeredPrefix configuration.arithmetic.fixedConfig configuration.twiddleTable
         configuration.prefixBoundary (decodeInput configuration input) := by
   rw [decodePrefix_eq_decodeVector_unpackNatural]
   funext index
   obtain ⟨⟨cycle, lane⟩, rfl⟩ :=
     (naturalLayout configuration).surjective index
   have pointwise := congrFun
-    (decode_unrolledResultFrame_cycle configuration table input cycle) lane
+    (decode_unrolledResultFrame_cycle configuration input cycle) lane
   simpa [Configuration.prefixGeometry_completed, unpackNatural,
     UnrolledFFTLayer.decodeVector] using pointwise
 
@@ -367,13 +360,12 @@ theorem decodePrefix_unrolledResultFrame
 natural complete fixed-point FFT result. -/
 theorem resultFrame_composition
     (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : InputFrame configuration) :
     FinalReorder.resultFrame configuration
-        (FFTStageChain.resultFrame configuration table
-          (unrolledResultFrame configuration table
+        (FFTStageChain.resultFrame configuration
+          (unrolledResultFrame configuration
             (InitialReorder.resultFrame configuration input))) =
-      FFT.resultFrame configuration table input := by
+      FFT.resultFrame configuration input := by
   rw [FFTStageChain.resultFrame, FFTStageChain.resultValue,
     decodePrefix_unrolledResultFrame,
     finalReorder_encodeFinalPhysical]

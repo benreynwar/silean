@@ -1,5 +1,6 @@
 import HTFFT.Silean.FFT.Frame
 import Silean.Authoring.ModulePorts
+import Silean.Modules.ConditionalNegate.ConditionalNegate
 
 /-! # Initial streamed-frame reorder
 
@@ -8,9 +9,49 @@ bit-reversed order consumed by the ascending unrolled butterfly network.  It
 changes only where packed samples occur; it performs no arithmetic.
 -/
 
-namespace HTFFT.Silean.FFT.InitialReorder
+namespace HTFFT.Silean.InitialReorder
+open FFT
 
 open _root_.Silean
+
+/-- Width of the per-bank address. -/
+abbrev addressWidth (configuration : Configuration depth) : Nat :=
+  depth - configuration.laneDepth
+
+theorem laneDepth_le_addressWidth (configuration : Configuration depth) :
+    configuration.laneDepth ≤ addressWidth configuration := by
+  have geometry := configuration.initialReorderGeometry
+  unfold addressWidth
+  omega
+
+theorem addressWidth_pos (configuration : Configuration depth) :
+    0 < addressWidth configuration :=
+  lt_of_lt_of_le configuration.laneDepth_pos
+    (laneDepth_le_addressWidth configuration)
+
+/-- Reverse the bits of an address word. -/
+def reverseAddress (configuration : Configuration depth)
+    (address : Fin (addressWidth configuration) → Bool) :
+    Fin (addressWidth configuration) → Bool :=
+  fun index => address index.rev
+
+/-- Reverse the most-significant `laneDepth` address bits.  This is the lane
+rotation used by the VHDL architecture. -/
+def laneRotation (configuration : Configuration depth)
+    (address : Fin (addressWidth configuration) → Bool) :
+    Fin configuration.laneDepth → Bool :=
+  fun index => address ⟨addressWidth configuration - 1 - index.val, by
+    have indexLt := index.isLt
+    have fits := laneDepth_le_addressWidth configuration
+    omega⟩
+
+/-- Pre-rotation is the additive inverse of the lane rotation modulo the lane
+count. -/
+def preRotation (configuration : Configuration depth)
+    (address : Fin (addressWidth configuration) → Bool) :
+    Fin configuration.laneDepth → Bool :=
+  Modules.ConditionalNegate.resultValue configuration.laneDepth
+    (laneRotation configuration address) true
 
 /-- Reorder one natural input frame into the complete global bit-reversed order
 consumed by the unrolled prefix network. -/
@@ -88,4 +129,4 @@ theorem relates_of_contract (configuration : Configuration depth)
   FramedLatency.relates_of_holds_projection
     (inputObservation configuration) (outputObservation configuration) holds
 
-end HTFFT.Silean.FFT.InitialReorder
+end HTFFT.Silean.InitialReorder

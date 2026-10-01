@@ -195,6 +195,13 @@ def resultValue (configuration : FFTConfiguration depth)
   HTFFT.Fixed.butterflyLayer configuration.fixedConfig table geometry.stage
     (decodeInputFrame configuration geometry input)
 
+/-- End-to-end latency of the concrete rolled stage.  The commutator first
+delays the paired sample and frame marker by `pairDelay`; the complete
+butterfly bank then contributes its selected pipeline latency. -/
+def latency (geometry : Geometry depth)
+    (pipeline : PipelinedFixedButterfly.Pipeline) : Nat :=
+  geometry.pairDelay + pipeline.latency
+
 /-- The stage result is already canonical at its output width, so encoding and
 decoding the expected output frame returns the exact pure result. -/
 @[simp] theorem decodeOutputFrame_encode_resultValue

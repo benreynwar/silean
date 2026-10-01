@@ -346,6 +346,26 @@ private theorem delayTrace_of_execution (signalType : SignalType)
         .cons (inputValue signalType input) (output .output)
           delayStep laterTrace⟩
 
+/-- Every concrete register-chain execution admits the corresponding abstract
+delay-line trace.  Both abstract endpoint states are hidden. -/
+theorem existsDelayTrace_of_execution (signalType : SignalType)
+    (latency : Nat)
+    {initialState finalState : (moduleStructure signalType latency).State}
+    {inputs : List (ShiftRegister.ports signalType).inputs.Values}
+    {outputs : List (ShiftRegister.ports signalType).outputs.Values}
+    (execution : (moduleStructure signalType latency).Executes
+      initialState inputs outputs finalState) :
+    ∃ initialDelayState finalDelayState,
+      Trace (DelayLine.Step latency) initialDelayState
+        (inputs.map (inputValue signalType))
+        (outputs.map fun output => output .output) finalDelayState := by
+  obtain ⟨initialDelayState, corresponds⟩ :=
+    stateCoverage signalType latency initialState
+  obtain ⟨finalDelayState, trace⟩ :=
+    delayTrace_of_execution signalType latency execution
+      initialDelayState corresponds
+  exact ⟨initialDelayState, finalDelayState, trace⟩
+
 theorem optionalContract_of_execution (signalType : SignalType) (latency : Nat)
     {initialState finalState : (moduleStructure signalType latency).State}
     {inputs : List (ShiftRegister.ports signalType).inputs.Values}

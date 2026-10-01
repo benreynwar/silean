@@ -1,9 +1,32 @@
 import HTFFT.Silean.FFT.FFT
+import HTFFT.Silean.InitialReorder.InitialReorderDerived
+import HTFFT.Silean.FFTStageChain.FFTStageChainDerived
+import HTFFT.Silean.FinalReorder.FinalReorderDerived
 import HTFFT.Silean.UnrolledFFTNetwork.UnrolledFFTNetworkDerived
 import Silean.Authoring.ModuleDesign
 import Silean.Modules.OptionalShiftRegister.OptionalShiftRegisterDerived
 
-/-! Permanent top-level FFT body with unresolved functional children. -/
+/-! Concrete top-level FFT hierarchy. -/
+
+namespace HTFFT.Silean.FFT.Internal
+
+/-- Stable emission identity for every structural choice in the complete FFT.
+The child specializations remain the authoritative encodings of their own
+numeric and pipeline parameters. -/
+def specialization (configuration : Configuration depth) :
+    List _root_.Silean.Naming.ModuleParameter :=
+  InitialReorder.Internal.specialization configuration ++
+  UnrolledFFTNetwork.Internal.specialization configuration.unrolled
+    configuration.prefixTable ++
+  FFTStageChain.Internal.specialization configuration ++
+  FinalReorder.Internal.specialization configuration
+
+/-- The rolled ROM definition names supply the non-numeric part of the
+complete hierarchy's emission identity. -/
+def variant (configuration : Configuration depth) : String :=
+  FFTStageChain.Internal.variant configuration
+
+end HTFFT.Silean.FFT.Internal
 
 namespace HTFFT.Silean
 
@@ -13,17 +36,18 @@ open _root_.Silean.Modules
 
 module_design FFT
     (depth : Nat) (configuration : FFT.Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth) where
+    (variant := FFT.Internal.variant configuration)
+    (specialization := FFT.Internal.specialization configuration) where
   boundary (FFT.ports configuration)
     (naming := FFT.Naming.ports configuration)
   instances {
-    initialReorder := unresolved (FFT.InitialReorder.ports configuration),
+    initialReorder := InitialReorder.design depth configuration,
     unrolled := UnrolledFFTNetwork.design configuration.laneDepth
-      configuration.unrolled (configuration.prefixTable table),
+      configuration.unrolled configuration.prefixTable,
     unrolledFirstDelay := OptionalShiftRegister.design .bit
       configuration.unrolled.networkLatency,
-    stageChain := unresolved (FFT.FFTStageChain.ports configuration),
-    finalReorder := unresolved (FFT.FinalReorder.ports configuration) }
+    stageChain := FFTStageChain.design depth configuration,
+    finalReorder := FinalReorder.design depth configuration }
   wiring {
     outputs {
       .o_first := finalReorder.o_first,

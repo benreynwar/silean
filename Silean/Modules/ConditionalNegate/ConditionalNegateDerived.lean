@@ -43,4 +43,17 @@ theorem result_toBitVec_of_realization (width : Nat)
   obtain ⟨_, _, allowed⟩ := allowed_of_realization width realizes
   exact result_toBitVec_of_allowed width allowed
 
+/-- Every structural realization produces the natural Boolean-vector result.
+This is the representation-level companion of `result_toBitVec_of_realization`
+for clients that remain in Silean's ordinary vector semantics. -/
+theorem result_of_realization (width : Nat)
+    {step : (moduleStructure width).Step}
+    (realizes : (moduleStructure width).Realizes step) :
+    step.outputs .result =
+      resultValue width (step.inputs .value) (step.inputs .negate) := by
+  apply BitVector.toBitVec_injective width
+  rw [result_toBitVec_of_realization width realizes]
+  cases selected : step.inputs .negate <;>
+    simp [resultValue, selected]
+
 end Silean.Modules.ConditionalNegate

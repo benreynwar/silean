@@ -22,6 +22,7 @@ import Silean.Modules.Increment.IncrementDerived
 import Silean.Modules.Register.RegisterDerived
 import Silean.Modules.ShiftRegister.ShiftRegisterDerived
 import Silean.Modules.OptionalShiftRegister.OptionalShiftRegisterDerived
+import Silean.Modules.BarrelShifter.BarrelShifterDerived
 import Silean.Modules.ResetRegister.ResetRegisterDerived
 import Silean.Modules.EnabledResetRegister.EnabledResetRegisterDerived
 import Silean.Modules.EnabledResetCounter.EnabledResetCounterDerived

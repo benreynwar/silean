@@ -9,7 +9,8 @@ physical frame layouts are interpreted; individual stage implementations are
 deliberately absent.
 -/
 
-namespace HTFFT.Silean.FFT.FFTStageChain
+namespace HTFFT.Silean.FFTStageChain
+open FFT
 
 open _root_.Silean
 
@@ -24,15 +25,8 @@ abbrev StageIndex (configuration : Configuration depth) :=
 /-- Geometry of one rolled layer, indexed from zero at the first layer after
 the unrolled prefix. -/
 def stageGeometry (configuration : Configuration depth)
-    (index : StageIndex configuration) : FFTStage.Geometry depth where
-  laneDepth := configuration.laneDepth
-  stage := ⟨configuration.laneDepth + index.val, by
-    have indexLt : index.val < depth - configuration.laneDepth := by
-      exact index.isLt
-    have laneLe := configuration.laneDepth_le_depth
-    omega⟩
-  laneDepth_pos := configuration.laneDepth_pos
-  laneDepth_le_stage := Nat.le_add_right _ _
+    (index : StageIndex configuration) : FFTStage.Geometry depth :=
+  configuration.rolledStageGeometry index
 
 @[simp] theorem stageGeometry_stage_val
     (configuration : Configuration depth)
@@ -62,16 +56,15 @@ def accumulatedLatency (configuration : Configuration depth)
 
 /-- Pure fixed-point suffix result carried by the chain. -/
 def resultValue (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : PrefixFrame configuration) : HTFFT.Fixed.Vector depth :=
-  HTFFT.Fixed.layeredSuffix configuration.arithmetic.fixedConfig table
+  HTFFT.Fixed.layeredSuffix configuration.arithmetic.fixedConfig
+    configuration.twiddleTable
     configuration.prefixBoundary (decodePrefix configuration input)
 
 /-- Physical result frame at the final streamed boundary. -/
 def resultFrame (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : PrefixFrame configuration) : OutputFrame configuration :=
-  encodeFinalPhysical configuration (resultValue configuration table input)
+  encodeFinalPhysical configuration (resultValue configuration input)
 
 module_ports ports (configuration : Configuration depth) where
   input i_first : .bit,
@@ -100,45 +93,41 @@ def outputObservation (configuration : Configuration depth)
   (output Output.o_first, output Output.o_data)
 
 def carriedRelation (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : FramedLatency.Frame configuration.frameLength
       (InputObservation configuration))
     (output : FramedLatency.Frame configuration.frameLength
       (OutputObservation configuration)) : Prop :=
   (fun cycle => (output cycle).2) =
-    resultFrame configuration table (fun cycle => (input cycle).2)
+    resultFrame configuration (fun cycle => (input cycle).2)
 
 def frameRelation (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (input : FramedLatency.Frame configuration.frameLength
       (ports configuration).inputs.Values)
     (output : FramedLatency.Frame configuration.frameLength
       (ports configuration).outputs.Values) : Prop :=
-  carriedRelation configuration table
+  carriedRelation configuration
     (fun cycle => inputObservation configuration (input cycle))
     (fun cycle => outputObservation configuration (output cycle))
 
 def contract (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     (trace : BoundaryTrace (ports configuration)) : Prop :=
   FramedLatency.Holds configuration.frameLength
     configuration.stageChainLatency configuration.frameLength_pos
     (fun input => (inputObservation configuration input).1 = true)
     (fun output => (outputObservation configuration output).1 = true)
-    (frameRelation configuration table) trace
+    (frameRelation configuration) trace
 
 theorem relates_of_contract (configuration : Configuration depth)
-    (table : HTFFT.Fixed.TwiddleTable depth)
     {trace : BoundaryTrace (ports configuration)}
-    (holds : contract configuration table trace) :
+    (holds : contract configuration trace) :
     FramedLatency.Relates configuration.frameLength
       configuration.stageChainLatency configuration.frameLength_pos
       (fun input : InputObservation configuration => input.1 = true)
       (fun output : OutputObservation configuration => output.1 = true)
-      (carriedRelation configuration table)
+      (carriedRelation configuration)
       (trace.inputs.map (inputObservation configuration))
       (trace.outputs.map (outputObservation configuration)) :=
   FramedLatency.relates_of_holds_projection
     (inputObservation configuration) (outputObservation configuration) holds
 
-end HTFFT.Silean.FFT.FFTStageChain
+end HTFFT.Silean.FFTStageChain

@@ -147,6 +147,17 @@ def packOutput (configuration : Configuration depth)
     OutputFrame configuration :=
   fun cycle lane => values (naturalLayout configuration (cycle, lane))
 
+/-- Unpacking a naturally ordered output frame immediately after packing
+recovers the packed logical vector. -/
+@[simp] theorem unpackNatural_packOutput
+    (configuration : Configuration depth)
+    (values : Fin (2 ^ depth) →
+      (UnrolledFFTLayer.complexSignalType
+        (configuration.arithmetic.boundaryFormat (Fin.last depth))).Denote) :
+    unpackNatural configuration (packOutput configuration values) = values := by
+  funext index
+  simp [unpackNatural, packOutput]
+
 @[simp] theorem unpackInput_pack
     (configuration : Configuration depth)
     (values : Fin (2 ^ depth) →
@@ -248,5 +259,45 @@ def encodeOutput (configuration : Configuration depth)
     (UnrolledFFTLayer.encodeVector
       (configuration.arithmetic.boundaryFormat
         configuration.finalGeometry.completed) values)
+
+/-- Decode a naturally ordered external output frame into Mathlib complex
+values at the final fixed-point boundary. -/
+noncomputable def decodeOutput (configuration : Configuration depth)
+    (frame : OutputFrame configuration) : Fin (2 ^ depth) → ℂ :=
+  HTFFT.Fixed.decodeVector configuration.arithmetic.fixedConfig
+    (Fin.last depth)
+    (UnrolledFFTLayer.decodeVector
+      (configuration.arithmetic.boundaryFormat (Fin.last depth))
+      (unpackNatural configuration frame))
+
+/-- Encoding followed by external decoding applies exactly the declared
+fixed-width wrap at the final boundary. -/
+@[simp] theorem decodeOutput_encodeOutput
+    (configuration : Configuration depth)
+    (values : HTFFT.Fixed.Vector depth) :
+    decodeOutput configuration (encodeOutput configuration values) =
+      HTFFT.Fixed.decodeVector configuration.arithmetic.fixedConfig
+        (Fin.last depth)
+        (fun index => HTFFT.Butterfly.Fixed.wrapComplex
+          (configuration.arithmetic.boundaryFormat (Fin.last depth))
+          (values index)) := by
+  funext index
+  simp [decodeOutput, encodeOutput, unpackNatural, packOutput,
+    UnrolledFFTLayer.decodeVector, UnrolledFFTLayer.encodeVector,
+    HTFFT.Fixed.decodeVector, HTFFT.Butterfly.Fixed.wrapComplex]
+
+/-- On canonical final-boundary values, external output encoding and decoding
+lose no information. -/
+theorem decodeOutput_encodeOutput_of_canonical
+    (configuration : Configuration depth)
+    (values : HTFFT.Fixed.Vector depth)
+    (canonical :
+      (fun index => HTFFT.Butterfly.Fixed.wrapComplex
+        (configuration.arithmetic.boundaryFormat (Fin.last depth))
+        (values index)) = values) :
+    decodeOutput configuration (encodeOutput configuration values) =
+      HTFFT.Fixed.decodeVector configuration.arithmetic.fixedConfig
+        (Fin.last depth) values := by
+  rw [decodeOutput_encodeOutput, canonical]
 
 end HTFFT.Silean.FFT

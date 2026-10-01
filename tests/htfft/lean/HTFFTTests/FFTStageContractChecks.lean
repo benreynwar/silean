@@ -1,8 +1,5 @@
 import HTFFT.Silean.FFTStage
 
-assert_not_imported HTFFT.Silean.FFTStage.Internal.FFTStageStructure
-assert_not_imported HTFFT.Silean.FFTStage.Internal.FFTStageVerification
-
 namespace HTFFTTests.FFTStageContract
 
 open Silean
@@ -27,6 +24,9 @@ open HTFFT.Silean
 #check FFTStage.frameRelation
 #check FFTStage.contract
 #check FFTStage.relates_of_contract
+#check FFTStage.place
+#check FFTStage.structuralCertification
+#check FFTStage.contract_of_execution
 
 /-- Four lanes carrying a sixteen-point frame.  Stage two is the first
 streaming layer after a two-layer unrolled prefix. -/
