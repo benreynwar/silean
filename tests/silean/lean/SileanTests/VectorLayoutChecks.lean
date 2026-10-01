@@ -36,7 +36,7 @@ def insertConstants : Fin 4 → BitSource 2
   | 2 => .input 1
   | 3 => .constant true
 
-/-- The PicoRV32 J-immediate layout that motivated the generic module. -/
+/-- A noncontiguous immediate layout exercising the generic module. -/
 def immediateJ : Fin 32 → BitSource 32 := fun index =>
   if zero : index.val = 0 then .constant false
   else if low : index.val ≤ 10 then .input ⟨index.val + 20, by omega⟩

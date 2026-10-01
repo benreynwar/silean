@@ -50,14 +50,13 @@ streaming FFT at [benreynwar/htfft](https://github.com/benreynwar/htfft):
 - the exact radix-2 FFT is proved equal to Mathlib's complex DFT;
 - the fixed-point model has explicit no-overflow conditions and a proved
   numerical error bound;
-- the multiplier, butterfly, and generic unrolled FFT have certified Silean
-  implementations; and
-- the complete streaming hierarchy has natural top-down contracts, with the
-  concrete rolled stage and packet reorderers still to be implemented.
+- its arithmetic, unrolled prefix, rolled stages, and packet reorderers have
+  certified Silean implementations; and
+- the closed streaming hierarchy has an end-to-end hardware-to-DFT accuracy
+  theorem.
 
-The repository also contains certified FIFO examples and a structural PicoRV
-client. The complete PicoRV source-equivalence and architectural-refinement
-proofs remain future work.
+The repository also contains certified FIFO examples that exercise the
+framework independently of the FFT client.
 
 Top-down designs use `ModuleBody`: it records ports, child interfaces, and
 wiring without pretending that unresolved children have executable blackbox
@@ -80,9 +79,9 @@ SystemVerilog are compiled and simulated, but the renderer is not yet proved
 semantics-preserving. Signal semantics are two-state Boolean semantics and do
 not model timing, metastability, `X`, or `Z`.
 
-The HTFFT mathematical, numerical, arithmetic, and unrolled-network results are
-proved. Its full streaming hardware theorem remains conditional until the
-rolled stages and packet reorderers are concretely implemented.
+The HTFFT mathematical, numerical, and complete streaming-hardware results are
+proved. Generated RTL is still validation evidence rather than part of the
+formal theorem.
 
 ## Trying it
 
@@ -104,9 +103,8 @@ make test
 
 - [`Silean/`](Silean/) contains the reusable framework and module library.
 - [`HTFFT/`](HTFFT/) contains the FFT specifications, proofs, and hardware.
-- [`HTFFT/Plan.md`](HTFFT/Plan.md) records the current FFT work.
-- [`PicoRV/`](PicoRV/) and [`RV32I/`](RV32I/) contain the processor client
-  and its clean architectural model.
+- [`HTFFT/README.md`](HTFFT/README.md) explains the FFT architecture, proof,
+  and remaining validation work.
 - [`docs/silean/Architecture.md`](docs/silean/Architecture.md) describes the
   framework in detail.
 - [`Roadmap.md`](Roadmap.md) records the project-wide direction.

@@ -5,6 +5,13 @@ separate, see [Architecture.md](Architecture.md). For conventions when adding a
 module, see [ModuleOrganization.md](ModuleOrganization.md). Current project
 work belongs in the [roadmap](../../Roadmap.md), not here.
 
+Two focused design guides supplement this map:
+
+- [LeafwiseComposition.md](LeafwiseComposition.md) explains recursive
+  bitwise construction over vectors and tuples.
+- [FifoOrganization.md](FifoOrganization.md) explains the shared FIFO
+  contract, implementations, and refinement boundary.
+
 ## Public entry points
 
 | Import | Purpose |
@@ -150,9 +157,8 @@ and proof details under its own `Internal/` directory. The exact convention is
 described in [ModuleOrganization.md](ModuleOrganization.md).
 
 Client-specific hardware stays with its client. In particular, fixed-point FFT
-policy and streaming FFT modules belong under `HTFFT/`, while PicoRV-specific
-hardware belongs under `PicoRV/`. A useful component moves into
-`Silean/Modules/` only when its interface is genuinely reusable.
+policy and streaming FFT modules belong under `HTFFT/`. A useful component
+moves into `Silean/Modules/` only when its interface is genuinely reusable.
 
 ## Naming and emission
 
@@ -174,12 +180,19 @@ never proof inputs.
 
 ## Tests
 
-- `tests/silean/lean/SileanTests/` contains Lean-facing library regressions.
-- `tests/htfft/` and `tests/picorv/` contain client regressions.
-- `tests/*/Fixtures/` contains test-only designs and shared inputs; reusable
-  library code must not import it.
-- The top-level `Makefile` coordinates Lean emission, CIRCT lowering,
-  Verilator, and cocotb where configured.
+`tests/silean/lean/SileanTests/` contains Lean-facing library checks. Every
+file is imported by the aggregate `SileanTests.lean`, so declarations written
+as Lean `example`s are checked by the normal build. These files cover concrete
+values, contracts, generated authoring declarations, emitted FIRRTL, and
+regressions for previously troublesome cases.
+
+`tests/htfft/` contains client-specific Lean checks. Directories named
+`Fixtures/` contain test-only designs or shared inputs; reusable library code
+must not import them. Reusable definitions and public theorems belong with the
+library rather than in a test fixture.
+
+The top-level `Makefile` coordinates example-import checks, Lean emission,
+CIRCT lowering, Verilator, and cocotb where configured.
 
 The formal boundary currently ends at `ModuleStructure`. Backend lowering and
 simulation provide valuable validation, but are not inputs to Lean correctness

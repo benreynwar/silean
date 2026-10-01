@@ -21,7 +21,7 @@ hardware structure means.
 This document explains that model. [SourceMap.md](SourceMap.md) maps concepts
 to files, [ModuleOrganization.md](ModuleOrganization.md) gives conventions for
 individual modules, and the project-wide [roadmap](../../Roadmap.md) records
-current and future work.
+planned future work.
 
 ## The overall picture
 
@@ -282,10 +282,10 @@ wiring fact and identifies each child projection with that child's observed
 execution. The conditional top-down proof is therefore retained rather than
 rewritten when implementation proceeds.
 
-HTFFT uses this style. Its complete streaming boundary and stage chain were
-proved first from natural framed contracts for the immediate children. The
-children can now be refined independently while the parent bodies and proofs
-remain fixed.
+HTFFT used this style. Its complete streaming boundary and stage chain were
+proved first from natural framed contracts for unresolved immediate children.
+Those children were later replaced by concrete certified structures without
+changing the parent bodies or their conditional composition proofs.
 
 ## Authoring identity, naming, and emission
 
