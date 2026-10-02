@@ -1,5 +1,6 @@
 # Silean
 
+```
 WARNING: LLM Usage Scale
  0 - A project I wrote myself
  2
@@ -7,6 +8,7 @@ WARNING: LLM Usage Scale
  6
  8 <--------- THIS PROJECT
 10 - A project entirely written by an LLM
+```
 
 This project is an experiment to see if a proof-assistant-centric approach to
 hardware RTL design is practical yet.  The conclusion is that it is practical.
@@ -20,9 +22,9 @@ It is not a suitable base to build upon, but it is a reasonable demonstration
 of the approach.  My main role has been setting goals and keeping the agent
 going in vaguely the right direction.
 
-At this point the project has served it's purpose and I'm not longer working on
-it.  What I am working on is getting competent enough at writing Lean myself
-that I can create a project similar to this, but that isn't a big pile of slop.
+At this point the project has served it's purpose and I'm no longer working on
+it.  I'm currently working on a second version of this project that will be much
+lower on the LLM Usage Scale.
 
 The rest of this README is LLM generated.
 
