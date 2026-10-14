@@ -11,6 +11,9 @@ require mathlib from git
 lean_lib «Silean» where
 
 @[default_target]
+lean_lib «Silean2» where
+
+@[default_target]
 lean_lib «HTFFT» where
 
 @[default_target]
