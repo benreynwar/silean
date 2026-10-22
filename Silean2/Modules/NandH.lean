@@ -12,7 +12,7 @@ abbrev nandPorts : ModulePorts := {
 }
 
 abbrev left : nandPorts.InputKey := 0
-abbrev right : nandPorts.InputKey := 0
+abbrev right : nandPorts.InputKey := 1
 abbrev result : nandPorts.OutputKey := 1
 
 def nandFunction (inputs : nandPorts.InputValues) : nandPorts.OutputValues :=
