@@ -18,6 +18,7 @@ For more details see [`Silean1/README.md`](Silean1/README.md).
 This is a second version of the project using much less AI assistance.  The goal
 is for it to be a better designed version of Silean1.
 
+```
 LLM Usage Scale
  0 - A project I wrote myself
  2
@@ -25,3 +26,4 @@ LLM Usage Scale
  6
  8 <--------- Silean1
 10 - A project entirely written by an LLM
+```j
