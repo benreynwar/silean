@@ -6,11 +6,24 @@ abbrev PortTypes (nPorts : Nat) := Fin nPorts → SignalType
 abbrev PortValues {nPorts : Nat} (portTypes : PortTypes nPorts) :=
   (portIndex : Fin nPorts) → (portTypes portIndex).Denote
 
+instance {nPorts : Nat} : DecidableEq (PortTypes nPorts) := by
+  intros a b
+  by_cases h : ∀ i, a i = b i
+  · apply isTrue
+    funext i
+    exact h i
+  · apply isFalse
+    intro functionsEqual
+    apply h
+    intro i
+    rw [functionsEqual]
+
 structure ModulePorts where
   nInputs : Nat
   nOutputs : Nat
   inputTypes : PortTypes nInputs
   outputTypes : PortTypes nOutputs
+  deriving DecidableEq
 
 abbrev ModulePorts.InputKey (ports : ModulePorts) := Fin ports.nInputs
 abbrev ModulePorts.OutputKey (ports : ModulePorts) := Fin ports.nOutputs

@@ -43,3 +43,6 @@ lean_exe «emit-bit-register-bank» where
 
 lean_exe «emit-htfft-16x4» where
   root := `HTFFT.Emitters.FFT16x4
+
+lean_exe «emit-circt» where
+  root := `Silean2.CIRCT.EmitH

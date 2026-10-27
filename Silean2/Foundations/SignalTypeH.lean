@@ -24,4 +24,16 @@ mutual
   | .cons head tail => head.Denote × tail.Denote
 end
 
+def checkedCast
+    {F : SignalType → Type}
+    (expectedType : SignalType)
+    {actualType : SignalType}
+    (value : F actualType)
+    : Except String (F expectedType) :=
+  if h : actualType = expectedType then
+    pure (h ▸ value)
+  else
+    throw s!"Type mismatch, expected type is {repr expectedType} but seen type is {repr actualType}"
+
+
 end Silean2.Foundations

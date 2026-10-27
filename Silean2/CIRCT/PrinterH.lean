@@ -15,7 +15,7 @@ mutual
   def emitType : SignalType → String
     | .bit => "i1"
     | .vector n .bit => s!"i{n}"
-    | .vector n t => s!"!hw.array<{n} x {emitType t}"
+    | .vector n t => s!"!hw.array<{n} x {emitType t}>"
     | .tuple ts => "!hw.struct<" ++ comma (fieldTypes ts 0) ++ ">"
   def fieldTypes : SignalTypes → Nat → List String
   | .nil, _ => []
@@ -24,13 +24,13 @@ end
 
 def emitModuleHeader (ifc : CIRCTInterface) : String :=
   let inputs := (List.finRange ifc.ports.nInputs).map fun i =>
-    s!"in %{ifc.inputNames i} : {emitType (ifc.ports.inputTypes i)}"
-  let clock := match ifc.clkName with
+    s!"in %{ifc.naming.inputNames i} : {emitType (ifc.ports.inputTypes i)}"
+  let clock := match ifc.naming.clkName with
     | none => []
     | some name => [s!"in %{name} : !seq.clock"]
   let outputs := (List.finRange ifc.ports.nOutputs).map fun i =>
-    s!"out %{ifc.outputNames i} : {emitType (ifc.ports.outputTypes i)}"
-  s!"hw.module @{ifc.name}(" ++ comma (inputs ++ clock ++ outputs) ++ ")"
+    s!"out {ifc.naming.outputNames i} : {emitType (ifc.ports.outputTypes i)}"
+  s!"hw.module @{ifc.naming.name}(" ++ comma (inputs ++ clock ++ outputs) ++ ")"
 
 private structure PrintState where
   lines : List String := []
@@ -55,14 +55,15 @@ def emitResult (maybeName : Option String)
     | some fixedName => pure fixedName
     | none => freshName
   let attributes := match maybeName with
-    | some fixedName => " {sv.namehint := " ++ fixedName ++ "}"
+    | some fixedName => " {sv.namehint = \"" ++ fixedName ++ "\"}"
     | none => ""
   writeLine s!"%{name} = {text attributes}"
   return s!"%{name}"
 
 def vecBoolToInt (width : Nat) (value : Fin width → Bool) : Nat :=
   let indices := List.finRange width
-  indices.foldl (fun result i => result * 2 + (value i).toNat) 0
+  let rev : Fin width → Fin width := fun i => ⟨width - 1 - i, by omega⟩
+  indices.foldl (fun result i => result * 2 + (value (rev i)).toNat) 0
 
 mutual
   private def emitConstantValue (t : SignalType) (value : t.Denote) : String :=
@@ -88,7 +89,16 @@ def alias (s : String) (t : String) (maybeName : Option String) : PrintM String 
     if s!"%{name}" == s then
       return s
     else
-      emitResult maybeName fun attrs => s!"hw.bitcast {s}{attrs} : ({t}) → {t}"
+      emitResult maybeName fun attrs => s!"hw.bitcast {s}{attrs} : ({t}) -> {t}"
+
+def refName
+    {ctx : Context}
+    {t : SignalType} (ref : Ref ctx t)
+    : String :=
+  match ref with
+  | .inputRef i => ctx.ifc.naming.inputNames i
+  | .instOutputRef inst port => ctx.insts[inst].outputName port
+  | .exprRef i => ctx.exprs[i].name
 
 def emitExpr
     (ctx : Context)
@@ -102,80 +112,74 @@ def emitExpr
     | .bit | .vector _ .bit =>
       emitResult name fun attrs => s!"hw.constant {literal}{attrs}"
     | _ =>
-      emitResult name fun attrs => s!"hw.aggregate_constant {literal}{attrs}"
-  | .inputRef i => alias s!"%{ctx.ifc.inputNames i}" (emitType t) name
-  | .exprRef i => alias s!"%{ctx.exprs[i].name}" (emitType t) name
-  | .regRef i => alias s!"%{ctx.regs[i].name}" (emitType t) name
-  | .instOutputRef i j => alias s!"%{ctx.insts[i].ifc.outputNames j}" (emitType t) name
+      emitResult name fun attrs => s!"hw.aggregate_constant {literal}{attrs} : {emitType t}"
+  | .ref ref => alias s!"%{refName ref}" (emitType t) name
+  | .reg next => do
+      let nextName := refName next
+      let some clk := ctx.ifc.naming.clkName | throw "Register required clock"
+      emitResult name fun attrs =>
+        s!"seq.firreg %{nextName} clock %{clk}{attrs} : {emitType t}"
   | .add lhs rhs => do
-      let lhsName ← emitExpr ctx lhs none
-      let rhsName ← emitExpr ctx rhs none
-      emitResult name fun attrs => s!"comb.add {lhsName}, {rhsName}{attrs} : {emitType t}"
+      let lhsName := refName lhs
+      let rhsName := refName rhs
+      emitResult name fun attrs => s!"comb.add %{lhsName}, %{rhsName}{attrs} : {emitType t}"
 
-def emitInst (m : CIRCTModule) (i : Fin m.instDecls.length) : PrintM Unit := do
+def emitInst (m : CIRCTModule) (i : Fin m.instDecls.size) : PrintM Unit := do
   let inst := m.instDecls[i]
   let ifc := inst.ifc
   -- Build up a list of (name, expr, type) tuples for the input ports
   -- and emit the input port expressions while doing it
   let inputs : List (String × String × String) ← (List.finRange ifc.ports.nInputs).mapM fun j => do
     return (
-      ifc.inputNames j,
-      m.exprDecls[(m.instImpls i j).index].name,
+      ifc.naming.inputNames j,
+      s!"%{refName (m.instImpls i j)}",
       emitType (ifc.ports.inputTypes j)
     )
-  let outputNames := (List.finRange ifc.ports.nOutputs).map fun j => s!"%{ifc.outputNames j}"
+  let outputNames := (List.finRange ifc.ports.nOutputs).map fun port =>
+    s!"%{inst.outputName port}"
   let lhs := if outputNames.isEmpty then
     ""
   else
     comma outputNames ++ " = "
-  let clocks ← match ifc.clkName with
+  let clocks ← match ifc.naming.clkName with
   | none => pure []
   | some clkName =>
-      match m.ifc.clkName with
+      match m.ifc.naming.clkName with
       | none => throw "Child needs clock but parent doesn't have one"
       | some parentClockName =>
         pure [(clkName, s!"%{parentClockName}", "!seq.clock")]
   let input_text := (inputs ++ clocks).map fun ⟨name, exprname, type⟩ =>
     s!"{name}: {exprname}: {type}"
   let output_text := (List.finRange ifc.ports.nOutputs).map fun j =>
-    s!"%{ifc.outputNames j} : {emitType (ifc.ports.outputTypes j)}"
+    s!"{ifc.naming.outputNames j} : {emitType (ifc.ports.outputTypes j)}"
   writeLine (
-    lhs ++ "hw.instance" ++ inst.name ++ " @" ++ ifc.name ++
+    lhs ++ "hw.instance \"" ++ inst.name ++ "\" @" ++ ifc.naming.name ++
     "(" ++ comma input_text ++ ") -> (" ++ comma output_text ++ ")"
   )
 
-def emitReg (m : CIRCTModule) (i : Fin m.regDecls.length) : PrintM Unit := do
-  let regDecl := m.regDecls[i]
-  let exprIndex := (m.regImpls i).index
-  let nextName := m.exprDecls[exprIndex].name
-  let some clk := m.ifc.clkName | throw "Register required clock"
-  let _ ← emitResult (some regDecl.name) fun attrs =>
-    s!"seq.firreg {nextName} clock %{clk}{attrs} : {emitType regDecl.type}"
-
 def emitOutput (m : CIRCTModule) (i : Fin m.ifc.ports.nOutputs): PrintM (String × String) := do
-  let outputName := m.exprDecls[(m.outputs i).index].name
-  return (outputName, emitType (m.ifc.ports.outputTypes i))
+  let outputName := refName (m.outputs i)
+  return (s!"%{outputName}", emitType (m.ifc.ports.outputTypes i))
 
 def emitBody (m : CIRCTModule) : Except String String := do
   let action : PrintM Unit := do
-    for i in List.finRange m.exprDecls.length do
+    for i in List.finRange m.exprDecls.size do
       let _ ← emitExpr m.ctx (m.exprImpls i) (some m.exprDecls[i].name)
-    for i in List.finRange m.instDecls.length do
+    for i in List.finRange m.instDecls.size do
       emitInst m i
-    for i in List.finRange m.regDecls.length do
-      emitReg m i
     let outputs ← (List.finRange m.ifc.ports.nOutputs).mapM fun i => do
       return ← emitOutput m i
     if outputs.isEmpty then
       writeLine "hw.output"
     else
-      writeLine "s!hw.output {comma (outputs.map (·.1))} : {comma (outputs.map (·.2))}"
+      writeLine s!"hw.output {comma (outputs.map (·.1))} : {comma (outputs.map (·.2))}"
   let (_, state) ← action.run {}
   return String.intercalate "\n" state.lines ++ "\n"
 
 def emitModule (m : CIRCTModule) : Except String String := do
+  m.validateNames
   let header := emitModuleHeader m.ifc
   let body ← emitBody m
-  return "  " ++ header ++ body
+  return "  " ++ header ++ "{ \n" ++ body ++ "}\n"
 
 end Silean2.CIRCT

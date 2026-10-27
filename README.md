@@ -26,4 +26,4 @@ LLM Usage Scale
  6
  8 <--------- Silean1
 10 - A project entirely written by an LLM
-```j
+```

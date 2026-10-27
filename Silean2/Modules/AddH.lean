@@ -13,8 +13,11 @@ abbrev addPorts (width : Nat) : ModulePorts := {
   outputTypes := fun _ => .vector width .bit
 }
 
+@[match_pattern]
 abbrev left {width : Nat}: (addPorts width).InputKey := ⟨0, by simp⟩
+@[match_pattern]
 abbrev right {width : Nat}: (addPorts width).InputKey := ⟨1, by simp⟩
+@[match_pattern]
 abbrev result {width : Nat}: (addPorts width).OutputKey := ⟨0, by simp⟩
 
 def addFunction
@@ -29,7 +32,32 @@ def addFunction
 
 def addSpec (width : Nat) := Spec.ofFunction (addFunction width)
 
-def addLower (width : Nat) : Lowering (addPorts width) :=
-  fun inputs _ => .add lhs rhs
+def addBuilder {width : Nat} : CIRCTModuleBuilder (addPorts width) :=
+  fun inputs => do
+    let sum ← CIRCTBuilder.addExpr "sum"
+      (.add (inputs Add.left) (inputs Add.right))
+    return fun _ => .exprRef sum
+
+def addImpl (width : Nat) (_ : CIRCTSettings)
+    : CIRCTImplementation (addPorts width) := .primitive addBuilder
+
+def addName := "Add"
+
+def addParamsType : ParamsType := .nat
+
+def addRegistration : ModuleRegistration := {
+  paramsType := addParamsType
+  ports := addPorts
+  impl := addImpl
+}
+
+def addRef (width : Nat) : ModuleRef (addPorts width) := {
+  name := addName,
+  paramsType := addParamsType,
+  params := width
+}
+
+
+
 
 end Silean2.Modules.Add

@@ -13,4 +13,25 @@ def three (x : Fin 3) : Bool := match x with
 
 #guard bitVectorToNat three = 3
 
+def collect
+    {m : Type → Type} [Monad m]
+    {n : Nat} {α : Fin n → Type}
+    (f : (i : Fin n) → m (α i))
+    : m ((i : Fin n) → α i) :=
+  match n with
+  | 0 => pure fun i => nomatch i
+  | _ + 1 => do
+    let head ← f 0
+    let tail ← collect (fun i => f i.succ)
+    return fun i =>
+      match i with
+      | ⟨0, _⟩ => head
+      | ⟨k+1, _⟩ => tail ⟨ k, by omega⟩
+
+def checkedFin (n i : Nat) : Except String (Fin n) :=
+  if h : i < n then
+    pure ⟨i, h⟩
+  else
+    throw s!"Index {i} is out of bounds for length {n}"
+
 end Silean2.Foundations
