@@ -23,6 +23,29 @@ inductive BuilderExpr : SignalType → Type
   | add {width : Nat} (lhs : BuilderRef (CIRCTInt width))
       (rhs : BuilderRef (CIRCTInt width))
     : BuilderExpr (CIRCTInt width)
+  | sub {width : Nat} (lhs : BuilderRef (CIRCTInt width)) (rhs : BuilderRef (CIRCTInt width))
+    : BuilderExpr (CIRCTInt width)
+  | mul {width : Nat} (lhs : BuilderRef (CIRCTInt width)) (rhs : BuilderRef (CIRCTInt width))
+    : BuilderExpr (CIRCTInt width)
+  | extract {inputWidth : Nat}
+      (value : BuilderRef (CIRCTInt inputWidth))
+      (lowBit outputWidth : Nat)
+      (inBounds : lowBit + outputWidth ≤ inputWidth)
+    : BuilderExpr (CIRCTInt outputWidth)
+  | concat {highWidth lowWidth : Nat}
+      (high : BuilderRef (CIRCTInt highWidth)) (low : BuilderRef (CIRCTInt lowWidth))
+    : BuilderExpr (CIRCTInt (highWidth + lowWidth))
+  | replicate {inputWidth: Nat}
+      (value : BuilderRef (CIRCTInt inputWidth))
+      (count : Nat) (positive : 0 < count)
+    : BuilderExpr (CIRCTInt (inputWidth * count))
+  | structExtract {fields : SignalTypes}
+      (value : BuilderRef (.tuple fields))
+      (field : Fin fields.length)
+    : BuilderExpr (fields.get field)
+  | structCreate {fields : SignalTypes}
+      (values : (i : Fin fields.length) → BuilderRef (fields.get i))
+    : BuilderExpr (.tuple fields)
 
 abbrev BuilderRefs {nPorts : Nat} (types : PortTypes nPorts) :=
   (i : Fin nPorts) → Option (BuilderRef (types i))
@@ -59,26 +82,36 @@ def CIRCTModuleBuilder (ports : ModulePorts) :=
   CIRCTBuildM ((o : ports.OutputKey) → BuilderRef (ports.outputTypes o))
 
 mutual
-  inductive ParamsType where
+  inductive RawParamsType where
     | nat
     | bool
-    | vector (element : ParamsType) (length : Nat)
-    | record (fields : ParamsFields)
+    | vector (element : RawParamsType) (length : Nat)
+    | record (fields : RawParamsFields)
     deriving DecidableEq, Hashable
 
-  inductive ParamsFields where
+  inductive RawParamsFields where
     | nil
-    | cons (name : String) (type : ParamsType) (rest : ParamsFields)
+    | cons (name : String) (type : RawParamsType) (rest : RawParamsFields)
 end
 
+syntax "params%[" (str " : " term),*,? "]" : term
+
+macro_rules
+  | `(params%[$[$names: str : $types:term],*]) => do
+    let mut fields ← `(Silean2.CIRCT.RawParamsFields.nil)
+    for i in [:names.size] do
+      let j := names.size - i - 1
+      fields ← `(Silean2.CIRCT.RawParamsFields.cons $(names[j]!) $(types[j]!) $fields)
+    `(Silean2.CIRCT.RawParamsType.record $fields)
+
 mutual
-  def ParamsType.Denote : ParamsType → Type
+  def RawParamsType.Denote : RawParamsType → Type
     | .nat => Nat
     | .bool => Bool
     | .vector element length => Vector element.Denote length
     | .record fields => fields.Denote
 
-  def ParamsFields.Denote : ParamsFields → Type
+  def RawParamsFields.Denote : RawParamsFields → Type
     | .nil => Unit
     | .cons _ type rest => type.Denote × rest.Denote
 
@@ -86,7 +119,7 @@ end
 
 mutual
   @[implicit_reducible]
-  def ParamsType.denoteHashable : (t : ParamsType) → Hashable t.Denote
+  def RawParamsType.denoteHashable : (t : RawParamsType) → Hashable t.Denote
     | .nat => inferInstanceAs (Hashable Nat)
     | .bool => inferInstanceAs (Hashable Bool)
     | .vector element _ =>
@@ -95,7 +128,7 @@ mutual
     | .record fields => fields.denoteHashable
 
   @[implicit_reducible]
-  def ParamsFields.denoteHashable : (t : ParamsFields) → Hashable t.Denote
+  def RawParamsFields.denoteHashable : (t : RawParamsFields) → Hashable t.Denote
     | .nil => inferInstanceAs (Hashable Unit)
     | .cons _ type rest =>
         letI := type.denoteHashable
@@ -103,12 +136,12 @@ mutual
         inferInstanceAs (Hashable (type.Denote × rest.Denote))
 end
 
-instance (t : ParamsType) : Hashable t.Denote := t.denoteHashable
-instance (t : ParamsFields) : Hashable t.Denote := t.denoteHashable
+instance (t : RawParamsType) : Hashable t.Denote := t.denoteHashable
+instance (t : RawParamsFields) : Hashable t.Denote := t.denoteHashable
 
 mutual
-  def ParamsType.denoteDecidableEq :
-      (t : ParamsType) → DecidableEq t.Denote
+  def RawParamsType.denoteDecidableEq :
+      (t : RawParamsType) → DecidableEq t.Denote
     | .nat => inferInstanceAs (DecidableEq Nat)
     | .bool => inferInstanceAs (DecidableEq Bool)
     | .vector element length =>
@@ -116,8 +149,8 @@ mutual
         inferInstanceAs (DecidableEq (Vector element.Denote length))
     | .record fields => fields.denoteDecidableEq
 
-  def ParamsFields.denoteDecidableEq :
-      (t : ParamsFields) → DecidableEq t.Denote
+  def RawParamsFields.denoteDecidableEq :
+      (t : RawParamsFields) → DecidableEq t.Denote
     | .nil => inferInstanceAs (DecidableEq Unit)
     | .cons _ type rest =>
         letI := type.denoteDecidableEq
@@ -125,12 +158,12 @@ mutual
         inferInstanceAs (DecidableEq (type.Denote × rest.Denote))
 end
 
-instance (t : ParamsType) : DecidableEq t.Denote :=
+instance (t : RawParamsType) : DecidableEq t.Denote :=
   t.denoteDecidableEq
 
 structure ModuleKey where
   name : String
-  paramsType : ParamsType
+  paramsType : RawParamsType
   params : paramsType.Denote
   deriving DecidableEq, Hashable
 
@@ -164,9 +197,11 @@ structure ModuleSigRegistration where
   ports : Params → ModulePorts
 
 structure ModuleRegistration where
-  paramsType : ParamsType
-  ports : paramsType.Denote → ModulePorts
-  impl : (params : paramsType.Denote) → CIRCTSettings → CIRCTImplementation (ports params)
+  rawParamsType : RawParamsType
+  ParamsType : Type
+  decodeParams : rawParamsType.Denote → Except String ParamsType
+  ports : ParamsType → ModulePorts
+  impl : (params : ParamsType) → CIRCTSettings → CIRCTImplementation (ports params)
 
 abbrev Registry := Std.HashMap String ModuleRegistration
 
@@ -185,9 +220,10 @@ def Registry.resolve
     : Except String (CIRCTImplementation ports) := do
   let some registration := registry[ref.name]?
     | throw s!"Module {ref.name} not found inregistry"
-  if hParams : ref.paramsType = registration.paramsType then
-    let params : registration.paramsType.Denote :=
+  if hParams : ref.paramsType = registration.rawParamsType then
+    let rawParams : registration.rawParamsType.Denote :=
       hParams ▸ ref.params
+    let params : registration.ParamsType ← registration.decodeParams rawParams
     if hPorts : registration.ports params = ports then
       let impl : CIRCTImplementation ports :=
         hPorts ▸ registration.impl params settings

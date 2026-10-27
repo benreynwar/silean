@@ -14,12 +14,12 @@ structure BuildConfig where
   settings : CIRCTSettings
   deriving Lean.FromJson
 
-def fieldNames : ParamsFields → List String
+def fieldNames : RawParamsFields → List String
   | .nil => []
   | .cons name _ rest => name :: fieldNames rest
 
 mutual
-  def decodeParams (type : ParamsType) (value : Lean.Json) (path : String) :
+  def decodeParams (type : RawParamsType) (value : Lean.Json) (path : String) :
       Except String type.Denote :=
     match type with
       | .nat => value.getNat?.mapError (fun message => s!"{path}: {message}")
@@ -45,7 +45,7 @@ mutual
               throw s!"{path}: Unknown field: {name}"
           decodeFields fields value path
 
-  def decodeFields (fields : ParamsFields) (object : Lean.Json) (path : String) :
+  def decodeFields (fields : RawParamsFields) (object : Lean.Json) (path : String) :
       Except String fields.Denote :=
     match fields with
       | .nil => pure ()
@@ -59,21 +59,25 @@ end
 def emitJson (source : String) : Except String String := do
   let json ← Lean.Json.parse source
   let config : BuildConfig ← Lean.fromJson? json
-  let thisRegistry ← Modules.registry
-  let some registration := thisRegistry[config.mod]? | throw s!"Module {config.mod} not found in registry"
-  let params ← decodeParams registration.paramsType config.params "params"
+  -- Need to use a match here because registry is Type 1 and that means
+  -- the except Monads don't play nicely.
+  match Modules.registry with
+  | .error message => .error message
+  | .ok thisRegistry => do
+    let some registration := thisRegistry[config.mod]? | throw s!"Module {config.mod} not found in registry"
+    let rawParams ← decodeParams registration.rawParamsType config.params "params"
+    let params ← registration.decodeParams rawParams
+    let top : ModuleRef (registration.ports params) := {
+      name := config.mod,
+      paramsType := registration.rawParamsType,
+      params := rawParams,
+    }
+    let modules ← buildDesign config.settings thisRegistry top
 
-  let top : ModuleRef (registration.ports params) := {
-    name := config.mod,
-    paramsType := registration.paramsType,
-    params := params,
-  }
-  let modules ← buildDesign config.settings thisRegistry top
-
-  let mut output := "module {\n"
-  for mod in modules do
-    output := output ++ (← emitModule mod.2)
-  return output ++ "}\n"
+    let mut output := "module {\n"
+    for mod in modules do
+      output := output ++ (← emitModule mod.2)
+    return output ++ "}\n"
 
 end Silean2.CIRCT
 

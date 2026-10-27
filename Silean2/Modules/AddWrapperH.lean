@@ -42,7 +42,7 @@ def addWrapperFromAdd (width : Nat) : ModuleBody := {
   outputDrivers := fun _ => Source.childOutput 0 Add.result
 }
 
-def addWrapperParamsType : ParamsType:= .nat
+def addWrapperParamsType : RawParamsType:= .nat
 
 namespace AddWrapperFromAdd
 
@@ -67,7 +67,9 @@ def addWrapperFromAddImpl (width : Nat) (_ : CIRCTSettings)
 
 def addWrapperFromAddName := "AddWrapperFromAdd"
 def addWrapperFromAddRegistration : ModuleRegistration := {
-  paramsType := .nat
+  rawParamsType := .nat
+  ParamsType := Nat
+  decodeParams := fun x => pure x
   ports := addWrapperPorts
   impl := addWrapperFromAddImpl
 }

@@ -50,6 +50,31 @@ inductive Expr (ctx : Context) : SignalType → Type
   | reg {t : SignalType} (next : Ref ctx t) : Expr ctx t
   | add {width : Nat} (lhs : Ref ctx (CIRCTInt width)) (rhs : Ref ctx (CIRCTInt width))
     : Expr ctx (CIRCTInt width)
+  | sub {width : Nat} (lhs : Ref ctx (CIRCTInt width)) (rhs : Ref ctx (CIRCTInt width))
+    : Expr ctx (CIRCTInt width)
+  | mul {width : Nat} (lhs : Ref ctx (CIRCTInt width)) (rhs : Ref ctx (CIRCTInt width))
+    : Expr ctx (CIRCTInt width)
+  | extract {inputWidth : Nat}
+      (value : Ref ctx (CIRCTInt inputWidth))
+      (lowBit outputWidth : Nat)
+      (inBounds : lowBit + outputWidth ≤ inputWidth)
+    : Expr ctx (CIRCTInt outputWidth)
+  | concat {highWidth lowWidth : Nat}
+      (high : Ref ctx (CIRCTInt highWidth)) (low : Ref ctx (CIRCTInt lowWidth))
+    : Expr ctx (CIRCTInt (highWidth + lowWidth))
+  | replicate {inputWidth: Nat}
+      (value : Ref ctx (CIRCTInt inputWidth))
+      (count : Nat) (positive : 0 < count)
+    : Expr ctx (CIRCTInt (inputWidth * count))
+  | structExtract {fields : SignalTypes}
+      (value : Ref ctx (.tuple fields))
+      (field : Fin fields.length)
+    : Expr ctx (fields.get field)
+  | structCreate {fields : SignalTypes}
+      (values : (i : Fin fields.length) → Ref ctx (fields.get i))
+    : Expr ctx (.tuple fields)
+
+
 
 abbrev Refs (ctx : Context) {nPorts : Nat} (types : PortTypes nPorts) :=
   (i : Fin nPorts) → Ref ctx (types i)

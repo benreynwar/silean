@@ -60,10 +60,10 @@ def emitResult (maybeName : Option String)
   writeLine s!"%{name} = {text attributes}"
   return s!"%{name}"
 
-def vecBoolToInt (width : Nat) (value : Fin width → Bool) : Nat :=
+def vecBoolToInt (width : Nat) (value : Vector Bool width) : Nat :=
   let indices := List.finRange width
   let rev : Fin width → Fin width := fun i => ⟨width - 1 - i, by omega⟩
-  indices.foldl (fun result i => result * 2 + (value (rev i)).toNat) 0
+  indices.foldl (fun result i => result * 2 + (value[(rev i)]).toNat) 0
 
 mutual
   private def emitConstantValue (t : SignalType) (value : t.Denote) : String :=
@@ -71,7 +71,8 @@ mutual
     | .bit => s!"{Bool.toNat value} : i1"
     | .vector n .bit => s!"{vecBoolToInt n value} : i{n}"
     | .vector n element =>
-      "[" ++ comma ((List.finRange n).reverse.map (fun i => emitConstantValue element (value i))) ++ "]"
+      let elements : Vector element.Denote n := value
+      "[" ++ comma ((List.finRange n).reverse.map (fun i => emitConstantValue element elements[i])) ++ "]"
     | .tuple elements =>
       "[" ++ comma (emitConstantFields elements value) ++ "]"
 
@@ -123,6 +124,31 @@ def emitExpr
       let lhsName := refName lhs
       let rhsName := refName rhs
       emitResult name fun attrs => s!"comb.add %{lhsName}, %{rhsName}{attrs} : {emitType t}"
+  | .sub lhs rhs => do
+      let lhsName := refName lhs
+      let rhsName := refName rhs
+      emitResult name fun attrs => s!"comb.sub %{lhsName}, %{rhsName}{attrs} : {emitType t}"
+  | .mul lhs rhs => do
+      let lhsName := refName lhs
+      let rhsName := refName rhs
+      emitResult name fun attrs => s!"comb.mul %{lhsName}, %{rhsName}{attrs} : {emitType t}"
+  | .extract (inputWidth := inputWidth) value lowBit outputWidth h => do
+      let valueName := refName value
+      emitResult name fun attrs => s!"comb.extract %{valueName} from {lowBit}{attrs} : (i{inputWidth}) -> i{outputWidth})"
+  | .concat (highWidth := highWidth) (lowWidth := lowWidth) high low => do
+      let highName := refName high
+      let lowName := refName low
+      emitResult name fun attrs => s!"comb.concat %{highName}, %{lowName}{attrs} : i{highWidth}, i{lowWidth}"
+  | .replicate (inputWidth := inputWidth) value count positive => do
+      let valueName := refName value
+      let outputWidth := inputWidth * count
+      emitResult name fun attrs => s!"comb.replicate %{valueName}{attrs} : (i{inputWidth}) -> i{outputWidth}"
+  | .structExtract (fields := fields) value field => do
+      let valueName := refName value
+      emitResult name fun attrs => s!"comb.struct_extract %{valueName}{attrs} : {emitType (.tuple fields)}"
+  | .structCreate (fields := fields) values => do
+      let names := (List.finRange fields.length).map fun i => refName (values i)
+      emitResult name fun attrs => s!"comb.struct_create ({comma names}){attrs} : {emitType (.tuple fields)}"
 
 def emitInst (m : CIRCTModule) (i : Fin m.instDecls.size) : PrintM Unit := do
   let inst := m.instDecls[i]

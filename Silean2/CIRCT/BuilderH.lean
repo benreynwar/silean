@@ -132,6 +132,21 @@ def finalizeExpr
       return .reg (← finalizeRef b next)
     | _, .some (.add lhs rhs) => do
       return .add (← finalizeRef b lhs) (← finalizeRef b rhs)
+    | _, .some (.sub lhs rhs) => do
+      return .sub (← finalizeRef b lhs) (← finalizeRef b rhs)
+    | _, .some (.mul lhs rhs) => do
+      return .mul (← finalizeRef b lhs) (← finalizeRef b rhs)
+    | _, .some (.extract value lowBit outputWidth inBounds) => do
+      return .extract (← finalizeRef b value) lowBit outputWidth inBounds
+    | _, .some (.concat high low) => do
+      return .concat (← finalizeRef b high) (← finalizeRef b low)
+    | _, .some (.replicate value count positive) => do
+      return .replicate (← finalizeRef b value) count positive
+    | _, .some (.structExtract value field) => do
+      return .structExtract (← finalizeRef b value) field
+    | _, .some (.structCreate values) => do
+      let refs ← collect fun i => finalizeRef b (values i)
+      return .structCreate refs
 
 def finalizeExprImpls
     (b : CIRCTBuilder)

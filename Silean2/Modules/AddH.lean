@@ -43,10 +43,12 @@ def addImpl (width : Nat) (_ : CIRCTSettings)
 
 def addName := "Add"
 
-def addParamsType : ParamsType := .nat
+def addParamsType : RawParamsType := .nat
 
 def addRegistration : ModuleRegistration := {
-  paramsType := addParamsType
+  rawParamsType := addParamsType
+  ParamsType := Nat
+  decodeParams := fun x => pure x
   ports := addPorts
   impl := addImpl
 }
